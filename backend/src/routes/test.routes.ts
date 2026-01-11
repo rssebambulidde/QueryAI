@@ -26,7 +26,7 @@ router.get(
     };
 
     // Try to connect with anon key
-    let anonTest = { success: false, error: null };
+    let anonTest: { success: boolean; error: string | null } = { success: false, error: null };
     try {
       const { data, error } = await supabase.from('user_profiles').select('count').limit(1);
       if (error) {
@@ -35,11 +35,11 @@ router.get(
         anonTest = { success: true, error: null };
       }
     } catch (error: any) {
-      anonTest = { success: false, error: error.message };
+      anonTest = { success: false, error: error.message || String(error) };
     }
 
     // Try to connect with service role key
-    let adminTest = { success: false, error: null };
+    let adminTest: { success: boolean; error: string | null } = { success: false, error: null };
     try {
       const { data, error } = await supabaseAdmin.from('user_profiles').select('count').limit(1);
       if (error) {
@@ -48,7 +48,7 @@ router.get(
         adminTest = { success: true, error: null };
       }
     } catch (error: any) {
-      adminTest = { success: false, error: error.message };
+      adminTest = { success: false, error: error.message || String(error) };
     }
 
     res.status(200).json({
