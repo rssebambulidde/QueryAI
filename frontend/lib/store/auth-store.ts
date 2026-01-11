@@ -82,22 +82,42 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.signup({ email, password, fullName });
           if (response.success && response.data) {
             const { user, session } = response.data;
+            // Check if session tokens are valid (not empty)
+            // If empty, email confirmation is required
+            const hasValidSession = session.accessToken && session.refreshToken;
+            
             set({
-              user,
-              accessToken: session.accessToken,
-              refreshToken: session.refreshToken,
-              isAuthenticated: true,
+              user: hasValidSession ? user : null, // Only set user if authenticated
+              accessToken: session.accessToken || null,
+              refreshToken: session.refreshToken || null,
+              isAuthenticated: hasValidSession, // Only true if we have valid tokens
               isLoading: false,
             });
-            // Store tokens in localStorage for API client
-            if (typeof window !== 'undefined') {
+            
+            // Store tokens in localStorage only if valid
+            if (typeof window !== 'undefined' && hasValidSession) {
               localStorage.setItem('accessToken', session.accessToken);
               localStorage.setItem('refreshToken', session.refreshToken);
+            } else if (typeof window !== 'undefined') {
+              // Clear tokens if email confirmation required
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('refreshToken');
+            }
+            
+            // If email confirmation is required, throw a special error
+            if (!hasValidSession) {
+              throw new Error('EMAIL_CONFIRMATION_REQUIRED');
             }
           } else {
             throw new Error(response.error?.message || 'Signup failed');
           }
         } catch (error: any) {
+          // Don't show error for email confirmation - handle it differently
+          if (error.message === 'EMAIL_CONFIRMATION_REQUIRED') {
+            set({ isLoading: false });
+            throw error; // Re-throw so signup page can handle it
+          }
+          
           const errorMessage =
             error.response?.data?.error?.message ||
             error.message ||

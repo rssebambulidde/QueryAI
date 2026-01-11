@@ -51,11 +51,23 @@ export default function SignupPage() {
   }, [error, clearError]);
 
   const onSubmit = async (data: SignupFormData) => {
+    setSuccessMessage(null);
     try {
       await signup(data.email, data.password, data.fullName);
       router.push('/dashboard');
-    } catch (err) {
-      // Error is handled by the store
+    } catch (err: any) {
+      // Check if email confirmation is required
+      if (err.message === 'EMAIL_CONFIRMATION_REQUIRED') {
+        // Show success message - user needs to confirm email
+        setSuccessMessage(
+          'Account created successfully! Please check your email to confirm your account before signing in.'
+        );
+        setShowAlert(true);
+        clearError(); // Clear any error state
+        // Don't redirect - stay on signup page with message
+      } else {
+        // Other errors are handled by the store
+      }
     }
   };
 
@@ -77,7 +89,10 @@ export default function SignupPage() {
           </p>
         </div>
 
-        {showAlert && error && (
+        {showAlert && successMessage && (
+          <Alert variant="success">{successMessage}</Alert>
+        )}
+        {showAlert && error && !successMessage && (
           <Alert variant="error">{error}</Alert>
         )}
 
