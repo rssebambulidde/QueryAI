@@ -10,6 +10,9 @@ export const apiLimiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  validate: {
+    trustProxy: false, // Disable trust proxy validation to avoid warnings
+  },
   handler: (req: Request, res: Response) => {
     logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
     const error = new RateLimitError('Too many requests, please try again later.');
@@ -30,6 +33,9 @@ export const authLimiter = rateLimit({
   message: 'Too many authentication attempts, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  validate: {
+    trustProxy: false, // Disable trust proxy validation to avoid warnings
+  },
   handler: (req: Request, res: Response) => {
     logger.warn(`Auth rate limit exceeded for IP: ${req.ip}`);
     const error = new RateLimitError('Too many authentication attempts, please try again later.');
