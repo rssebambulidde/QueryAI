@@ -10,6 +10,7 @@ import { apiLimiter } from './middleware/rateLimiter';
 import { checkDatabaseHealth } from './config/database';
 import authRoutes from './routes/auth.routes';
 import testRoutes from './routes/test.routes';
+import debugRoutes from './routes/debug.routes';
 
 const app: Express = express();
 
