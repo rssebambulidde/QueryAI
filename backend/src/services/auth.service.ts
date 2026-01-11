@@ -75,6 +75,18 @@ export class AuthService {
           throw new ConflictError('User with this email already exists');
         }
         
+        // Handle email sending errors - provide helpful message
+        if (authError.message?.toLowerCase().includes('error sending confirmation email') ||
+            authError.message?.toLowerCase().includes('sending email') ||
+            authError.code === 'unexpected_failure') {
+          logger.warn('Email sending failed. This usually means email confirmations are enabled but SMTP is not configured.');
+          throw new AuthenticationError(
+            'Signup failed: Email confirmation could not be sent. ' +
+            'Please disable email confirmations in Supabase (Authentication → Settings → Enable Email Confirmations: OFF) ' +
+            'or configure SMTP email provider.'
+          );
+        }
+        
         throw new AuthenticationError(`Signup failed: ${authError.message || 'Unknown error'}`);
       }
 
@@ -107,7 +119,11 @@ export class AuthService {
 
       // Return auth response
       if (!authData.session) {
-        // Email confirmation required
+        // Email confirmation might be required
+        // Check if it's an email sending error or actual confirmation requirement
+        logger.warn(`User created but no session. Email confirmation might be required.`);
+        
+        // Return user info but no session
         return {
           user: {
             id: authData.user.id,
