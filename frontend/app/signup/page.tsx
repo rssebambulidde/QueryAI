@@ -24,6 +24,7 @@ export default function SignupPage() {
   const { signup, isAuthenticated, isLoading, error, clearError } =
     useAuthStore();
   const [showAlert, setShowAlert] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const {
     register,
