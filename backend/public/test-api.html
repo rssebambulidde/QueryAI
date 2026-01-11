@@ -227,14 +227,41 @@
         console.log('QueryAI API Tester loaded');
         console.log('Current URL:', window.location.href);
         
-        // Test button click handlers
+        // Add event listeners when page loads
         window.addEventListener('load', () => {
-            console.log('Page loaded, testing button handlers...');
-            const testBtn = document.querySelector('button[onclick="testSignup()"]');
-            if (testBtn) {
-                console.log('Signup button found:', testBtn);
-            } else {
-                console.error('Signup button not found!');
+            console.log('Page loaded, setting up event listeners...');
+            
+            // Find buttons and add event listeners
+            const signupBtn = document.querySelector('.endpoint-card:nth-of-type(1) button');
+            const loginBtn = document.querySelector('.endpoint-card:nth-of-type(2) button');
+            const meBtn = document.querySelector('.endpoint-card:nth-of-type(3) button');
+            const logoutBtn = document.querySelector('.endpoint-card:nth-of-type(4) button');
+            const refreshBtn = document.querySelector('.endpoint-card:nth-of-type(5) button');
+            const forgotBtn = document.querySelector('.endpoint-card:nth-of-type(6) button');
+            
+            if (signupBtn) {
+                signupBtn.addEventListener('click', testSignup);
+                console.log('Signup button listener added');
+            }
+            if (loginBtn) {
+                loginBtn.addEventListener('click', testLogin);
+                console.log('Login button listener added');
+            }
+            if (meBtn) {
+                meBtn.addEventListener('click', testMe);
+                console.log('Me button listener added');
+            }
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', testLogout);
+                console.log('Logout button listener added');
+            }
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', testRefresh);
+                console.log('Refresh button listener added');
+            }
+            if (forgotBtn) {
+                forgotBtn.addEventListener('click', testForgotPassword);
+                console.log('Forgot password button listener added');
             }
         });
 
