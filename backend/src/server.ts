@@ -1,6 +1,7 @@
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import path from 'path';
 import config from './config/env';
 import logger from './config/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
