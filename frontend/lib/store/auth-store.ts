@@ -84,7 +84,7 @@ export const useAuthStore = create<AuthState>()(
             const { user, session } = response.data;
             // Check if session tokens are valid (not empty)
             // If empty, email confirmation is required
-            const hasValidSession = session.accessToken && session.refreshToken;
+            const hasValidSession = !!(session.accessToken && session.refreshToken);
             
             set({
               user: hasValidSession ? user : null, // Only set user if authenticated
