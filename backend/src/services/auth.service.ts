@@ -328,6 +328,50 @@ export class AuthService {
   }
 
   /**
+   * Reset password using access token from password reset email
+   */
+  static async resetPassword(token: string, newPassword: string): Promise<void> {
+    try {
+      if (!token) {
+        throw new ValidationError('Access token is required');
+      }
+
+      if (!newPassword) {
+        throw new ValidationError('New password is required');
+      }
+
+      if (newPassword.length < 8) {
+        throw new ValidationError('Password must be at least 8 characters long');
+      }
+
+      // Verify token and get user
+      const userData = await AuthService.verifyToken(token);
+      if (!userData) {
+        throw new AuthenticationError('Invalid or expired reset token');
+      }
+
+      // Use admin client to update password
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(
+        userData.userId,
+        { password: newPassword }
+      );
+
+      if (error) {
+        logger.error('Password reset error:', error);
+        throw new AuthenticationError(`Failed to reset password: ${error.message}`);
+      }
+
+      logger.info(`Password reset successful for user: ${userData.email} (${userData.userId})`);
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof AuthenticationError) {
+        throw error;
+      }
+      logger.error('Password reset error:', error);
+      throw new AuthenticationError('Failed to reset password');
+    }
+  }
+
+  /**
    * Logout user
    * Note: Supabase doesn't provide server-side session invalidation.
    * This method verifies the token and logs the logout action.
