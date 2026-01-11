@@ -5,7 +5,8 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && npm run copy-public",
+    "copy-public": "xcopy /E /I /Y public dist\\public 2>nul || cp -r public dist/ 2>/dev/null || true",
     "start": "node dist/server.js",
     "postinstall": "npm run build",
     "lint": "eslint src --ext .ts",
