@@ -35,9 +35,13 @@ const corsOptions = {
 
     const allowedOrigins = [
       config.CORS_ORIGIN,
-      // Railway development environment
+      // Railway development environment (backend)
       ...(process.env.RAILWAY_PUBLIC_DOMAIN 
         ? [`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`] 
+        : []),
+      // Railway frontend service (if set)
+      ...(process.env.RAILWAY_FRONTEND_DOMAIN
+        ? [`https://${process.env.RAILWAY_FRONTEND_DOMAIN}`]
         : []),
       // Local development
       'http://localhost:3000',
