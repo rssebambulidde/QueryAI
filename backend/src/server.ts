@@ -72,6 +72,14 @@ app.get('/', (_req: Request, res: Response) => {
       health: '/health',
       api: '/api',
       root: '/',
+      auth: {
+        signup: 'POST /api/auth/signup',
+        login: 'POST /api/auth/login',
+        logout: 'POST /api/auth/logout',
+        refresh: 'POST /api/auth/refresh',
+        forgotPassword: 'POST /api/auth/forgot-password',
+        me: 'GET /api/auth/me',
+      },
     },
     documentation: {
       github: 'https://github.com/rssebambulidde/QueryAI',
