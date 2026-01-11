@@ -54,6 +54,26 @@ app.use(requestLogger);
 // Rate limiting
 app.use('/api/', apiLimiter);
 
+// Root endpoint
+app.get('/', (_req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    message: 'QueryAI API - AI Knowledge Hub',
+    version: '1.0.0',
+    status: 'operational',
+    environment: config.NODE_ENV,
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/health',
+      api: '/api',
+      root: '/',
+    },
+    documentation: {
+      github: 'https://github.com/rssebambulidde/QueryAI',
+    },
+  });
+});
+
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
@@ -61,6 +81,7 @@ app.get('/health', (_req: Request, res: Response) => {
     message: 'Server is healthy',
     timestamp: new Date().toISOString(),
     environment: config.NODE_ENV,
+    uptime: process.uptime(),
   });
 });
 
@@ -73,6 +94,7 @@ app.get('/api', (_req: Request, res: Response) => {
     endpoints: {
       health: '/health',
       api: '/api',
+      root: '/',
     },
   });
 });
