@@ -11,7 +11,26 @@
 
 ---
 
-## 📋 **Option 1: Deploy Frontend to Railway (Recommended)**
+## 📋 **Option 1: Deploy Frontend to Vercel (Recommended)**
+
+**Why Vercel?**
+- ✅ Optimized for Next.js
+- ✅ Global CDN automatically
+- ✅ Free tier is generous
+- ✅ Zero-config deployment
+- ✅ Industry standard for Next.js
+
+**Why NOT same Railway service?**
+- ❌ Different build processes
+- ❌ Can't scale independently
+- ❌ Coupled deployments
+- ❌ Less efficient
+
+See `DEPLOYMENT_ARCHITECTURE.md` for detailed explanation.
+
+---
+
+## 📋 **Option 2: Deploy Frontend to Railway (Alternative)**
 
 ### Step 1: Create New Railway Service for Frontend
 
