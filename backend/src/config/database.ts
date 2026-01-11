@@ -59,32 +59,47 @@ export const checkDatabaseHealth = async (): Promise<{
   message: string;
 }> => {
   try {
-    // Simple query to test connection
-    const { error } = await supabaseAdmin.rpc('version');
+    // Try to query user_profiles table (should exist after migration)
+    const { error } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id')
+      .limit(1);
 
     if (error) {
-      // Try alternative: query a system table
-      const { error: altError } = await supabaseAdmin
-        .from('_prisma_migrations')
-        .select('id')
-        .limit(1);
-
-      if (altError && altError.code !== '42P01') {
+      // If table doesn't exist (42P01), connection works but tables not created
+      if (error.code === '42P01' || error.code === 'PGRST116') {
         return {
-          connected: false,
-          message: `Database connection failed: ${error.message}`,
+          connected: true,
+          message: 'Database connected (tables not yet created - run migrations)',
         };
       }
+
+      // Other errors indicate connection issues
+      return {
+        connected: false,
+        message: `Database connection failed: ${error.message}`,
+      };
     }
 
+    // Success - table exists and query worked
     return {
       connected: true,
       message: 'Database connection healthy',
     };
   } catch (error: any) {
+    // Check if it's a connection error or just missing tables
+    const errorMessage = error.message || String(error);
+    
+    if (errorMessage.includes('relation') && errorMessage.includes('does not exist')) {
+      return {
+        connected: true,
+        message: 'Database connected (tables not yet created - run migrations)',
+      };
+    }
+
     return {
       connected: false,
-      message: `Database connection error: ${error.message}`,
+      message: `Database connection error: ${errorMessage}`,
     };
   }
 };
