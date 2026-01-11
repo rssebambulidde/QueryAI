@@ -42,12 +42,12 @@ This roadmap outlines the phased development approach for the AI Knowledge Hub p
 - [ ] Set up database migrations
 
 ### 1.3 Authentication
-- [ ] Integrate Supabase Auth
-- [ ] Implement email/password signup
-- [ ] Implement email/password login
-- [ ] Implement password reset
-- [ ] Create JWT token middleware
-- [ ] Set up user profile creation on signup
+- [x] Integrate Supabase Auth
+- [x] Implement email/password signup
+- [x] Implement email/password login
+- [x] Implement password reset
+- [x] Create JWT token middleware
+- [x] Set up user profile creation on signup
 
 ### 1.4 Basic AI Integration
 - [ ] Integrate OpenAI API

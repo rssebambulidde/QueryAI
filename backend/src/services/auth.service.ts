@@ -1,6 +1,7 @@
 import { supabaseAdmin, supabase } from '../config/database';
 import { DatabaseService } from './database.service';
 import logger from '../config/logger';
+import config from '../config/env';
 import { AuthenticationError, ValidationError, ConflictError } from '../types/error';
 
 export interface SignupData {
@@ -67,11 +68,14 @@ export class AuthService {
         logger.error('Signup error:', authError);
         
         // Handle specific Supabase errors
-        if (authError.message.includes('already registered')) {
+        // Check both error code and message for better reliability
+        if (authError.status === 422 || 
+            authError.message?.toLowerCase().includes('already registered') ||
+            authError.message?.toLowerCase().includes('user already registered')) {
           throw new ConflictError('User with this email already exists');
         }
         
-        throw new AuthenticationError(`Signup failed: ${authError.message}`);
+        throw new AuthenticationError(`Signup failed: ${authError.message || 'Unknown error'}`);
       }
 
       if (!authData.user) {
@@ -158,11 +162,14 @@ export class AuthService {
       if (authError) {
         logger.warn(`Login failed for email: ${data.email}`, authError);
         
-        if (authError.message.includes('Invalid login credentials')) {
+        // Check error status code for invalid credentials (400 is common for invalid credentials)
+        if (authError.status === 400 || 
+            authError.message?.toLowerCase().includes('invalid login credentials') ||
+            authError.message?.toLowerCase().includes('invalid password')) {
           throw new AuthenticationError('Invalid email or password');
         }
         
-        throw new AuthenticationError(`Login failed: ${authError.message}`);
+        throw new AuthenticationError(`Login failed: ${authError.message || 'Unknown error'}`);
       }
 
       if (!authData.user || !authData.session) {
@@ -217,8 +224,10 @@ export class AuthService {
       }
 
       // Request password reset (use regular client)
+      const redirectUrl = `${config.API_BASE_URL}/reset-password`;
+      
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${process.env.API_BASE_URL || 'http://localhost:3000'}/reset-password`,
+        redirectTo: redirectUrl,
       });
 
       if (error) {
@@ -291,6 +300,9 @@ export class AuthService {
 
   /**
    * Logout user
+   * Note: Supabase doesn't provide server-side session invalidation.
+   * This method verifies the token and logs the logout action.
+   * The client should clear the token from storage.
    */
   static async logout(token: string): Promise<void> {
     try {
@@ -298,17 +310,22 @@ export class AuthService {
       const userData = await AuthService.verifyToken(token);
       
       if (userData) {
-        // Sign out the user
-        const { error } = await supabaseAdmin.auth.admin.signOut(userData.userId);
-
-        if (error) {
-          logger.error('Logout error:', error);
-        } else {
-          logger.info('User logged out successfully');
-        }
+        // Log the logout action
+        // Note: Supabase handles session management client-side
+        // The client should clear tokens from storage after calling this endpoint
+        logger.info(`User logged out: ${userData.email} (${userData.userId})`);
+        
+        // Optionally log usage
+        await DatabaseService.logUsage(userData.userId, 'query', {
+          action: 'logout',
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        logger.warn('Logout attempted with invalid token');
       }
     } catch (error) {
       logger.error('Logout error:', error);
+      // Don't throw - logout should always succeed to prevent token enumeration
     }
   }
 }
