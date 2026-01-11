@@ -2,8 +2,8 @@ export interface User {
   id: string;
   email: string;
   fullName?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface UserProfile {

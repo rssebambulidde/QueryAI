@@ -7,6 +7,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { apiLimiter } from './middleware/rateLimiter';
 import { checkDatabaseHealth } from './config/database';
+import authRoutes from './routes/auth.routes';
 
 const app: Express = express();
 
@@ -55,6 +56,9 @@ app.use(requestLogger);
 // Rate limiting
 app.use('/api/', apiLimiter);
 
+// API Routes
+app.use('/api/auth', authRoutes);
+
 // Root endpoint
 app.get('/', (_req: Request, res: Response) => {
   res.status(200).json({
@@ -92,7 +96,7 @@ app.get('/health', async (_req: Request, res: Response) => {
   });
 });
 
-// API routes (to be added in next phases)
+// API info endpoint
 app.get('/api', (_req: Request, res: Response) => {
   res.status(200).json({
     success: true,
@@ -102,6 +106,14 @@ app.get('/api', (_req: Request, res: Response) => {
       health: '/health',
       api: '/api',
       root: '/',
+      auth: {
+        signup: 'POST /api/auth/signup',
+        login: 'POST /api/auth/login',
+        logout: 'POST /api/auth/logout',
+        refresh: 'POST /api/auth/refresh',
+        forgotPassword: 'POST /api/auth/forgot-password',
+        me: 'GET /api/auth/me',
+      },
     },
   });
 });
