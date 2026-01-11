@@ -146,6 +146,24 @@ The backend uses a centralized error handling system:
 - Input validation (to be added)
 - JWT authentication (to be added)
 
+## Railway Deployment
+
+The backend is configured for Railway deployment. See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for detailed deployment instructions.
+
+### Quick Railway Setup
+
+1. Create a new Railway project from GitHub
+2. Set root directory to `backend`
+3. Add environment variables (see `.env.example`)
+4. Deploy!
+
+Railway automatically:
+- Detects Node.js project
+- Runs `npm install`
+- Runs `npm run build` (via postinstall)
+- Runs `npm start`
+- Provides `PORT` environment variable
+
 ## Development Status
 
 **Phase 1.1 - Backend Foundation** ✅
@@ -154,6 +172,7 @@ The backend uses a centralized error handling system:
 - [x] Environment variables management
 - [x] Error handling middleware
 - [x] Logging system
+- [x] Railway deployment configuration
 
 **Next Steps:**
 - Phase 1.2: Database Setup

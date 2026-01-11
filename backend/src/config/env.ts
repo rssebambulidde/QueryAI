@@ -50,9 +50,12 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
 
 const config: EnvConfig = {
   // Server
-  NODE_ENV: getEnvVar('NODE_ENV', 'development'),
-  PORT: parseInt(getEnvVar('PORT', '3001'), 10),
-  API_BASE_URL: getEnvVar('API_BASE_URL', 'http://localhost:3001'),
+  NODE_ENV: getEnvVar('NODE_ENV', process.env.NODE_ENV || 'development'),
+  // Railway automatically provides PORT environment variable
+  PORT: parseInt(process.env.PORT || getEnvVar('PORT', '3001'), 10),
+  API_BASE_URL: getEnvVar('API_BASE_URL', process.env.RAILWAY_PUBLIC_DOMAIN 
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` 
+    : 'http://localhost:3001'),
 
   // Database (Supabase)
   SUPABASE_URL: getEnvVar('SUPABASE_URL'),
@@ -75,8 +78,11 @@ const config: EnvConfig = {
   JWT_SECRET: getEnvVar('JWT_SECRET', 'your-secret-key-change-in-production'),
   JWT_EXPIRES_IN: getEnvVar('JWT_EXPIRES_IN', '7d'),
 
-  // CORS
-  CORS_ORIGIN: getEnvVar('CORS_ORIGIN', 'http://localhost:3000'),
+  // CORS - Allow Railway domains in development
+  CORS_ORIGIN: getEnvVar('CORS_ORIGIN', 
+    process.env.RAILWAY_ENVIRONMENT === 'development' && process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : 'http://localhost:3000'),
 
   // Logging
   LOG_LEVEL: getEnvVar('LOG_LEVEL', 'info'),
