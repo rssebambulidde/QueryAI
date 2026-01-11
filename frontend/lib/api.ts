@@ -130,6 +130,23 @@ export const authApi = {
     return response.data;
   },
 
+  resetPassword: async (data: {
+    password: string;
+    accessToken: string;
+    refreshToken: string;
+  }): Promise<ApiResponse> => {
+    const response = await apiClient.post<ApiResponse>(
+      '/api/auth/reset-password',
+      { password: data.password },
+      {
+        headers: {
+          Authorization: `Bearer ${data.accessToken}`,
+        },
+      }
+    );
+    return response.data;
+  },
+
   getMe: async (): Promise<ApiResponse<{ user: User }>> => {
     const response = await apiClient.get<ApiResponse<{ user: User }>>(
       '/api/auth/me'

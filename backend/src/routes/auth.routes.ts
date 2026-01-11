@@ -146,6 +146,37 @@ router.post(
 );
 
 /**
+ * POST /api/auth/reset-password
+ * Reset password using token from reset email (requires authentication)
+ */
+router.post(
+  '/reset-password',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { password } = req.body;
+
+    if (!password) {
+      throw new ValidationError('Password is required');
+    }
+
+    // Get token from Authorization header
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+
+    if (!token) {
+      throw new ValidationError('Access token is required');
+    }
+
+    await AuthService.resetPassword(token, password);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully',
+    });
+  })
+);
+
+/**
  * GET /api/auth/me
  * Get current user (requires authentication)
  */

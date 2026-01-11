@@ -240,20 +240,33 @@ export class AuthService {
       }
 
       // Request password reset (use regular client)
-      const redirectUrl = `${config.API_BASE_URL}/reset-password`;
+      // Use frontend URL for redirect (Supabase will redirect there with tokens)
+      // For now, use CORS_ORIGIN as frontend URL, or fallback to API_BASE_URL if not set
+      const frontendUrl = config.CORS_ORIGIN || config.API_BASE_URL;
+      const redirectUrl = `${frontendUrl}/reset-password`;
+      
+      logger.info(`Requesting password reset for: ${email}`, {
+        redirectUrl,
+        apiBaseUrl: config.API_BASE_URL,
+      });
       
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: redirectUrl,
       });
 
       if (error) {
-        logger.error('Password reset request error:', error);
-        // Don't reveal if email exists or not (security best practice)
-        // Always return success
+        logger.error('Password reset request error:', {
+          error: error.message,
+          code: error.code,
+          status: error.status,
+          details: 'This usually means SMTP is not configured in Supabase. See BREVO_SMTP_SETUP.md',
+        });
+        // Still don't reveal if email exists (security), but log the error for debugging
+        // If it's an email sending error, we should still return success to prevent enumeration
         return;
       }
 
-      logger.info(`Password reset requested for email: ${email}`);
+      logger.info(`Password reset email sent successfully for: ${email}`);
     } catch (error) {
       if (error instanceof ValidationError) {
         throw error;
