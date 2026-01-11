@@ -15,6 +15,9 @@ router.post(
   '/signup',
   authLimiter,
   asyncHandler(async (req: Request, res: Response) => {
+    const logger = (await import('../config/logger')).default;
+    logger.info('Signup request received', { email: req.body.email });
+    
     const { email, password, fullName } = req.body;
 
     if (!email || !password) {
@@ -45,6 +48,9 @@ router.post(
   '/login',
   authLimiter,
   asyncHandler(async (req: Request, res: Response) => {
+    const logger = (await import('../config/logger')).default;
+    logger.info('Login request received', { email: req.body.email });
+    
     const { email, password } = req.body;
 
     if (!email || !password) {

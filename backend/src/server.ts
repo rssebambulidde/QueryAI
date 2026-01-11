@@ -9,6 +9,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { apiLimiter } from './middleware/rateLimiter';
 import { checkDatabaseHealth } from './config/database';
 import authRoutes from './routes/auth.routes';
+import testRoutes from './routes/test.routes';
 
 const app: Express = express();
 
@@ -61,6 +62,7 @@ app.use(requestLogger);
 app.use('/api/', apiLimiter);
 
 // API Routes
+app.use('/api/test', testRoutes);
 app.use('/api/auth', authRoutes);
 
 // Root endpoint

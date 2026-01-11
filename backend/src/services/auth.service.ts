@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '../config/database';
+import { supabaseAdmin, supabase } from '../config/database';
 import { DatabaseService } from './database.service';
 import logger from '../config/logger';
 import { AuthenticationError, ValidationError, ConflictError } from '../types/error';
@@ -52,8 +52,8 @@ export class AuthService {
         throw new ValidationError('Invalid email format');
       }
 
-      // Sign up user with Supabase Auth
-      const { data: authData, error: authError } = await supabaseAdmin.auth.signUp({
+      // Sign up user with Supabase Auth (use regular client for user operations)
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
@@ -149,8 +149,8 @@ export class AuthService {
         throw new ValidationError('Email and password are required');
       }
 
-      // Sign in user with Supabase Auth
-      const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
+      // Sign in user with Supabase Auth (use regular client for user operations)
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       });
@@ -216,8 +216,8 @@ export class AuthService {
         throw new ValidationError('Invalid email format');
       }
 
-      // Request password reset
-      const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
+      // Request password reset (use regular client)
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${process.env.API_BASE_URL || 'http://localhost:3000'}/reset-password`,
       });
 
@@ -243,6 +243,7 @@ export class AuthService {
    */
   static async verifyToken(token: string): Promise<{ userId: string; email: string } | null> {
     try {
+      // Use admin client for token verification (server-side operation)
       const { data, error } = await supabaseAdmin.auth.getUser(token);
 
       if (error || !data.user) {
@@ -268,7 +269,8 @@ export class AuthService {
     expiresIn: number;
   } | null> {
     try {
-      const { data, error } = await supabaseAdmin.auth.refreshSession({
+      // Use regular client for token refresh
+      const { data, error } = await supabase.auth.refreshSession({
         refresh_token: refreshToken,
       });
 
