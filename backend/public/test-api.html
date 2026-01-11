@@ -223,6 +223,21 @@
     </div>
 
     <script>
+        // Test if JavaScript is working
+        console.log('QueryAI API Tester loaded');
+        console.log('Current URL:', window.location.href);
+        
+        // Test button click handlers
+        window.addEventListener('load', () => {
+            console.log('Page loaded, testing button handlers...');
+            const testBtn = document.querySelector('button[onclick="testSignup()"]');
+            if (testBtn) {
+                console.log('Signup button found:', testBtn);
+            } else {
+                console.error('Signup button not found!');
+            }
+        });
+
         let accessToken = localStorage.getItem('accessToken') || '';
         let refreshToken = localStorage.getItem('refreshToken') || '';
 
@@ -278,16 +293,19 @@
             console.log('Request URL:', `${apiUrl}/api/auth/signup`);
 
             try {
+                const requestBody = {
+                    email,
+                    password,
+                    ...(fullName && { fullName }),
+                };
+                console.log('Request body:', requestBody);
+
                 const response = await fetch(`${apiUrl}/api/auth/signup`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        email,
-                        password,
-                        fullName: fullName || undefined,
-                    }),
+                    body: JSON.stringify(requestBody),
                 });
 
                 console.log('Response status:', response.status);
