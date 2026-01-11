@@ -6,6 +6,7 @@ import logger from './config/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { apiLimiter } from './middleware/rateLimiter';
+import { checkDatabaseHealth } from './config/database';
 
 const app: Express = express();
 
@@ -75,13 +76,19 @@ app.get('/', (_req: Request, res: Response) => {
 });
 
 // Health check endpoint
-app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({
-    success: true,
-    message: 'Server is healthy',
+app.get('/health', async (_req: Request, res: Response) => {
+  const dbHealth = await checkDatabaseHealth();
+  
+  res.status(dbHealth.connected ? 200 : 503).json({
+    success: dbHealth.connected,
+    message: 'Server health check',
     timestamp: new Date().toISOString(),
     environment: config.NODE_ENV,
     uptime: process.uptime(),
+    database: {
+      connected: dbHealth.connected,
+      message: dbHealth.message,
+    },
   });
 });
 
