@@ -21,6 +21,10 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.1",
     "cors": "^2.8.5",
