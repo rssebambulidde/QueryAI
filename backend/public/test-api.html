@@ -245,17 +245,40 @@
 
         function showResponse(elementId, data, isError = false) {
             const element = document.getElementById(elementId);
+            if (!element) {
+                console.error(`Element ${elementId} not found`);
+                return;
+            }
             element.style.display = 'block';
             element.innerHTML = `<pre class="${isError ? 'error' : 'success'}">${JSON.stringify(data, null, 2)}</pre>`;
         }
 
+        function showLoading(elementId) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.style.display = 'block';
+                element.innerHTML = '<pre class="success">Loading...</pre>';
+            }
+        }
+
         async function testSignup() {
+            console.log('testSignup called');
             const email = document.getElementById('signupEmail').value;
             const password = document.getElementById('signupPassword').value;
             const fullName = document.getElementById('signupFullName').value;
 
+            if (!email || !password) {
+                showResponse('signupResponse', { error: 'Email and password are required' }, true);
+                return;
+            }
+
+            showLoading('signupResponse');
+            const apiUrl = getApiUrl();
+            console.log('API URL:', apiUrl);
+            console.log('Request URL:', `${apiUrl}/api/auth/signup`);
+
             try {
-                const response = await fetch(`${getApiUrl()}/api/auth/signup`, {
+                const response = await fetch(`${apiUrl}/api/auth/signup`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -267,7 +290,9 @@
                     }),
                 });
 
+                console.log('Response status:', response.status);
                 const data = await response.json();
+                console.log('Response data:', data);
                 showResponse('signupResponse', data, !response.ok);
 
                 // Save tokens if signup successful
@@ -279,16 +304,31 @@
                     updateTokenDisplay();
                 }
             } catch (error) {
-                showResponse('signupResponse', { error: error.message }, true);
+                console.error('Signup error:', error);
+                showResponse('signupResponse', { 
+                    error: error.message || 'Network error. Check console for details.',
+                    details: error.toString()
+                }, true);
             }
         }
 
         async function testLogin() {
+            console.log('testLogin called');
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
 
+            if (!email || !password) {
+                showResponse('loginResponse', { error: 'Email and password are required' }, true);
+                return;
+            }
+
+            showLoading('loginResponse');
+            const apiUrl = getApiUrl();
+            console.log('API URL:', apiUrl);
+            console.log('Request URL:', `${apiUrl}/api/auth/login`);
+
             try {
-                const response = await fetch(`${getApiUrl()}/api/auth/login`, {
+                const response = await fetch(`${apiUrl}/api/auth/login`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -296,7 +336,9 @@
                     body: JSON.stringify({ email, password }),
                 });
 
+                console.log('Response status:', response.status);
                 const data = await response.json();
+                console.log('Response data:', data);
                 showResponse('loginResponse', data, !response.ok);
 
                 // Save tokens if login successful
@@ -308,18 +350,28 @@
                     updateTokenDisplay();
                 }
             } catch (error) {
-                showResponse('loginResponse', { error: error.message }, true);
+                console.error('Login error:', error);
+                showResponse('loginResponse', { 
+                    error: error.message || 'Network error. Check console for details.',
+                    details: error.toString()
+                }, true);
             }
         }
 
         async function testMe() {
+            console.log('testMe called');
             if (!accessToken) {
                 showResponse('meResponse', { error: 'No access token. Please login first.' }, true);
                 return;
             }
 
+            showLoading('meResponse');
+            const apiUrl = getApiUrl();
+            console.log('API URL:', apiUrl);
+            console.log('Request URL:', `${apiUrl}/api/auth/me`);
+
             try {
-                const response = await fetch(`${getApiUrl()}/api/auth/me`, {
+                const response = await fetch(`${apiUrl}/api/auth/me`, {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${accessToken}`,
@@ -329,7 +381,11 @@
                 const data = await response.json();
                 showResponse('meResponse', data, !response.ok);
             } catch (error) {
-                showResponse('meResponse', { error: error.message }, true);
+                console.error('Get me error:', error);
+                showResponse('meResponse', { 
+                    error: error.message || 'Network error. Check console for details.',
+                    details: error.toString()
+                }, true);
             }
         }
 
