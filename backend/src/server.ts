@@ -81,6 +81,9 @@ app.use('/api/', apiLimiter);
 // API Routes
 app.use('/api/test', testRoutes);
 app.use('/api/auth', authRoutes);
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/debug', debugRoutes);
+}
 
 // Root endpoint
 app.get('/', (_req: Request, res: Response) => {

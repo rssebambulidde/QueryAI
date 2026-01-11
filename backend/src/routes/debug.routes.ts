@@ -12,10 +12,11 @@ router.get(
   '/env',
   asyncHandler(async (req: Request, res: Response) => {
     if (process.env.NODE_ENV === 'production') {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         message: 'Debug endpoint not available in production',
       });
+      return;
     }
 
     // Don't expose actual keys, just check if they exist
