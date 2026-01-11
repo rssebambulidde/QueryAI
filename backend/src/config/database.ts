@@ -2,10 +2,42 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import config from './env';
 import logger from './logger';
 
+// Log configuration (without exposing keys)
+logger.info('Initializing Supabase clients...', {
+  SUPABASE_URL: config.SUPABASE_URL ? `${config.SUPABASE_URL.substring(0, 30)}...` : 'NOT SET',
+  SUPABASE_URL_LENGTH: config.SUPABASE_URL?.length || 0,
+  SUPABASE_ANON_KEY_SET: !!config.SUPABASE_ANON_KEY,
+  SUPABASE_ANON_KEY_LENGTH: config.SUPABASE_ANON_KEY?.length || 0,
+  SUPABASE_SERVICE_ROLE_KEY_SET: !!config.SUPABASE_SERVICE_ROLE_KEY,
+  SUPABASE_SERVICE_ROLE_KEY_LENGTH: config.SUPABASE_SERVICE_ROLE_KEY?.length || 0,
+});
+
+// Validate configuration
+if (!config.SUPABASE_URL) {
+  logger.error('SUPABASE_URL is not set!');
+  throw new Error('SUPABASE_URL environment variable is required');
+}
+
+if (!config.SUPABASE_ANON_KEY) {
+  logger.error('SUPABASE_ANON_KEY is not set!');
+  throw new Error('SUPABASE_ANON_KEY environment variable is required');
+}
+
+if (!config.SUPABASE_SERVICE_ROLE_KEY) {
+  logger.error('SUPABASE_SERVICE_ROLE_KEY is not set!');
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is required');
+}
+
+// Clean URL - remove trailing slash if present
+const cleanedUrl = config.SUPABASE_URL.trim().replace(/\/+$/, '');
+if (cleanedUrl !== config.SUPABASE_URL) {
+  logger.warn(`SUPABASE_URL had trailing slash, cleaned: ${cleanedUrl}`);
+}
+
 // Create Supabase client with service role key (for admin operations)
 export const supabaseAdmin: SupabaseClient = createClient(
-  config.SUPABASE_URL,
-  config.SUPABASE_SERVICE_ROLE_KEY,
+  cleanedUrl,
+  config.SUPABASE_SERVICE_ROLE_KEY.trim(),
   {
     auth: {
       autoRefreshToken: false,
@@ -17,8 +49,8 @@ export const supabaseAdmin: SupabaseClient = createClient(
 // Create Supabase client with anon key (for user operations)
 // This will be used when we have user authentication tokens
 export const supabase: SupabaseClient = createClient(
-  config.SUPABASE_URL,
-  config.SUPABASE_ANON_KEY,
+  cleanedUrl,
+  config.SUPABASE_ANON_KEY.trim(),
   {
     auth: {
       autoRefreshToken: true,
