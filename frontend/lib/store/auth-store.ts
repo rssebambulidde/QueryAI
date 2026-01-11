@@ -129,11 +129,11 @@ export const useAuthStore = create<AuthState>()(
       checkAuth: async () => {
         const { accessToken } = get();
         if (!accessToken) {
-          set({ isAuthenticated: false, user: null });
+          set({ isAuthenticated: false, user: null, isLoading: false });
           return;
         }
 
-        set({ isLoading: true });
+        set({ isLoading: true, error: null });
         try {
           const response = await authApi.getMe();
           if (response.success && response.data) {
@@ -143,20 +143,25 @@ export const useAuthStore = create<AuthState>()(
               isLoading: false,
             });
           } else {
-            throw new Error('Authentication failed');
+            throw new Error(response.error?.message || 'Authentication failed');
           }
-        } catch (error) {
+        } catch (error: any) {
+          console.error('Auth check error:', error);
+          // Clear auth state on failure
           set({
             isAuthenticated: false,
             user: null,
             accessToken: null,
             refreshToken: null,
             isLoading: false,
+            error: error.response?.data?.error?.message || error.message || 'Authentication failed',
           });
           if (typeof window !== 'undefined') {
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
           }
+          // Re-throw so caller knows it failed
+          throw error;
         }
       },
 

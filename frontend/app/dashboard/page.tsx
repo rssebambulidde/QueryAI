@@ -7,16 +7,14 @@ import { Button } from '@/components/ui/button';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, logout, checkAuth } =
-    useAuthStore();
+  const { user, isAuthenticated, isLoading, logout } = useAuthStore();
 
   useEffect(() => {
+    // Redirect if not authenticated (wait for loading to finish)
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
-    } else if (!isLoading && isAuthenticated) {
-      checkAuth();
     }
-  }, [isAuthenticated, isLoading, router, checkAuth]);
+  }, [isAuthenticated, isLoading, router]);
 
   const handleLogout = async () => {
     await logout();

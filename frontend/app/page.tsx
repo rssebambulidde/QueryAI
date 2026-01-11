@@ -8,7 +8,14 @@ import { Button } from '@/components/ui/button';
 
 export default function HomePage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
+
+  useEffect(() => {
+    // Check auth status on mount (load from persisted storage)
+    checkAuth().catch(() => {
+      // Auth check failed, user not authenticated - stay on home page
+    });
+  }, [checkAuth]);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
