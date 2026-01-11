@@ -13,6 +13,9 @@ import testRoutes from './routes/test.routes';
 
 const app: Express = express();
 
+// Trust proxy - Required for Railway's reverse proxy
+app.set('trust proxy', true);
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: {
