@@ -23,19 +23,19 @@ Add these in Railway Dashboard → Service → Variables:
 
 **Required:**
 - [ ] `NODE_ENV=development`
-- [ ] `SUPABASE_URL=...`
-- [ ] `SUPABASE_ANON_KEY=...`
-- [ ] `SUPABASE_SERVICE_ROLE_KEY=...`
-- [ ] `OPENAI_API_KEY=sk-...`
-- [ ] `JWT_SECRET=...` (generate secure random string)
-- [ ] `CORS_ORIGIN=...` (or leave empty for Railway auto-detect)
+- [ ] `SUPABASE_URL=...` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md#2-supabase_url)
+- [ ] `SUPABASE_ANON_KEY=...` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md#3-supabase_anon_key)
+- [ ] `SUPABASE_SERVICE_ROLE_KEY=...` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md#4-supabase_service_role_key)
+- [ ] `OPENAI_API_KEY=sk-...` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md#openai_api_key)
+- [ ] `JWT_SECRET=...` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md#5-jwt_secret) (generate secure random string)
+- [ ] `CORS_ORIGIN=...` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md#6-cors_origin) (or leave empty for Railway auto-detect)
 
 **Optional (for later phases):**
-- [ ] `ANTHROPIC_API_KEY=...`
-- [ ] `TAVILY_API_KEY=...`
-- [ ] `PINECONE_API_KEY=...`
-- [ ] `PINECONE_ENVIRONMENT=...`
-- [ ] `PINECONE_INDEX_NAME=queryai-embeddings`
+- [ ] `ANTHROPIC_API_KEY=...` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md)
+- [ ] `TAVILY_API_KEY=...` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md#tavily_api_key-optional)
+- [ ] `PINECONE_API_KEY=...` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md#pinecone_api_key-optional)
+- [ ] `PINECONE_ENVIRONMENT=...` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md#7-pinecone_environment)
+- [ ] `PINECONE_INDEX_NAME=queryai-embeddings` → See [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md#8-pinecone_index_name)
 
 **Note:** Railway automatically provides:
 - ✅ `PORT` (don't set manually)
@@ -106,11 +106,24 @@ railway open
 - Railway provides HTTPS automatically
 - Custom domains available in Railway settings
 
+## 📖 Environment Variables Guide
+
+**Don't know where to find the values?** See the complete guide:
+👉 [ENV_VARIABLES_GUIDE.md](./ENV_VARIABLES_GUIDE.md)
+
+This guide explains step-by-step where to find:
+- Supabase keys
+- OpenAI API key
+- Pinecone configuration
+- How to generate JWT_SECRET
+- And more!
+
 ## 🔗 Useful Links
 
 - [Railway Dashboard](https://railway.app/dashboard)
 - [Railway Docs](https://docs.railway.app)
 - [Full Deployment Guide](./RAILWAY_DEPLOYMENT.md)
+- [Environment Variables Guide](./ENV_VARIABLES_GUIDE.md) ⭐ NEW!
 
 ---
 
