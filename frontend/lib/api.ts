@@ -167,8 +167,13 @@ export interface QuestionRequest {
   temperature?: number;
   maxTokens?: number;
   enableSearch?: boolean;
-  topic?: string;
+  topic?: string; // Any keyword for topic filtering
   maxSearchResults?: number;
+  // Advanced search filters
+  timeRange?: TimeRange;
+  startDate?: string; // ISO date string (YYYY-MM-DD)
+  endDate?: string; // ISO date string (YYYY-MM-DD)
+  country?: string; // ISO country code (e.g., 'US', 'UG', 'KE')
 }
 
 export interface Source {
@@ -272,12 +277,20 @@ export const aiApi = {
 };
 
 // Search API Types
+export type TimeRange = 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
+
 export interface SearchRequest {
   query: string;
-  topic?: string;
+  topic?: string; // Any keyword for topic filtering
   maxResults?: number;
   includeDomains?: string[];
   excludeDomains?: string[];
+  // Time range filtering
+  timeRange?: TimeRange;
+  startDate?: string; // ISO date string (YYYY-MM-DD)
+  endDate?: string; // ISO date string (YYYY-MM-DD)
+  // Location filtering
+  country?: string; // ISO country code (e.g., 'US', 'UG', 'KE')
 }
 
 export interface SearchResult {

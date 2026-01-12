@@ -2,12 +2,20 @@ import { tavilyClient } from '../config/tavily';
 import logger from '../config/logger';
 import { AppError, ValidationError } from '../types/error';
 
+export type TimeRange = 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
+
 export interface SearchRequest {
   query: string;
-  topic?: string;
+  topic?: string; // Any keyword for topic filtering
   maxResults?: number;
   includeDomains?: string[];
   excludeDomains?: string[];
+  // Time range filtering
+  timeRange?: TimeRange;
+  startDate?: string; // ISO date string (YYYY-MM-DD)
+  endDate?: string; // ISO date string (YYYY-MM-DD)
+  // Location filtering
+  country?: string; // ISO country code (e.g., 'US', 'UG', 'KE')
 }
 
 export interface SearchResult {
@@ -23,6 +31,8 @@ export interface SearchResponse {
   query: string;
   results: SearchResult[];
   topic?: string;
+  timeRange?: TimeRange;
+  country?: string;
   cached?: boolean;
 }
 
@@ -47,6 +57,10 @@ function generateCacheKey(request: SearchRequest): string {
     request.maxResults || 5,
     (request.includeDomains || []).sort().join(','),
     (request.excludeDomains || []).sort().join(','),
+    request.timeRange || '',
+    request.startDate || '',
+    request.endDate || '',
+    request.country || '',
   ];
   return parts.join('|');
 }
@@ -132,17 +146,40 @@ export class SearchService {
         query: searchQuery,
         originalQuery: request.query,
         topic: request.topic,
+        timeRange: request.timeRange,
+        country: request.country,
         maxResults: request.maxResults || 5,
       });
 
-      // Perform search
-      const response = await tavilyClient.search(searchQuery, {
+      // Build Tavily search options
+      const tavilyOptions: any = {
         maxResults: request.maxResults || 5,
         includeDomains: request.includeDomains,
         excludeDomains: request.excludeDomains,
         searchDepth: 'basic', // Options: 'basic' or 'advanced'
         includeRawContent: false, // Don't include raw content to save tokens
-      });
+      };
+
+      // Add time range filtering
+      if (request.timeRange) {
+        tavilyOptions.timeRange = request.timeRange;
+      } else if (request.startDate || request.endDate) {
+        // Use custom date range if provided
+        if (request.startDate) {
+          tavilyOptions.startDate = request.startDate;
+        }
+        if (request.endDate) {
+          tavilyOptions.endDate = request.endDate;
+        }
+      }
+
+      // Add location filtering
+      if (request.country) {
+        tavilyOptions.country = request.country.toUpperCase();
+      }
+
+      // Perform search
+      const response = await tavilyClient.search(searchQuery, tavilyOptions);
 
       // Transform Tavily results to our format
       const results: SearchResult[] = (response.results || []).map((result: any) => ({
@@ -158,6 +195,8 @@ export class SearchService {
         query: request.query,
         results,
         topic: request.topic,
+        timeRange: request.timeRange,
+        country: request.country,
         cached: false,
       };
 

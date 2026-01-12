@@ -16,8 +16,13 @@ export interface QuestionRequest {
   maxTokens?: number;
   // Search options
   enableSearch?: boolean;
-  topic?: string;
+  topic?: string; // Any keyword for topic filtering
   maxSearchResults?: number;
+  // Advanced search filters
+  timeRange?: 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
+  startDate?: string; // ISO date string (YYYY-MM-DD)
+  endDate?: string; // ISO date string (YYYY-MM-DD)
+  country?: string; // ISO country code (e.g., 'US', 'UG', 'KE')
 }
 
 export interface Source {
@@ -300,6 +305,10 @@ Use the provided context and search results to enhance your answers. If the info
             query: request.question,
             topic: request.topic,
             maxResults: request.maxSearchResults || 5,
+            timeRange: request.timeRange,
+            startDate: request.startDate,
+            endDate: request.endDate,
+            country: request.country,
           };
 
           const searchResponse = await SearchService.search(searchRequest);
@@ -315,6 +324,8 @@ Use the provided context and search results to enhance your answers. If the info
               query: request.question,
               resultsCount: searchResults.length,
               topic: request.topic,
+              timeRange: request.timeRange,
+              country: request.country,
             });
           }
         } catch (searchError: any) {

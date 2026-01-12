@@ -23,7 +23,7 @@ export const ChatInterface: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
-  const handleSend = async (content: string, topic?: string) => {
+  const handleSend = async (content: string, filters?: { topic?: string; timeRange?: any; startDate?: string; endDate?: string; country?: string }) => {
     if (!content.trim() || isLoading) return;
 
     // Add user message
@@ -62,7 +62,11 @@ export const ChatInterface: React.FC = () => {
         question: content,
         conversationHistory,
         enableSearch: true, // Enable search by default
-        topic: topic?.trim(), // Add topic filtering if provided
+        topic: filters?.topic?.trim(), // Topic/keyword filtering
+        timeRange: filters?.timeRange, // Time range filtering
+        startDate: filters?.startDate, // Custom start date
+        endDate: filters?.endDate, // Custom end date
+        country: filters?.country, // Location filtering
         maxSearchResults: 5,
       };
 
@@ -88,7 +92,11 @@ export const ChatInterface: React.FC = () => {
             question: content,
             conversationHistory: [], // Don't include history to save tokens
             enableSearch: true,
-            topic: topic?.trim(), // Include topic for source filtering
+            topic: filters?.topic?.trim(), // Include filters for source matching
+            timeRange: filters?.timeRange,
+            startDate: filters?.startDate,
+            endDate: filters?.endDate,
+            country: filters?.country,
             maxSearchResults: 5,
           });
           

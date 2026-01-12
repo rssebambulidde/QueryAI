@@ -18,10 +18,34 @@ router.post(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { query, topic, maxResults, includeDomains, excludeDomains } = req.body;
+    const { 
+      query, 
+      topic, 
+      maxResults, 
+      includeDomains, 
+      excludeDomains,
+      timeRange,
+      startDate,
+      endDate,
+      country,
+    } = req.body;
 
     if (!query) {
       throw new ValidationError('Search query is required');
+    }
+
+    // Validate time range if provided
+    const validTimeRanges = ['day', 'week', 'month', 'year', 'd', 'w', 'm', 'y'];
+    if (timeRange && !validTimeRanges.includes(timeRange)) {
+      throw new ValidationError(`Invalid timeRange. Must be one of: ${validTimeRanges.join(', ')}`);
+    }
+
+    // Validate date format if provided
+    if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      throw new ValidationError('startDate must be in YYYY-MM-DD format');
+    }
+    if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      throw new ValidationError('endDate must be in YYYY-MM-DD format');
     }
 
     const searchRequest: SearchRequest = {
@@ -30,12 +54,18 @@ router.post(
       maxResults: maxResults || 5,
       includeDomains: includeDomains,
       excludeDomains: excludeDomains,
+      timeRange: timeRange,
+      startDate: startDate,
+      endDate: endDate,
+      country: country?.trim()?.toUpperCase(),
     };
 
     logger.info('Search request', {
       userId: req.user?.id,
       query: searchRequest.query,
       topic: searchRequest.topic,
+      timeRange: searchRequest.timeRange,
+      country: searchRequest.country,
     });
 
     const result = await SearchService.search(searchRequest);
