@@ -29,18 +29,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
 
-  // Replace [Source N] patterns with hyperlinks
+  // Replace [Source N] patterns with hyperlinks using source titles
   const processContentWithSources = (content: string, sources?: Source[]): string => {
     if (!sources || sources.length === 0) return content;
     
-    // Replace [Source 1], [Source 2], etc. with markdown links
+    // Replace [Source 1], [Source 2], etc. with markdown links using source titles
     let processedContent = content;
     sources.forEach((source, index) => {
       const sourceNumber = index + 1;
       const pattern = new RegExp(`\\[Source ${sourceNumber}\\]`, 'gi');
+      
+      // Use the source title as the link text (fallback to "Source N" if no title)
+      const linkText = source.title || `Source ${sourceNumber}`;
+      
       processedContent = processedContent.replace(
         pattern,
-        `[Source ${sourceNumber}](${source.url} "${source.title}")`
+        `[${linkText}](${source.url} "${source.title || linkText}")`
       );
     });
     
