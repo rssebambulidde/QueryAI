@@ -9,6 +9,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { apiLimiter } from './middleware/rateLimiter';
 import { checkDatabaseHealth } from './config/database';
 import authRoutes from './routes/auth.routes';
+import aiRoutes from './routes/ai.routes';
 import testRoutes from './routes/test.routes';
 import debugRoutes from './routes/debug.routes';
 
@@ -82,6 +83,7 @@ app.use('/api/', apiLimiter);
 // API Routes
 app.use('/api/test', testRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/ai', aiRoutes);
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }
@@ -150,6 +152,10 @@ app.get('/api', (_req: Request, res: Response) => {
         forgotPassword: 'POST /api/auth/forgot-password',
         resetPassword: 'POST /api/auth/reset-password',
         me: 'GET /api/auth/me',
+      },
+      ai: {
+        ask: 'POST /api/ai/ask',
+        askStream: 'POST /api/ai/ask/stream',
       },
     },
   });

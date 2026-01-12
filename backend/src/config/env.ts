@@ -16,7 +16,7 @@ interface EnvConfig {
   SUPABASE_SERVICE_ROLE_KEY: string;
 
   // AI Services
-  OPENAI_API_KEY: string;
+  OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
 
   // Search API
@@ -42,7 +42,7 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
   const value = process.env[key] || defaultValue;
   if (!value && key !== 'ANTHROPIC_API_KEY' && key !== 'TAVILY_API_KEY' && 
       key !== 'PINECONE_API_KEY' && key !== 'PINECONE_ENVIRONMENT' && 
-      key !== 'PINECONE_INDEX_NAME') {
+      key !== 'PINECONE_INDEX_NAME' && key !== 'OPENAI_API_KEY') {
     throw new Error(`Missing required environment variable: ${key}`);
   }
   return value || '';
@@ -62,7 +62,7 @@ const config: EnvConfig = {
   SUPABASE_ANON_KEY: getEnvVar('SUPABASE_ANON_KEY'),
   SUPABASE_SERVICE_ROLE_KEY: getEnvVar('SUPABASE_SERVICE_ROLE_KEY'),
 
-  // AI Services
+  // AI Services (OpenAI is optional but recommended for AI features)
   OPENAI_API_KEY: getEnvVar('OPENAI_API_KEY'),
   ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
 

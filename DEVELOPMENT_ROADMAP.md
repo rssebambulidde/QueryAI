@@ -50,11 +50,11 @@ This roadmap outlines the phased development approach for the AI Knowledge Hub p
 - [x] Set up user profile creation on signup
 
 ### 1.4 Basic AI Integration
-- [ ] Integrate OpenAI API
-- [ ] Create question-answering endpoint
-- [ ] Implement basic prompt engineering
-- [ ] Handle streaming responses
-- [ ] Basic error handling for AI API
+- [x] Integrate OpenAI API
+- [x] Create question-answering endpoint
+- [x] Implement basic prompt engineering
+- [x] Handle streaming responses
+- [x] Basic error handling for AI API
 
 ### 1.5 Frontend Foundation
 - [ ] Set up Next.js project
