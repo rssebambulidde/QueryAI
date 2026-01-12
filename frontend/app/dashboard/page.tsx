@@ -119,8 +119,8 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <div className="flex items-center">
-                      <span className="text-gray-400 mr-2">⏳</span>
-                      <span className="text-sm text-gray-500">
+                      <span className="text-green-500 mr-2">✅</span>
+                      <span className="text-sm text-gray-700 font-medium">
                         Phase 1.5: Frontend Foundation
                       </span>
                     </div>

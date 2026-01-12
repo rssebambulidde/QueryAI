@@ -155,4 +155,102 @@ export const authApi = {
   },
 };
 
+// AI API Types
+export interface QuestionRequest {
+  question: string;
+  context?: string;
+  conversationHistory?: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface QuestionResponse {
+  answer: string;
+  model: string;
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+}
+
+// AI API Functions
+export const aiApi = {
+  ask: async (data: QuestionRequest): Promise<ApiResponse<QuestionResponse>> => {
+    const response = await apiClient.post<ApiResponse<QuestionResponse>>(
+      '/api/ai/ask',
+      data
+    );
+    return response.data;
+  },
+
+  askStream: async function* (
+    data: QuestionRequest
+  ): AsyncGenerator<string, void, unknown> {
+    // Get token from localStorage
+    const token = typeof window !== 'undefined' 
+      ? localStorage.getItem('accessToken') 
+      : null;
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    
+    const response = await fetch(`${API_URL}/api/ai/ask/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Streaming request failed: ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('Failed to get response reader');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const parsed = JSON.parse(line.slice(6));
+              if (parsed.chunk) {
+                yield parsed.chunk;
+              }
+              if (parsed.done) {
+                return;
+              }
+              if (parsed.error) {
+                throw new Error(parsed.error.message || 'Streaming error');
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
+};
+
 export default apiClient;

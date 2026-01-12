@@ -57,12 +57,12 @@ This roadmap outlines the phased development approach for the AI Knowledge Hub p
 - [x] Basic error handling for AI API
 
 ### 1.5 Frontend Foundation
-- [ ] Set up Next.js project
-- [ ] Configure Tailwind CSS
-- [ ] Set up component library (Shadcn/ui)
-- [ ] Create authentication pages (login, signup)
-- [ ] Implement protected routes
-- [ ] Set up API client with axios
+- [x] Set up Next.js project
+- [x] Configure Tailwind CSS
+- [x] Set up component library (Shadcn/ui)
+- [x] Create authentication pages (login, signup)
+- [x] Implement protected routes
+- [x] Set up API client with axios
 
 ### 1.6 Chat Interface
 - [ ] Create chat UI component
