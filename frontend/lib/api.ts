@@ -166,11 +166,21 @@ export interface QuestionRequest {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  enableSearch?: boolean;
+  topic?: string;
+  maxSearchResults?: number;
+}
+
+export interface Source {
+  title: string;
+  url: string;
+  snippet?: string;
 }
 
 export interface QuestionResponse {
   answer: string;
   model: string;
+  sources?: Source[];
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -258,6 +268,60 @@ export const aiApi = {
     } finally {
       reader.releaseLock();
     }
+  },
+};
+
+// Search API Types
+export interface SearchRequest {
+  query: string;
+  topic?: string;
+  maxResults?: number;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+}
+
+export interface SearchResult {
+  title: string;
+  url: string;
+  content: string;
+  score?: number;
+  publishedDate?: string;
+  author?: string;
+}
+
+export interface SearchResponse {
+  query: string;
+  results: SearchResult[];
+  topic?: string;
+  cached?: boolean;
+}
+
+// Search API Functions
+export const searchApi = {
+  search: async (data: SearchRequest): Promise<ApiResponse<SearchResponse>> => {
+    const response = await apiClient.post<ApiResponse<SearchResponse>>(
+      '/api/search',
+      data
+    );
+    return response.data;
+  },
+
+  getCacheStats: async (): Promise<ApiResponse<{
+    size: number;
+    maxSize: number;
+    entries: number;
+  }>> => {
+    const response = await apiClient.get<ApiResponse<{
+      size: number;
+      maxSize: number;
+      entries: number;
+    }>>('/api/search/cache/stats');
+    return response.data;
+  },
+
+  clearCache: async (): Promise<ApiResponse> => {
+    const response = await apiClient.delete<ApiResponse>('/api/search/cache');
+    return response.data;
   },
 };
 
