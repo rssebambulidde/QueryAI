@@ -61,30 +61,58 @@ export const ChatInterface: React.FC = () => {
         conversationHistory,
       };
 
-      for await (const chunk of aiApi.askStream(request)) {
-        assistantMessage = {
-          ...assistantMessage,
-          content: assistantMessage.content + chunk,
-        };
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[updated.length - 1] = assistantMessage;
-          return updated;
-        });
-      }
+      try {
+        for await (const chunk of aiApi.askStream(request)) {
+          assistantMessage = {
+            ...assistantMessage,
+            content: assistantMessage.content + chunk,
+          };
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = assistantMessage;
+            return updated;
+          });
+        }
 
-      setIsStreaming(false);
-      setIsLoading(false);
-      toast.success('Response received');
+        setIsStreaming(false);
+        setIsLoading(false);
+        toast.success('Response received');
+      } catch (streamError: any) {
+        // If streaming fails, try non-streaming as fallback
+        console.warn('Streaming failed, falling back to non-streaming:', streamError);
+        setIsStreaming(false);
+        
+        const fallbackResponse = await aiApi.ask(request);
+        if (fallbackResponse.success && fallbackResponse.data) {
+          assistantMessage = {
+            ...assistantMessage,
+            content: fallbackResponse.data.answer,
+          };
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = assistantMessage;
+            return updated;
+          });
+          setIsLoading(false);
+          toast.success('Response received (non-streaming)');
+        } else {
+          throw streamError; // Re-throw original error if fallback also fails
+        }
+      }
     } catch (err: any) {
       setIsLoading(false);
       setIsStreaming(false);
-      const errorMessage =
-        err.response?.data?.error?.message ||
-        err.message ||
-        'Failed to get AI response';
+      
+      // Extract error message
+      let errorMessage = 'Failed to get AI response';
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (err.response?.data?.error?.message) {
+        errorMessage = err.response.data.error.message;
+      }
+      
       setError(errorMessage);
-      toast.error('Error', errorMessage);
+      toast.error(errorMessage);
 
       // Remove the empty assistant message on error
       setMessages((prev) => prev.slice(0, -1));

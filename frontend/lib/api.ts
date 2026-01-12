@@ -208,7 +208,15 @@ export const aiApi = {
     });
 
     if (!response.ok) {
-      throw new Error(`Streaming request failed: ${response.statusText}`);
+      // Try to get error message from response
+      let errorMessage = `Streaming request failed: ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error?.message || errorData.message || errorMessage;
+      } catch (e) {
+        // If response is not JSON, use status text
+      }
+      throw new Error(errorMessage);
     }
 
     const reader = response.body?.getReader();
