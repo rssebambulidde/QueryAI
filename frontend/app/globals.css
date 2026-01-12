@@ -65,3 +65,42 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Markdown prose styles */
+.prose {
+  color: inherit;
+}
+
+.prose code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.prose pre {
+  overflow-x: auto;
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.prose pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.prose table th,
+.prose table td {
+  border: 1px solid #e5e7eb;
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.prose table th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
