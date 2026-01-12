@@ -3,8 +3,9 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
-import { ExternalLink, Link2 } from 'lucide-react';
+import 'highlight.js/styles/github-dark.css';
 
 export interface Source {
   title: string;
@@ -27,6 +28,28 @@ interface ChatMessageProps {
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
+
+  // Replace [Source N] patterns with hyperlinks
+  const processContentWithSources = (content: string, sources?: Source[]): string => {
+    if (!sources || sources.length === 0) return content;
+    
+    // Replace [Source 1], [Source 2], etc. with markdown links
+    let processedContent = content;
+    sources.forEach((source, index) => {
+      const sourceNumber = index + 1;
+      const pattern = new RegExp(`\\[Source ${sourceNumber}\\]`, 'gi');
+      processedContent = processedContent.replace(
+        pattern,
+        `[Source ${sourceNumber}](${source.url} "${source.title}")`
+      );
+    });
+    
+    return processedContent;
+  };
+
+  const processedContent = isUser || !hasSources 
+    ? message.content 
+    : processContentWithSources(message.content, message.sources);
 
   return (
     <div
@@ -66,6 +89,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             ) : (
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeHighlight]}
                 components={{
                   // Customize heading styles
                   h1: ({ node, ...props }) => <h1 className="text-lg font-bold mt-4 mb-2 first:mt-0" {...props} />,
@@ -78,24 +102,45 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                   // Customize paragraph
                   p: ({ node, ...props }) => <p className="my-2 first:mt-0 last:mb-0" {...props} />,
                   // Customize code blocks
-                  code: ({ node, inline, ...props }: any) => {
+                  code: ({ node, inline, className, children, ...props }: any) => {
                     if (inline) {
                       return (
-                        <code className="bg-gray-100 text-blue-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props} />
+                        <code className="bg-gray-100 text-blue-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+                          {children}
+                        </code>
                       );
                     }
                     return (
-                      <code className="block bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-sm font-mono my-2" {...props} />
+                      <code className={cn("block p-3 rounded-lg overflow-x-auto text-sm font-mono my-2", className)} {...props}>
+                        {children}
+                      </code>
                     );
                   },
                   // Customize blockquotes
                   blockquote: ({ node, ...props }) => (
                     <blockquote className="border-l-4 border-gray-300 pl-4 my-2 italic text-gray-600" {...props} />
                   ),
-                  // Customize links
-                  a: ({ node, ...props }) => (
-                    <a className="text-blue-600 hover:text-blue-800 underline" target="_blank" rel="noopener noreferrer" {...props} />
-                  ),
+                  // Customize links - special styling for source links
+                  a: ({ node, href, title, children, ...props }: any) => {
+                    const isSourceLink = href && message.sources?.some((s, idx) => s.url === href);
+                    return (
+                      <a 
+                        className={cn(
+                          "underline hover:opacity-80 transition-opacity",
+                          isSourceLink 
+                            ? "text-blue-600 font-medium hover:text-blue-800" 
+                            : "text-blue-600 hover:text-blue-800"
+                        )}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={title}
+                        {...props}
+                      >
+                        {children}
+                      </a>
+                    );
+                  },
                   // Customize strong/bold
                   strong: ({ node, ...props }) => <strong className="font-semibold" {...props} />,
                   // Customize emphasis/italic
@@ -104,7 +149,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                   hr: ({ node, ...props }) => <hr className="my-4 border-gray-300" {...props} />,
                 }}
               >
-                {message.content}
+                {processedContent}
               </ReactMarkdown>
             )}
           </div>
@@ -122,42 +167,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             })}
           </div>
         </div>
-
-        {/* Sources */}
-        {hasSources && !isUser && (
-          <div className="mt-2 w-full">
-            <div className="flex items-center gap-2 mb-2">
-              <Link2 className="w-3 h-3 text-gray-400" />
-              <span className="text-xs font-medium text-gray-500">Sources</span>
-            </div>
-            <div className="flex flex-col gap-2">
-              {message.sources!.map((source, index) => (
-                <a
-                  key={index}
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-start gap-2 p-2 rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-blue-300 transition-all duration-200"
-                >
-                  <ExternalLink className="w-3 h-3 text-gray-400 mt-0.5 flex-shrink-0 group-hover:text-blue-600 transition-colors" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-medium text-gray-900 group-hover:text-blue-600 truncate">
-                      {source.title}
-                    </div>
-                    {source.snippet && (
-                      <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">
-                        {source.snippet}
-                      </div>
-                    )}
-                    <div className="text-xs text-gray-400 mt-1 truncate">
-                      {new URL(source.url).hostname}
-                    </div>
-                  </div>
-                </a>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

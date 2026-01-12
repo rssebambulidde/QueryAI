@@ -23,7 +23,7 @@ export const ChatInterface: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
-  const handleSend = async (content: string) => {
+  const handleSend = async (content: string, topic?: string) => {
     if (!content.trim() || isLoading) return;
 
     // Add user message
@@ -62,6 +62,7 @@ export const ChatInterface: React.FC = () => {
         question: content,
         conversationHistory,
         enableSearch: true, // Enable search by default
+        topic: topic?.trim(), // Add topic filtering if provided
         maxSearchResults: 5,
       };
 
@@ -87,6 +88,7 @@ export const ChatInterface: React.FC = () => {
             question: content,
             conversationHistory: [], // Don't include history to save tokens
             enableSearch: true,
+            topic: topic?.trim(), // Include topic for source filtering
             maxSearchResults: 5,
           });
           
