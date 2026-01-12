@@ -72,11 +72,11 @@ This roadmap outlines the phased development approach for the AI Knowledge Hub p
 - [x] Basic conversation history
 
 ### 1.7 Testing & Deployment
-- [ ] Write unit tests for critical functions
-- [ ] Test authentication flow
-- [ ] Deploy backend to Render/Vercel
-- [ ] Deploy frontend to Vercel
-- [ ] Set up environment variables in production
+- [x] Write unit tests for critical functions
+- [x] Test authentication flow
+- [x] Deploy backend to Railway (verified)
+- [x] Deploy frontend to Railway (verified)
+- [x] Set up environment variables in production
 
 **Timeline:** 2-3 weeks  
 **Success Criteria:** Users can sign up, log in, and ask questions with AI responses
