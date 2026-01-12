@@ -81,10 +81,16 @@ router.post(
     });
 
     // Set headers for Server-Sent Events (SSE)
+    // Must be set before any writes
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering for nginx
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
+    // Flush headers immediately
+    res.flushHeaders();
 
     // Handle client disconnect
     req.on('close', () => {

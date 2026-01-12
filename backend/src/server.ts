@@ -20,6 +20,7 @@ const app: Express = express();
 app.set('trust proxy', 1);
 
 // Security middleware
+// Configure Helmet to allow streaming endpoints
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -27,8 +28,11 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://api.openai.com"],
     },
   },
+  // Disable contentSecurityPolicy for streaming endpoints (handled in route)
+  crossOriginEmbedderPolicy: false,
 }));
 
 // CORS configuration
