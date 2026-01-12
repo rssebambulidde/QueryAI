@@ -88,12 +88,12 @@ This roadmap outlines the phased development approach for the AI Knowledge Hub p
 **Goal:** Add document upload, search integration, and embeddings
 
 ### 2.1 Tavily Search Integration
-- [ ] Integrate Tavily Search API
-- [ ] Create search service
-- [ ] Implement topic filtering
-- [ ] Combine search results with AI responses
-- [ ] Add source attribution
-- [ ] Cache search results
+- [x] Integrate Tavily Search API
+- [x] Create search service
+- [x] Implement topic filtering
+- [x] Combine search results with AI responses
+- [x] Add source attribution
+- [x] Cache search results
 
 ### 2.2 Document Upload System
 - [ ] Set up Supabase Storage

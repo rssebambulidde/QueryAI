@@ -10,6 +10,7 @@ import { apiLimiter } from './middleware/rateLimiter';
 import { checkDatabaseHealth } from './config/database';
 import authRoutes from './routes/auth.routes';
 import aiRoutes from './routes/ai.routes';
+import searchRoutes from './routes/search.routes';
 import testRoutes from './routes/test.routes';
 import debugRoutes from './routes/debug.routes';
 
@@ -88,6 +89,7 @@ app.use('/api/', apiLimiter);
 app.use('/api/test', testRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/search', searchRoutes);
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }
@@ -160,6 +162,11 @@ app.get('/api', (_req: Request, res: Response) => {
       ai: {
         ask: 'POST /api/ai/ask',
         askStream: 'POST /api/ai/ask/stream',
+      },
+      search: {
+        search: 'POST /api/search',
+        cacheStats: 'GET /api/search/cache/stats',
+        clearCache: 'DELETE /api/search/cache',
       },
     },
   });

@@ -18,7 +18,17 @@ router.post(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { question, context, conversationHistory, model, temperature, maxTokens } = req.body;
+    const { 
+      question, 
+      context, 
+      conversationHistory, 
+      model, 
+      temperature, 
+      maxTokens,
+      enableSearch,
+      topic,
+      maxSearchResults,
+    } = req.body;
 
     if (!question) {
       throw new ValidationError('Question is required');
@@ -31,6 +41,9 @@ router.post(
       model,
       temperature,
       maxTokens,
+      enableSearch: enableSearch !== false, // Default to true
+      topic: topic?.trim(),
+      maxSearchResults: maxSearchResults || 5,
     };
 
     logger.info('AI question request', {
@@ -59,7 +72,17 @@ router.post(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { question, context, conversationHistory, model, temperature, maxTokens } = req.body;
+    const { 
+      question, 
+      context, 
+      conversationHistory, 
+      model, 
+      temperature, 
+      maxTokens,
+      enableSearch,
+      topic,
+      maxSearchResults,
+    } = req.body;
 
     if (!question) {
       throw new ValidationError('Question is required');
@@ -72,6 +95,9 @@ router.post(
       model,
       temperature,
       maxTokens,
+      enableSearch: enableSearch !== false, // Default to true
+      topic: topic?.trim(),
+      maxSearchResults: maxSearchResults || 5,
     };
 
     logger.info('AI streaming question request', {
