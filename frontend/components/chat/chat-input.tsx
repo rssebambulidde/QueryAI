@@ -43,17 +43,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   return (
-    <div className="relative">
+    <div className="space-y-2">
       {/* Advanced Search Filters */}
       {showFilters && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 z-20">
-          <SearchFilters
-            filters={filters}
-            onChange={handleFiltersChange}
-            onClose={() => setShowFilters(false)}
-            disabled={disabled}
-          />
-        </div>
+        <SearchFilters
+          filters={filters}
+          onChange={handleFiltersChange}
+          onClose={() => setShowFilters(false)}
+          disabled={disabled}
+        />
       )}
 
       {/* Main Input */}
