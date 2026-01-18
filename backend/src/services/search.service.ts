@@ -213,15 +213,6 @@ export class SearchService {
         author: result.author,
       }));
 
-      const images = Array.isArray(response.images)
-        ? response.images
-            .map((image: any) => {
-              if (typeof image === 'string') return image;
-              return image?.url || image?.imageUrl || image?.src || '';
-            })
-            .filter(Boolean)
-        : undefined;
-
       const searchResponse: SearchResponse = {
         query: request.query,
         results,
@@ -229,7 +220,7 @@ export class SearchService {
         timeRange: request.timeRange,
         country: request.country,
         answer: response.answer,
-        images,
+        images: response.images,
         cached: false,
       };
 
