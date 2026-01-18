@@ -395,7 +395,11 @@ export const documentApi = {
       throw new Error('Authentication required');
     }
 
-    const response = await fetch(`${API_URL}/api/documents/download?path=${encodeURIComponent(filePath)}`, {
+    // Normalize API_URL to avoid double slashes
+    const baseUrl = API_URL.replace(/\/+$/, ''); // Remove trailing slashes
+    const url = `${baseUrl}/api/documents/download?path=${encodeURIComponent(filePath)}`;
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,
