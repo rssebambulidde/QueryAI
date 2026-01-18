@@ -172,6 +172,9 @@ export interface QuestionRequest {
   includeDomains?: string[];
   excludeDomains?: string[];
   searchDepth?: 'basic' | 'advanced';
+  includeRawContent?: boolean;
+  includeAnswer?: boolean;
+  includeImages?: boolean;
   // Advanced search filters
   timeRange?: TimeRange;
   startDate?: string; // ISO date string (YYYY-MM-DD)
@@ -289,6 +292,9 @@ export interface SearchRequest {
   includeDomains?: string[];
   excludeDomains?: string[];
   searchDepth?: 'basic' | 'advanced';
+  includeRawContent?: boolean;
+  includeAnswer?: boolean;
+  includeImages?: boolean;
   // Time range filtering
   timeRange?: TimeRange;
   startDate?: string; // ISO date string (YYYY-MM-DD)
@@ -312,6 +318,8 @@ export interface SearchResponse {
   topic?: string;
   timeRange?: TimeRange;
   country?: string;
+  answer?: string;
+  images?: string[];
   cached?: boolean;
 }
 

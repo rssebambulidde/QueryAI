@@ -25,6 +25,9 @@ router.post(
       includeDomains, 
       excludeDomains,
       searchDepth,
+      includeRawContent,
+      includeAnswer,
+      includeImages,
       timeRange,
       startDate,
       endDate,
@@ -65,6 +68,16 @@ router.post(
       throw new ValidationError('excludeDomains must be an array of domain strings');
     }
 
+    if (includeRawContent !== undefined && typeof includeRawContent !== 'boolean') {
+      throw new ValidationError('includeRawContent must be a boolean');
+    }
+    if (includeAnswer !== undefined && typeof includeAnswer !== 'boolean') {
+      throw new ValidationError('includeAnswer must be a boolean');
+    }
+    if (includeImages !== undefined && typeof includeImages !== 'boolean') {
+      throw new ValidationError('includeImages must be a boolean');
+    }
+
     const searchRequest: SearchRequest = {
       query: query.trim(),
       topic: topic?.trim(),
@@ -72,6 +85,9 @@ router.post(
       includeDomains: includeDomains,
       excludeDomains: excludeDomains,
       searchDepth,
+      includeRawContent,
+      includeAnswer,
+      includeImages,
       timeRange: timeRange,
       startDate: startDate,
       endDate: endDate,

@@ -11,6 +11,9 @@ export interface SearchRequest {
   includeDomains?: string[];
   excludeDomains?: string[];
   searchDepth?: 'basic' | 'advanced';
+  includeRawContent?: boolean;
+  includeAnswer?: boolean;
+  includeImages?: boolean;
   // Time range filtering
   timeRange?: TimeRange;
   startDate?: string; // ISO date string (YYYY-MM-DD)
@@ -34,6 +37,8 @@ export interface SearchResponse {
   topic?: string;
   timeRange?: TimeRange;
   country?: string;
+  answer?: string;
+  images?: string[];
   cached?: boolean;
 }
 
@@ -59,6 +64,9 @@ function generateCacheKey(request: SearchRequest): string {
     (request.includeDomains || []).sort().join(','),
     (request.excludeDomains || []).sort().join(','),
     request.searchDepth || 'basic',
+    request.includeRawContent ? 'raw' : '',
+    request.includeAnswer ? 'answer' : '',
+    request.includeImages ? 'images' : '',
     request.timeRange || '',
     request.startDate || '',
     request.endDate || '',
@@ -152,6 +160,9 @@ export class SearchService {
         country: request.country,
         maxResults: request.maxResults || 5,
         searchDepth: request.searchDepth || 'basic',
+        includeRawContent: !!request.includeRawContent,
+        includeAnswer: !!request.includeAnswer,
+        includeImages: !!request.includeImages,
       });
 
       // Build Tavily search options
@@ -160,7 +171,16 @@ export class SearchService {
         includeDomains: request.includeDomains,
         excludeDomains: request.excludeDomains,
         searchDepth: request.searchDepth || 'basic', // Options: 'basic' or 'advanced'
+        includeRawContent: request.includeRawContent === true,
       };
+
+      if (request.includeAnswer === true) {
+        tavilyOptions.includeAnswer = true;
+      }
+
+      if (request.includeImages === true) {
+        tavilyOptions.includeImages = true;
+      }
 
       // Add time range filtering
       if (request.timeRange) {
@@ -193,12 +213,23 @@ export class SearchService {
         author: result.author,
       }));
 
+      const images = Array.isArray(response.images)
+        ? response.images
+            .map((image: any) => {
+              if (typeof image === 'string') return image;
+              return image?.url || image?.imageUrl || image?.src || '';
+            })
+            .filter(Boolean)
+        : undefined;
+
       const searchResponse: SearchResponse = {
         query: request.query,
         results,
         topic: request.topic,
         timeRange: request.timeRange,
         country: request.country,
+        answer: response.answer,
+        images,
         cached: false,
       };
 

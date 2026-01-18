@@ -14,6 +14,9 @@ export interface SearchFilters {
   includeDomains?: string[];
   excludeDomains?: string[];
   searchDepth?: 'basic' | 'advanced';
+  includeRawContent?: boolean;
+  includeAnswer?: boolean;
+  includeImages?: boolean;
 }
 
 interface SearchFiltersProps {
@@ -321,7 +324,10 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
     filters.maxResults ||
     (filters.includeDomains && filters.includeDomains.length > 0) ||
     (filters.excludeDomains && filters.excludeDomains.length > 0) ||
-    filters.searchDepth;
+    filters.searchDepth ||
+    filters.includeRawContent ||
+    filters.includeAnswer ||
+    filters.includeImages;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-lg animate-in fade-in slide-in-from-top-2 space-y-4 max-h-[70vh] overflow-y-auto">
@@ -507,6 +513,38 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
           <p className="text-xs text-gray-500 mt-1">Comma-separated domains</p>
         </div>
 
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              checked={filters.includeRawContent === true}
+              onChange={(e) => onChange({ ...filters, includeRawContent: e.target.checked || undefined })}
+              disabled={disabled}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+            />
+            Include raw content
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              checked={filters.includeAnswer === true}
+              onChange={(e) => onChange({ ...filters, includeAnswer: e.target.checked || undefined })}
+              disabled={disabled}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+            />
+            Include answer summary
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              checked={filters.includeImages === true}
+              onChange={(e) => onChange({ ...filters, includeImages: e.target.checked || undefined })}
+              disabled={disabled}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+            />
+            Include images
+          </label>
+        </div>
       </div>
     </div>
   );

@@ -72,6 +72,9 @@ export const ChatInterface: React.FC = () => {
         includeDomains: filters?.includeDomains,
         excludeDomains: filters?.excludeDomains,
         searchDepth: filters?.searchDepth,
+        includeRawContent: filters?.includeRawContent,
+        includeAnswer: filters?.includeAnswer,
+        includeImages: filters?.includeImages,
       };
 
       try {
@@ -105,6 +108,9 @@ export const ChatInterface: React.FC = () => {
             includeDomains: filters?.includeDomains,
             excludeDomains: filters?.excludeDomains,
             searchDepth: filters?.searchDepth,
+            includeRawContent: filters?.includeRawContent,
+            includeAnswer: filters?.includeAnswer,
+            includeImages: filters?.includeImages,
           });
           
           if (sourceResponse.success && sourceResponse.data?.sources && sourceResponse.data.sources.length > 0) {
