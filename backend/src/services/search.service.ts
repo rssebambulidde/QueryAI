@@ -34,8 +34,6 @@ export interface SearchResponse {
   topic?: string;
   timeRange?: TimeRange;
   country?: string;
-  searchAvailable?: boolean;
-  searchError?: string;
   cached?: boolean;
 }
 
@@ -134,8 +132,6 @@ export class SearchService {
           query: request.query,
           results: [],
           topic: request.topic,
-          searchAvailable: false,
-          searchError: 'Tavily client not configured',
           cached: false,
         };
       }
@@ -203,7 +199,6 @@ export class SearchService {
         topic: request.topic,
         timeRange: request.timeRange,
         country: request.country,
-        searchAvailable: true,
         cached: false,
       };
 
