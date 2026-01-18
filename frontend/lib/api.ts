@@ -387,38 +387,25 @@ export const documentApi = {
   },
 
   download: async (filePath: string): Promise<Blob> => {
-    const token = typeof window !== 'undefined' 
-      ? localStorage.getItem('accessToken') 
-      : null;
-
-    if (!token) {
-      throw new Error('Authentication required');
-    }
-
-    // Normalize API_URL to avoid double slashes
-    const baseUrl = API_URL.replace(/\/+$/, ''); // Remove trailing slashes
-    const url = `${baseUrl}/api/documents/download?path=${encodeURIComponent(filePath)}`;
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      let errorMessage = 'Failed to download document';
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData?.error?.message || errorData?.message || errorMessage;
-      } catch {
-        // If response is not JSON, use status text
-        errorMessage = response.statusText || errorMessage;
+    try {
+      const response = await apiClient.get('/api/documents/download', {
+        params: { path: filePath },
+        responseType: 'blob',
+      });
+      return response.data as Blob;
+    } catch (error: any) {
+      // If response is a blob error, try to parse it as JSON
+      if (error.response?.data instanceof Blob) {
+        try {
+          const text = await error.response.data.text();
+          const errorData = JSON.parse(text);
+          throw new Error(errorData?.error?.message || errorData?.message || 'Failed to download document');
+        } catch {
+          throw new Error(error.response?.statusText || 'Failed to download document');
+        }
       }
-      throw new Error(errorMessage);
+      throw new Error(error.response?.data?.error?.message || error.response?.data?.message || error.message || 'Failed to download document');
     }
-
-    return response.blob();
   },
 
   delete: async (path: string): Promise<ApiResponse> => {
