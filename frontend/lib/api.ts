@@ -1,4 +1,4 @@
-import axios, { AxiosError, AxiosInstance } from 'axios';
+import axios, { AxiosError, AxiosInstance, AxiosProgressEvent } from 'axios';
 
 // API Client Configuration
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -122,15 +122,15 @@ export const authApi = {
       accessToken: string;
       refreshToken: string;
       expiresIn: number;
-    }>>('/api/auth/refresh', { refreshToken });
+    }>>(
+      '/api/auth/refresh',
+      { refreshToken }
+    );
     return response.data;
   },
 
   forgotPassword: async (email: string): Promise<ApiResponse> => {
-    const response = await apiClient.post<ApiResponse>(
-      '/api/auth/forgot-password',
-      { email }
-    );
+    const response = await apiClient.post<ApiResponse>('/api/auth/forgot-password', { email });
     return response.data;
   },
 
@@ -173,6 +173,9 @@ export interface QuestionRequest {
   enableSearch?: boolean;
   topic?: string; // Any keyword for topic filtering
   maxSearchResults?: number;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  searchDepth?: 'basic' | 'advanced';
   // Advanced search filters
   timeRange?: TimeRange;
   startDate?: string; // ISO date string (YYYY-MM-DD)
@@ -353,14 +356,24 @@ export interface DocumentItem {
 }
 
 export const documentApi = {
-  upload: async (file: File): Promise<ApiResponse<DocumentItem>> => {
+  upload: async (
+    file: File,
+    onProgress?: (progress: number) => void
+  ): Promise<ApiResponse<DocumentItem>> => {
     const formData = new FormData();
     formData.append('file', file);
+    
     const response = await apiClient.post<ApiResponse<DocumentItem>>(
       '/api/documents/upload',
       formData,
       {
         timeout: 30000,
+        onUploadProgress: (progressEvent: AxiosProgressEvent) => {
+          if (progressEvent.total && onProgress) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onProgress(percentCompleted);
+          }
+        },
       }
     );
     return response.data;
@@ -371,6 +384,25 @@ export const documentApi = {
       '/api/documents'
     );
     return response.data;
+  },
+
+  download: async (filePath: string): Promise<Blob> => {
+    const token = typeof window !== 'undefined' 
+      ? localStorage.getItem('accessToken') 
+      : null;
+
+    const response = await fetch(`${API_URL}/api/documents/download?path=${encodeURIComponent(filePath)}`, {
+      method: 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to download document');
+    }
+
+    return response.blob();
   },
 
   delete: async (path: string): Promise<ApiResponse> => {

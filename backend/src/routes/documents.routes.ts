@@ -102,6 +102,38 @@ router.get(
 );
 
 /**
+ * GET /api/documents/download
+ * Download a document by path
+ */
+router.get(
+  '/download',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { path: filePath } = req.query;
+    if (!filePath || typeof filePath !== 'string') {
+      throw new ValidationError('File path is required');
+    }
+
+    if (!filePath.startsWith(`${userId}/`)) {
+      throw new ValidationError('Invalid file path');
+    }
+
+    const fileData = await StorageService.downloadDocument(filePath);
+
+    res.setHeader('Content-Type', fileData.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileData.name)}"`);
+    res.setHeader('Content-Length', fileData.size);
+
+    res.send(fileData.buffer);
+  })
+);
+
+/**
  * DELETE /api/documents
  * Delete a document by path
  */

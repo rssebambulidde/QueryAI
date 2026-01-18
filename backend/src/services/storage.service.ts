@@ -13,6 +13,13 @@ export interface StoredDocument {
   updatedAt?: string;
 }
 
+export interface DownloadDocument {
+  buffer: Buffer;
+  name: string;
+  size: number;
+  mimeType: string;
+}
+
 const BUCKET_NAME = config.SUPABASE_STORAGE_BUCKET;
 
 export class StorageService {
@@ -95,6 +102,38 @@ export class StorageService {
         createdAt: item.created_at || undefined,
         updatedAt: item.updated_at || undefined,
       }));
+  }
+
+  static async downloadDocument(filePath: string): Promise<DownloadDocument> {
+    await this.ensureBucket();
+
+    const { data, error } = await supabaseAdmin.storage
+      .from(BUCKET_NAME)
+      .download(filePath);
+
+    if (error) {
+      logger.error('Failed to download document', { error: error.message, filePath });
+      throw new AppError('Failed to download document', 500, 'DOWNLOAD_FAILED');
+    }
+
+    const buffer = Buffer.from(await data.arrayBuffer());
+    const fileName = path.basename(filePath);
+    const extension = path.extname(fileName).toLowerCase();
+    
+    // Determine MIME type from extension if not available
+    const mimeTypes: Record<string, string> = {
+      '.pdf': 'application/pdf',
+      '.txt': 'text/plain',
+      '.md': 'text/markdown',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+
+    return {
+      buffer,
+      name: fileName,
+      size: buffer.length,
+      mimeType: mimeTypes[extension] || 'application/octet-stream',
+    };
   }
 
   static async deleteDocument(userId: string, filePath: string): Promise<void> {
