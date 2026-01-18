@@ -28,58 +28,10 @@ router.post(
       enableSearch,
       topic,
       maxSearchResults,
-      includeDomains,
-      excludeDomains,
-      searchDepth,
-      includeRawContent,
-      includeAnswer,
-      includeImages,
-      timeRange,
-      startDate,
-      endDate,
-      country,
     } = req.body;
 
     if (!question) {
       throw new ValidationError('Question is required');
-    }
-
-    const validTimeRanges = ['day', 'week', 'month', 'year', 'd', 'w', 'm', 'y'];
-    if (timeRange && !validTimeRanges.includes(timeRange)) {
-      throw new ValidationError(`Invalid timeRange. Must be one of: ${validTimeRanges.join(', ')}`);
-    }
-
-    const validSearchDepths = ['basic', 'advanced'];
-    if (searchDepth && !validSearchDepths.includes(searchDepth)) {
-      throw new ValidationError(`Invalid searchDepth. Must be one of: ${validSearchDepths.join(', ')}`);
-    }
-
-    if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-      throw new ValidationError('startDate must be in YYYY-MM-DD format');
-    }
-    if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
-      throw new ValidationError('endDate must be in YYYY-MM-DD format');
-    }
-
-    if (maxSearchResults && (typeof maxSearchResults !== 'number' || maxSearchResults < 1 || maxSearchResults > 10)) {
-      throw new ValidationError('maxSearchResults must be a number between 1 and 10');
-    }
-
-    if (includeDomains && !Array.isArray(includeDomains)) {
-      throw new ValidationError('includeDomains must be an array of domain strings');
-    }
-    if (excludeDomains && !Array.isArray(excludeDomains)) {
-      throw new ValidationError('excludeDomains must be an array of domain strings');
-    }
-
-    if (includeRawContent !== undefined && typeof includeRawContent !== 'boolean') {
-      throw new ValidationError('includeRawContent must be a boolean');
-    }
-    if (includeAnswer !== undefined && typeof includeAnswer !== 'boolean') {
-      throw new ValidationError('includeAnswer must be a boolean');
-    }
-    if (includeImages !== undefined && typeof includeImages !== 'boolean') {
-      throw new ValidationError('includeImages must be a boolean');
     }
 
     const request: QuestionRequest = {
@@ -92,16 +44,6 @@ router.post(
       enableSearch: enableSearch !== false, // Default to true
       topic: topic?.trim(),
       maxSearchResults: maxSearchResults || 5,
-      includeDomains,
-      excludeDomains,
-      searchDepth,
-      includeRawContent,
-      includeAnswer,
-      includeImages,
-      timeRange,
-      startDate,
-      endDate,
-      country: country?.trim(),
     };
 
     logger.info('AI question request', {
@@ -140,58 +82,10 @@ router.post(
       enableSearch,
       topic,
       maxSearchResults,
-      includeDomains,
-      excludeDomains,
-      searchDepth,
-      includeRawContent,
-      includeAnswer,
-      includeImages,
-      timeRange,
-      startDate,
-      endDate,
-      country,
     } = req.body;
 
     if (!question) {
       throw new ValidationError('Question is required');
-    }
-
-    const validTimeRanges = ['day', 'week', 'month', 'year', 'd', 'w', 'm', 'y'];
-    if (timeRange && !validTimeRanges.includes(timeRange)) {
-      throw new ValidationError(`Invalid timeRange. Must be one of: ${validTimeRanges.join(', ')}`);
-    }
-
-    const validSearchDepths = ['basic', 'advanced'];
-    if (searchDepth && !validSearchDepths.includes(searchDepth)) {
-      throw new ValidationError(`Invalid searchDepth. Must be one of: ${validSearchDepths.join(', ')}`);
-    }
-
-    if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-      throw new ValidationError('startDate must be in YYYY-MM-DD format');
-    }
-    if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
-      throw new ValidationError('endDate must be in YYYY-MM-DD format');
-    }
-
-    if (maxSearchResults && (typeof maxSearchResults !== 'number' || maxSearchResults < 1 || maxSearchResults > 10)) {
-      throw new ValidationError('maxSearchResults must be a number between 1 and 10');
-    }
-
-    if (includeDomains && !Array.isArray(includeDomains)) {
-      throw new ValidationError('includeDomains must be an array of domain strings');
-    }
-    if (excludeDomains && !Array.isArray(excludeDomains)) {
-      throw new ValidationError('excludeDomains must be an array of domain strings');
-    }
-
-    if (includeRawContent !== undefined && typeof includeRawContent !== 'boolean') {
-      throw new ValidationError('includeRawContent must be a boolean');
-    }
-    if (includeAnswer !== undefined && typeof includeAnswer !== 'boolean') {
-      throw new ValidationError('includeAnswer must be a boolean');
-    }
-    if (includeImages !== undefined && typeof includeImages !== 'boolean') {
-      throw new ValidationError('includeImages must be a boolean');
     }
 
     const request: QuestionRequest = {
@@ -204,16 +98,6 @@ router.post(
       enableSearch: enableSearch !== false, // Default to true
       topic: topic?.trim(),
       maxSearchResults: maxSearchResults || 5,
-      includeDomains,
-      excludeDomains,
-      searchDepth,
-      includeRawContent,
-      includeAnswer,
-      includeImages,
-      timeRange,
-      startDate,
-      endDate,
-      country: country?.trim(),
     };
 
     logger.info('AI streaming question request', {

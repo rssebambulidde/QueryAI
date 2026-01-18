@@ -10,10 +10,6 @@ export interface SearchRequest {
   maxResults?: number;
   includeDomains?: string[];
   excludeDomains?: string[];
-  searchDepth?: 'basic' | 'advanced';
-  includeRawContent?: boolean;
-  includeAnswer?: boolean;
-  includeImages?: boolean;
   // Time range filtering
   timeRange?: TimeRange;
   startDate?: string; // ISO date string (YYYY-MM-DD)
@@ -37,8 +33,6 @@ export interface SearchResponse {
   topic?: string;
   timeRange?: TimeRange;
   country?: string;
-  answer?: string;
-  images?: string[];
   cached?: boolean;
 }
 
@@ -63,10 +57,6 @@ function generateCacheKey(request: SearchRequest): string {
     request.maxResults || 5,
     (request.includeDomains || []).sort().join(','),
     (request.excludeDomains || []).sort().join(','),
-    request.searchDepth || 'basic',
-    request.includeRawContent ? 'raw' : '',
-    request.includeAnswer ? 'answer' : '',
-    request.includeImages ? 'images' : '',
     request.timeRange || '',
     request.startDate || '',
     request.endDate || '',
@@ -159,10 +149,6 @@ export class SearchService {
         timeRange: request.timeRange,
         country: request.country,
         maxResults: request.maxResults || 5,
-        searchDepth: request.searchDepth || 'basic',
-        includeRawContent: !!request.includeRawContent,
-        includeAnswer: !!request.includeAnswer,
-        includeImages: !!request.includeImages,
       });
 
       // Build Tavily search options
@@ -170,17 +156,9 @@ export class SearchService {
         maxResults: request.maxResults || 5,
         includeDomains: request.includeDomains,
         excludeDomains: request.excludeDomains,
-        searchDepth: request.searchDepth || 'basic', // Options: 'basic' or 'advanced'
-        includeRawContent: request.includeRawContent === true,
+        searchDepth: 'basic', // Options: 'basic' or 'advanced'
+        includeRawContent: false, // Don't include raw content to save tokens
       };
-
-      if (request.includeAnswer === true) {
-        tavilyOptions.includeAnswer = true;
-      }
-
-      if (request.includeImages === true) {
-        tavilyOptions.includeImages = true;
-      }
 
       // Add time range filtering
       if (request.timeRange) {
@@ -219,8 +197,6 @@ export class SearchService {
         topic: request.topic,
         timeRange: request.timeRange,
         country: request.country,
-        answer: response.answer,
-        images: response.images,
         cached: false,
       };
 

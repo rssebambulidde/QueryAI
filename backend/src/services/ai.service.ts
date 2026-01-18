@@ -18,12 +18,6 @@ export interface QuestionRequest {
   enableSearch?: boolean;
   topic?: string; // Any keyword for topic filtering
   maxSearchResults?: number;
-  includeDomains?: string[];
-  excludeDomains?: string[];
-  searchDepth?: 'basic' | 'advanced';
-  includeRawContent?: boolean;
-  includeAnswer?: boolean;
-  includeImages?: boolean;
   // Advanced search filters
   timeRange?: 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
   startDate?: string; // ISO date string (YYYY-MM-DD)
@@ -61,12 +55,7 @@ export class AIService {
   /**
    * Build system prompt with context and search results
    */
-  private static buildSystemPrompt(
-    context?: string,
-    searchResults?: Array<{ title: string; url: string; content: string }>,
-    searchAnswer?: string,
-    searchImages?: string[]
-  ): string {
+  private static buildSystemPrompt(context?: string, searchResults?: Array<{ title: string; url: string; content: string }>): string {
     const basePrompt = `You are a helpful AI assistant that provides accurate, informative, and well-structured answers to user questions.
 
 Guidelines:
@@ -87,14 +76,6 @@ Guidelines:
         fullContext += `URL: ${result.url}\n`;
         fullContext += `Content: ${result.content}\n\n`;
       });
-    }
-
-    if (searchAnswer) {
-      fullContext += `Search Summary:\n${searchAnswer}\n\n`;
-    }
-
-    if (searchImages && searchImages.length > 0) {
-      fullContext += `Related Images:\n${searchImages.join('\n')}\n\n`;
     }
 
     // Add additional context if provided
@@ -120,16 +101,14 @@ Use the provided context and search results to enhance your answers. If the info
     question: string,
     context?: string,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
-    searchResults?: Array<{ title: string; url: string; content: string }>,
-    searchAnswer?: string,
-    searchImages?: string[]
+    searchResults?: Array<{ title: string; url: string; content: string }>
   ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
     // Add system prompt
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt(context, searchResults, searchAnswer, searchImages),
+      content: this.buildSystemPrompt(context, searchResults),
     });
 
     // Add conversation history if provided
@@ -173,8 +152,6 @@ Use the provided context and search results to enhance your answers. If the info
 
       // Perform search if enabled
       let searchResults: Array<{ title: string; url: string; content: string }> | undefined;
-      let searchAnswer: string | undefined;
-      let searchImages: string[] | undefined;
       let sources: Source[] | undefined;
 
       if (request.enableSearch !== false) { // Default to true if not specified
@@ -183,16 +160,6 @@ Use the provided context and search results to enhance your answers. If the info
             query: request.question,
             topic: request.topic,
             maxResults: request.maxSearchResults || 5,
-            includeDomains: request.includeDomains,
-            excludeDomains: request.excludeDomains,
-            searchDepth: request.searchDepth,
-            includeRawContent: request.includeRawContent,
-            includeAnswer: request.includeAnswer,
-            includeImages: request.includeImages,
-            timeRange: request.timeRange,
-            startDate: request.startDate,
-            endDate: request.endDate,
-            country: request.country,
           };
 
           const searchResponse = await SearchService.search(searchRequest);
@@ -209,9 +176,6 @@ Use the provided context and search results to enhance your answers. If the info
               url: r.url,
               snippet: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
             }));
-
-            searchAnswer = searchResponse.answer;
-            searchImages = searchResponse.images;
 
             logger.info('Search results retrieved', {
               query: request.question,
@@ -233,9 +197,7 @@ Use the provided context and search results to enhance your answers. If the info
         request.question,
         request.context,
         request.conversationHistory,
-        searchResults,
-        searchAnswer,
-        searchImages
+        searchResults
       );
 
       logger.info('Sending question to OpenAI', {
@@ -336,8 +298,6 @@ Use the provided context and search results to enhance your answers. If the info
 
       // Perform search if enabled (for streaming, we do search before streaming)
       let searchResults: Array<{ title: string; url: string; content: string }> | undefined;
-      let searchAnswer: string | undefined;
-      let searchImages: string[] | undefined;
 
       if (request.enableSearch !== false) { // Default to true if not specified
         try {
@@ -345,12 +305,6 @@ Use the provided context and search results to enhance your answers. If the info
             query: request.question,
             topic: request.topic,
             maxResults: request.maxSearchResults || 5,
-            includeDomains: request.includeDomains,
-            excludeDomains: request.excludeDomains,
-            searchDepth: request.searchDepth,
-            includeRawContent: request.includeRawContent,
-            includeAnswer: request.includeAnswer,
-            includeImages: request.includeImages,
             timeRange: request.timeRange,
             startDate: request.startDate,
             endDate: request.endDate,
@@ -365,9 +319,6 @@ Use the provided context and search results to enhance your answers. If the info
               url: r.url,
               content: r.content,
             }));
-
-            searchAnswer = searchResponse.answer;
-            searchImages = searchResponse.images;
 
             logger.info('Search results retrieved for streaming', {
               query: request.question,
@@ -391,9 +342,7 @@ Use the provided context and search results to enhance your answers. If the info
         request.question,
         request.context,
         request.conversationHistory,
-        searchResults,
-        searchAnswer,
-        searchImages
+        searchResults
       );
 
       logger.info('Sending streaming question to OpenAI', {
