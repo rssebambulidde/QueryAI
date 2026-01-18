@@ -391,15 +391,27 @@ export const documentApi = {
       ? localStorage.getItem('accessToken') 
       : null;
 
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
     const response = await fetch(`${API_URL}/api/documents/download?path=${encodeURIComponent(filePath)}`, {
       method: 'GET',
       headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        'Authorization': `Bearer ${token}`,
       },
     });
 
     if (!response.ok) {
-      throw new Error('Failed to download document');
+      let errorMessage = 'Failed to download document';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData?.error?.message || errorData?.message || errorMessage;
+      } catch {
+        // If response is not JSON, use status text
+        errorMessage = response.statusText || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
     return response.blob();
