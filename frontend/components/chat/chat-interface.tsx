@@ -5,7 +5,7 @@ import { ChatMessage, Message, Source } from './chat-message';
 import { TypingIndicator } from './typing-indicator';
 import { ChatInput } from './chat-input';
 import { SearchFilters } from './search-filters';
-import { aiApi, QuestionRequest } from '@/lib/api';
+import { aiApi, QuestionRequest, SearchMeta } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Alert } from '@/components/ui/alert';
 import { Sparkles, MessageSquare, Trash2 } from 'lucide-react';
@@ -18,6 +18,17 @@ export const ChatInterface: React.FC = () => {
   const [sources, setSources] = useState<Source[] | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  const handleSearchMeta = (meta?: SearchMeta) => {
+    if (!meta) return;
+    if (meta.error) {
+      toast.error(`Search unavailable: ${meta.error}`);
+      return;
+    }
+    if (meta.attempted && meta.resultsCount === 0) {
+      toast.error('Search returned no results.');
+    }
+  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -107,6 +118,10 @@ export const ChatInterface: React.FC = () => {
             searchDepth: filters?.searchDepth,
           });
           
+          if (sourceResponse.success) {
+            handleSearchMeta(sourceResponse.data?.searchMeta);
+          }
+
           if (sourceResponse.success && sourceResponse.data?.sources && sourceResponse.data.sources.length > 0) {
             assistantMessage = {
               ...assistantMessage,
@@ -134,6 +149,7 @@ export const ChatInterface: React.FC = () => {
         
         const fallbackResponse = await aiApi.ask(request);
         if (fallbackResponse.success && fallbackResponse.data) {
+          handleSearchMeta(fallbackResponse.data.searchMeta);
           assistantMessage = {
             ...assistantMessage,
             content: fallbackResponse.data.answer,

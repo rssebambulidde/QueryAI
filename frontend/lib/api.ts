@@ -185,10 +185,17 @@ export interface Source {
   snippet?: string;
 }
 
+export interface SearchMeta {
+  attempted: boolean;
+  resultsCount: number;
+  error?: string;
+}
+
 export interface QuestionResponse {
   answer: string;
   model: string;
   sources?: Source[];
+  searchMeta?: SearchMeta;
   usage: {
     promptTokens: number;
     completionTokens: number;

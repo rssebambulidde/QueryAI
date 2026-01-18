@@ -34,10 +34,17 @@ export interface Source {
   snippet?: string;
 }
 
+export interface SearchMeta {
+  attempted: boolean;
+  resultsCount: number;
+  error?: string;
+}
+
 export interface QuestionResponse {
   answer: string;
   model: string;
   sources?: Source[];
+  searchMeta?: SearchMeta;
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -160,9 +167,14 @@ Use the provided context and search results to answer the question directly. If 
       // Perform search if enabled
       let searchResults: Array<{ title: string; url: string; content: string }> | undefined;
       let sources: Source[] | undefined;
+      const searchMeta: SearchMeta = {
+        attempted: false,
+        resultsCount: 0,
+      };
 
       if (request.enableSearch !== false) { // Default to true if not specified
         try {
+          searchMeta.attempted = true;
           const searchRequest: SearchRequest = {
             query: request.question,
             topic: request.topic,
@@ -177,6 +189,10 @@ Use the provided context and search results to answer the question directly. If 
           };
 
           const searchResponse = await SearchService.search(searchRequest);
+          searchMeta.resultsCount = searchResponse.results?.length || 0;
+          if (searchResponse.searchAvailable === false) {
+            searchMeta.error = searchResponse.searchError || 'Search unavailable';
+          }
           
           if (searchResponse.results && searchResponse.results.length > 0) {
             searchResults = searchResponse.results.map(r => ({
@@ -199,6 +215,8 @@ Use the provided context and search results to answer the question directly. If 
           }
         } catch (searchError: any) {
           // Log search error but don't fail the entire request
+          searchMeta.attempted = true;
+          searchMeta.error = searchError.message || 'Search failed';
           logger.warn('Search failed, continuing without search results', {
             error: searchError.message,
             question: request.question,
@@ -245,6 +263,7 @@ Use the provided context and search results to answer the question directly. If 
         answer,
         model: completion.model,
         sources,
+        searchMeta,
         usage: {
           promptTokens: completion.usage.prompt_tokens,
           completionTokens: completion.usage.completion_tokens,
