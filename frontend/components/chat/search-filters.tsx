@@ -10,6 +10,13 @@ export interface SearchFilters {
   startDate?: string;
   endDate?: string;
   country?: string;
+  maxResults?: number;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  searchDepth?: 'basic' | 'advanced';
+  includeRawContent?: boolean;
+  includeAnswer?: boolean;
+  includeImages?: boolean;
 }
 
 interface SearchFiltersProps {
@@ -24,6 +31,11 @@ const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
   { value: 'week', label: 'Last week' },
   { value: 'month', label: 'Last month' },
   { value: 'year', label: 'Last year' },
+];
+
+const SEARCH_DEPTH_OPTIONS: { value: 'basic' | 'advanced'; label: string }[] = [
+  { value: 'basic', label: 'Basic (faster)' },
+  { value: 'advanced', label: 'Advanced (deeper)' },
 ];
 
 // Complete list of all countries with ISO 3166-1 alpha-2 codes
@@ -281,6 +293,13 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
 }) => {
   const [useCustomDates, setUseCustomDates] = useState(false);
 
+  const formatDomains = (domains?: string[]) => (domains && domains.length > 0 ? domains.join(', ') : '');
+  const parseDomains = (value: string) =>
+    value
+      .split(',')
+      .map((domain) => domain.trim())
+      .filter(Boolean);
+
   const handleTimeRangeChange = (value: TimeRange | 'custom') => {
     if (value === 'custom') {
       setUseCustomDates(true);
@@ -296,7 +315,19 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
     setUseCustomDates(false);
   };
 
-  const hasFilters = filters.topic || filters.timeRange || filters.startDate || filters.endDate || filters.country;
+  const hasFilters =
+    filters.topic ||
+    filters.timeRange ||
+    filters.startDate ||
+    filters.endDate ||
+    filters.country ||
+    filters.maxResults ||
+    (filters.includeDomains && filters.includeDomains.length > 0) ||
+    (filters.excludeDomains && filters.excludeDomains.length > 0) ||
+    filters.searchDepth ||
+    filters.includeRawContent ||
+    filters.includeAnswer ||
+    filters.includeImages;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-lg animate-in fade-in slide-in-from-top-2 space-y-4">
@@ -412,6 +443,108 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
           ))}
         </select>
         <p className="text-xs text-gray-500 mt-1">{COUNTRIES.length} countries available</p>
+      </div>
+
+      {/* Advanced Options */}
+      <div className="border-t border-gray-200 pt-4 space-y-3">
+        <div>
+          <label className="text-xs font-medium text-gray-700 mb-1 block">Max Results</label>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={filters.maxResults ?? 5}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              onChange({ ...filters, maxResults: Number.isNaN(value) ? undefined : value });
+            }}
+            disabled={disabled}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+          />
+          <p className="text-xs text-gray-500 mt-1">Range: 1–10</p>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-700 mb-1 block">Search Depth</label>
+          <select
+            value={filters.searchDepth || ''}
+            onChange={(e) => onChange({ ...filters, searchDepth: (e.target.value || undefined) as 'basic' | 'advanced' | undefined })}
+            disabled={disabled}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+          >
+            <option value="">Default (basic)</option>
+            {SEARCH_DEPTH_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-700 mb-1 block">Include Domains</label>
+          <input
+            type="text"
+            value={formatDomains(filters.includeDomains)}
+            onChange={(e) => {
+              const parsed = parseDomains(e.target.value);
+              onChange({ ...filters, includeDomains: parsed.length > 0 ? parsed : undefined });
+            }}
+            placeholder="e.g., nytimes.com, bbc.co.uk"
+            disabled={disabled}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+          />
+          <p className="text-xs text-gray-500 mt-1">Comma-separated domains</p>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-700 mb-1 block">Exclude Domains</label>
+          <input
+            type="text"
+            value={formatDomains(filters.excludeDomains)}
+            onChange={(e) => {
+              const parsed = parseDomains(e.target.value);
+              onChange({ ...filters, excludeDomains: parsed.length > 0 ? parsed : undefined });
+            }}
+            placeholder="e.g., wikipedia.org"
+            disabled={disabled}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+          />
+          <p className="text-xs text-gray-500 mt-1">Comma-separated domains</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              checked={filters.includeRawContent === true}
+              onChange={(e) => onChange({ ...filters, includeRawContent: e.target.checked || undefined })}
+              disabled={disabled}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+            />
+            Include raw content
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              checked={filters.includeAnswer === true}
+              onChange={(e) => onChange({ ...filters, includeAnswer: e.target.checked || undefined })}
+              disabled={disabled}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+            />
+            Include answer summary
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input
+              type="checkbox"
+              checked={filters.includeImages === true}
+              onChange={(e) => onChange({ ...filters, includeImages: e.target.checked || undefined })}
+              disabled={disabled}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+            />
+            Include images
+          </label>
+        </div>
       </div>
     </div>
   );

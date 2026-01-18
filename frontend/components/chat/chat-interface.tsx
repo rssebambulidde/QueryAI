@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage, Message, Source } from './chat-message';
 import { TypingIndicator } from './typing-indicator';
 import { ChatInput } from './chat-input';
+import { SearchFilters } from './search-filters';
 import { aiApi, QuestionRequest } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Alert } from '@/components/ui/alert';
@@ -23,7 +24,7 @@ export const ChatInterface: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
-  const handleSend = async (content: string, filters?: { topic?: string; timeRange?: any; startDate?: string; endDate?: string; country?: string }) => {
+  const handleSend = async (content: string, filters?: SearchFilters) => {
     if (!content.trim() || isLoading) return;
 
     // Add user message
@@ -67,7 +68,13 @@ export const ChatInterface: React.FC = () => {
         startDate: filters?.startDate, // Custom start date
         endDate: filters?.endDate, // Custom end date
         country: filters?.country, // Location filtering
-        maxSearchResults: 5,
+        maxSearchResults: filters?.maxResults || 5,
+        includeDomains: filters?.includeDomains,
+        excludeDomains: filters?.excludeDomains,
+        searchDepth: filters?.searchDepth,
+        includeRawContent: filters?.includeRawContent,
+        includeAnswer: filters?.includeAnswer,
+        includeImages: filters?.includeImages,
       };
 
       try {
@@ -97,7 +104,13 @@ export const ChatInterface: React.FC = () => {
             startDate: filters?.startDate,
             endDate: filters?.endDate,
             country: filters?.country,
-            maxSearchResults: 5,
+            maxSearchResults: filters?.maxResults || 5,
+            includeDomains: filters?.includeDomains,
+            excludeDomains: filters?.excludeDomains,
+            searchDepth: filters?.searchDepth,
+            includeRawContent: filters?.includeRawContent,
+            includeAnswer: filters?.includeAnswer,
+            includeImages: filters?.includeImages,
           });
           
           if (sourceResponse.success && sourceResponse.data?.sources && sourceResponse.data.sources.length > 0) {
