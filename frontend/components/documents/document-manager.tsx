@@ -66,6 +66,10 @@ export const DocumentManager = () => {
     } catch (error: any) {
       if (error?.code === 'ECONNABORTED') {
         toast.error('Upload timed out. Please try again.');
+      } else if (error?.response?.data?.error?.message) {
+        toast.error(error.response.data.error.message);
+      } else if (error?.response?.data?.message) {
+        toast.error(error.response.data.message);
       } else {
         toast.error(error.message || 'Upload failed');
       }
