@@ -21,9 +21,6 @@ export interface QuestionRequest {
   includeDomains?: string[];
   excludeDomains?: string[];
   searchDepth?: 'basic' | 'advanced';
-  includeRawContent?: boolean;
-  includeAnswer?: boolean;
-  includeImages?: boolean;
   // Advanced search filters
   timeRange?: 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
   startDate?: string; // ISO date string (YYYY-MM-DD)
@@ -63,9 +60,7 @@ export class AIService {
    */
   private static buildSystemPrompt(
     context?: string,
-    searchResults?: Array<{ title: string; url: string; content: string }>,
-    searchAnswer?: string,
-    searchImages?: string[]
+    searchResults?: Array<{ title: string; url: string; content: string }>
   ): string {
     const basePrompt = `You are a helpful AI assistant that provides accurate, informative, and well-structured answers to user questions.
 
@@ -88,14 +83,6 @@ Guidelines:
         fullContext += `URL: ${result.url}\n`;
         fullContext += `Content: ${result.content}\n\n`;
       });
-    }
-
-    if (searchAnswer) {
-      fullContext += `Search Summary:\n${searchAnswer}\n\n`;
-    }
-
-    if (searchImages && searchImages.length > 0) {
-      fullContext += `Related Images:\n${searchImages.join('\n')}\n\n`;
     }
 
     // Add additional context if provided
@@ -121,16 +108,14 @@ Use the provided context and search results to answer the question directly. If 
     question: string,
     context?: string,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
-    searchResults?: Array<{ title: string; url: string; content: string }>,
-    searchAnswer?: string,
-    searchImages?: string[]
+    searchResults?: Array<{ title: string; url: string; content: string }>
   ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
     // Add system prompt
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt(context, searchResults, searchAnswer, searchImages),
+      content: this.buildSystemPrompt(context, searchResults),
     });
 
     // Add conversation history if provided
@@ -174,8 +159,6 @@ Use the provided context and search results to answer the question directly. If 
 
       // Perform search if enabled
       let searchResults: Array<{ title: string; url: string; content: string }> | undefined;
-      let searchAnswer: string | undefined;
-      let searchImages: string[] | undefined;
       let sources: Source[] | undefined;
 
       if (request.enableSearch !== false) { // Default to true if not specified
@@ -187,9 +170,6 @@ Use the provided context and search results to answer the question directly. If 
             includeDomains: request.includeDomains,
             excludeDomains: request.excludeDomains,
             searchDepth: request.searchDepth,
-            includeRawContent: request.includeRawContent,
-            includeAnswer: request.includeAnswer,
-            includeImages: request.includeImages,
             timeRange: request.timeRange,
             startDate: request.startDate,
             endDate: request.endDate,
@@ -197,9 +177,6 @@ Use the provided context and search results to answer the question directly. If 
           };
 
           const searchResponse = await SearchService.search(searchRequest);
-
-          searchAnswer = searchResponse.answer;
-          searchImages = searchResponse.images;
           
           if (searchResponse.results && searchResponse.results.length > 0) {
             searchResults = searchResponse.results.map(r => ({
@@ -234,9 +211,7 @@ Use the provided context and search results to answer the question directly. If 
         request.question,
         request.context,
         request.conversationHistory,
-        searchResults,
-        searchAnswer,
-        searchImages
+        searchResults
       );
 
       logger.info('Sending question to OpenAI', {
@@ -337,8 +312,6 @@ Use the provided context and search results to answer the question directly. If 
 
       // Perform search if enabled (for streaming, we do search before streaming)
       let searchResults: Array<{ title: string; url: string; content: string }> | undefined;
-      let searchAnswer: string | undefined;
-      let searchImages: string[] | undefined;
 
       if (request.enableSearch !== false) { // Default to true if not specified
         try {
@@ -349,9 +322,6 @@ Use the provided context and search results to answer the question directly. If 
             includeDomains: request.includeDomains,
             excludeDomains: request.excludeDomains,
             searchDepth: request.searchDepth,
-            includeRawContent: request.includeRawContent,
-            includeAnswer: request.includeAnswer,
-            includeImages: request.includeImages,
             timeRange: request.timeRange,
             startDate: request.startDate,
             endDate: request.endDate,
@@ -359,9 +329,6 @@ Use the provided context and search results to answer the question directly. If 
           };
 
           const searchResponse = await SearchService.search(searchRequest);
-
-          searchAnswer = searchResponse.answer;
-          searchImages = searchResponse.images;
           
           if (searchResponse.results && searchResponse.results.length > 0) {
             searchResults = searchResponse.results.map(r => ({
@@ -392,9 +359,7 @@ Use the provided context and search results to answer the question directly. If 
         request.question,
         request.context,
         request.conversationHistory,
-        searchResults,
-        searchAnswer,
-        searchImages
+        searchResults
       );
 
       logger.info('Sending streaming question to OpenAI', {
