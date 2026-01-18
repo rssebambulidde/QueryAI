@@ -57,8 +57,11 @@ export const DocumentManager = () => {
     try {
       const response = await documentApi.upload(selectedFile);
       if (response.success) {
-        toast.success('Document uploaded');
+        toast.success('Document uploaded successfully');
         setSelectedFile(null);
+        // Reset file input
+        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
         await loadDocuments();
       } else {
         toast.error(response.message || 'Upload failed');
@@ -107,6 +110,7 @@ export const DocumentManager = () => {
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center mb-4">
         <input
           type="file"
+          id="file-upload"
           accept=".pdf,.txt,.md,.docx"
           onChange={(event) => {
             const file = event.target.files?.[0] || null;
@@ -114,7 +118,10 @@ export const DocumentManager = () => {
           }}
           className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
         />
-        <Button onClick={handleUpload} disabled={isUploading || !selectedFile}>
+        <Button 
+          onClick={handleUpload} 
+          disabled={isUploading || !selectedFile}
+        >
           {isUploading ? 'Uploading...' : 'Upload'}
         </Button>
       </div>
