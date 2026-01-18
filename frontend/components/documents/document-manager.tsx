@@ -14,7 +14,7 @@ const formatBytes = (bytes: number): string => {
   return `${(bytes / Math.pow(1024, idx)).toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
 };
 
-const getFileIcon = (mimeType: string, fileName: string): JSX.Element => {
+const getFileIcon = (mimeType: string, fileName: string): React.ReactElement => {
   const extension = fileName.split('.').pop()?.toLowerCase();
   
   if (mimeType === 'application/pdf' || extension === 'pdf') {
