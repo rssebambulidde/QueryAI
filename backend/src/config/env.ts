@@ -14,6 +14,7 @@ interface EnvConfig {
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
+  SUPABASE_STORAGE_BUCKET: string;
 
   // AI Services
   OPENAI_API_KEY?: string;
@@ -61,6 +62,7 @@ const config: EnvConfig = {
   SUPABASE_URL: getEnvVar('SUPABASE_URL'),
   SUPABASE_ANON_KEY: getEnvVar('SUPABASE_ANON_KEY'),
   SUPABASE_SERVICE_ROLE_KEY: getEnvVar('SUPABASE_SERVICE_ROLE_KEY'),
+  SUPABASE_STORAGE_BUCKET: getEnvVar('SUPABASE_STORAGE_BUCKET', 'documents'),
 
   // AI Services (OpenAI is optional but recommended for AI features)
   OPENAI_API_KEY: getEnvVar('OPENAI_API_KEY'),

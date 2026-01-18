@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { ChatInterface } from '@/components/chat/chat-interface';
+import { DocumentManager } from '@/components/documents/document-manager';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -58,6 +59,9 @@ export default function DashboardPage() {
       </nav>
 
       <main className="flex-1 flex flex-col overflow-hidden">
+        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
+          <DocumentManager />
+        </div>
         <div className="flex-1 overflow-hidden">
           <ChatInterface />
         </div>

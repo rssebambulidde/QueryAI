@@ -338,4 +338,45 @@ export const searchApi = {
   },
 };
 
+// Document API Types
+export interface DocumentItem {
+  path: string;
+  name: string;
+  size: number;
+  mimeType: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const documentApi = {
+  upload: async (file: File): Promise<ApiResponse<DocumentItem>> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post<ApiResponse<DocumentItem>>(
+      '/api/documents/upload',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    return response.data;
+  },
+
+  list: async (): Promise<ApiResponse<DocumentItem[]>> => {
+    const response = await apiClient.get<ApiResponse<DocumentItem[]>>(
+      '/api/documents'
+    );
+    return response.data;
+  },
+
+  delete: async (path: string): Promise<ApiResponse> => {
+    const response = await apiClient.delete<ApiResponse>('/api/documents', {
+      data: { path },
+    });
+    return response.data;
+  },
+};
+
 export default apiClient;
