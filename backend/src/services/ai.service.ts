@@ -75,8 +75,7 @@ Guidelines:
 - Use proper formatting (bullet points, paragraphs) when appropriate
 - Cite sources when context or search results are provided
 - Be friendly and professional
-- When using search results, cite them with [Source 1], [Source 2], etc.
-- If search results are provided, do not say you lack real-time access; use the provided results as your current information.`;
+- When using search results, cite them with [Source 1], [Source 2], etc.`;
 
     let fullContext = '';
 
@@ -108,7 +107,7 @@ Guidelines:
 
 ${fullContext}
 
-Use the provided context and search results to answer the question directly. If search results are available, you must use them and cite sources using [Source N]. Do not add generic disclaimers about real-time access.`;
+Use the provided context and search results to enhance your answers. If the information is relevant to the question, incorporate it into your response. Always cite sources using [Source N] format when referencing search results.`;
     }
 
     return basePrompt;
@@ -197,9 +196,6 @@ Use the provided context and search results to answer the question directly. If 
           };
 
           const searchResponse = await SearchService.search(searchRequest);
-
-          searchAnswer = searchResponse.answer;
-          searchImages = searchResponse.images;
           
           if (searchResponse.results && searchResponse.results.length > 0) {
             searchResults = searchResponse.results.map(r => ({
@@ -213,6 +209,9 @@ Use the provided context and search results to answer the question directly. If 
               url: r.url,
               snippet: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
             }));
+
+            searchAnswer = searchResponse.answer;
+            searchImages = searchResponse.images;
 
             logger.info('Search results retrieved', {
               query: request.question,
@@ -359,9 +358,6 @@ Use the provided context and search results to answer the question directly. If 
           };
 
           const searchResponse = await SearchService.search(searchRequest);
-
-          searchAnswer = searchResponse.answer;
-          searchImages = searchResponse.images;
           
           if (searchResponse.results && searchResponse.results.length > 0) {
             searchResults = searchResponse.results.map(r => ({
@@ -369,6 +365,9 @@ Use the provided context and search results to answer the question directly. If 
               url: r.url,
               content: r.content,
             }));
+
+            searchAnswer = searchResponse.answer;
+            searchImages = searchResponse.images;
 
             logger.info('Search results retrieved for streaming', {
               query: request.question,
