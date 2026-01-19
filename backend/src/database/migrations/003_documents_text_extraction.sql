@@ -11,11 +11,12 @@ CREATE TABLE IF NOT EXISTS documents (
     file_path TEXT NOT NULL, -- Supabase Storage path
     file_type TEXT NOT NULL CHECK (file_type IN ('pdf', 'docx', 'txt', 'md')),
     file_size INTEGER NOT NULL,
-    status TEXT DEFAULT 'processing' CHECK (status IN ('processing', 'extracted', 'failed')),
+    status TEXT DEFAULT 'processing' CHECK (status IN ('processing', 'extracted', 'failed', 'embedding', 'embedded', 'embedding_failed')),
     extracted_text TEXT, -- Full extracted text content
     text_length INTEGER, -- Character count of extracted text
     extraction_error TEXT, -- Error message if extraction failed
-    metadata JSONB DEFAULT '{}', -- Additional metadata (page count, word count, etc.)
+    embedding_error TEXT, -- Error message if embedding generation failed
+    metadata JSONB DEFAULT '{}', -- Additional metadata (page count, word count, embedding metadata, etc.)
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

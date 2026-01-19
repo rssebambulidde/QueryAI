@@ -131,6 +131,68 @@ router.post(
           pageCount: result.stats.pageCount,
           tableCount: result.tables?.length || 0,
         });
+
+        // Trigger embedding generation automatically after text extraction
+        // This runs in the background and doesn't block
+        const { EmbeddingService } = await import('../services/embedding.service');
+        const { ChunkService } = await import('../services/chunk.service');
+
+        EmbeddingService.processDocument(document.id, userId, result.text)
+          .then(async ({ chunks, embeddings, metadata }) => {
+            try {
+              // Store chunks in database
+              await ChunkService.createChunks(document.id, chunks);
+
+              // Update document with embedding metadata
+              await DocumentService.updateDocument(document.id, userId, {
+                status: 'embedded',
+                metadata: {
+                  ...result.metadata,
+                  wordCount: result.stats.wordCount,
+                  pageCount: result.stats.pageCount,
+                  paragraphCount: result.stats.paragraphCount,
+                  tables: result.tables,
+                  tableCount: result.tables?.length || 0,
+                  images: result.images ? result.images.map(img => ({
+                    page: img.page,
+                    index: img.index,
+                    width: img.width,
+                    height: img.height,
+                    format: img.format,
+                    size: img.size,
+                  })) : undefined,
+                  imageCount: result.images?.length || 0,
+                  ocr: result.ocrUsed || false,
+                  embedding: metadata,
+                  chunkCount: chunks.length,
+                  embeddedAt: new Date().toISOString(),
+                },
+              });
+
+              logger.info('Embedding generation completed automatically', {
+                documentId: document.id,
+                chunkCount: chunks.length,
+                totalTokens: metadata.totalTokens,
+              });
+            } catch (embedError: any) {
+              logger.error('Failed to store chunks after embedding', {
+                documentId: document.id,
+                error: embedError.message,
+              });
+              await DocumentService.updateDocument(document.id, userId, {
+                status: 'embedding_failed',
+                embedding_error: embedError.message || 'Failed to store chunks',
+              });
+            }
+          })
+          .catch(async (embedError: any) => {
+            logger.warn('Automatic embedding generation failed (non-critical)', {
+              documentId: document.id,
+              error: embedError.message,
+            });
+            // Don't fail the document - embedding can be retried manually
+            // Document status remains 'extracted'
+          });
       })
       .catch(async (error: any) => {
         // Update document with error status

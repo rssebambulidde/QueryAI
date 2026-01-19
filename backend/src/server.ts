@@ -12,6 +12,7 @@ import authRoutes from './routes/auth.routes';
 import aiRoutes from './routes/ai.routes';
 import searchRoutes from './routes/search.routes';
 import documentsRoutes from './routes/documents.routes';
+import embeddingsRoutes from './routes/embeddings.routes';
 import testRoutes from './routes/test.routes';
 import debugRoutes from './routes/debug.routes';
 
@@ -92,6 +93,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/documents', documentsRoutes);
+app.use('/api/documents', embeddingsRoutes); // Embedding endpoints use same base path
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }

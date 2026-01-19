@@ -68,10 +68,11 @@ export namespace Database {
     file_path: string;
     file_type: 'pdf' | 'docx' | 'txt' | 'md';
     file_size: number;
-    status: 'processing' | 'extracted' | 'failed';
+    status: 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed';
     extracted_text?: string;
     text_length?: number;
     extraction_error?: string;
+    embedding_error?: string;
     metadata?: Record<string, any>;
     created_at: string;
     updated_at: string;
