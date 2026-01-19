@@ -539,6 +539,181 @@ router.post(
 );
 
 /**
+ * POST /api/documents/:id/process
+ * Manually trigger full processing (extraction + chunking + embedding) for a document
+ */
+router.post(
+  '/:id/process',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { id } = req.params;
+    const documentId = Array.isArray(id) ? id[0] : id;
+    if (!documentId) {
+      throw new ValidationError('Document ID is required');
+    }
+
+    const document = await DocumentService.getDocument(documentId, userId);
+    if (!document) {
+      throw new ValidationError('Document not found');
+    }
+
+    // Check if already processed
+    if (document.status === 'processed' || document.status === 'embedded') {
+      const chunkCount = await ChunkService.getChunkCount(documentId);
+      if (chunkCount > 0) {
+        res.status(200).json({
+          success: true,
+          message: 'Document is already processed',
+          data: {
+            documentId: documentId,
+            status: document.status,
+          },
+        });
+        return;
+      }
+    }
+
+    // Step 1: Extract text if not already extracted
+    if (!document.extracted_text || document.extracted_text.trim().length === 0) {
+      // Download file from storage
+      const fileData = await StorageService.downloadDocument(document.file_path);
+
+      // Update status to processing
+      await DocumentService.updateDocument(documentId, userId, {
+        status: 'processing',
+        extraction_error: undefined,
+      });
+
+      // Extract text
+      ExtractionService.extractText(fileData.buffer, document.file_type, document.filename)
+        .then(async (result) => {
+          await DocumentService.updateDocument(documentId, userId, {
+            status: 'extracted',
+            extracted_text: result.text,
+            text_length: result.stats.length,
+            metadata: {
+              ...result.metadata,
+              wordCount: result.stats.wordCount,
+              pageCount: result.stats.pageCount,
+              paragraphCount: result.stats.paragraphCount,
+            },
+          });
+
+          logger.info('Text extraction completed, starting embedding', {
+            documentId: documentId,
+            textLength: result.stats.length,
+          });
+
+          // Step 2: Generate embeddings after extraction
+          const { EmbeddingService } = await import('../services/embedding.service');
+
+          await DocumentService.updateDocument(documentId, userId, {
+            status: 'embedding',
+            embedding_error: undefined,
+          });
+
+          EmbeddingService.processDocument(documentId, userId, result.text)
+            .then(async ({ chunks, embeddings, metadata }) => {
+              await ChunkService.createChunks(documentId, chunks);
+              await DocumentService.updateDocument(documentId, userId, {
+                status: 'processed',
+                metadata: {
+                  ...result.metadata,
+                  wordCount: result.stats.wordCount,
+                  pageCount: result.stats.pageCount,
+                  paragraphCount: result.stats.paragraphCount,
+                  embedding: metadata,
+                  chunkCount: chunks.length,
+                  embeddedAt: new Date().toISOString(),
+                },
+              });
+
+              logger.info('Document processing completed', {
+                documentId: documentId,
+                chunkCount: chunks.length,
+              });
+            })
+            .catch(async (error: any) => {
+              await DocumentService.updateDocument(documentId, userId, {
+                status: 'embedding_failed',
+                embedding_error: error.message || 'Embedding generation failed',
+              });
+
+              logger.error('Embedding generation failed', {
+                documentId: documentId,
+                error: error.message,
+              });
+            });
+        })
+        .catch(async (error: any) => {
+          await DocumentService.updateDocument(documentId, userId, {
+            status: 'failed',
+            extraction_error: error.message || 'Extraction failed',
+          });
+
+          logger.error('Text extraction failed', {
+            documentId: documentId,
+            error: error.message,
+          });
+        });
+    } else {
+      // Text already extracted, just generate embeddings
+      await DocumentService.updateDocument(documentId, userId, {
+        status: 'embedding',
+        embedding_error: undefined,
+      });
+
+      const { EmbeddingService } = await import('../services/embedding.service');
+
+      EmbeddingService.processDocument(documentId, userId, document.extracted_text)
+        .then(async ({ chunks, embeddings, metadata }) => {
+          await ChunkService.createChunks(documentId, chunks);
+          await DocumentService.updateDocument(documentId, userId, {
+            status: 'processed',
+            metadata: {
+              ...document.metadata,
+              embedding: metadata,
+              chunkCount: chunks.length,
+              embeddedAt: new Date().toISOString(),
+            },
+          });
+
+          logger.info('Document processing completed', {
+            documentId: documentId,
+            chunkCount: chunks.length,
+          });
+        })
+        .catch(async (error: any) => {
+          await DocumentService.updateDocument(documentId, userId, {
+            status: 'embedding_failed',
+            embedding_error: error.message || 'Embedding generation failed',
+          });
+
+          logger.error('Embedding generation failed', {
+            documentId: documentId,
+            error: error.message,
+          });
+        });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Document processing started (extraction + chunking + embedding)',
+      data: {
+        documentId: documentId,
+        status: document.extracted_text ? 'embedding' : 'processing',
+      },
+    });
+  })
+);
+
+/**
  * POST /api/documents/batch-extract
  * Manually trigger text extraction for multiple documents
  */
@@ -851,9 +1026,9 @@ router.post(
       logger.warn('No chunks to delete or chunks table not found', { documentId, error: error.message });
     }
 
-    // Clear extracted text and reset status
+    // Clear extracted text and reset status to 'stored'
     await DocumentService.updateDocument(documentId, userId, {
-      status: 'processing',
+      status: 'stored',
       extracted_text: undefined,
       text_length: undefined,
       extraction_error: undefined,
@@ -876,7 +1051,7 @@ router.post(
       message: 'Processing data cleared successfully. Document remains in storage.',
       data: {
         documentId,
-        status: 'processing',
+        status: 'stored',
       },
     });
   })

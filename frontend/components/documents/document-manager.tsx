@@ -61,6 +61,8 @@ export const DocumentManager = () => {
   }, [documents]);
 
   const totalSize = useMemo(() => getTotalSize(documents), [documents]);
+  const totalCharacters = useMemo(() => getTotalCharacters(documents), [documents]);
+  const totalChunks = useMemo(() => getTotalChunks(documents), [documents]);
 
   const loadDocuments = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -299,6 +301,8 @@ export const DocumentManager = () => {
           <p className="text-xs text-gray-500">
             Upload PDF, TXT, MD, or DOCX files (max 10MB).
             {totalSize > 0 && ` · Total storage: ${formatBytes(totalSize)}`}
+            {totalCharacters > 0 && ` · Total characters: ${totalCharacters.toLocaleString()}`}
+            {totalChunks > 0 && ` · Total chunks: ${totalChunks.toLocaleString()}`}
           </p>
         </div>
       </div>
@@ -455,6 +459,7 @@ export const DocumentManager = () => {
                       {formatBytes(doc.size)}
                       {doc.createdAt ? ` · ${new Date(doc.createdAt).toLocaleDateString()}` : ''}
                       {(doc.status === 'extracted' || doc.status === 'processed' || doc.status === 'embedded') && doc.textLength && ` · ${doc.textLength.toLocaleString()} chars`}
+                      {doc.chunkCount && doc.chunkCount > 0 && ` · ${doc.chunkCount} chunk${doc.chunkCount !== 1 ? 's' : ''}`}
                       {doc.status === 'failed' && doc.extractionError && ` · ${doc.extractionError}`}
                       {doc.status === 'embedding_failed' && doc.embeddingError && ` · ${doc.embeddingError}`}
                     </p>
@@ -467,11 +472,11 @@ export const DocumentManager = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleProcess(doc)}
-                      className="h-8 px-2 text-blue-600 border-blue-200 hover:bg-blue-50"
-                      title="Process document (extract + chunk)"
+                      className="h-8 px-3 text-blue-600 border-blue-200 hover:bg-blue-50"
                       disabled={isLoading || isUploading}
                     >
-                      <Play className="w-4 h-4" />
+                      <Play className="w-3 h-3 mr-1.5" />
+                      Process
                     </Button>
                   )}
                   {/* Retry button - show for failed documents */}
@@ -488,10 +493,10 @@ export const DocumentManager = () => {
                           toast.error(error.message || 'Failed to retry processing');
                         }
                       }}
-                      className="h-8 px-2"
-                      title="Retry processing"
+                      className="h-8 px-3"
                     >
-                      <RefreshCw className="w-4 h-4" />
+                      <RefreshCw className="w-3 h-3 mr-1.5" />
+                      Retry
                     </Button>
                   )}
                   {/* Clear processing button - show for processed/extracted documents */}
@@ -500,39 +505,39 @@ export const DocumentManager = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleClearProcessing(doc)}
-                      className="h-8 px-2 text-orange-600 border-orange-200 hover:bg-orange-50"
-                      title="Clear processing data (keep document in storage)"
+                      className="h-8 px-3 text-orange-600 border-orange-200 hover:bg-orange-50"
                     >
-                      <Eraser className="w-4 h-4" />
+                      <Eraser className="w-3 h-3 mr-1.5" />
+                      Clear
                     </Button>
                   )}
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleView(doc)}
-                    className="h-8 px-2"
-                    title="View document"
+                    className="h-8 px-3"
                     disabled={!doc.status || (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed')}
                   >
-                    <Eye className="w-4 h-4" />
+                    <Eye className="w-3 h-3 mr-1.5" />
+                    View
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDownload(doc)}
-                    className="h-8 px-2"
-                    title="Download document"
+                    className="h-8 px-3"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="w-3 h-3 mr-1.5" />
+                    Download
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDelete(doc.id || doc.path)}
-                    className="h-8 px-2 text-red-600 border-red-200 hover:bg-red-50"
-                    title="Delete document"
+                    className="h-8 px-3 text-red-600 border-red-200 hover:bg-red-50"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3 h-3 mr-1.5" />
+                    Delete
                   </Button>
                 </div>
               </div>
