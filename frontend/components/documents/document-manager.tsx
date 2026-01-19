@@ -91,9 +91,11 @@ export const DocumentManager = () => {
     loadDocuments();
   }, []);
 
-  // Auto-refresh every 5 seconds if there are documents with 'processing' status
+  // Auto-refresh every 5 seconds if there are documents with 'processing' or 'embedding' status
   useEffect(() => {
-    const hasProcessing = documents.some(doc => doc.status === 'processing');
+    const hasProcessing = documents.some(doc => 
+      doc.status === 'processing' || doc.status === 'embedding'
+    );
     if (!hasProcessing) {
       return; // No processing documents, no need to set up interval
     }
@@ -429,18 +431,21 @@ export const DocumentManager = () => {
                           doc.status === 'extracted' && "bg-blue-100 text-blue-700",
                           doc.status === 'embedding' && "bg-purple-100 text-purple-700",
                           doc.status === 'embedded' && "bg-green-100 text-green-700",
+                          doc.status === 'stored' && "bg-gray-100 text-gray-700",
                           (doc.status === 'processing' || doc.status === 'embedding') && "bg-yellow-100 text-yellow-700",
                           (doc.status === 'failed' || doc.status === 'embedding_failed') && "bg-red-100 text-red-700"
                         )}>
                           {doc.status === 'processed' && <CheckCircle2 className="w-3 h-3" />}
                           {doc.status === 'extracted' && <CheckCircle2 className="w-3 h-3" />}
                           {doc.status === 'embedded' && <CheckCircle2 className="w-3 h-3" />}
+                          {doc.status === 'stored' && <File className="w-3 h-3" />}
                           {(doc.status === 'processing' || doc.status === 'embedding') && <Clock className="w-3 h-3 animate-spin" />}
                           {(doc.status === 'failed' || doc.status === 'embedding_failed') && <AlertCircle className="w-3 h-3" />}
                           {doc.status === 'processed' && 'Processed'}
                           {doc.status === 'extracted' && 'Extracted'}
                           {doc.status === 'embedding' && 'Chunking...'}
                           {doc.status === 'embedded' && 'Embedded'}
+                          {doc.status === 'stored' && 'Stored'}
                           {doc.status === 'processing' && 'Processing...'}
                           {(doc.status === 'failed' || doc.status === 'embedding_failed') && 'Failed'}
                         </span>
@@ -456,8 +461,8 @@ export const DocumentManager = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {/* Process button - show for documents that aren't processed yet */}
-                  {doc.id && doc.status !== 'processed' && doc.status !== 'processing' && doc.status !== 'embedding' && (
+                  {/* Process button - show for stored documents or documents that aren't processed yet */}
+                  {doc.id && (doc.status === 'stored' || (doc.status !== 'processed' && doc.status !== 'processing' && doc.status !== 'embedding' && doc.status !== 'extracted' && doc.status !== 'embedded')) && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -507,7 +512,7 @@ export const DocumentManager = () => {
                     onClick={() => handleView(doc)}
                     className="h-8 px-2"
                     title="View document"
-                    disabled={!doc.status || (doc.status !== 'extracted' && doc.status !== 'processed' && doc.status !== 'embedded')}
+                    disabled={!doc.status || (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed')}
                   >
                     <Eye className="w-4 h-4" />
                   </Button>

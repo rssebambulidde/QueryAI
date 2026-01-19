@@ -82,13 +82,17 @@ router.post(
     const storedDoc = await StorageService.uploadDocument(userId, req.file);
     const fileType = getFileType(req.file.originalname, req.file.mimetype);
 
-    // Create document record
+    // Create document record with appropriate status
+    // If auto-processing is disabled, set status to 'stored' (ready for manual processing)
+    const initialStatus = (req.query.autoExtract === 'true') ? 'processing' : 'stored';
+    
     const document = await DocumentService.createDocument({
       user_id: userId,
       filename: storedDoc.name,
       file_path: storedDoc.path,
       file_type: fileType,
       file_size: storedDoc.size,
+      status: initialStatus,
     });
 
     logger.info('Document uploaded and record created', {
@@ -239,7 +243,7 @@ router.post(
         name: document.filename,
         size: document.file_size,
         mimeType: req.file.mimetype,
-        status: document.status,
+        status: initialStatus, // Use the status we set, not the document status (which might be default)
         autoExtract,
         autoEmbed,
         createdAt: document.created_at,

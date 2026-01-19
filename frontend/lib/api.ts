@@ -352,7 +352,7 @@ export interface DocumentItem {
   name: string;
   size: number;
   mimeType: string;
-  status?: 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed'; // Processing status
+  status?: 'stored' | 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed'; // Processing status
   textLength?: number; // Character count of extracted text
   chunkCount?: number; // Number of chunks for processed documents
   extractionError?: string; // Error message if extraction failed

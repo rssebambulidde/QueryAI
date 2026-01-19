@@ -10,10 +10,11 @@ export interface CreateDocumentInput {
   file_path: string;
   file_type: 'pdf' | 'docx' | 'txt' | 'md';
   file_size: number;
+  status?: 'stored' | 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed';
 }
 
 export interface UpdateDocumentInput {
-  status?: 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed';
+  status?: 'stored' | 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed';
   extracted_text?: string;
   text_length?: number;
   extraction_error?: string;
@@ -36,7 +37,7 @@ export class DocumentService {
           file_path: input.file_path,
           file_type: input.file_type,
           file_size: input.file_size,
-          status: 'processing',
+          status: input.status || 'stored',
           metadata: {},
         })
         .select()
