@@ -68,7 +68,7 @@ export namespace Database {
     file_path: string;
     file_type: 'pdf' | 'docx' | 'txt' | 'md';
     file_size: number;
-    status: 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed';
+    status: 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed';
     extracted_text?: string;
     text_length?: number;
     extraction_error?: string;

@@ -352,9 +352,10 @@ export interface DocumentItem {
   name: string;
   size: number;
   mimeType: string;
-  status?: 'processing' | 'extracted' | 'failed'; // Extraction status (Phase 2.3+)
+  status?: 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed'; // Processing status
   textLength?: number; // Character count of extracted text
   extractionError?: string; // Error message if extraction failed
+  embeddingError?: string; // Error message if embedding failed
   createdAt?: string;
   updatedAt?: string;
 }
@@ -441,6 +442,11 @@ export const documentApi = {
 
   retryExtraction: async (documentId: string): Promise<ApiResponse> => {
     const response = await apiClient.post<ApiResponse>(`/api/documents/${documentId}/extract`);
+    return response.data;
+  },
+
+  process: async (documentId: string): Promise<ApiResponse> => {
+    const response = await apiClient.post<ApiResponse>(`/api/documents/${documentId}/process`);
     return response.data;
   },
 };

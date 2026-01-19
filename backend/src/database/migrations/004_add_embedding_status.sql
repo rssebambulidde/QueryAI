@@ -14,7 +14,7 @@ DROP CONSTRAINT IF EXISTS documents_status_check;
 
 ALTER TABLE documents 
 ADD CONSTRAINT documents_status_check 
-CHECK (status IN ('processing', 'extracted', 'failed', 'embedding', 'embedded', 'embedding_failed'));
+CHECK (status IN ('processing', 'extracted', 'failed', 'embedding', 'embedded', 'embedding_failed', 'processed'));
 
 -- Add index for embedding status queries
 CREATE INDEX IF NOT EXISTS idx_documents_embedding_status 

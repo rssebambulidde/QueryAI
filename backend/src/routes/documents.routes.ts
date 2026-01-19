@@ -98,9 +98,9 @@ router.post(
       size: storedDoc.size,
     });
 
-    // Check if auto-processing is enabled (default: true for backward compatibility)
-    const autoExtract = req.query.autoExtract !== 'false';
-    const autoEmbed = req.query.autoEmbed !== 'false';
+    // Check if auto-processing is enabled (default: false - user must manually trigger processing)
+    const autoExtract = req.query.autoExtract === 'true';
+    const autoEmbed = req.query.autoEmbed === 'true';
 
     // Trigger text extraction asynchronously (if enabled)
     if (autoExtract) {
@@ -284,6 +284,7 @@ router.get(
         status: doc.status,
         textLength: doc.text_length,
         extractionError: doc.extraction_error,
+        embeddingError: doc.embedding_error,
         createdAt: doc.created_at,
         updatedAt: doc.updated_at,
       }));
@@ -311,6 +312,7 @@ router.get(
               status: 'extracted' as const, // Assume extracted for legacy documents
               textLength: undefined,
               extractionError: undefined,
+              embeddingError: undefined,
               createdAt: storageDoc.createdAt || new Date().toISOString(),
               updatedAt: storageDoc.updatedAt || new Date().toISOString(),
             });

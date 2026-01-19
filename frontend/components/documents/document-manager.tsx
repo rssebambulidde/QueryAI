@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { documentApi, DocumentItem } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
-import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw } from 'lucide-react';
+import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const formatBytes = (bytes: number): string => {
@@ -181,17 +181,17 @@ export const DocumentManager = () => {
     }
   };
 
-  const handleDelete = async (path: string) => {
+  const handleDelete = async (pathOrId: string) => {
     if (!confirm('Are you sure you want to delete this document?')) {
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await documentApi.delete(path);
+      const response = await documentApi.delete(pathOrId);
       if (response.success) {
         toast.success('Document deleted');
-        setDocuments((prev) => prev.filter((doc) => doc.path !== path));
+        setDocuments((prev) => prev.filter((doc) => (doc.id || doc.path) !== pathOrId));
       } else {
         toast.error(response.message || 'Delete failed');
       }
@@ -199,6 +199,26 @@ export const DocumentManager = () => {
       toast.error(error.message || 'Delete failed');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleProcess = async (doc: DocumentItem) => {
+    if (!doc.id) {
+      toast.error('Document ID not available');
+      return;
+    }
+
+    try {
+      toast.info('Processing document (extraction + chunking)...');
+      const response = await documentApi.process(doc.id);
+      if (response.success) {
+        toast.success('Document processing started');
+        setTimeout(() => loadDocuments(), 2000); // Refresh after a short delay
+      } else {
+        toast.error(response.message || 'Failed to start processing');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to process document');
     }
   };
 
@@ -374,43 +394,66 @@ export const DocumentManager = () => {
                       {doc.status && (
                         <span className={cn(
                           "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0",
-                          doc.status === 'extracted' && "bg-green-100 text-green-700",
-                          doc.status === 'processing' && "bg-yellow-100 text-yellow-700",
-                          doc.status === 'failed' && "bg-red-100 text-red-700"
+                          doc.status === 'processed' && "bg-green-100 text-green-700",
+                          doc.status === 'extracted' && "bg-blue-100 text-blue-700",
+                          doc.status === 'embedding' && "bg-purple-100 text-purple-700",
+                          doc.status === 'embedded' && "bg-green-100 text-green-700",
+                          (doc.status === 'processing' || doc.status === 'embedding') && "bg-yellow-100 text-yellow-700",
+                          (doc.status === 'failed' || doc.status === 'embedding_failed') && "bg-red-100 text-red-700"
                         )}>
+                          {doc.status === 'processed' && <CheckCircle2 className="w-3 h-3" />}
                           {doc.status === 'extracted' && <CheckCircle2 className="w-3 h-3" />}
-                          {doc.status === 'processing' && <Clock className="w-3 h-3 animate-spin" />}
-                          {doc.status === 'failed' && <AlertCircle className="w-3 h-3" />}
+                          {doc.status === 'embedded' && <CheckCircle2 className="w-3 h-3" />}
+                          {(doc.status === 'processing' || doc.status === 'embedding') && <Clock className="w-3 h-3 animate-spin" />}
+                          {(doc.status === 'failed' || doc.status === 'embedding_failed') && <AlertCircle className="w-3 h-3" />}
+                          {doc.status === 'processed' && 'Processed'}
                           {doc.status === 'extracted' && 'Extracted'}
+                          {doc.status === 'embedding' && 'Chunking...'}
+                          {doc.status === 'embedded' && 'Embedded'}
                           {doc.status === 'processing' && 'Processing...'}
-                          {doc.status === 'failed' && 'Failed'}
+                          {(doc.status === 'failed' || doc.status === 'embedding_failed') && 'Failed'}
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-gray-500">
                       {formatBytes(doc.size)}
                       {doc.createdAt ? ` · ${new Date(doc.createdAt).toLocaleDateString()}` : ''}
-                      {doc.status === 'extracted' && doc.textLength && ` · ${doc.textLength.toLocaleString()} chars`}
+                      {(doc.status === 'extracted' || doc.status === 'processed' || doc.status === 'embedded') && doc.textLength && ` · ${doc.textLength.toLocaleString()} chars`}
                       {doc.status === 'failed' && doc.extractionError && ` · ${doc.extractionError}`}
+                      {doc.status === 'embedding_failed' && doc.embeddingError && ` · ${doc.embeddingError}`}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {doc.status === 'failed' && doc.id && (
+                  {/* Process button - show for documents that aren't processed yet */}
+                  {doc.id && doc.status !== 'processed' && doc.status !== 'processing' && doc.status !== 'embedding' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleProcess(doc)}
+                      className="h-8 px-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                      title="Process document (extract + chunk)"
+                      disabled={isLoading || isUploading}
+                    >
+                      <Play className="w-4 h-4" />
+                    </Button>
+                  )}
+                  {/* Retry button - show for failed documents */}
+                  {(doc.status === 'failed' || doc.status === 'embedding_failed') && doc.id && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={async () => {
                         try {
-                          await documentApi.retryExtraction(doc.id!);
-                          toast.success('Extraction retry started');
+                          await documentApi.process(doc.id!);
+                          toast.success('Processing retry started');
                           setTimeout(() => loadDocuments(), 2000);
                         } catch (error: any) {
-                          toast.error(error.message || 'Failed to retry extraction');
+                          toast.error(error.message || 'Failed to retry processing');
                         }
                       }}
                       className="h-8 px-2"
-                      title="Retry extraction"
+                      title="Retry processing"
                     >
                       <RefreshCw className="w-4 h-4" />
                     </Button>
@@ -421,6 +464,7 @@ export const DocumentManager = () => {
                     onClick={() => handleView(doc)}
                     className="h-8 px-2"
                     title="View document"
+                    disabled={!doc.status || (doc.status !== 'extracted' && doc.status !== 'processed' && doc.status !== 'embedded')}
                   >
                     <Eye className="w-4 h-4" />
                   </Button>
@@ -436,7 +480,7 @@ export const DocumentManager = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleDelete(doc.path)}
+                    onClick={() => handleDelete(doc.id || doc.path)}
                     className="h-8 px-2 text-red-600 border-red-200 hover:bg-red-50"
                     title="Delete document"
                   >

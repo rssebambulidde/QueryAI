@@ -13,7 +13,7 @@ export interface CreateDocumentInput {
 }
 
 export interface UpdateDocumentInput {
-  status?: 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed';
+  status?: 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed';
   extracted_text?: string;
   text_length?: number;
   extraction_error?: string;
