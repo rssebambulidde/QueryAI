@@ -224,23 +224,40 @@ export class ExtractionService {
       let ocrUsed = false;
 
       // Check if PDF is scanned (very little or no text extracted)
-      const isScannedPDF = text.trim().length < 100 && pageCount > 0;
+      // Threshold: less than 50 characters per page suggests scanned PDF
+      const avgCharsPerPage = pageCount > 0 ? text.trim().length / pageCount : 0;
+      const isScannedPDF = avgCharsPerPage < 50 && pageCount > 0 && text.trim().length < 500;
 
       // If scanned PDF, try OCR (optional - requires tesseract.js)
       if (isScannedPDF) {
         try {
-          logger.info('Detected scanned PDF, attempting OCR');
+          logger.info('Detected scanned PDF, attempting OCR', {
+            pageCount,
+            extractedTextLength: text.length,
+            avgCharsPerPage: avgCharsPerPage.toFixed(2),
+          });
+          
           const ocrText = await this.extractTextWithOCR(parser);
-          if (ocrText && ocrText.length > text.length) {
+          
+          if (ocrText && ocrText.trim().length > text.trim().length) {
             text = ocrText;
             ocrUsed = true;
-            logger.info('OCR extraction successful', { textLength: text.length });
+            logger.info('OCR extraction successful', {
+              textLength: text.length,
+              improvement: `${((text.length - textData.text.length) / textData.text.length * 100).toFixed(1)}%`,
+            });
+          } else {
+            logger.warn('OCR did not improve text extraction', {
+              originalLength: text.length,
+              ocrLength: ocrText?.length || 0,
+            });
           }
         } catch (ocrError: any) {
           logger.warn('OCR extraction failed or not available', {
             error: ocrError.message,
+            code: ocrError.code,
           });
-          // Continue with regular extraction
+          // Continue with regular extraction (even if empty)
         }
       }
 
@@ -592,50 +609,87 @@ export class ExtractionService {
       const info = await parser.getInfo();
       const pageCount = info.total || 1;
 
+      logger.info(`Processing ${pageCount} page(s) with OCR`);
+
       // Process each page
       for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
         try {
-          // Convert PDF page to image
-          const screenshot = await parser.getScreenshot({
-            partial: [pageNum],
-            scale: 2.0, // Higher scale = better OCR accuracy
-          });
+          logger.info(`Processing page ${pageNum}/${pageCount} with OCR`);
+          
+          // Convert PDF page to image with higher resolution for better OCR
+          const screenshot = await Promise.race([
+            parser.getScreenshot({
+              partial: [pageNum],
+              scale: 2.0, // Higher scale = better OCR accuracy (2x = 300 DPI equivalent)
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Screenshot timeout')), 60000) // 1 minute per page
+            ),
+          ]);
 
           if (screenshot.pages && screenshot.pages[0] && screenshot.pages[0].data) {
             const imageBuffer = screenshot.pages[0].data;
 
-            // Run OCR on the image
-            const { data: { text } } = await Tesseract.recognize(imageBuffer, 'eng', {
-              logger: (m: any) => {
-                if (m.status === 'recognizing text') {
-                  logger.debug(`OCR progress: ${m.progress * 100}%`);
-                }
-              },
-            });
+            // Run OCR on the image with optimized settings
+            const { data: { text } } = await Promise.race([
+              Tesseract.recognize(imageBuffer, 'eng', {
+                logger: (m: any) => {
+                  if (m.status === 'recognizing text') {
+                    const progress = Math.round(m.progress * 100);
+                    if (progress % 25 === 0) { // Log every 25%
+                      logger.debug(`OCR progress page ${pageNum}: ${progress}%`);
+                    }
+                  }
+                },
+                // Optimize for document text
+                tessedit_pageseg_mode: '6', // Assume uniform block of text
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,!?;:()[]{}\'"-+=*/%&$#@^~`|\\<>_',
+              }),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('OCR timeout')), 120000) // 2 minutes per page
+              ),
+            ]);
 
             if (text && text.trim().length > 0) {
               allText.push(text.trim());
-              logger.info(`OCR completed for page ${pageNum}`, {
+              logger.info(`OCR completed for page ${pageNum}/${pageCount}`, {
                 textLength: text.length,
+                wordCount: text.split(/\s+/).length,
               });
+            } else {
+              logger.warn(`No text extracted from page ${pageNum} via OCR`);
             }
+          } else {
+            logger.warn(`Failed to get screenshot for page ${pageNum}`);
           }
         } catch (pageError: any) {
           logger.warn(`OCR failed for page ${pageNum}`, {
             error: pageError.message,
+            code: pageError.code,
           });
-          // Continue with next page
+          // Continue with next page - don't fail entire extraction
         }
       }
 
       const combinedText = allText.join('\n\n');
-      logger.info('OCR extraction completed', {
+      
+      if (combinedText.trim().length === 0) {
+        logger.warn('OCR extraction completed but no text was extracted');
+        throw new AppError('OCR did not extract any text from the scanned PDF', 400, 'OCR_NO_TEXT');
+      }
+
+      logger.info('OCR extraction completed successfully', {
         pageCount,
         totalTextLength: combinedText.length,
+        totalWordCount: combinedText.split(/\s+/).length,
+        avgCharsPerPage: Math.round(combinedText.length / pageCount),
       });
 
       return combinedText;
     } catch (error: any) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       logger.error('OCR extraction failed', { error: error.message });
       throw new AppError(`OCR extraction failed: ${error.message}`, 500, 'OCR_FAILED');
     }
