@@ -4,6 +4,8 @@ import path from 'path';
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { StorageService } from '../services/storage.service';
+import { DocumentService } from '../services/document.service';
+import { ExtractionService } from '../services/extraction.service';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
 
@@ -46,8 +48,19 @@ const handleUpload = (req: Request, res: Response, next: NextFunction) => {
 };
 
 /**
+ * Helper function to determine file type from extension
+ */
+const getFileType = (fileName: string, mimeType: string): 'pdf' | 'docx' | 'txt' | 'md' => {
+  const extension = path.extname(fileName).toLowerCase();
+  if (extension === '.pdf' || mimeType === 'application/pdf') return 'pdf';
+  if (extension === '.docx' || mimeType.includes('wordprocessingml')) return 'docx';
+  if (extension === '.md' || mimeType === 'text/markdown') return 'md';
+  return 'txt'; // Default to txt
+};
+
+/**
  * POST /api/documents/upload
- * Upload a document to Supabase Storage
+ * Upload a document to Supabase Storage and extract text
  */
 router.post(
   '/upload',
@@ -63,18 +76,74 @@ router.post(
       throw new ValidationError('File is required');
     }
 
-    const document = await StorageService.uploadDocument(userId, req.file);
+    // Upload to storage
+    const storedDoc = await StorageService.uploadDocument(userId, req.file);
+    const fileType = getFileType(req.file.originalname, req.file.mimetype);
 
-    logger.info('Document uploaded', {
-      userId,
-      filePath: document.path,
-      size: document.size,
+    // Create document record
+    const document = await DocumentService.createDocument({
+      user_id: userId,
+      filename: storedDoc.name,
+      file_path: storedDoc.path,
+      file_type: fileType,
+      file_size: storedDoc.size,
     });
 
+    logger.info('Document uploaded and record created', {
+      userId,
+      documentId: document.id,
+      filePath: storedDoc.path,
+      size: storedDoc.size,
+    });
+
+    // Trigger text extraction asynchronously (don't wait for it)
+    ExtractionService.extractText(req.file.buffer, fileType, req.file.originalname)
+      .then(async (result) => {
+        // Update document with extracted text
+        await DocumentService.updateDocument(document.id, userId, {
+          status: 'extracted',
+          extracted_text: result.text,
+          text_length: result.stats.length,
+          metadata: {
+            ...result.metadata,
+            wordCount: result.stats.wordCount,
+            pageCount: result.stats.pageCount,
+            paragraphCount: result.stats.paragraphCount,
+          },
+        });
+
+        logger.info('Text extraction completed', {
+          documentId: document.id,
+          textLength: result.stats.length,
+          wordCount: result.stats.wordCount,
+        });
+      })
+      .catch(async (error: any) => {
+        // Update document with error status
+        await DocumentService.updateDocument(document.id, userId, {
+          status: 'failed',
+          extraction_error: error.message || 'Extraction failed',
+        });
+
+        logger.error('Text extraction failed', {
+          documentId: document.id,
+          error: error.message,
+        });
+      });
+
+    // Return immediately with processing status
     res.status(201).json({
       success: true,
-      message: 'Document uploaded successfully',
-      data: document,
+      message: 'Document uploaded successfully. Text extraction in progress.',
+      data: {
+        id: document.id,
+        path: document.file_path,
+        name: document.filename,
+        size: document.file_size,
+        mimeType: req.file.mimetype,
+        status: document.status,
+        createdAt: document.created_at,
+      },
     });
   })
 );
@@ -92,11 +161,34 @@ router.get(
       throw new ValidationError('User not authenticated');
     }
 
-    const documents = await StorageService.listDocuments(userId);
+    const { status, topic_id, limit, offset } = req.query;
+
+    const documents = await DocumentService.listDocuments(userId, {
+      status: status as 'processing' | 'extracted' | 'failed' | undefined,
+      topic_id: topic_id as string | undefined,
+      limit: limit ? parseInt(limit as string, 10) : undefined,
+      offset: offset ? parseInt(offset as string, 10) : undefined,
+    });
+
+    // Format response to match frontend expectations
+    const formattedDocuments = documents.map((doc) => ({
+      id: doc.id,
+      path: doc.file_path,
+      name: doc.filename,
+      size: doc.file_size,
+      mimeType: doc.file_type === 'pdf' ? 'application/pdf' :
+                doc.file_type === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
+                doc.file_type === 'md' ? 'text/markdown' : 'text/plain',
+      status: doc.status,
+      textLength: doc.text_length,
+      extractionError: doc.extraction_error,
+      createdAt: doc.created_at,
+      updatedAt: doc.updated_at,
+    }));
 
     res.status(200).json({
       success: true,
-      data: documents,
+      data: formattedDocuments,
     });
   })
 );
@@ -134,8 +226,121 @@ router.get(
 );
 
 /**
+ * GET /api/documents/:id/text
+ * Get extracted text for a document
+ */
+router.get(
+  '/:id/text',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { id } = req.params;
+    const documentId = Array.isArray(id) ? id[0] : id;
+    if (!documentId) {
+      throw new ValidationError('Document ID is required');
+    }
+
+    const textData = await DocumentService.getDocumentText(documentId, userId);
+
+    if (!textData) {
+      throw new ValidationError('Document not found or text not extracted');
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        documentId: documentId,
+        text: textData.text,
+        stats: textData.stats,
+        extractedAt: textData.extractedAt,
+      },
+    });
+  })
+);
+
+/**
+ * POST /api/documents/:id/extract
+ * Manually trigger text extraction for a document
+ */
+router.post(
+  '/:id/extract',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { id } = req.params;
+    const documentId = Array.isArray(id) ? id[0] : id;
+    if (!documentId) {
+      throw new ValidationError('Document ID is required');
+    }
+
+    const document = await DocumentService.getDocument(documentId, userId);
+    if (!document) {
+      throw new ValidationError('Document not found');
+    }
+
+    // Download file from storage
+    const fileData = await StorageService.downloadDocument(document.file_path);
+
+    // Update status to processing
+    await DocumentService.updateDocument(documentId, userId, {
+      status: 'processing',
+      extraction_error: undefined,
+    });
+
+    // Extract text
+    ExtractionService.extractText(fileData.buffer, document.file_type, document.filename)
+      .then(async (result) => {
+        await DocumentService.updateDocument(documentId, userId, {
+          status: 'extracted',
+          extracted_text: result.text,
+          text_length: result.stats.length,
+          metadata: {
+            ...result.metadata,
+            wordCount: result.stats.wordCount,
+            pageCount: result.stats.pageCount,
+            paragraphCount: result.stats.paragraphCount,
+          },
+        });
+
+        logger.info('Manual text extraction completed', {
+          documentId: documentId,
+          textLength: result.stats.length,
+        });
+      })
+      .catch(async (error: any) => {
+        await DocumentService.updateDocument(documentId, userId, {
+          status: 'failed',
+          extraction_error: error.message || 'Extraction failed',
+        });
+
+        logger.error('Manual text extraction failed', {
+          documentId: documentId,
+          error: error.message,
+        });
+      });
+
+    res.status(200).json({
+      success: true,
+      message: 'Text extraction started',
+      data: {
+        documentId: documentId,
+        status: 'processing',
+      },
+    });
+  })
+);
+
+/**
  * DELETE /api/documents
- * Delete a document by path
+ * Delete a document by path (from both storage and database)
  */
 router.delete(
   '/',
@@ -146,9 +351,36 @@ router.delete(
       throw new ValidationError('User not authenticated');
     }
 
-    const { path: filePath } = req.body;
+    const { path: filePath, id } = req.body;
+
+    // If ID is provided, delete by ID (preferred)
+    if (id) {
+      const document = await DocumentService.getDocument(id, userId);
+      if (!document) {
+        throw new ValidationError('Document not found');
+      }
+
+      // Delete from storage
+      await StorageService.deleteDocument(userId, document.file_path);
+      // Delete from database
+      await DocumentService.deleteDocument(id, userId);
+
+      res.status(200).json({
+        success: true,
+        message: 'Document deleted successfully',
+      });
+      return;
+    }
+
+    // Fallback: delete by path (legacy support)
     if (!filePath || typeof filePath !== 'string') {
-      throw new ValidationError('File path is required');
+      throw new ValidationError('File path or document ID is required');
+    }
+
+    // Find document by path
+    const document = await DocumentService.getDocumentByPath(filePath, userId);
+    if (document) {
+      await DocumentService.deleteDocument(document.id, userId);
     }
 
     await StorageService.deleteDocument(userId, filePath);

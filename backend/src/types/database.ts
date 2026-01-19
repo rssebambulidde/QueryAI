@@ -59,4 +59,33 @@ export namespace Database {
     metadata?: Record<string, any>;
     created_at: string;
   }
+
+  export interface Document {
+    id: string;
+    user_id: string;
+    topic_id?: string;
+    filename: string;
+    file_path: string;
+    file_type: 'pdf' | 'docx' | 'txt' | 'md';
+    file_size: number;
+    status: 'processing' | 'extracted' | 'failed';
+    extracted_text?: string;
+    text_length?: number;
+    extraction_error?: string;
+    metadata?: Record<string, any>;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface DocumentChunk {
+    id: string;
+    document_id: string;
+    chunk_index: number;
+    content: string;
+    start_char?: number;
+    end_char?: number;
+    token_count?: number;
+    embedding_id?: string;
+    created_at: string;
+  }
 }
