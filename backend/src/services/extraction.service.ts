@@ -1,6 +1,5 @@
-// pdf-parse uses CommonJS, so we need to import it differently
-const pdfParseLib = require('pdf-parse');
-const pdfParse = pdfParseLib.default || pdfParseLib;
+// pdf-parse v2 uses a class-based API
+const { PDFParse } = require('pdf-parse');
 import mammoth from 'mammoth';
 import logger from '../config/logger';
 import { AppError } from '../types/error';
@@ -124,8 +123,10 @@ export class ExtractionService {
     metadata: Record<string, any>;
   }> {
     try {
+      const parser = new PDFParse({ data: buffer });
+      
       const data = await Promise.race([
-        pdfParse(buffer),
+        parser.getText(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('PDF extraction timeout')), EXTRACTION_TIMEOUT)
         ),
@@ -133,7 +134,7 @@ export class ExtractionService {
 
       const text = data.text || '';
       const metadata: Record<string, any> = {
-        pageCount: data.numpages || 0,
+        pageCount: data.pages?.length || 0,
         info: data.info || {},
       };
 
