@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { documentApi, DocumentItem } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
-import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X } from 'lucide-react';
+import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const formatBytes = (bytes: number): string => {
@@ -72,7 +72,16 @@ export const DocumentManager = () => {
 
   useEffect(() => {
     loadDocuments();
-  }, []);
+    
+    // Auto-refresh every 5 seconds if there are documents with 'processing' status
+    const hasProcessing = documents.some(doc => doc.status === 'processing');
+    if (hasProcessing) {
+      const interval = setInterval(() => {
+        loadDocuments();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [documents]);
 
   const handleFileSelect = (file: File) => {
     const maxSize = 10 * 1024 * 1024; // 10MB
@@ -343,14 +352,52 @@ export const DocumentManager = () => {
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   {getFileIcon(doc.mimeType, doc.name)}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
+                      {doc.status && (
+                        <span className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0",
+                          doc.status === 'extracted' && "bg-green-100 text-green-700",
+                          doc.status === 'processing' && "bg-yellow-100 text-yellow-700",
+                          doc.status === 'failed' && "bg-red-100 text-red-700"
+                        )}>
+                          {doc.status === 'extracted' && <CheckCircle2 className="w-3 h-3" />}
+                          {doc.status === 'processing' && <Clock className="w-3 h-3 animate-spin" />}
+                          {doc.status === 'failed' && <AlertCircle className="w-3 h-3" />}
+                          {doc.status === 'extracted' && 'Extracted'}
+                          {doc.status === 'processing' && 'Processing...'}
+                          {doc.status === 'failed' && 'Failed'}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500">
                       {formatBytes(doc.size)}
                       {doc.createdAt ? ` · ${new Date(doc.createdAt).toLocaleDateString()}` : ''}
+                      {doc.status === 'extracted' && doc.textLength && ` · ${doc.textLength.toLocaleString()} chars`}
+                      {doc.status === 'failed' && doc.extractionError && ` · ${doc.extractionError}`}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {doc.status === 'failed' && doc.id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await documentApi.retryExtraction(doc.id!);
+                          toast.success('Extraction retry started');
+                          setTimeout(() => loadDocuments(), 2000);
+                        } catch (error: any) {
+                          toast.error(error.message || 'Failed to retry extraction');
+                        }
+                      }}
+                      className="h-8 px-2"
+                      title="Retry extraction"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

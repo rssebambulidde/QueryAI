@@ -347,10 +347,14 @@ export const searchApi = {
 
 // Document API Types
 export interface DocumentItem {
+  id?: string; // Document ID (Phase 2.3+)
   path: string;
   name: string;
   size: number;
   mimeType: string;
+  status?: 'processing' | 'extracted' | 'failed'; // Extraction status (Phase 2.3+)
+  textLength?: number; // Character count of extracted text
+  extractionError?: string; // Error message if extraction failed
   createdAt?: string;
   updatedAt?: string;
 }
@@ -412,6 +416,31 @@ export const documentApi = {
     const response = await apiClient.delete<ApiResponse>('/api/documents', {
       data: { path },
     });
+    return response.data;
+  },
+
+  getText: async (documentId: string): Promise<ApiResponse<{
+    documentId: string;
+    text: string;
+    stats: {
+      length: number;
+      wordCount: number;
+      pageCount?: number;
+      paragraphCount?: number;
+    };
+    extractedAt: string;
+  }>> => {
+    const response = await apiClient.get<ApiResponse<{
+      documentId: string;
+      text: string;
+      stats: any;
+      extractedAt: string;
+    }>>(`/api/documents/${documentId}/text`);
+    return response.data;
+  },
+
+  retryExtraction: async (documentId: string): Promise<ApiResponse> => {
+    const response = await apiClient.post<ApiResponse>(`/api/documents/${documentId}/extract`);
     return response.data;
   },
 };
