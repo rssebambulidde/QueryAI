@@ -620,6 +620,13 @@ router.post(
 
           EmbeddingService.processDocument(documentId, userId, result.text)
             .then(async ({ chunks, embeddings, metadata }) => {
+              // Delete existing chunks before creating new ones
+              try {
+                await ChunkService.deleteChunksByDocument(documentId);
+              } catch (error: any) {
+                logger.warn('No existing chunks to delete or error deleting', { documentId, error: error.message });
+              }
+              
               await ChunkService.createChunks(documentId, chunks);
               await DocumentService.updateDocument(documentId, userId, {
                 status: 'processed',
@@ -673,6 +680,13 @@ router.post(
 
       EmbeddingService.processDocument(documentId, userId, document.extracted_text)
         .then(async ({ chunks, embeddings, metadata }) => {
+          // Delete existing chunks before creating new ones
+          try {
+            await ChunkService.deleteChunksByDocument(documentId);
+          } catch (error: any) {
+            logger.warn('No existing chunks to delete or error deleting', { documentId, error: error.message });
+          }
+          
           await ChunkService.createChunks(documentId, chunks);
           await DocumentService.updateDocument(documentId, userId, {
             status: 'processed',
@@ -1027,18 +1041,21 @@ router.post(
     }
 
     // Clear extracted text and reset status to 'stored'
-    await DocumentService.updateDocument(documentId, userId, {
+    // Use null explicitly to clear fields in database
+    const updateData: any = {
       status: 'stored',
-      extracted_text: undefined,
-      text_length: undefined,
-      extraction_error: undefined,
-      embedding_error: undefined,
+      extracted_text: null,
+      text_length: null,
+      extraction_error: null,
+      embedding_error: null,
       metadata: {
         // Keep file metadata but clear processing metadata
         fileType: document.file_type,
         fileName: document.filename,
       },
-    });
+    };
+    
+    await DocumentService.updateDocument(documentId, userId, updateData);
 
     logger.info('Processing data cleared for document', {
       documentId,

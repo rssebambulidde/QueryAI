@@ -225,7 +225,9 @@ export const DocumentManager = () => {
       const response = await documentApi.process(doc.id);
       if (response.success) {
         toast.success('Document processing started');
-        setTimeout(() => loadDocuments(), 2000); // Refresh after a short delay
+        // Refresh immediately and periodically
+        await loadDocuments();
+        // The existing auto-refresh will handle periodic updates
       } else {
         toast.error(response.message || 'Failed to start processing');
       }
@@ -526,6 +528,7 @@ export const DocumentManager = () => {
                     size="sm"
                     onClick={() => handleDownload(doc)}
                     className="h-8 px-3"
+                    disabled={!doc.status || (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed')}
                   >
                     <Download className="w-3 h-3 mr-1.5" />
                     Download

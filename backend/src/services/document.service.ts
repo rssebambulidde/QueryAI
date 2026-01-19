@@ -15,10 +15,10 @@ export interface CreateDocumentInput {
 
 export interface UpdateDocumentInput {
   status?: 'stored' | 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed';
-  extracted_text?: string;
-  text_length?: number;
-  extraction_error?: string;
-  embedding_error?: string;
+  extracted_text?: string | null;
+  text_length?: number | null;
+  extraction_error?: string | null;
+  embedding_error?: string | null;
   metadata?: Record<string, any>;
 }
 
