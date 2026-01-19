@@ -415,10 +415,17 @@ export const documentApi = {
   },
 
   delete: async (pathOrId: string): Promise<ApiResponse> => {
+    if (!pathOrId) {
+      throw new Error('Document ID or path is required');
+    }
+    
     // Try to determine if it's an ID (UUID) or path
-    const isId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathOrId);
+    // UUID format: 8-4-4-4-12 hex characters
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isId = uuidRegex.test(pathOrId.trim());
+    
     const response = await apiClient.delete<ApiResponse>('/api/documents', {
-      data: isId ? { id: pathOrId } : { path: pathOrId },
+      data: isId ? { id: pathOrId.trim() } : { path: pathOrId.trim() },
     });
     return response.data;
   },

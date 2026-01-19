@@ -987,22 +987,47 @@ router.delete(
     const { path: filePath, id } = req.body;
 
     // If ID is provided, delete by ID (preferred)
-    if (id) {
-      const document = await DocumentService.getDocument(id, userId);
-      if (!document) {
-        throw new ValidationError('Document not found');
+    if (id && typeof id === 'string') {
+      try {
+        const document = await DocumentService.getDocument(id, userId);
+        if (!document) {
+          throw new ValidationError('Document not found');
+        }
+
+        // Delete chunks first (if they exist)
+        try {
+          await ChunkService.deleteChunksByDocument(id);
+        } catch (chunkError: any) {
+          // If chunks don't exist, that's okay - just log and continue
+          logger.warn('No chunks to delete or chunks table not found', { documentId: id, error: chunkError.message });
+        }
+
+        // Delete from storage
+        try {
+          await StorageService.deleteDocument(userId, document.file_path);
+        } catch (storageError: any) {
+          // If file doesn't exist in storage, that's okay - just log and continue
+          logger.warn('File not found in storage, continuing with database deletion', { 
+            filePath: document.file_path, 
+            error: storageError.message 
+          });
+        }
+
+        // Delete from database
+        await DocumentService.deleteDocument(id, userId);
+
+        res.status(200).json({
+          success: true,
+          message: 'Document deleted successfully',
+        });
+        return;
+      } catch (error: any) {
+        if (error instanceof ValidationError) {
+          throw error;
+        }
+        logger.error('Error deleting document by ID', { id, userId, error: error.message });
+        throw new ValidationError('Failed to delete document: ' + error.message);
       }
-
-      // Delete from storage
-      await StorageService.deleteDocument(userId, document.file_path);
-      // Delete from database
-      await DocumentService.deleteDocument(id, userId);
-
-      res.status(200).json({
-        success: true,
-        message: 'Document deleted successfully',
-      });
-      return;
     }
 
     // Fallback: delete by path (legacy support)
@@ -1010,13 +1035,42 @@ router.delete(
       throw new ValidationError('File path or document ID is required');
     }
 
-    // Find document by path
-    const document = await DocumentService.getDocumentByPath(filePath, userId);
-    if (document) {
-      await DocumentService.deleteDocument(document.id, userId);
-    }
+    try {
+      // Find document by path
+      const document = await DocumentService.getDocumentByPath(filePath, userId);
+      if (document) {
+        // Delete chunks first (if they exist)
+        try {
+          await ChunkService.deleteChunksByDocument(document.id);
+        } catch (chunkError: any) {
+          logger.warn('No chunks to delete', { documentId: document.id, error: chunkError.message });
+        }
 
-    await StorageService.deleteDocument(userId, filePath);
+        // Delete from database
+        await DocumentService.deleteDocument(document.id, userId);
+      }
+
+      // Delete from storage (even if not in database)
+      try {
+        await StorageService.deleteDocument(userId, filePath);
+      } catch (storageError: any) {
+        // If file doesn't exist in storage, that's okay if we already deleted from database
+        if (document) {
+          logger.warn('File not found in storage, but database record deleted', { 
+            filePath, 
+            error: storageError.message 
+          });
+        } else {
+          throw new ValidationError('Document not found in storage or database');
+        }
+      }
+    } catch (error: any) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      logger.error('Error deleting document by path', { filePath, userId, error: error.message });
+      throw new ValidationError('Failed to delete document: ' + error.message);
+    }
 
     res.status(200).json({
       success: true,
