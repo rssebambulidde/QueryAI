@@ -13,6 +13,11 @@ export interface ExtractionResult {
     paragraphCount?: number;
   };
   metadata?: Record<string, any>;
+  tables?: Array<{
+    page: number;
+    rows: Array<Array<string>>;
+    headers?: string[];
+  }>; // Extracted tables from PDF
 }
 
 export interface TextStats {
@@ -23,7 +28,7 @@ export interface TextStats {
 }
 
 const MAX_TEXT_LENGTH = 1_000_000; // 1 million characters
-const EXTRACTION_TIMEOUT = 60000; // 60 seconds
+const EXTRACTION_TIMEOUT = 300000; // 5 minutes for large PDFs
 
 export class ExtractionService {
   /**
@@ -46,11 +51,16 @@ export class ExtractionService {
 
     let text: string;
     let metadata: Record<string, any> = {};
+    let tables: Array<{
+      page: number;
+      rows: Array<Array<string>>;
+      headers?: string[];
+    }> | undefined = undefined;
 
     try {
       switch (fileType) {
         case 'pdf':
-          ({ text, metadata } = await this.extractFromPDF(buffer));
+          ({ text, metadata, tables } = await this.extractFromPDF(buffer));
           break;
         case 'docx':
           text = await this.extractFromDOCX(buffer);
@@ -85,16 +95,25 @@ export class ExtractionService {
       // Calculate statistics
       const stats = this.calculateStats(text, metadata);
 
+      // Include tables in metadata if available
+      if (tables && tables.length > 0) {
+        metadata.tables = tables;
+        metadata.tableCount = tables.length;
+      }
+
       logger.info('Text extraction completed', {
         fileName,
         textLength: stats.length,
         wordCount: stats.wordCount,
+        pageCount: stats.pageCount,
+        tableCount: tables?.length || 0,
       });
 
       return {
         text,
         stats,
         metadata,
+        tables,
       };
     } catch (error: any) {
       logger.error('Text extraction failed', {
@@ -116,29 +135,93 @@ export class ExtractionService {
   }
 
   /**
-   * Extract text from PDF
+   * Extract text and tables from PDF
    */
   private static async extractFromPDF(buffer: Buffer): Promise<{
     text: string;
     metadata: Record<string, any>;
+    tables?: Array<{
+      page: number;
+      rows: Array<Array<string>>;
+      headers?: string[];
+    }>;
   }> {
     try {
       const parser = new PDFParse({ data: buffer });
       
-      const data = await Promise.race([
+      // Extract text first (required)
+      const textData = await Promise.race([
         parser.getText(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('PDF extraction timeout')), EXTRACTION_TIMEOUT)
+          setTimeout(() => reject(new Error('PDF text extraction timeout')), EXTRACTION_TIMEOUT)
         ),
       ]);
 
-      const text = data.text || '';
+      const text = textData.text || '';
+      const pageCount = textData.pages?.length || 0;
+
+      // Extract tables (optional - don't fail if this fails)
+      let tables: Array<{
+        page: number;
+        rows: Array<Array<string>>;
+        headers?: string[];
+      }> | undefined = undefined;
+
+      try {
+        const tablesData = await Promise.race([
+          parser.getTable().catch(() => null), // getTable() method
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('PDF table extraction timeout')), EXTRACTION_TIMEOUT)
+          ),
+        ]);
+
+        if (tablesData && tablesData.pages) {
+          // Extract tables from all pages
+          const allTables: Array<{
+            page: number;
+            rows: Array<Array<string>>;
+            headers?: string[];
+          }> = [];
+
+          tablesData.pages.forEach((pageData: any, pageIndex: number) => {
+            if (pageData.tables && Array.isArray(pageData.tables)) {
+              pageData.tables.forEach((table: any) => {
+                if (table && Array.isArray(table) && table.length > 0) {
+                  // Table is an array of rows
+                  const rows = table.map((row: any) => 
+                    Array.isArray(row) ? row.map((cell: any) => String(cell || '')) : []
+                  );
+                  
+                  if (rows.length > 0) {
+                    allTables.push({
+                      page: pageIndex + 1,
+                      rows: rows,
+                      headers: rows[0] || undefined, // First row as headers
+                    });
+                  }
+                }
+              });
+            }
+          });
+
+          if (allTables.length > 0) {
+            tables = allTables;
+          }
+        }
+      } catch (tableError: any) {
+        // Log but don't fail extraction if table parsing fails
+        logger.warn('Table extraction failed (non-critical)', {
+          error: tableError.message,
+        });
+      }
+
       const metadata: Record<string, any> = {
-        pageCount: data.pages?.length || 0,
-        info: data.info || {},
+        pageCount,
+        info: textData.info || {},
+        tableCount: tables?.length || 0,
       };
 
-      return { text, metadata };
+      return { text, metadata, tables };
     } catch (error: any) {
       if (error.message.includes('timeout')) {
         throw new AppError('PDF extraction timed out. File may be too large or corrupted.', 400, 'TIMEOUT');

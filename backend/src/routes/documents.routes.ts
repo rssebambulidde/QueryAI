@@ -109,6 +109,8 @@ router.post(
             wordCount: result.stats.wordCount,
             pageCount: result.stats.pageCount,
             paragraphCount: result.stats.paragraphCount,
+            tables: result.tables, // Store extracted tables
+            tableCount: result.tables?.length || 0,
           },
         });
 
@@ -116,6 +118,8 @@ router.post(
           documentId: document.id,
           textLength: result.stats.length,
           wordCount: result.stats.wordCount,
+          pageCount: result.stats.pageCount,
+          tableCount: result.tables?.length || 0,
         });
       })
       .catch(async (error: any) => {

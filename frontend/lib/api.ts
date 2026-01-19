@@ -371,7 +371,7 @@ export const documentApi = {
       '/api/documents/upload',
       formData,
       {
-        timeout: 120000, // 2 minutes for large files
+        timeout: 300000, // 5 minutes for large files (500+ pages)
         onUploadProgress: (progressEvent: AxiosProgressEvent) => {
           if (progressEvent.total && onProgress) {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
