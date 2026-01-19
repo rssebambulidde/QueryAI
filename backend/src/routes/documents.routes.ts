@@ -6,8 +6,10 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { StorageService } from '../services/storage.service';
 import { DocumentService } from '../services/document.service';
 import { ExtractionService } from '../services/extraction.service';
+import { ChunkService } from '../services/chunk.service';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
+import { apiLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -96,9 +98,14 @@ router.post(
       size: storedDoc.size,
     });
 
-    // Trigger text extraction asynchronously (don't wait for it)
-    ExtractionService.extractText(req.file.buffer, fileType, req.file.originalname)
-      .then(async (result) => {
+    // Check if auto-processing is enabled (default: true for backward compatibility)
+    const autoExtract = req.query.autoExtract !== 'false';
+    const autoEmbed = req.query.autoEmbed !== 'false';
+
+    // Trigger text extraction asynchronously (if enabled)
+    if (autoExtract) {
+      ExtractionService.extractText(req.file.buffer, fileType, req.file.originalname)
+        .then(async (result) => {
         // Update document with extracted text
         await DocumentService.updateDocument(document.id, userId, {
           status: 'extracted',
@@ -132,12 +139,13 @@ router.post(
           tableCount: result.tables?.length || 0,
         });
 
-        // Trigger embedding generation automatically after text extraction
-        // This runs in the background and doesn't block
-        const { EmbeddingService } = await import('../services/embedding.service');
-        const { ChunkService } = await import('../services/chunk.service');
+        // Trigger embedding generation automatically after text extraction (if enabled)
+        if (autoEmbed) {
+          // This runs in the background and doesn't block
+          const { EmbeddingService } = await import('../services/embedding.service');
+          const { ChunkService } = await import('../services/chunk.service');
 
-        EmbeddingService.processDocument(document.id, userId, result.text)
+          EmbeddingService.processDocument(document.id, userId, result.text)
           .then(async ({ chunks, embeddings, metadata }) => {
             try {
               // Store chunks in database
@@ -193,6 +201,7 @@ router.post(
             // Don't fail the document - embedding can be retried manually
             // Document status remains 'extracted'
           });
+        }
       })
       .catch(async (error: any) => {
         // Update document with error status
@@ -206,11 +215,24 @@ router.post(
           error: error.message,
         });
       });
+    } else {
+      // Auto-extract is disabled, just store the document
+      logger.info('Document uploaded without auto-extraction', {
+        documentId: document.id,
+        userId,
+      });
+    }
 
     // Return immediately with processing status
+    const message = autoExtract
+      ? autoEmbed
+        ? 'Document uploaded successfully. Text extraction and embedding in progress.'
+        : 'Document uploaded successfully. Text extraction in progress.'
+      : 'Document uploaded successfully. Use /api/documents/:id/extract to extract text manually.';
+
     res.status(201).json({
       success: true,
-      message: 'Document uploaded successfully. Text extraction in progress.',
+      message,
       data: {
         id: document.id,
         path: document.file_path,
@@ -218,6 +240,8 @@ router.post(
         size: document.file_size,
         mimeType: req.file.mimetype,
         status: document.status,
+        autoExtract,
+        autoEmbed,
         createdAt: document.created_at,
       },
     });
@@ -482,6 +506,286 @@ router.post(
       data: {
         documentId: documentId,
         status: 'processing',
+      },
+    });
+  })
+);
+
+/**
+ * POST /api/documents/batch-extract
+ * Manually trigger text extraction for multiple documents
+ */
+router.post(
+  '/batch-extract',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { documentIds, autoEmbed } = req.body;
+
+    if (!documentIds || !Array.isArray(documentIds) || documentIds.length === 0) {
+      throw new ValidationError('documentIds array is required');
+    }
+
+    if (documentIds.length > 50) {
+      throw new ValidationError('Maximum 50 documents can be processed at once');
+    }
+
+    const results: Array<{
+      documentId: string;
+      success: boolean;
+      message: string;
+    }> = [];
+
+    // Process each document
+    for (const documentId of documentIds) {
+      try {
+        const document = await DocumentService.getDocument(documentId, userId);
+        if (!document) {
+          results.push({
+            documentId,
+            success: false,
+            message: 'Document not found',
+          });
+          continue;
+        }
+
+        // Check if already extracted
+        if (document.extracted_text && document.extracted_text.trim().length > 0) {
+          results.push({
+            documentId,
+            success: true,
+            message: 'Document already has extracted text',
+          });
+
+          // If autoEmbed is true and not already embedded, trigger embedding
+          if (autoEmbed && document.status !== 'embedded') {
+            const { EmbeddingService } = await import('../services/embedding.service');
+            const { ChunkService } = await import('../services/chunk.service');
+
+            EmbeddingService.processDocument(documentId, userId, document.extracted_text)
+              .then(async ({ chunks, embeddings, metadata }) => {
+                await ChunkService.createChunks(documentId, chunks);
+                await DocumentService.updateDocument(documentId, userId, {
+                  status: 'embedded',
+                  metadata: {
+                    ...document.metadata,
+                    embedding: metadata,
+                    chunkCount: chunks.length,
+                    embeddedAt: new Date().toISOString(),
+                  },
+                });
+              })
+              .catch(async (error: any) => {
+                logger.error('Batch embedding failed', { documentId, error: error.message });
+              });
+          }
+          continue;
+        }
+
+        // Download file from storage
+        const fileData = await StorageService.downloadDocument(document.file_path);
+
+        // Update status to processing
+        await DocumentService.updateDocument(documentId, userId, {
+          status: 'processing',
+          extraction_error: undefined,
+        });
+
+        // Extract text
+        const fileType = document.file_type;
+        ExtractionService.extractText(fileData.buffer, fileType, document.filename)
+          .then(async (result) => {
+            await DocumentService.updateDocument(documentId, userId, {
+              status: 'extracted',
+              extracted_text: result.text,
+              text_length: result.stats.length,
+              metadata: {
+                ...result.metadata,
+                wordCount: result.stats.wordCount,
+                pageCount: result.stats.pageCount,
+                paragraphCount: result.stats.paragraphCount,
+              },
+            });
+
+            // Auto-embed if requested
+            if (autoEmbed) {
+              const { EmbeddingService } = await import('../services/embedding.service');
+
+              EmbeddingService.processDocument(documentId, userId, result.text)
+                .then(async ({ chunks, embeddings, metadata }) => {
+                  await ChunkService.createChunks(documentId, chunks);
+                  await DocumentService.updateDocument(documentId, userId, {
+                    status: 'embedded',
+                    metadata: {
+                      ...result.metadata,
+                      wordCount: result.stats.wordCount,
+                      pageCount: result.stats.pageCount,
+                      paragraphCount: result.stats.paragraphCount,
+                      embedding: metadata,
+                      chunkCount: chunks.length,
+                      embeddedAt: new Date().toISOString(),
+                    },
+                  });
+                })
+                .catch(async (error: any) => {
+                  logger.error('Batch embedding failed', { documentId, error: error.message });
+                });
+            }
+          })
+          .catch(async (error: any) => {
+            await DocumentService.updateDocument(documentId, userId, {
+              status: 'failed',
+              extraction_error: error.message || 'Extraction failed',
+            });
+          });
+
+        results.push({
+          documentId,
+          success: true,
+          message: 'Extraction started',
+        });
+      } catch (error: any) {
+        results.push({
+          documentId,
+          success: false,
+          message: error.message || 'Failed to process document',
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Processing ${results.length} document(s)`,
+      data: {
+        results,
+        total: results.length,
+        started: results.filter(r => r.success).length,
+        failed: results.filter(r => !r.success).length,
+      },
+    });
+  })
+);
+
+/**
+ * POST /api/documents/batch-embed
+ * Manually trigger embedding generation for multiple extracted documents
+ */
+router.post(
+  '/batch-embed',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { documentIds } = req.body;
+
+    if (!documentIds || !Array.isArray(documentIds) || documentIds.length === 0) {
+      throw new ValidationError('documentIds array is required');
+    }
+
+    if (documentIds.length > 50) {
+      throw new ValidationError('Maximum 50 documents can be processed at once');
+    }
+
+    const results: Array<{
+      documentId: string;
+      success: boolean;
+      message: string;
+    }> = [];
+
+    // Process each document
+    for (const documentId of documentIds) {
+      try {
+        const document = await DocumentService.getDocument(documentId, userId);
+        if (!document) {
+          results.push({
+            documentId,
+            success: false,
+            message: 'Document not found',
+          });
+          continue;
+        }
+
+        // Check if text is extracted
+        if (!document.extracted_text || document.extracted_text.trim().length === 0) {
+          results.push({
+            documentId,
+            success: false,
+            message: 'Document text must be extracted before generating embeddings',
+          });
+          continue;
+        }
+
+        // Check if already embedded
+        const chunkCount = await ChunkService.getChunkCount(documentId);
+        if (document.status === 'embedded' && chunkCount > 0) {
+          results.push({
+            documentId,
+            success: true,
+            message: 'Document already has embeddings',
+          });
+          continue;
+        }
+
+        // Update status to embedding
+        await DocumentService.updateDocument(documentId, userId, {
+          status: 'embedding',
+          embedding_error: undefined,
+        });
+
+        // Trigger embedding generation
+        const { EmbeddingService } = await import('../services/embedding.service');
+
+        EmbeddingService.processDocument(documentId, userId, document.extracted_text)
+          .then(async ({ chunks, embeddings, metadata }) => {
+            await ChunkService.createChunks(documentId, chunks);
+            await DocumentService.updateDocument(documentId, userId, {
+              status: 'embedded',
+              metadata: {
+                ...document.metadata,
+                embedding: metadata,
+                chunkCount: chunks.length,
+                embeddedAt: new Date().toISOString(),
+              },
+            });
+          })
+          .catch(async (error: any) => {
+            await DocumentService.updateDocument(documentId, userId, {
+              status: 'embedding_failed',
+              embedding_error: error.message || 'Embedding generation failed',
+            });
+          });
+
+        results.push({
+          documentId,
+          success: true,
+          message: 'Embedding generation started',
+        });
+      } catch (error: any) {
+        results.push({
+          documentId,
+          success: false,
+          message: error.message || 'Failed to process document',
+        });
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Processing ${results.length} document(s)`,
+      data: {
+        results,
+        total: results.length,
+        started: results.filter(r => r.success).length,
+        failed: results.filter(r => !r.success).length,
       },
     });
   })
