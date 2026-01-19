@@ -230,8 +230,18 @@ export class DocumentService {
       const { data, error } = await query;
 
       if (error) {
+        // Check if table doesn't exist (PostgreSQL error code 42P01 or PGRST error)
+        if (error.code === '42P01' || error.code === 'PGRST116' || 
+            error.message?.includes('relation') && error.message?.includes('does not exist')) {
+          // Re-throw with a specific error that the route can catch
+          const tableNotFoundError = new Error('TABLE_NOT_FOUND');
+          (tableNotFoundError as any).code = 'TABLE_NOT_FOUND';
+          throw tableNotFoundError;
+        }
+        
         logger.error('Failed to list documents', {
           error: error.message,
+          errorCode: error.code,
           userId,
         });
         throw new AppError('Failed to list documents', 500, 'DB_ERROR');
@@ -240,6 +250,10 @@ export class DocumentService {
       return (data || []) as Database.Document[];
     } catch (error: any) {
       if (error instanceof AppError) {
+        throw error;
+      }
+      // Re-throw table not found error
+      if (error.code === 'TABLE_NOT_FOUND' || error.message === 'TABLE_NOT_FOUND') {
         throw error;
       }
       logger.error('Unexpected error listing documents', { error: error.message });

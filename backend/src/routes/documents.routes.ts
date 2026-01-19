@@ -163,33 +163,70 @@ router.get(
 
     const { status, topic_id, limit, offset } = req.query;
 
-    const documents = await DocumentService.listDocuments(userId, {
-      status: status as 'processing' | 'extracted' | 'failed' | undefined,
-      topic_id: topic_id as string | undefined,
-      limit: limit ? parseInt(limit as string, 10) : undefined,
-      offset: offset ? parseInt(offset as string, 10) : undefined,
-    });
+    try {
+      // Try to get documents from database (Phase 2.3+)
+      const documents = await DocumentService.listDocuments(userId, {
+        status: status as 'processing' | 'extracted' | 'failed' | undefined,
+        topic_id: topic_id as string | undefined,
+        limit: limit ? parseInt(limit as string, 10) : undefined,
+        offset: offset ? parseInt(offset as string, 10) : undefined,
+      });
 
-    // Format response to match frontend expectations
-    const formattedDocuments = documents.map((doc) => ({
-      id: doc.id,
-      path: doc.file_path,
-      name: doc.filename,
-      size: doc.file_size,
-      mimeType: doc.file_type === 'pdf' ? 'application/pdf' :
-                doc.file_type === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
-                doc.file_type === 'md' ? 'text/markdown' : 'text/plain',
-      status: doc.status,
-      textLength: doc.text_length,
-      extractionError: doc.extraction_error,
-      createdAt: doc.created_at,
-      updatedAt: doc.updated_at,
-    }));
+      // Format response to match frontend expectations
+      const formattedDocuments = documents.map((doc) => ({
+        id: doc.id,
+        path: doc.file_path,
+        name: doc.filename,
+        size: doc.file_size,
+        mimeType: doc.file_type === 'pdf' ? 'application/pdf' :
+                  doc.file_type === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
+                  doc.file_type === 'md' ? 'text/markdown' : 'text/plain',
+        status: doc.status,
+        textLength: doc.text_length,
+        extractionError: doc.extraction_error,
+        createdAt: doc.created_at,
+        updatedAt: doc.updated_at,
+      }));
 
-    res.status(200).json({
-      success: true,
-      data: formattedDocuments,
-    });
+      res.status(200).json({
+        success: true,
+        data: formattedDocuments,
+      });
+    } catch (error: any) {
+      // Fallback to StorageService if documents table doesn't exist (pre-Phase 2.3)
+      if (error.code === 'TABLE_NOT_FOUND' || 
+          error.message === 'TABLE_NOT_FOUND' ||
+          (error.message?.includes('relation') && error.message?.includes('does not exist'))) {
+        logger.warn('Documents table not found, falling back to StorageService', {
+          userId,
+          error: error.message,
+        });
+
+        const storageDocuments = await StorageService.listDocuments(userId);
+        
+        // Format to match expected response structure
+        const formattedDocuments = storageDocuments.map((doc) => ({
+          id: doc.path, // Use path as ID for legacy documents
+          path: doc.path,
+          name: doc.name,
+          size: doc.size,
+          mimeType: doc.mimeType,
+          status: 'extracted' as const, // Assume extracted for legacy documents
+          textLength: undefined,
+          extractionError: undefined,
+          createdAt: doc.createdAt,
+          updatedAt: doc.updatedAt,
+        }));
+
+        res.status(200).json({
+          success: true,
+          data: formattedDocuments,
+        });
+      } else {
+        // Re-throw if it's a different error
+        throw error;
+      }
+    }
   })
 );
 
