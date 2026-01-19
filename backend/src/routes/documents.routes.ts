@@ -273,7 +273,24 @@ router.get(
       });
 
       // Format response to match frontend expectations
-      const formattedDocuments = documents.map((doc) => ({
+      // Get chunk counts for all documents in parallel
+      const documentsWithChunks = await Promise.all(
+        documents.map(async (doc) => {
+          let chunkCount = 0;
+          try {
+            chunkCount = await ChunkService.getChunkCount(doc.id);
+          } catch (error) {
+            // If chunks table doesn't exist or error, chunkCount remains 0
+            logger.warn('Failed to get chunk count', { documentId: doc.id, error });
+          }
+          return {
+            ...doc,
+            chunkCount,
+          };
+        })
+      );
+
+      const formattedDocuments = documentsWithChunks.map((doc) => ({
         id: doc.id,
         path: doc.file_path,
         name: doc.filename,
@@ -283,6 +300,7 @@ router.get(
                   doc.file_type === 'md' ? 'text/markdown' : 'text/plain',
         status: doc.status,
         textLength: doc.text_length,
+        chunkCount: doc.chunkCount,
         extractionError: doc.extraction_error,
         embeddingError: doc.embedding_error,
         createdAt: doc.created_at,
@@ -311,6 +329,7 @@ router.get(
               mimeType: storageDoc.mimeType,
               status: 'extracted' as const, // Assume extracted for legacy documents
               textLength: undefined,
+              chunkCount: 0, // Legacy documents don't have chunks
               extractionError: undefined,
               embeddingError: undefined,
               createdAt: storageDoc.createdAt || new Date().toISOString(),
@@ -351,7 +370,9 @@ router.get(
           mimeType: doc.mimeType,
           status: 'extracted' as const, // Assume extracted for legacy documents
           textLength: undefined,
+          chunkCount: 0, // Legacy documents don't have chunks
           extractionError: undefined,
+          embeddingError: undefined,
           createdAt: doc.createdAt,
           updatedAt: doc.updatedAt,
         }));
@@ -788,6 +809,70 @@ router.post(
         total: results.length,
         started: results.filter(r => r.success).length,
         failed: results.filter(r => !r.success).length,
+      },
+    });
+  })
+);
+
+/**
+ * POST /api/documents/:id/clear-processing
+ * Clear processing data (extracted text, chunks, embeddings) but keep the document in storage
+ */
+router.post(
+  '/:id/clear-processing',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { id } = req.params;
+    const documentId = Array.isArray(id) ? id[0] : id;
+    if (!documentId) {
+      throw new ValidationError('Document ID is required');
+    }
+
+    const document = await DocumentService.getDocument(documentId, userId);
+    if (!document) {
+      throw new ValidationError('Document not found');
+    }
+
+    // Delete all chunks (this will cascade delete embeddings if needed)
+    try {
+      await ChunkService.deleteChunksByDocument(documentId);
+    } catch (error: any) {
+      // If chunks don't exist, that's okay - just log and continue
+      logger.warn('No chunks to delete or chunks table not found', { documentId, error: error.message });
+    }
+
+    // Clear extracted text and reset status
+    await DocumentService.updateDocument(documentId, userId, {
+      status: 'processing',
+      extracted_text: undefined,
+      text_length: undefined,
+      extraction_error: undefined,
+      embedding_error: undefined,
+      metadata: {
+        // Keep file metadata but clear processing metadata
+        fileType: document.file_type,
+        fileName: document.filename,
+      },
+    });
+
+    logger.info('Processing data cleared for document', {
+      documentId,
+      userId,
+      filename: document.filename,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Processing data cleared successfully. Document remains in storage.',
+      data: {
+        documentId,
+        status: 'processing',
       },
     });
   })

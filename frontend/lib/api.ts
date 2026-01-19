@@ -354,6 +354,7 @@ export interface DocumentItem {
   mimeType: string;
   status?: 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed'; // Processing status
   textLength?: number; // Character count of extracted text
+  chunkCount?: number; // Number of chunks for processed documents
   extractionError?: string; // Error message if extraction failed
   embeddingError?: string; // Error message if embedding failed
   createdAt?: string;
@@ -413,10 +414,17 @@ export const documentApi = {
     }
   },
 
-  delete: async (path: string): Promise<ApiResponse> => {
+  delete: async (pathOrId: string): Promise<ApiResponse> => {
+    // Try to determine if it's an ID (UUID) or path
+    const isId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathOrId);
     const response = await apiClient.delete<ApiResponse>('/api/documents', {
-      data: { path },
+      data: isId ? { id: pathOrId } : { path: pathOrId },
     });
+    return response.data;
+  },
+
+  clearProcessing: async (documentId: string): Promise<ApiResponse> => {
+    const response = await apiClient.post<ApiResponse>(`/api/documents/${documentId}/clear-processing`);
     return response.data;
   },
 

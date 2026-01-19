@@ -33,6 +33,14 @@ const getTotalSize = (documents: DocumentItem[]): number => {
   return documents.reduce((sum, doc) => sum + doc.size, 0);
 };
 
+const getTotalCharacters = (documents: DocumentItem[]): number => {
+  return documents.reduce((sum, doc) => sum + (doc.textLength || 0), 0);
+};
+
+const getTotalChunks = (documents: DocumentItem[]): number => {
+  return documents.reduce((sum, doc) => sum + (doc.chunkCount || 0), 0);
+};
+
 export const DocumentManager = () => {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -456,6 +464,18 @@ export const DocumentManager = () => {
                       title="Retry processing"
                     >
                       <RefreshCw className="w-4 h-4" />
+                    </Button>
+                  )}
+                  {/* Clear processing button - show for processed/extracted documents */}
+                  {doc.id && (doc.status === 'processed' || doc.status === 'extracted' || doc.status === 'embedded') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleClearProcessing(doc)}
+                      className="h-8 px-2 text-orange-600 border-orange-200 hover:bg-orange-50"
+                      title="Clear processing data (keep document in storage)"
+                    >
+                      <Eraser className="w-4 h-4" />
                     </Button>
                   )}
                   <Button
