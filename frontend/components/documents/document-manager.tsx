@@ -54,34 +54,48 @@ export const DocumentManager = () => {
 
   const totalSize = useMemo(() => getTotalSize(documents), [documents]);
 
-  const loadDocuments = async () => {
-    setIsLoading(true);
+  const loadDocuments = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setIsLoading(true);
+    }
     try {
       const response = await documentApi.list();
       if (response.success && response.data) {
         setDocuments(response.data);
       } else {
-        toast.error(response.message || 'Failed to load documents');
+        if (showLoading) {
+          toast.error(response.message || 'Failed to load documents');
+        }
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to load documents');
+      if (showLoading) {
+        toast.error(error.message || 'Failed to load documents');
+      }
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, []);
 
+  // Load documents on mount
   useEffect(() => {
     loadDocuments();
-    
-    // Auto-refresh every 5 seconds if there are documents with 'processing' status
+  }, []);
+
+  // Auto-refresh every 5 seconds if there are documents with 'processing' status
+  useEffect(() => {
     const hasProcessing = documents.some(doc => doc.status === 'processing');
-    if (hasProcessing) {
-      const interval = setInterval(() => {
-        loadDocuments();
-      }, 5000);
-      return () => clearInterval(interval);
+    if (!hasProcessing) {
+      return; // No processing documents, no need to set up interval
     }
-  }, [documents]);
+
+    const interval = setInterval(() => {
+      loadDocuments(false); // Don't show loading spinner for auto-refresh
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [documents, loadDocuments]);
 
   const handleFileSelect = (file: File) => {
     const maxSize = 10 * 1024 * 1024; // 10MB
@@ -335,7 +349,10 @@ export const DocumentManager = () => {
       {/* Documents List */}
       <div className="border-t border-gray-100 pt-4">
         {isLoading && !isUploading ? (
-          <p className="text-sm text-gray-500">Loading documents...</p>
+          <div className="flex flex-col items-center justify-center py-8">
+            <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-blue-600 border-r-transparent mb-2"></div>
+            <p className="text-sm text-gray-500">Loading documents...</p>
+          </div>
         ) : sortedDocuments.length === 0 ? (
           <div className="text-center py-8">
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />

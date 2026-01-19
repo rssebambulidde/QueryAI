@@ -188,14 +188,14 @@ router.get(
         updatedAt: doc.updated_at,
       }));
 
-      // Also get documents from Storage to catch any that weren't migrated
-      try {
-        const storageDocuments = await StorageService.listDocuments(userId);
-        const dbPaths = new Set(documents.map(d => d.file_path));
-        
-        // Add Storage documents that aren't in database
-        storageDocuments.forEach((storageDoc) => {
-          if (!dbPaths.has(storageDoc.path)) {
+      // Only merge Storage documents if database is empty (performance optimization)
+      // This prevents slow loading when there are many documents
+      if (formattedDocuments.length === 0) {
+        try {
+          const storageDocuments = await StorageService.listDocuments(userId);
+          
+          // Add Storage documents that aren't in database
+          storageDocuments.forEach((storageDoc) => {
             // Determine file type from extension
             const extension = path.extname(storageDoc.name).toLowerCase();
             const fileType = extension === '.pdf' ? 'pdf' :
@@ -214,14 +214,14 @@ router.get(
               createdAt: storageDoc.createdAt || new Date().toISOString(),
               updatedAt: storageDoc.updatedAt || new Date().toISOString(),
             });
-          }
-        });
-      } catch (storageError: any) {
-        // If StorageService fails, just use database documents
-        logger.warn('Failed to get documents from Storage', {
-          userId,
-          error: storageError.message,
-        });
+          });
+        } catch (storageError: any) {
+          // If StorageService fails, just use database documents
+          logger.warn('Failed to get documents from Storage', {
+            userId,
+            error: storageError.message,
+          });
+        }
       }
 
       res.status(200).json({
