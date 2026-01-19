@@ -111,6 +111,16 @@ router.post(
             paragraphCount: result.stats.paragraphCount,
             tables: result.tables, // Store extracted tables
             tableCount: result.tables?.length || 0,
+            images: result.images ? result.images.map(img => ({
+              page: img.page,
+              index: img.index,
+              width: img.width,
+              height: img.height,
+              format: img.format,
+              size: img.size,
+            })) : undefined, // Store image metadata (not full data URLs)
+            imageCount: result.images?.length || 0,
+            ocr: result.ocrUsed || false, // Mark if OCR was used
           },
         });
 
