@@ -563,6 +563,20 @@ router.post(
       throw new ValidationError('Document not found');
     }
 
+    // Get chunking options from request body
+    const { maxChunkSize, overlapSize } = req.body;
+    const chunkingOptions: {
+      maxChunkSize?: number;
+      overlapSize?: number;
+    } = {};
+    
+    if (maxChunkSize && typeof maxChunkSize === 'number' && maxChunkSize >= 100 && maxChunkSize <= 2000) {
+      chunkingOptions.maxChunkSize = maxChunkSize;
+    }
+    if (overlapSize && typeof overlapSize === 'number' && overlapSize >= 0 && overlapSize <= 500) {
+      chunkingOptions.overlapSize = overlapSize;
+    }
+
     // Check if already processed
     if (document.status === 'processed' || document.status === 'embedded') {
       const chunkCount = await ChunkService.getChunkCount(documentId);
@@ -618,7 +632,7 @@ router.post(
             embedding_error: undefined,
           });
 
-          EmbeddingService.processDocument(documentId, userId, result.text)
+          EmbeddingService.processDocument(documentId, userId, result.text, chunkingOptions)
             .then(async ({ chunks, embeddings, metadata }) => {
               // Delete existing chunks before creating new ones
               try {
@@ -678,7 +692,7 @@ router.post(
 
       const { EmbeddingService } = await import('../services/embedding.service');
 
-      EmbeddingService.processDocument(documentId, userId, document.extracted_text)
+      EmbeddingService.processDocument(documentId, userId, document.extracted_text, chunkingOptions)
         .then(async ({ chunks, embeddings, metadata }) => {
           // Delete existing chunks before creating new ones
           try {

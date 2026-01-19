@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { documentApi, DocumentItem } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
-import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw, Play, Eraser } from 'lucide-react';
+import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw, Play, Eraser, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 
 const formatBytes = (bytes: number): string => {
   if (!bytes || bytes <= 0) return '0 B';
@@ -48,6 +49,12 @@ export const DocumentManager = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [showChunkingSettings, setShowChunkingSettings] = useState(false);
+  const [processingDocument, setProcessingDocument] = useState<DocumentItem | null>(null);
+  const [chunkingSettings, setChunkingSettings] = useState({
+    maxChunkSize: 800,
+    overlapSize: 100,
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -165,6 +172,11 @@ export const DocumentManager = () => {
   };
 
   const handleDownload = async (doc: DocumentItem) => {
+    if (!doc.path) {
+      toast.error('Document path not available');
+      return;
+    }
+    
     try {
       const blob = await documentApi.download(doc.path);
       const url = window.URL.createObjectURL(blob);
@@ -177,11 +189,17 @@ export const DocumentManager = () => {
       window.URL.revokeObjectURL(url);
       toast.success('Download started');
     } catch (error: any) {
+      console.error('Download error:', error);
       toast.error(error.message || 'Failed to download document');
     }
   };
 
   const handleView = async (doc: DocumentItem) => {
+    if (!doc.path) {
+      toast.error('Document path not available');
+      return;
+    }
+    
     try {
       const blob = await documentApi.download(doc.path);
       const url = window.URL.createObjectURL(blob);
@@ -189,6 +207,7 @@ export const DocumentManager = () => {
       // Clean up after a delay
       setTimeout(() => window.URL.revokeObjectURL(url), 100);
     } catch (error: any) {
+      console.error('View error:', error);
       toast.error(error.message || 'Failed to open document');
     }
   };
@@ -220,9 +239,25 @@ export const DocumentManager = () => {
       return;
     }
 
+    // Show settings dialog first
+    setProcessingDocument(doc);
+    setShowChunkingSettings(true);
+  };
+
+  const handleProcessWithSettings = async () => {
+    if (!processingDocument?.id) {
+      toast.error('Document ID not available');
+      return;
+    }
+
+    setShowChunkingSettings(false);
+    
     try {
       toast.info('Processing document (extraction + chunking)...');
-      const response = await documentApi.process(doc.id);
+      const response = await documentApi.process(processingDocument.id, {
+        maxChunkSize: chunkingSettings.maxChunkSize,
+        overlapSize: chunkingSettings.overlapSize,
+      });
       if (response.success) {
         toast.success('Document processing started');
         // Refresh immediately and periodically
@@ -233,6 +268,8 @@ export const DocumentManager = () => {
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to process document');
+    } finally {
+      setProcessingDocument(null);
     }
   };
 
@@ -518,7 +555,8 @@ export const DocumentManager = () => {
                     size="sm"
                     onClick={() => handleView(doc)}
                     className="h-8 px-3"
-                    disabled={!doc.status || (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed')}
+                    disabled={!doc.path || (doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed'))}
+                    title={!doc.path ? 'Document path not available' : doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding') ? `Document is ${doc.status}` : 'View document'}
                   >
                     <Eye className="w-3 h-3 mr-1.5" />
                     View
@@ -528,7 +566,8 @@ export const DocumentManager = () => {
                     size="sm"
                     onClick={() => handleDownload(doc)}
                     className="h-8 px-3"
-                    disabled={!doc.status || (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed')}
+                    disabled={!doc.path || (doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed'))}
+                    title={!doc.path ? 'Document path not available' : doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding') ? `Document is ${doc.status}` : 'Download document'}
                   >
                     <Download className="w-3 h-3 mr-1.5" />
                     Download
@@ -548,6 +587,97 @@ export const DocumentManager = () => {
           </div>
         )}
       </div>
+
+      {/* Chunking Settings Dialog */}
+      {showChunkingSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                Chunking Settings
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setShowChunkingSettings(false);
+                  setProcessingDocument(null);
+                }}
+                className="h-8 w-8 p-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <Input
+                  type="number"
+                  label="Max Chunk Size (tokens)"
+                  value={chunkingSettings.maxChunkSize}
+                  onChange={(e) => setChunkingSettings({
+                    ...chunkingSettings,
+                    maxChunkSize: parseInt(e.target.value) || 800,
+                  })}
+                  min={100}
+                  max={2000}
+                  step={50}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Maximum tokens per chunk (default: 800, ~600 words). Range: 100-2000
+                </p>
+              </div>
+              
+              <div>
+                <Input
+                  type="number"
+                  label="Overlap Size (tokens)"
+                  value={chunkingSettings.overlapSize}
+                  onChange={(e) => setChunkingSettings({
+                    ...chunkingSettings,
+                    overlapSize: parseInt(e.target.value) || 100,
+                  })}
+                  min={0}
+                  max={500}
+                  step={25}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Overlap tokens between chunks (default: 100, ~75 words). Range: 0-500
+                </p>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-xs text-blue-800">
+                  <strong>Tip:</strong> Larger chunks preserve more context but may be less precise. 
+                  Overlap helps maintain continuity between chunks.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowChunkingSettings(false);
+                  setProcessingDocument(null);
+                }}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleProcessWithSettings}
+                className="flex-1"
+                disabled={!processingDocument}
+              >
+                <Play className="w-4 h-4 mr-2" />
+                Process with Settings
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

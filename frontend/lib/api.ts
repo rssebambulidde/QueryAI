@@ -460,8 +460,8 @@ export const documentApi = {
     return response.data;
   },
 
-  process: async (documentId: string): Promise<ApiResponse> => {
-    const response = await apiClient.post<ApiResponse>(`/api/documents/${documentId}/process`);
+  process: async (documentId: string, options?: { maxChunkSize?: number; overlapSize?: number }): Promise<ApiResponse> => {
+    const response = await apiClient.post<ApiResponse>(`/api/documents/${documentId}/process`, options || {});
     return response.data;
   },
 };
