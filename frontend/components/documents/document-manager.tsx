@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { documentApi, DocumentItem } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
-import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw, Play } from 'lucide-react';
+import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw, Play, Eraser } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const formatBytes = (bytes: number): string => {
@@ -227,6 +227,29 @@ export const DocumentManager = () => {
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to process document');
+    }
+  };
+
+  const handleClearProcessing = async (doc: DocumentItem) => {
+    if (!doc.id) {
+      toast.error('Document ID not available');
+      return;
+    }
+
+    if (!confirm('Clear processing data (extracted text, chunks, embeddings)? The document will remain in storage.')) {
+      return;
+    }
+
+    try {
+      const response = await documentApi.clearProcessing(doc.id);
+      if (response.success) {
+        toast.success('Processing data cleared. Document remains in storage.');
+        setTimeout(() => loadDocuments(), 1000);
+      } else {
+        toast.error(response.message || 'Failed to clear processing data');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to clear processing data');
     }
   };
 
