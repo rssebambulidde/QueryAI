@@ -188,6 +188,42 @@ router.get(
         updatedAt: doc.updated_at,
       }));
 
+      // Also get documents from Storage to catch any that weren't migrated
+      try {
+        const storageDocuments = await StorageService.listDocuments(userId);
+        const dbPaths = new Set(documents.map(d => d.file_path));
+        
+        // Add Storage documents that aren't in database
+        storageDocuments.forEach((storageDoc) => {
+          if (!dbPaths.has(storageDoc.path)) {
+            // Determine file type from extension
+            const extension = path.extname(storageDoc.name).toLowerCase();
+            const fileType = extension === '.pdf' ? 'pdf' :
+                            extension === '.docx' ? 'docx' :
+                            extension === '.md' ? 'md' : 'txt';
+            
+            formattedDocuments.push({
+              id: storageDoc.path, // Use path as ID for legacy documents
+              path: storageDoc.path,
+              name: storageDoc.name,
+              size: storageDoc.size,
+              mimeType: storageDoc.mimeType,
+              status: 'extracted' as const, // Assume extracted for legacy documents
+              textLength: undefined,
+              extractionError: undefined,
+              createdAt: storageDoc.createdAt || new Date().toISOString(),
+              updatedAt: storageDoc.updatedAt || new Date().toISOString(),
+            });
+          }
+        });
+      } catch (storageError: any) {
+        // If StorageService fails, just use database documents
+        logger.warn('Failed to get documents from Storage', {
+          userId,
+          error: storageError.message,
+        });
+      }
+
       res.status(200).json({
         success: true,
         data: formattedDocuments,
@@ -372,6 +408,99 @@ router.post(
         status: 'processing',
       },
     });
+  })
+);
+
+/**
+ * POST /api/documents/sync
+ * Sync existing Storage documents to database (migrate pre-Phase 2.3 documents)
+ */
+router.post(
+  '/sync',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    try {
+      // Get all documents from Storage
+      const storageDocuments = await StorageService.listDocuments(userId);
+      
+      if (storageDocuments.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: 'No documents to sync',
+          data: { synced: 0, skipped: 0 },
+        });
+      }
+
+      let synced = 0;
+      let skipped = 0;
+
+      // For each Storage document, check if it exists in database
+      for (const storageDoc of storageDocuments) {
+        try {
+          // Check if document already exists in database
+          const existing = await DocumentService.getDocumentByPath(storageDoc.path, userId);
+          
+          if (existing) {
+            skipped++;
+            continue;
+          }
+
+          // Determine file type from extension
+          const extension = path.extname(storageDoc.name).toLowerCase();
+          const fileType = extension === '.pdf' ? 'pdf' :
+                          extension === '.docx' ? 'docx' :
+                          extension === '.md' ? 'md' : 'txt';
+
+          // Create document record
+          await DocumentService.createDocument({
+            user_id: userId,
+            filename: storageDoc.name,
+            file_path: storageDoc.path,
+            file_type: fileType,
+            file_size: storageDoc.size,
+          });
+
+          synced++;
+        } catch (error: any) {
+          logger.error('Failed to sync document', {
+            userId,
+            path: storageDoc.path,
+            error: error.message,
+          });
+          skipped++;
+        }
+      }
+
+      logger.info('Document sync completed', {
+        userId,
+        synced,
+        skipped,
+        total: storageDocuments.length,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Synced ${synced} document(s), skipped ${skipped}`,
+        data: { synced, skipped, total: storageDocuments.length },
+      });
+    } catch (error: any) {
+      // If table doesn't exist, return helpful message
+      if (error.code === 'TABLE_NOT_FOUND' || 
+          error.message === 'TABLE_NOT_FOUND' ||
+          (error.message?.includes('relation') && error.message?.includes('does not exist'))) {
+        throw new ValidationError(
+          'Documents table not found. Please run the database migration first: ' +
+          'backend/src/database/migrations/003_documents_text_extraction.sql'
+        );
+      }
+      // Re-throw other errors (will be handled by errorHandler middleware)
+      throw error;
+    }
   })
 );
 
