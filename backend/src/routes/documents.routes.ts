@@ -7,6 +7,7 @@ import { StorageService } from '../services/storage.service';
 import { DocumentService } from '../services/document.service';
 import { ExtractionService } from '../services/extraction.service';
 import { ChunkService } from '../services/chunk.service';
+import { PineconeService } from '../services/pinecone.service';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
 import { apiLimiter } from '../middleware/rateLimiter';
@@ -634,14 +635,45 @@ router.post(
 
           EmbeddingService.processDocument(documentId, userId, result.text, chunkingOptions)
             .then(async ({ chunks, embeddings, metadata }) => {
-              // Delete existing chunks before creating new ones
+              // Delete existing chunks and vectors before creating new ones
               try {
+                // Delete existing Pinecone vectors
+                await PineconeService.deleteDocumentVectors(documentId);
                 await ChunkService.deleteChunksByDocument(documentId);
               } catch (error: any) {
                 logger.warn('No existing chunks to delete or error deleting', { documentId, error: error.message });
               }
               
-              await ChunkService.createChunks(documentId, chunks);
+              // Step 1: Create chunks in database to get chunk IDs
+              const createdChunks = await ChunkService.createChunks(documentId, chunks);
+              
+              // Step 2: Store embeddings in Pinecone
+              try {
+                const document = await DocumentService.getDocument(documentId, userId);
+                const vectorIds = await PineconeService.upsertVectors(
+                  documentId,
+                  createdChunks.map(chunk => ({
+                    id: chunk.id,
+                    chunkIndex: chunk.chunk_index,
+                    content: chunk.content,
+                  })),
+                  embeddings,
+                  userId,
+                  document?.topic_id || undefined
+                );
+
+                logger.info('Vectors stored in Pinecone', {
+                  documentId,
+                  vectorCount: vectorIds.length,
+                });
+              } catch (error: any) {
+                logger.error('Failed to store vectors in Pinecone', {
+                  documentId,
+                  error: error.message,
+                });
+                // Continue even if Pinecone fails - chunks are still stored
+              }
+              
               await DocumentService.updateDocument(documentId, userId, {
                 status: 'processed',
                 metadata: {
@@ -694,14 +726,44 @@ router.post(
 
       EmbeddingService.processDocument(documentId, userId, document.extracted_text, chunkingOptions)
         .then(async ({ chunks, embeddings, metadata }) => {
-          // Delete existing chunks before creating new ones
+          // Delete existing chunks and vectors before creating new ones
           try {
+            // Delete existing Pinecone vectors
+            await PineconeService.deleteDocumentVectors(documentId);
             await ChunkService.deleteChunksByDocument(documentId);
           } catch (error: any) {
             logger.warn('No existing chunks to delete or error deleting', { documentId, error: error.message });
           }
           
-          await ChunkService.createChunks(documentId, chunks);
+          // Step 1: Create chunks in database to get chunk IDs
+          const createdChunks = await ChunkService.createChunks(documentId, chunks);
+          
+          // Step 2: Store embeddings in Pinecone
+          try {
+            const vectorIds = await PineconeService.upsertVectors(
+              documentId,
+              createdChunks.map(chunk => ({
+                id: chunk.id,
+                chunkIndex: chunk.chunk_index,
+                content: chunk.content,
+              })),
+              embeddings,
+              userId,
+              document?.topic_id || undefined
+            );
+
+            logger.info('Vectors stored in Pinecone', {
+              documentId,
+              vectorCount: vectorIds.length,
+            });
+          } catch (error: any) {
+            logger.error('Failed to store vectors in Pinecone', {
+              documentId,
+              error: error.message,
+            });
+            // Continue even if Pinecone fails - chunks are still stored
+          }
+          
           await DocumentService.updateDocument(documentId, userId, {
             status: 'processed',
             metadata: {
@@ -1046,8 +1108,9 @@ router.post(
       throw new ValidationError('Document not found');
     }
 
-    // Delete all chunks (this will cascade delete embeddings if needed)
+    // Delete all chunks and Pinecone vectors
     try {
+      await PineconeService.deleteDocumentVectors(documentId);
       await ChunkService.deleteChunksByDocument(documentId);
     } catch (error: any) {
       // If chunks don't exist, that's okay - just log and continue
@@ -1204,8 +1267,9 @@ router.delete(
           throw new ValidationError('Document not found');
         }
 
-        // Delete chunks first (if they exist)
+        // Delete chunks and Pinecone vectors first (if they exist)
         try {
+          await PineconeService.deleteDocumentVectors(id);
           await ChunkService.deleteChunksByDocument(id);
         } catch (chunkError: any) {
           // If chunks don't exist, that's okay - just log and continue
@@ -1249,8 +1313,9 @@ router.delete(
       // Find document by path
       const document = await DocumentService.getDocumentByPath(filePath, userId);
       if (document) {
-        // Delete chunks first (if they exist)
+        // Delete chunks and Pinecone vectors first (if they exist)
         try {
+          await PineconeService.deleteDocumentVectors(document.id);
           await ChunkService.deleteChunksByDocument(document.id);
         } catch (chunkError: any) {
           logger.warn('No chunks to delete', { documentId: document.id, error: chunkError.message });

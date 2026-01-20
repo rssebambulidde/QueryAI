@@ -29,6 +29,7 @@
     "npm": ">=9.0.0"
   },
   "dependencies": {
+    "@pinecone-database/pinecone": "^6.1.3",
     "@supabase/supabase-js": "^2.90.1",
     "@tavily/core": "^0.6.4",
     "cors": "^2.8.5",

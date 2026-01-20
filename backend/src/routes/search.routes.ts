@@ -1,115 +1,77 @@
 import { Router, Request, Response } from 'express';
-import { SearchService, SearchRequest } from '../services/search.service';
-import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
-import { apiLimiter } from '../middleware/rateLimiter';
+import { asyncHandler } from '../middleware/errorHandler';
 import { ValidationError } from '../types/error';
+import { PineconeService } from '../services/pinecone.service';
+import { EmbeddingService } from '../services/embedding.service';
+import { apiLimiter } from '../middleware/rateLimiter';
 import logger from '../config/logger';
 
 const router = Router();
 
 /**
- * POST /api/search
- * Perform web search using Tavily
- * Requires authentication
+ * POST /api/search/semantic
+ * Perform semantic search over document embeddings
  */
 router.post(
-  '/',
+  '/semantic',
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { 
-      query, 
-      topic, 
-      maxResults, 
-      includeDomains, 
-      excludeDomains,
-      timeRange,
-      startDate,
-      endDate,
-      country,
-    } = req.body;
-
-    if (!query) {
-      throw new ValidationError('Search query is required');
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
     }
 
-    // Validate time range if provided
-    const validTimeRanges = ['day', 'week', 'month', 'year', 'd', 'w', 'm', 'y'];
-    if (timeRange && !validTimeRanges.includes(timeRange)) {
-      throw new ValidationError(`Invalid timeRange. Must be one of: ${validTimeRanges.join(', ')}`);
+    const { query, topK, topicId, documentIds, minScore } = req.body;
+
+    if (!query || typeof query !== 'string' || query.trim().length === 0) {
+      throw new ValidationError('Query is required and must be a non-empty string');
     }
 
-    // Validate date format if provided
-    if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-      throw new ValidationError('startDate must be in YYYY-MM-DD format');
-    }
-    if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
-      throw new ValidationError('endDate must be in YYYY-MM-DD format');
-    }
-
-    const searchRequest: SearchRequest = {
-      query: query.trim(),
-      topic: topic?.trim(),
-      maxResults: maxResults || 5,
-      includeDomains: includeDomains,
-      excludeDomains: excludeDomains,
-      timeRange: timeRange,
-      startDate: startDate,
-      endDate: endDate,
-      country: country?.trim()?.toUpperCase(),
-    };
-
-    logger.info('Search request', {
-      userId: req.user?.id,
-      query: searchRequest.query,
-      topic: searchRequest.topic,
-      timeRange: searchRequest.timeRange,
-      country: searchRequest.country,
+    // Generate embedding for the query
+    logger.info('Generating query embedding', {
+      userId,
+      queryLength: query.length,
     });
 
-    const result = await SearchService.search(searchRequest);
+    const queryEmbedding = await EmbeddingService.generateEmbedding(query);
+
+    // Perform semantic search
+    const results = await PineconeService.search(queryEmbedding, {
+      userId,
+      topK: topK || 10,
+      topicId: topicId || undefined,
+      documentIds: documentIds || undefined,
+      minScore: minScore || 0.7,
+    });
 
     res.status(200).json({
       success: true,
-      message: 'Search completed successfully',
-      data: result,
+      message: 'Semantic search completed',
+      data: {
+        query,
+        results,
+        count: results.length,
+      },
     });
   })
 );
 
 /**
- * GET /api/search/cache/stats
- * Get search cache statistics
- * Requires authentication
+ * GET /api/search/index-stats
+ * Get Pinecone index statistics
  */
 router.get(
-  '/cache/stats',
+  '/index-stats',
   authenticate,
-  asyncHandler(async (_req: Request, res: Response) => {
-    const stats = SearchService.getCacheStats();
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const stats = await PineconeService.getIndexStats();
 
     res.status(200).json({
       success: true,
       data: stats,
-    });
-  })
-);
-
-/**
- * DELETE /api/search/cache
- * Clear search cache
- * Requires authentication
- */
-router.delete(
-  '/cache',
-  authenticate,
-  asyncHandler(async (_req: Request, res: Response) => {
-    SearchService.clearCache();
-
-    res.status(200).json({
-      success: true,
-      message: 'Search cache cleared',
     });
   })
 );
