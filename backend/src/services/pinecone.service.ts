@@ -120,13 +120,12 @@ export class PineconeService {
         
         try {
           // New Pinecone SDK uses upsert with records array
-          const upsertResponse = await index.upsert(batch);
+          await index.upsert(batch);
           
           logger.info(`Upserted batch ${Math.floor(i / batchSize) + 1}`, {
             documentId,
             batchSize: batch.length,
             total: vectors.length,
-            upsertedCount: upsertResponse.upsertedCount || batch.length,
           });
           
           vectorIds.push(...batch.map(v => v.id));

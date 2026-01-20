@@ -35,7 +35,7 @@ router.get(
       const index = await getPineconeIndex();
       const stats = await PineconeService.getIndexStats();
 
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         message: 'Pinecone is configured and connected',
         data: {
@@ -46,7 +46,7 @@ router.get(
         },
       });
     } catch (error: any) {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: 'Pinecone connection failed',
         error: {
@@ -93,22 +93,20 @@ router.post(
       });
 
       // Try upsert
-      const result = await index.upsert([testVector]);
+      await index.upsert([testVector]);
 
       logger.info('Pinecone upsert test successful', {
         vectorId: testVector.id,
-        result,
       });
 
       // Try to fetch it back
       const fetchResult = await index.fetch([testVector.id]);
 
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         message: 'Pinecone upsert test successful',
         data: {
           vectorId: testVector.id,
-          upsertResult: result,
           fetchResult: fetchResult.records || {},
         },
       });
@@ -118,7 +116,7 @@ router.post(
         stack: error.stack,
       });
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: 'Pinecone upsert test failed',
         error: {
