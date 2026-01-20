@@ -1128,8 +1128,20 @@ router.post(
 
     // Delete all chunks and Pinecone vectors
     try {
-      await PineconeService.deleteDocumentVectors(documentId);
+      // Get chunk IDs before deleting chunks (for more reliable vector deletion)
+      const chunks = await ChunkService.getChunksByDocument(documentId, userId);
+      const chunkIds = chunks.map(chunk => chunk.id);
+      
+      // Delete Pinecone vectors using chunk IDs
+      await PineconeService.deleteDocumentVectors(documentId, chunkIds);
+      
+      // Delete chunks from database
       await ChunkService.deleteChunksByDocument(documentId);
+      
+      logger.info('Processing data cleared', {
+        documentId,
+        chunkCount: chunks.length,
+      });
     } catch (error: any) {
       // If chunks don't exist, that's okay - just log and continue
       logger.warn('No chunks to delete or chunks table not found', { documentId, error: error.message });

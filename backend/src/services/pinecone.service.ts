@@ -226,7 +226,7 @@ export class PineconeService {
   /**
    * Delete all vectors for a document
    */
-  static async deleteDocumentVectors(documentId: string): Promise<void> {
+  static async deleteDocumentVectors(documentId: string, chunkIds?: string[]): Promise<void> {
     if (!isPineconeConfigured()) {
       logger.warn('Pinecone not configured, skipping vector deletion');
       return;
@@ -235,20 +235,51 @@ export class PineconeService {
     try {
       const index = await getPineconeIndex();
       
-      // Delete by metadata filter
+      // Method 1: Delete by vector IDs if chunk IDs are provided (more reliable)
+      if (chunkIds && chunkIds.length > 0) {
+        const vectorIds = chunkIds.map(chunkId => this.generateVectorId(documentId, chunkId));
+        
+        logger.info('Deleting vectors by IDs', {
+          documentId,
+          vectorCount: vectorIds.length,
+        });
+
+        try {
+          await index.deleteMany(vectorIds);
+          logger.info('Document vectors deleted from Pinecone by IDs', {
+            documentId,
+            vectorCount: vectorIds.length,
+          });
+          return;
+        } catch (idError: any) {
+          logger.warn('Failed to delete by IDs, trying filter method', {
+            documentId,
+            error: idError.message,
+          });
+          // Fall through to filter method
+        }
+      }
+      
+      // Method 2: Delete by metadata filter (fallback)
+      logger.info('Deleting vectors by metadata filter', {
+        documentId,
+      });
+
       await index.deleteMany({
         filter: {
           documentId: { $eq: documentId },
         },
       });
 
-      logger.info('Document vectors deleted from Pinecone', {
+      logger.info('Document vectors deleted from Pinecone by filter', {
         documentId,
       });
     } catch (error: any) {
       logger.error('Failed to delete document vectors from Pinecone', {
         documentId,
         error: error.message,
+        errorStack: error.stack,
+        errorCode: error.code,
       });
       // Don't throw - deletion failure shouldn't break the flow
     }
