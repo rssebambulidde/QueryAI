@@ -650,28 +650,46 @@ router.post(
               // Step 2: Store embeddings in Pinecone
               try {
                 const document = await DocumentService.getDocument(documentId, userId);
-                const vectorIds = await PineconeService.upsertVectors(
-                  documentId,
-                  createdChunks.map(chunk => ({
-                    id: chunk.id,
-                    chunkIndex: chunk.chunk_index,
-                    content: chunk.content,
-                  })),
-                  embeddings,
-                  userId,
-                  document?.topic_id || undefined
-                );
+                
+                // Check if Pinecone is configured
+                const { isPineconeConfigured } = await import('../config/pinecone');
+                if (!isPineconeConfigured()) {
+                  logger.warn('Pinecone not configured, skipping vector storage', {
+                    documentId,
+                  });
+                } else {
+                  logger.info('Storing vectors in Pinecone', {
+                    documentId,
+                    chunkCount: createdChunks.length,
+                    embeddingCount: embeddings.length,
+                  });
 
-                logger.info('Vectors stored in Pinecone', {
-                  documentId,
-                  vectorCount: vectorIds.length,
-                });
+                  const vectorIds = await PineconeService.upsertVectors(
+                    documentId,
+                    createdChunks.map(chunk => ({
+                      id: chunk.id,
+                      chunkIndex: chunk.chunk_index,
+                      content: chunk.content,
+                    })),
+                    embeddings,
+                    userId,
+                    document?.topic_id || undefined
+                  );
+
+                  logger.info('Vectors stored in Pinecone successfully', {
+                    documentId,
+                    vectorCount: vectorIds.length,
+                  });
+                }
               } catch (error: any) {
                 logger.error('Failed to store vectors in Pinecone', {
                   documentId,
                   error: error.message,
+                  errorStack: error.stack,
+                  errorCode: error.code,
                 });
                 // Continue even if Pinecone fails - chunks are still stored
+                // But log the error so user knows vectors weren't stored
               }
               
               await DocumentService.updateDocument(documentId, userId, {

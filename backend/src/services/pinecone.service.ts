@@ -117,14 +117,28 @@ export class PineconeService {
 
       for (let i = 0; i < vectors.length; i += batchSize) {
         const batch = vectors.slice(i, i + batchSize);
-        await index.upsert(batch);
-        vectorIds.push(...batch.map(v => v.id));
         
-        logger.debug(`Upserted batch ${Math.floor(i / batchSize) + 1}`, {
-          documentId,
-          batchSize: batch.length,
-          total: vectors.length,
-        });
+        try {
+          // New Pinecone SDK uses upsert with records array
+          const upsertResponse = await index.upsert(batch);
+          
+          logger.info(`Upserted batch ${Math.floor(i / batchSize) + 1}`, {
+            documentId,
+            batchSize: batch.length,
+            total: vectors.length,
+            upsertedCount: upsertResponse.upsertedCount || batch.length,
+          });
+          
+          vectorIds.push(...batch.map(v => v.id));
+        } catch (batchError: any) {
+          logger.error(`Failed to upsert batch ${Math.floor(i / batchSize) + 1}`, {
+            documentId,
+            batchSize: batch.length,
+            error: batchError.message,
+            errorDetails: batchError,
+          });
+          throw batchError; // Re-throw to fail the entire operation
+        }
       }
 
       logger.info('Vectors upserted successfully', {
@@ -151,13 +165,32 @@ export class PineconeService {
       logger.error('Failed to upsert vectors to Pinecone', {
         documentId,
         error: error.message,
+        errorStack: error.stack,
+        errorCode: error.code,
+        errorStatus: error.status,
+        chunksCount: chunks.length,
+        embeddingsCount: embeddings.length,
       });
 
       if (error instanceof AppError) {
         throw error;
       }
 
-      throw new AppError(`Failed to upsert vectors: ${error.message}`, 500, 'PINECONE_ERROR');
+      // Provide more detailed error information
+      const errorMessage = error.message || 'Unknown error';
+      const errorDetails = error.response?.data || error.body || {};
+      
+      logger.error('Pinecone upsert error details', {
+        documentId,
+        errorMessage,
+        errorDetails,
+      });
+
+      throw new AppError(
+        `Failed to upsert vectors to Pinecone: ${errorMessage}. Details: ${JSON.stringify(errorDetails)}`,
+        500,
+        'PINECONE_ERROR'
+      );
     }
   }
 
