@@ -8,9 +8,12 @@ import { cn } from '@/lib/utils';
 import 'highlight.js/styles/github-dark.css';
 
 export interface Source {
+  type?: 'document' | 'web';
   title: string;
-  url: string;
+  url?: string;
+  documentId?: string;
   snippet?: string;
+  score?: number;
 }
 
 export interface Message {

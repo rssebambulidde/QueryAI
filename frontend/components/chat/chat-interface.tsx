@@ -4,7 +4,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage, Message, Source } from './chat-message';
 import { TypingIndicator } from './typing-indicator';
 import { ChatInput } from './chat-input';
-import { aiApi, QuestionRequest } from '@/lib/api';
+import { RAGSourceSelector, RAGSettings } from './rag-source-selector';
+import { aiApi, QuestionRequest, documentApi } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Alert } from '@/components/ui/alert';
 import { Sparkles, MessageSquare, Trash2 } from 'lucide-react';
@@ -17,11 +18,69 @@ export const ChatInterface: React.FC = () => {
   const [sources, setSources] = useState<Source[] | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  
+  // RAG settings state
+  const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
+    // Load from localStorage or use defaults
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ragSettings');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          // Invalid JSON, use defaults
+        }
+      }
+    }
+    return {
+      enableDocumentSearch: true,
+      enableWebSearch: true,
+      maxDocumentChunks: 5,
+      minScore: 0.7,
+      maxWebResults: 5,
+    };
+  });
+  
+  // Document count state
+  const [documentCount, setDocumentCount] = useState(0);
+  const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
+
+  // Load document count on mount
+  useEffect(() => {
+    const loadDocumentCount = async () => {
+      try {
+        const response = await documentApi.list();
+        if (response.success && response.data) {
+          const processedDocs = response.data.filter(
+            (doc) => doc.status === 'processed' || doc.status === 'embedded'
+          );
+          setDocumentCount(processedDocs.length);
+          setHasProcessedDocuments(processedDocs.length > 0);
+        }
+      } catch (err) {
+        console.warn('Failed to load document count:', err);
+        // Don't show error to user, just assume no documents
+      }
+    };
+    
+    loadDocumentCount();
+    
+    // Refresh document count every 30 seconds
+    const interval = setInterval(loadDocumentCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Save RAG settings to localStorage when they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ragSettings', JSON.stringify(ragSettings));
+    }
+  }, [ragSettings]);
 
   const handleSend = async (content: string, filters?: { topic?: string; timeRange?: any; startDate?: string; endDate?: string; country?: string }) => {
     if (!content.trim() || isLoading) return;
@@ -57,17 +116,24 @@ export const ChatInterface: React.FC = () => {
       // Add empty assistant message for streaming
       setMessages((prev) => [...prev, assistantMessage]);
 
-      // Stream the response with search enabled by default
+      // Build request with RAG settings
       const request: QuestionRequest = {
         question: content,
         conversationHistory,
-        enableSearch: true, // Enable search by default
+        // RAG options
+        enableDocumentSearch: ragSettings.enableDocumentSearch,
+        enableWebSearch: ragSettings.enableWebSearch,
+        documentIds: ragSettings.documentIds,
+        maxDocumentChunks: ragSettings.maxDocumentChunks,
+        minScore: ragSettings.minScore,
+        // Web search options (for backward compatibility)
+        enableSearch: ragSettings.enableWebSearch, // Map to enableWebSearch
         topic: filters?.topic?.trim(), // Topic/keyword filtering
         timeRange: filters?.timeRange, // Time range filtering
         startDate: filters?.startDate, // Custom start date
         endDate: filters?.endDate, // Custom end date
         country: filters?.country, // Location filtering
-        maxSearchResults: 5,
+        maxSearchResults: ragSettings.maxWebResults,
       };
 
       try {
@@ -91,13 +157,20 @@ export const ChatInterface: React.FC = () => {
           const sourceResponse = await aiApi.ask({
             question: content,
             conversationHistory: [], // Don't include history to save tokens
-            enableSearch: true,
-            topic: filters?.topic?.trim(), // Include filters for source matching
+            // RAG options
+            enableDocumentSearch: ragSettings.enableDocumentSearch,
+            enableWebSearch: ragSettings.enableWebSearch,
+            documentIds: ragSettings.documentIds,
+            maxDocumentChunks: ragSettings.maxDocumentChunks,
+            minScore: ragSettings.minScore,
+            // Web search options
+            enableSearch: ragSettings.enableWebSearch,
+            topic: filters?.topic?.trim(),
             timeRange: filters?.timeRange,
             startDate: filters?.startDate,
             endDate: filters?.endDate,
             country: filters?.country,
-            maxSearchResults: 5,
+            maxSearchResults: ragSettings.maxWebResults,
           });
           
           if (sourceResponse.success && sourceResponse.data?.sources && sourceResponse.data.sources.length > 0) {
@@ -172,25 +245,41 @@ export const ChatInterface: React.FC = () => {
     <div className="flex flex-col h-full bg-gradient-to-b from-gray-50 to-white">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg">
-              <Sparkles className="w-5 h-5 text-white" />
+        <div className="px-6 py-4 space-y-3">
+          {/* Top row: Title and Clear button */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Chat with AI</h2>
+                <p className="text-xs text-gray-500">Powered by RAG (Documents + Web Search)</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Chat with AI</h2>
-              <p className="text-xs text-gray-500">Powered by real-time web search</p>
+            {messages.length > 0 && (
+              <button
+                onClick={handleClear}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                Clear Chat
+              </button>
+            )}
+          </div>
+          
+          {/* RAG Source Selector */}
+          <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-700">Source Selection:</span>
+              <RAGSourceSelector
+                settings={ragSettings}
+                onChange={setRagSettings}
+                documentCount={documentCount}
+                hasProcessedDocuments={hasProcessedDocuments}
+              />
             </div>
           </div>
-          {messages.length > 0 && (
-            <button
-              onClick={handleClear}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-              Clear Chat
-            </button>
-          )}
         </div>
       </div>
 
@@ -210,7 +299,7 @@ export const ChatInterface: React.FC = () => {
                   Start a conversation by asking a question.
                 </p>
                 <p className="text-sm text-gray-500">
-                  I can search the web and provide answers with sources.
+                  I can search your documents and the web to provide comprehensive answers with sources.
                 </p>
               </div>
             </div>

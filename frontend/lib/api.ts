@@ -181,12 +181,22 @@ export interface QuestionRequest {
   startDate?: string; // ISO date string (YYYY-MM-DD)
   endDate?: string; // ISO date string (YYYY-MM-DD)
   country?: string; // ISO country code (e.g., 'US', 'UG', 'KE')
+  // RAG options
+  enableDocumentSearch?: boolean; // Search user's uploaded documents
+  enableWebSearch?: boolean; // Search web via Tavily
+  topicId?: string; // Topic ID for filtering documents
+  documentIds?: string[]; // Specific documents to search
+  maxDocumentChunks?: number; // Max document chunks to retrieve
+  minScore?: number; // Minimum similarity score for document chunks
 }
 
 export interface Source {
+  type?: 'document' | 'web';
   title: string;
-  url: string;
+  url?: string;
+  documentId?: string;
   snippet?: string;
+  score?: number;
 }
 
 export interface QuestionResponse {
