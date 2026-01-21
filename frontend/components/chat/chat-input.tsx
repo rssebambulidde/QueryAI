@@ -115,7 +115,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     <div className="relative">
       {/* Unified Filter Panel - Positioned absolutely above input */}
       {showFilters && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 z-50">
+        <div className="absolute bottom-full left-0 right-0 mb-2 z-[100]">
           <UnifiedFilterPanel
             filters={localFilters}
             topics={topics}

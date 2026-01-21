@@ -419,16 +419,16 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
   return (
     <div 
       ref={panelRef}
-      className="bg-white border border-gray-200 rounded-xl shadow-xl animate-in fade-in slide-in-from-bottom-2 max-h-[80vh] overflow-y-auto z-50"
+      className="bg-white border border-gray-200 rounded-xl shadow-xl animate-in fade-in slide-in-from-bottom-2 max-h-[80vh] overflow-y-auto relative z-[100]"
     >
       {/* Header */}
-      <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-20">
+      <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-[60] shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-gray-600" />
             <h3 className="text-sm font-semibold text-gray-900">Unified Filters</h3>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative z-[70]">
             {hasFilters && (
               <button
                 onClick={handleClear}
@@ -441,9 +441,10 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
             <button
               onClick={onClose}
               disabled={disabled}
-              className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors relative z-[70] flex items-center justify-center min-w-[32px] min-h-[32px]"
+              title="Close filters"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
