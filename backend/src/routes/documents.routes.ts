@@ -87,6 +87,18 @@ router.post(
     // If auto-processing is disabled, set status to 'stored' (ready for manual processing)
     const initialStatus = (req.query.autoExtract === 'true') ? 'processing' : 'stored';
     
+    // Get topicId from form data if provided
+    const topicId = req.body.topicId || undefined;
+    
+    // Validate topicId if provided
+    if (topicId) {
+      const { TopicService } = await import('../services/topic.service');
+      const topic = await TopicService.getTopic(topicId, userId);
+      if (!topic) {
+        throw new ValidationError('Invalid topic ID');
+      }
+    }
+    
     const document = await DocumentService.createDocument({
       user_id: userId,
       filename: storedDoc.name,
@@ -94,6 +106,7 @@ router.post(
       file_type: fileType,
       file_size: storedDoc.size,
       status: initialStatus,
+      topic_id: topicId,
     });
 
     logger.info('Document uploaded and record created', {

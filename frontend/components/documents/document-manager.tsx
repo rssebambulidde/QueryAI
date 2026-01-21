@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { documentApi, DocumentItem } from '@/lib/api';
+import { documentApi, DocumentItem, topicApi, Topic } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
-import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw, Play, Eraser, Settings } from 'lucide-react';
+import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw, Play, Eraser, Settings, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 
@@ -55,6 +55,8 @@ export const DocumentManager = () => {
     maxChunkSize: 800,
     overlapSize: 100,
   });
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -98,6 +100,21 @@ export const DocumentManager = () => {
   // Load documents on mount
   useEffect(() => {
     loadDocuments();
+  }, []);
+
+  // Load topics on mount
+  useEffect(() => {
+    const loadTopics = async () => {
+      try {
+        const response = await topicApi.list();
+        if (response.success && response.data) {
+          setTopics(response.data);
+        }
+      } catch (error) {
+        console.warn('Failed to load topics:', error);
+      }
+    };
+    loadTopics();
   }, []);
 
   // Auto-refresh every 5 seconds if there are documents with 'processing' or 'embedding' status
@@ -144,10 +161,11 @@ export const DocumentManager = () => {
     try {
       const response = await documentApi.upload(selectedFile, (progress) => {
         setUploadProgress(progress);
-      });
+      }, selectedTopicId || undefined);
       if (response.success) {
         toast.success('Document uploaded successfully');
         setSelectedFile(null);
+        setSelectedTopicId(null);
         setUploadProgress(0);
         // Reset file input
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -423,6 +441,32 @@ export const DocumentManager = () => {
               )}
             </Button>
           </div>
+          
+          {/* Topic Selection */}
+          {selectedFile && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-2">
+                <Tag className="w-3 h-3" />
+                Tag with Topic (Optional)
+              </label>
+              <select
+                value={selectedTopicId || ''}
+                onChange={(e) => setSelectedTopicId(e.target.value || null)}
+                disabled={isUploading}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 bg-white"
+              >
+                <option value="">No topic (general document)</option>
+                {topics.map((topic) => (
+                  <option key={topic.id} value={topic.id}>
+                    {topic.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Tagging documents with topics helps organize them and filter search results.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Upload Progress Bar */}

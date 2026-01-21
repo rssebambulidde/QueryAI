@@ -278,9 +278,12 @@ export const documentApi = {
     return response.data;
   },
 
-  upload: async (file: File, onProgress?: (progress: number) => void): Promise<ApiResponse<DocumentItem>> => {
+  upload: async (file: File, onProgress?: (progress: number) => void, topicId?: string): Promise<ApiResponse<DocumentItem>> => {
     const formData = new FormData();
     formData.append('file', file);
+    if (topicId) {
+      formData.append('topicId', topicId);
+    }
 
     const response = await apiClient.post('/api/documents/upload', formData, {
       headers: {

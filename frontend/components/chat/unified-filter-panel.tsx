@@ -419,10 +419,10 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
   return (
     <div 
       ref={panelRef}
-      className="bg-white border border-gray-200 rounded-xl shadow-xl animate-in fade-in slide-in-from-bottom-2 max-h-[80vh] overflow-y-auto"
+      className="bg-white border border-gray-200 rounded-xl shadow-xl animate-in fade-in slide-in-from-bottom-2 max-h-[80vh] overflow-y-auto z-50"
     >
       {/* Header */}
-      <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-10">
+      <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-gray-600" />
