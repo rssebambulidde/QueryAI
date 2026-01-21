@@ -126,21 +126,31 @@ ${fullContext}
 
 CRITICAL: Use the provided sources to answer the question. ${enableDocumentSearch && !enableWebSearch ? 'Remember: You are in DOCUMENT-ONLY mode. Only use information from the document excerpts provided above.' : ''} 
 
-CITATION REQUIREMENTS:
-- Every fact, statement, or piece of information you use from the document excerpts MUST be followed by a citation like [Document 1], [Document 2], etc.
-- For web sources, ALWAYS include the URL in the citation: [Web Source 1](URL), [Web Source 2](URL), etc.
-- Do NOT say "based on the document excerpts" or "based on web sources" - instead, cite specific sources with inline citations
-- When you mention multiple facts, cite each one: "The policy [Document 1] states that... Additionally, [Document 2] requires..."
-- Always cite sources using the format specified above.
+RESPONSE FORMATTING (CRITICAL - FOLLOW EXACTLY):
+1. ALWAYS start with a brief summary (2-3 lines) that captures the main answer to the question
+2. After the summary, provide detailed information in well-organized paragraphs
+3. Use bullet points (• or -) for lists of items, steps, requirements, or key points
+4. Use bold text (**text**) for key terms, important concepts, dates, or section headings
+5. Keep paragraphs concise (3-4 sentences max) for better readability
+6. Use proper spacing between sections and ideas
 
-RESPONSE FORMATTING:
-- Structure your response with clear, well-organized paragraphs
-- Use bullet points (• or -) for lists of items, steps, requirements, or key points
-- Use bold text (**text**) for key terms, important concepts, dates, or section headings
-- Provide a brief, comprehensive summary at the beginning (2-3 sentences) that captures the main answer
-- Keep paragraphs concise (3-4 sentences max) for better readability
-- Use proper spacing between sections and ideas
-- When presenting multiple points, use numbered lists or bullet points for clarity`;
+CITATION FORMAT (CRITICAL - FOLLOW EXACTLY):
+- Do NOT place citations inline within sentences
+- Place ALL citations on separate lines after each paragraph or section
+- Format: After each paragraph, add a blank line, then "Sources:" followed by citations on the same line
+- Example format:
+  
+  [Your paragraph content here explaining the information]
+  
+  Sources: [Document 1], [Web Source 1](https://example.com), [Web Source 2](https://example.com/article)
+  
+  [Next paragraph with different information]
+  
+  Sources: [Document 2], [Web Source 3](https://example.com/news)
+  
+- For web sources, ALWAYS include the full URL: [Web Source N](URL)
+- Group all citations for a paragraph together on one line, separated by commas
+- Each paragraph should have its own "Sources:" line with only the citations relevant to that paragraph`;
     }
 
     // If no context and document-only mode, provide clear instruction

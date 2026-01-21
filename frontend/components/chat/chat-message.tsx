@@ -33,48 +33,81 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const hasSources = message.sources && message.sources.length > 0;
 
   // Replace [Source N] and [Web Source N] patterns with hyperlinks using source titles
+  // Also handles "Sources:" lines with multiple citations
   const processContentWithSources = (content: string, sources?: Source[]): string => {
     if (!sources || sources.length === 0) return content;
     
     let processedContent = content;
     
-    // Process web sources first (they have URLs)
+    // First, process "Sources:" lines that contain multiple citations
+    // Pattern: "Sources: [Web Source 1](URL), [Document 1], [Web Source 2](URL)"
+    const sourcesLinePattern = /Sources:\s*((?:\[(?:Web Source|Document)\s+\d+\](?:\([^)]+\))?(?:\s*,\s*)?)+)/gi;
+    processedContent = processedContent.replace(sourcesLinePattern, (match, citations) => {
+      // Process each citation in the line
+      const citationPattern = /\[(Web Source|Document)\s+(\d+)\](?:\(([^)]+)\))?/gi;
+      const citationsList: string[] = [];
+      
+      let citationMatch;
+      let lastIndex = 0;
+      while ((citationMatch = citationPattern.exec(citations)) !== null) {
+        const [, type, number] = citationMatch;
+        const sourceIndex = parseInt(number) - 1;
+        
+        if (type === 'Web Source') {
+          const webSource = sources[sourceIndex] && sources[sourceIndex].type === 'web' 
+            ? sources[sourceIndex] 
+            : sources.find(s => s.type === 'web' && s.url);
+          if (webSource && webSource.url) {
+            const linkText = webSource.title || `Web Source ${number}`;
+            citationsList.push(`[${linkText}](${webSource.url} "${webSource.title || linkText}")`);
+          }
+        } else if (type === 'Document') {
+          const docSource = sources[sourceIndex] && sources[sourceIndex].type === 'document'
+            ? sources[sourceIndex]
+            : sources.find(s => s.type === 'document');
+          if (docSource) {
+            const linkText = docSource.title || `Document ${number}`;
+            if (docSource.url) {
+              citationsList.push(`[${linkText}](${docSource.url} "${docSource.title || linkText}")`);
+            } else {
+              citationsList.push(`**${linkText}**`);
+            }
+          }
+        }
+      }
+      
+      return 'Sources: ' + citationsList.join(', ');
+    });
+    
+    // Then process standalone citations (not in Sources: lines)
+    // Process web sources
     const webSources = sources.filter(s => s.type === 'web' && s.url);
     webSources.forEach((source, index) => {
       const sourceNumber = index + 1;
       
-      // Replace [Web Source N] or [Web Source N](URL) patterns
-      const pattern1 = new RegExp(`\\[Web Source ${sourceNumber}\\](?:\\([^)]+\\))?`, 'gi');
-      const pattern2 = new RegExp(`\\[Web Source ${sourceNumber}\\]`, 'gi');
-      
+      // Only replace if not already in a "Sources:" line
+      const pattern = new RegExp(`(?!Sources:.*)\\[Web Source ${sourceNumber}\\](?:\\([^)]+\\))?`, 'gi');
       const linkText = source.title || `Web Source ${sourceNumber}`;
       const replacement = `[${linkText}](${source.url} "${source.title || linkText}")`;
       
-      // Try pattern with URL first, then without
-      if (processedContent.match(pattern1)) {
-        processedContent = processedContent.replace(pattern1, replacement);
-      } else {
-        processedContent = processedContent.replace(pattern2, replacement);
-      }
+      processedContent = processedContent.replace(pattern, replacement);
     });
     
-    // Process document sources (they might not have URLs)
+    // Process document sources
     const documentSources = sources.filter(s => s.type === 'document');
     documentSources.forEach((source, index) => {
       const sourceNumber = index + 1;
-      const pattern = new RegExp(`\\[Document ${sourceNumber}\\]`, 'gi');
+      // Only replace if not already in a "Sources:" line
+      const pattern = new RegExp(`(?!Sources:.*)\\[Document ${sourceNumber}\\]`, 'gi');
       
-      // For documents, use the title as the link text
       const linkText = source.title || `Document ${sourceNumber}`;
       
-      // If document has a URL (for viewing), use it, otherwise just show the title
       if (source.url) {
         processedContent = processedContent.replace(
           pattern,
           `[${linkText}](${source.url} "${source.title || linkText}")`
         );
       } else {
-        // Just make it bold/emphasized if no URL
         processedContent = processedContent.replace(
           pattern,
           `**${linkText}**`
