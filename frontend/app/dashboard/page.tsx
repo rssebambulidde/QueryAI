@@ -54,7 +54,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-700">
-                {user.fullName || user.email}
+                {user.full_name || user.email}
               </span>
               <Button variant="outline" onClick={handleLogout}>
                 Logout

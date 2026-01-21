@@ -67,7 +67,7 @@ router.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
-    const conversationId = req.params.id;
+    const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
     const conversation = await ConversationService.getConversation(conversationId, userId);
 
@@ -96,7 +96,7 @@ router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
-    const conversationId = req.params.id;
+    const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { title, topicId } = req.body;
 
     if (!title && topicId === undefined) {
@@ -127,7 +127,7 @@ router.delete(
   '/:id',
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
-    const conversationId = req.params.id;
+    const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
     await ConversationService.deleteConversation(conversationId, userId);
 
@@ -146,7 +146,7 @@ router.get(
   '/:id/messages',
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
-    const conversationId = req.params.id;
+    const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
     const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
 
@@ -170,7 +170,7 @@ router.post(
   '/:id/messages',
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
-    const conversationId = req.params.id;
+    const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { role, content, sources, metadata } = req.body;
 
     if (!role || !content) {
