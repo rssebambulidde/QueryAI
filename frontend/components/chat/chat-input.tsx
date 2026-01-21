@@ -2,8 +2,9 @@
 
 import React, { useState, KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Loader2, Filter } from 'lucide-react';
-import { UnifiedFilterPanel, UnifiedFilters } from './unified-filter-panel';
+import { Send, Loader2 } from 'lucide-react';
+import { UnifiedFilters } from './unified-filter-panel';
+import { HorizontalFilterBar } from './horizontal-filter-bar';
 import { Topic } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -32,7 +33,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onLoadTopics,
 }) => {
   const [message, setMessage] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   const [localFilters, setLocalFilters] = useState<UnifiedFilters>(
     unifiedFilters || {
       topicId: selectedTopic?.id || null,
@@ -71,7 +71,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       setMessage('');
       // Don't clear filters - keep them for the next message
       // Filters will persist in the conversation
-      setShowFilters(false);
     }
   };
 
@@ -96,14 +95,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  // Check if filters are active
-  const hasActiveFilters = localFilters.topicId || 
-                          localFilters.keyword || 
-                          localFilters.timeRange || 
-                          localFilters.startDate || 
-                          localFilters.endDate || 
-                          localFilters.country;
-
   const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -113,24 +104,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div className="relative">
-      {/* Unified Filter Panel - Positioned absolutely above input */}
-      {showFilters && (
-        <div className="absolute bottom-full left-0 right-0 mb-2 z-[100]">
-          <UnifiedFilterPanel
-            filters={localFilters}
-            topics={topics}
-            selectedTopic={selectedTopic || localFilters.topic || null}
-            onChange={handleFiltersChange}
-            onTopicSelect={handleTopicSelect}
-            onClose={() => setShowFilters(false)}
-            disabled={disabled}
-            onLoadTopics={onLoadTopics}
-          />
-        </div>
-      )}
+      {/* Horizontal Filter Bar - Above input */}
+      <HorizontalFilterBar
+        filters={localFilters}
+        topics={topics}
+        selectedTopic={selectedTopic || localFilters.topic || null}
+        onChange={handleFiltersChange}
+        onTopicSelect={handleTopicSelect}
+        disabled={disabled}
+        onLoadTopics={onLoadTopics}
+      />
 
       {/* Main Input */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 px-4 py-3">
         <div className="flex-1 relative">
           <textarea
             value={message}
@@ -152,21 +138,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           />
         </div>
         <div className="flex gap-2">
-          <Button
-            onClick={() => setShowFilters(!showFilters)}
-            disabled={disabled}
-            variant="outline"
-            className={cn(
-              "px-3 py-3 border-gray-300 hover:bg-gray-50",
-              hasActiveFilters && "bg-blue-50 border-blue-300"
-            )}
-            title="Unified filters (Topics & Quick Filters)"
-          >
-            <Filter className={cn(
-              "w-4 h-4",
-              hasActiveFilters ? "text-blue-600" : "text-gray-600"
-            )} />
-          </Button>
           <Button
             onClick={handleSend}
             disabled={disabled || !message.trim()}
