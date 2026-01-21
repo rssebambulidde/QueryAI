@@ -120,7 +120,7 @@ export interface DocumentItem {
   name: string;
   size: number;
   mimeType: string;
-  status?: 'processing' | 'extracted' | 'embedding' | 'processed' | 'failed' | 'embedding_failed';
+  status?: 'stored' | 'processing' | 'extracted' | 'embedding' | 'embedded' | 'processed' | 'failed' | 'embedding_failed';
   textLength?: number;
   extractionError?: string;
   chunkCount?: number;
