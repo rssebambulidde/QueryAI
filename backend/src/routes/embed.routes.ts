@@ -257,22 +257,24 @@ router.get(
           .replace(/'/g, '&#39;');
         
         // Convert newlines to <br> first (before other processing)
-        html = html.replace(/\n/g, '<br>');
+        html = html.replace(/\\n/g, '<br>');
         
         // Links: [text](url) - do this before other formatting
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
         
         // Bold: **text** (but not if it's part of a link)
-        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
         
-        // Italic: *text* (but not if it's part of bold)
-        html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+        // Italic: *text* (but not if it's part of bold) - simplified
+        html = html.replace(/(^|[^*])\\*([^*]+)\\*([^*]|$)/g, '$1<em>$2</em>$3');
         
-        // Code: `code`
-        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+        // Code: backtick code - use String.fromCharCode to avoid template literal issues
+        const backtick = String.fromCharCode(96);
+        const codeRegex = new RegExp(backtick + '([^' + backtick + ']+)' + backtick, 'g');
+        html = html.replace(codeRegex, '<code>$1</code>');
         
         // Convert <br><br> to paragraph breaks
-        html = html.split('<br><br>').map(para => {
+        html = html.split('<br><br>').map(function(para) {
           para = para.trim();
           if (!para) return '';
           // Remove leading/trailing <br> tags
@@ -281,15 +283,15 @@ router.get(
         }).join('');
         
         // Lists: - item or * item (handle after paragraph conversion)
-        const listPattern = /(<p>)?(-|\*|\d+\.) (.+?)(<\/p>)?/g;
+        const listPattern = /(<p>)?(-|\\*|\\d+\\.) (.+?)(<\\/p>)?/g;
         html = html.replace(listPattern, function(match, p1, marker, content, p4) {
-          const listType = /^\d+\./.test(marker) ? 'ol' : 'ul';
+          const listType = /^\\d+\\./.test(marker) ? 'ol' : 'ul';
           return '<' + listType + '><li>' + content + '</li></' + listType + '>';
         });
         
         // Clean up nested lists
-        html = html.replace(/<\/ul>\s*<ul>/g, '');
-        html = html.replace(/<\/ol>\s*<ol>/g, '');
+        html = html.replace(/<\\/ul>\\s*<ul>/g, '');
+        html = html.replace(/<\\/ol>\\s*<ol>/g, '');
         
         return html;
       }
