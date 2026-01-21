@@ -1,10 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
+import { Copy, Edit2, Check, X } from 'lucide-react';
+import { useToast } from '@/lib/hooks/use-toast';
 import 'highlight.js/styles/github-dark.css';
 
 export interface Source {
@@ -26,11 +28,42 @@ export interface Message {
 
 interface ChatMessageProps {
   message: Message;
+  onEdit?: (messageId: string, newContent: string) => void;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(message.content);
+  const [isHovered, setIsHovered] = useState(false);
+  const { toast } = useToast();
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      toast.success('Copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy');
+    }
+  };
+
+  const handleEdit = () => {
+    setIsEditing(true);
+    setEditContent(message.content);
+  };
+
+  const handleSaveEdit = () => {
+    if (onEdit && editContent.trim() && editContent !== message.content) {
+      onEdit(message.id, editContent.trim());
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditContent(message.content);
+  };
 
   // Replace [Source N] and [Web Source N] patterns with hyperlinks using source titles
   // Also handles "Sources:" lines with multiple citations
@@ -128,6 +161,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
         'flex w-full mb-6 animate-in fade-in slide-in-from-bottom-2',
         isUser ? 'justify-end' : 'justify-start'
       )}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
       <div className={cn('flex flex-col', isUser ? 'items-end' : 'items-start', 'max-w-[85%]')}>
         {/* Message Bubble */}
@@ -135,7 +170,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           className={cn(
             'rounded-2xl px-4 py-3 shadow-sm',
             isUser
-              ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
+              ? 'bg-gradient-to-br from-orange-600 to-orange-700 text-white'
               : 'bg-white border border-gray-200 text-gray-900'
           )}
         >
@@ -143,19 +178,45 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
           <div
             className={cn(
               'text-xs font-semibold mb-2 uppercase tracking-wide',
-              isUser ? 'text-blue-100' : 'text-gray-500'
+              isUser ? 'text-orange-100' : 'text-gray-500'
             )}
           >
-            {isUser ? 'You' : 'AI Assistant'}
+            {isUser ? 'You' : 'Query Assistant'}
           </div>
 
           {/* Content */}
           <div className={cn(
             'prose prose-sm max-w-none break-words leading-relaxed',
             isUser ? 'prose-invert' : '',
-            !isUser && 'prose-headings:text-gray-900 prose-p:text-gray-800 prose-strong:text-gray-900 prose-code:text-blue-600 prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100'
+            !isUser && 'prose-headings:text-gray-900 prose-p:text-gray-800 prose-strong:text-gray-900 prose-code:text-orange-600 prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100'
           )}>
-            {isUser ? (
+            {isUser && isEditing ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded text-gray-900 bg-white resize-none"
+                  rows={3}
+                  autoFocus
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSaveEdit}
+                    className="px-3 py-1 bg-orange-600 text-white rounded text-sm hover:bg-orange-700 flex items-center gap-1"
+                  >
+                    <Check className="w-3 h-3" />
+                    Save
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300 flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : isUser ? (
               <div className="whitespace-pre-wrap">{message.content}</div>
             ) : (
               <ReactMarkdown
@@ -176,7 +237,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                   code: ({ node, inline, className, children, ...props }: any) => {
                     if (inline) {
                       return (
-                        <code className="bg-gray-100 text-blue-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+                        <code className="bg-gray-100 text-orange-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
                           {children}
                         </code>
                       );
@@ -199,8 +260,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                         className={cn(
                           "underline hover:opacity-80 transition-opacity",
                           isSourceLink 
-                            ? "text-blue-600 font-medium hover:text-blue-800" 
-                            : "text-blue-600 hover:text-blue-800"
+                            ? "text-orange-600 font-medium hover:text-orange-800" 
+                            : "text-orange-600 hover:text-orange-800"
                         )}
                         href={href}
                         target="_blank"
@@ -225,17 +286,48 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
             )}
           </div>
 
-          {/* Timestamp */}
-          <div
-            className={cn(
-              'text-xs mt-2 opacity-70',
-              isUser ? 'text-blue-100' : 'text-gray-500'
-            )}
-          >
-            {message.timestamp.toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+          {/* Timestamp and Actions */}
+          <div className="flex items-center justify-between mt-2">
+            <div
+              className={cn(
+                'text-xs opacity-70',
+                isUser ? 'text-orange-100' : 'text-gray-500'
+              )}
+            >
+              {message.timestamp.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </div>
+            <div
+              className={cn(
+                'flex items-center gap-1 opacity-0 transition-opacity',
+                isHovered && 'opacity-100'
+              )}
+            >
+              <button
+                onClick={handleCopy}
+                className={cn(
+                  'p-1.5 rounded hover:bg-opacity-20 transition-colors',
+                  isUser ? 'text-orange-100 hover:bg-white' : 'text-gray-400 hover:bg-gray-100'
+                )}
+                title="Copy message"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+              {isUser && onEdit && !isEditing && (
+                <button
+                  onClick={handleEdit}
+                  className={cn(
+                    'p-1.5 rounded hover:bg-opacity-20 transition-colors',
+                    'text-orange-100 hover:bg-white'
+                  )}
+                  title="Edit message"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

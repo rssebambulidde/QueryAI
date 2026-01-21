@@ -52,18 +52,18 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
     <div
       className={cn(
         'group relative px-4 py-3 cursor-pointer transition-colors hover:bg-gray-50',
-        isActive && 'bg-blue-50 border-l-4 border-l-blue-600'
+        isActive && 'bg-orange-50 border-l-4 border-l-orange-600'
       )}
       onClick={onSelect}
     >
       <div className="flex items-start gap-3">
         <div className={cn(
           'p-2 rounded-lg flex-shrink-0',
-          isActive ? 'bg-blue-100' : 'bg-gray-100'
+          isActive ? 'bg-orange-100' : 'bg-gray-100'
         )}>
           <MessageSquare className={cn(
             'w-4 h-4',
-            isActive ? 'text-blue-600' : 'text-gray-600'
+            isActive ? 'text-orange-600' : 'text-gray-600'
           )} />
         </div>
         
@@ -105,7 +105,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
               <div className="flex items-center justify-between mb-1">
                 <h3 className={cn(
                   'text-sm font-medium truncate',
-                  isActive ? 'text-blue-900' : 'text-gray-900'
+                  isActive ? 'text-orange-900' : 'text-gray-900'
                 )}>
                   {conversation.title || 'New Conversation'}
                 </h3>

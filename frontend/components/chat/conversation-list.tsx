@@ -6,7 +6,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { ConversationItem } from './conversation-item';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, X } from 'lucide-react';
+import { Plus, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/lib/hooks/use-toast';
 
@@ -21,6 +21,7 @@ export const ConversationList: React.FC = () => {
     deleteConversation,
   } = useConversationStore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const hasLoadedRef = useRef(false);
@@ -81,20 +82,43 @@ export const ConversationList: React.FC = () => {
     return date.toLocaleDateString();
   };
 
+  if (isCollapsed) {
+    return (
+      <div className="flex flex-col h-full bg-white border-r border-gray-200 w-12">
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="p-3 hover:bg-gray-50 border-b border-gray-200 flex items-center justify-center"
+          title="Expand conversations"
+        >
+          <ChevronRight className="w-5 h-5 text-gray-600" />
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200">
+    <div className="flex flex-col h-full bg-white border-r border-gray-200 w-80 flex-shrink-0">
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-gray-900">Conversations</h2>
-          <Button
-            onClick={handleNewConversation}
-            size="sm"
-            className="h-8 w-8 p-0"
-            variant="outline"
-          >
-            <Plus className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleNewConversation}
+              size="sm"
+              className="h-8 w-8 p-0"
+              variant="outline"
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+            <button
+              onClick={() => setIsCollapsed(true)}
+              className="h-8 w-8 p-0 flex items-center justify-center hover:bg-gray-100 rounded border border-gray-200"
+              title="Collapse conversations"
+            >
+              <ChevronLeft className="w-4 h-4 text-gray-600" />
+            </button>
+          </div>
         </div>
         
         {/* Search */}

@@ -120,7 +120,9 @@ export const ChatInterface: React.FC = () => {
     let conversationId = currentConversationId;
     if (!conversationId) {
       try {
-        const newConversation = await createConversation();
+        // Create conversation with title from first message
+        const title = content.length > 50 ? content.substring(0, 47) + '...' : content;
+        const newConversation = await createConversation(title);
         conversationId = newConversation.id;
       } catch (error: any) {
         toast.error(error.message || 'Failed to create conversation');
@@ -237,7 +239,7 @@ export const ChatInterface: React.FC = () => {
         setIsStreaming(false);
         setIsLoading(false);
         
-        // Refresh conversations list to update last message
+        // Refresh conversations list to update last message and title (if first message)
         refreshConversations();
         
         toast.success('Response received');
@@ -295,6 +297,28 @@ export const ChatInterface: React.FC = () => {
     // User can switch conversations to see different history
   };
 
+  const handleEditMessage = async (messageId: string, newContent: string) => {
+    // Find the message and update it
+    const messageIndex = messages.findIndex((m) => m.id === messageId);
+    if (messageIndex === -1) return;
+
+    const message = messages[messageIndex];
+    if (message.role !== 'user') return;
+
+    // Update the message in the UI
+    setMessages((prev) => {
+      const updated = [...prev];
+      updated[messageIndex] = { ...message, content: newContent };
+      return updated;
+    });
+
+    // Remove all messages after this one (user and assistant)
+    setMessages((prev) => prev.slice(0, messageIndex + 1));
+
+    // Resend the edited message
+    await handleSend(newContent);
+  };
+
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-gray-50 to-white">
       {/* Header */}
@@ -303,11 +327,11 @@ export const ChatInterface: React.FC = () => {
           {/* Top row: Title and Clear button */}
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg">
+              <div className="p-2 bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg">
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Chat with AI</h2>
+                <h2 className="text-lg font-semibold text-gray-900">Query Assistant</h2>
                 <p className="text-xs text-gray-500">Powered by RAG (Documents + Web Search)</p>
               </div>
             </div>
@@ -343,8 +367,8 @@ export const ChatInterface: React.FC = () => {
           {messages.length === 0 && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center max-w-md">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full mb-4">
-                  <MessageSquare className="w-8 h-8 text-blue-600" />
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full mb-4">
+                  <MessageSquare className="w-8 h-8 text-orange-600" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   👋 Welcome to QueryAI!
@@ -360,7 +384,11 @@ export const ChatInterface: React.FC = () => {
           )}
 
           {messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
+            <ChatMessage 
+              key={message.id} 
+              message={message}
+              onEdit={handleEditMessage}
+            />
           ))}
 
           {isStreaming && <TypingIndicator />}
