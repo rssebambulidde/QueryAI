@@ -9,10 +9,14 @@ import { aiApi, QuestionRequest, documentApi, conversationApi, topicApi, Topic }
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { Alert } from '@/components/ui/alert';
-import { Sparkles, MessageSquare, Filter, X } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { UnifiedFilters } from './unified-filter-panel';
 
-export const ChatInterface: React.FC = () => {
+interface ChatInterfaceProps {
+  ragSettings?: RAGSettings;
+}
+
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propRagSettings }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -32,8 +36,9 @@ export const ChatInterface: React.FC = () => {
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
   
-  // RAG settings state
+  // RAG settings state - use prop if provided, otherwise load from localStorage
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
+    if (propRagSettings) return propRagSettings;
     // Load from localStorage or use defaults
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ragSettings');
@@ -53,6 +58,13 @@ export const ChatInterface: React.FC = () => {
       maxWebResults: 5,
     };
   });
+
+  // Update ragSettings when prop changes
+  useEffect(() => {
+    if (propRagSettings) {
+      setRagSettings(propRagSettings);
+    }
+  }, [propRagSettings]);
   
   // Document count state
   const [documentCount, setDocumentCount] = useState(0);
@@ -178,11 +190,12 @@ export const ChatInterface: React.FC = () => {
   }, []);
 
   // Save RAG settings to localStorage when they change
+  // Save RAG settings to localStorage (only if not controlled by parent)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !propRagSettings) {
       localStorage.setItem('ragSettings', JSON.stringify(ragSettings));
     }
-  }, [ragSettings]);
+  }, [ragSettings, propRagSettings]);
 
   const handleSend = async (content: string, filters?: UnifiedFilters) => {
     if (!content.trim() || isLoading) return;
@@ -471,54 +484,10 @@ export const ChatInterface: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-b from-gray-50 to-white">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="px-6 py-4 space-y-3">
-          {/* Top row: Title and Clear button */}
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Query Assistant</h2>
-                <p className="text-xs text-gray-500">Powered by RAG (Documents + Web Search)</p>
-              </div>
-            </div>
-          </div>
-          
-          {/* Active Filters Display - Now handled by UnifiedFilterPanel */}
-          {selectedTopic && (
-            <div className="flex items-center gap-2 flex-wrap border-b border-gray-100 pb-3 mb-3">
-              <span className="text-xs font-medium text-gray-700 flex items-center gap-1">
-                <Filter className="w-3 h-3" />
-                Active Topic:
-              </span>
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-md">
-                {selectedTopic.name}
-              </span>
-            </div>
-          )}
-          
-          {/* RAG Source Selector */}
-          <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-gray-700">Source Selection:</span>
-              <RAGSourceSelector
-                settings={ragSettings}
-                onChange={setRagSettings}
-                documentCount={documentCount}
-                hasProcessedDocuments={hasProcessedDocuments}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
+    <div className="flex flex-col h-full bg-white">
+      {/* Messages - Centered layout like Perplexity */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {messages.length === 0 && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center max-w-md">
@@ -558,9 +527,9 @@ export const ChatInterface: React.FC = () => {
         </div>
       </div>
 
-      {/* Input */}
+      {/* Input - Centered layout */}
       <div className="bg-white border-t border-gray-200 shadow-lg relative">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-3xl mx-auto">
           <ChatInput
             onSend={handleSend}
             disabled={isLoading || isStreaming}

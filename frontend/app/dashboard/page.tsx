@@ -10,8 +10,10 @@ import { DocumentManager } from '@/components/documents/document-manager';
 import { TopicManager } from '@/components/topics/topic-manager';
 import { ApiKeyManager } from '@/components/api-keys/api-key-manager';
 import { EmbeddingManager } from '@/components/embeddings/embedding-manager';
-import { MessageSquare, FileText, Tag, Key, Bot } from 'lucide-react';
+import { MessageSquare, FileText, Tag, Key, Bot, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
+import { documentApi } from '@/lib/api';
 
 type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings';
 
@@ -20,6 +22,26 @@ export default function DashboardPage() {
   const { user, isAuthenticated, isLoading, logout, checkAuth } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  const [showSourceSelection, setShowSourceSelection] = useState(false);
+  const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ragSettings');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {}
+      }
+    }
+    return {
+      enableDocumentSearch: true,
+      enableWebSearch: true,
+      maxDocumentChunks: 5,
+      minScore: 0.5,
+      maxWebResults: 5,
+    };
+  });
+  const [documentCount, setDocumentCount] = useState(0);
+  const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
 
   // Check auth on mount
   useEffect(() => {
@@ -41,6 +63,34 @@ export default function DashboardPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, isLoading, hasCheckedAuth]); // router is stable, no need to include
+
+  // Load document count when chat tab is active
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      const loadDocumentCount = async () => {
+        try {
+          const response = await documentApi.list();
+          if (response.success && response.data) {
+            const processedDocs = response.data.filter(
+              (doc) => doc.status === 'processed' || doc.status === 'embedded'
+            );
+            setDocumentCount(processedDocs.length);
+            setHasProcessedDocuments(processedDocs.length > 0);
+          }
+        } catch (err) {
+          console.warn('Failed to load document count:', err);
+        }
+      };
+      loadDocumentCount();
+    }
+  }, [activeTab]);
+
+  // Save RAG settings to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ragSettings', JSON.stringify(ragSettings));
+    }
+  }, [ragSettings]);
 
   const handleLogout = async () => {
     await logout();
@@ -86,18 +136,53 @@ export default function DashboardPage() {
         {/* Left Sidebar Navigation */}
         <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col">
           <nav className="flex-1 px-2 py-4 space-y-1">
-            <button
-              onClick={() => setActiveTab('chat')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                activeTab === 'chat'
-                  ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+            <div>
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={cn(
+                  'w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                  activeTab === 'chat'
+                    ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquare className="w-5 h-5" />
+                  Query Assistant
+                </div>
+                {activeTab === 'chat' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowSourceSelection(!showSourceSelection);
+                    }}
+                    className="p-1 hover:bg-orange-100 rounded transition-colors"
+                  >
+                    {showSourceSelection ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
+                  </button>
+                )}
+              </button>
+              
+              {/* Collapsible Source Selection */}
+              {activeTab === 'chat' && showSourceSelection && (
+                <div className="mt-2 ml-11 mr-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <div className="mb-2">
+                    <span className="text-xs font-medium text-gray-700">Source Selection:</span>
+                  </div>
+                  <RAGSourceSelector
+                    settings={ragSettings}
+                    onChange={setRagSettings}
+                    documentCount={documentCount}
+                    hasProcessedDocuments={hasProcessedDocuments}
+                    className="flex-col gap-2"
+                  />
+                </div>
               )}
-            >
-              <MessageSquare className="w-5 h-5" />
-              Query Assistant
-            </button>
+            </div>
             <button
               onClick={() => setActiveTab('documents')}
               className={cn(
@@ -157,7 +242,7 @@ export default function DashboardPage() {
               <ConversationList />
               {/* Chat Interface */}
               <div className="flex-1 overflow-hidden">
-                <ChatInterface />
+                <ChatInterface ragSettings={ragSettings} />
               </div>
             </div>
           ) : activeTab === 'documents' ? (

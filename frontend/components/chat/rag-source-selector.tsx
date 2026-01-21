@@ -74,7 +74,7 @@ export const RAGSourceSelector: React.FC<RAGSourceSelectorProps> = ({
   }, [settings.enableDocumentSearch, settings.enableWebSearch, isDocumentAvailable, isWebAvailable]);
 
   return (
-    <div className={cn('flex items-center gap-4', className)}>
+    <div className={cn('flex items-center gap-2', className)}>
       {/* Document Search Toggle */}
       <div className="flex items-center gap-2">
         <button
