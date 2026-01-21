@@ -28,10 +28,22 @@ router.post(
       enableSearch,
       topic,
       maxSearchResults,
+      // RAG options
+      enableDocumentSearch,
+      enableWebSearch,
+      topicId,
+      documentIds,
+      maxDocumentChunks,
+      minScore,
     } = req.body;
 
     if (!question) {
       throw new ValidationError('Question is required');
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
     }
 
     const request: QuestionRequest = {
@@ -44,15 +56,25 @@ router.post(
       enableSearch: enableSearch !== false, // Default to true
       topic: topic?.trim(),
       maxSearchResults: maxSearchResults || 5,
+      // RAG options
+      enableDocumentSearch: enableDocumentSearch !== false, // Default to true
+      enableWebSearch: enableWebSearch !== false, // Default to true
+      topicId: topicId,
+      documentIds: documentIds,
+      maxDocumentChunks: maxDocumentChunks || 5,
+      minScore: minScore || 0.7,
     };
 
-    logger.info('AI question request', {
-      userId: req.user?.id,
+    logger.info('AI question request with RAG', {
+      userId,
       questionLength: request.question.length,
       hasContext: !!request.context,
+      enableDocumentSearch: request.enableDocumentSearch,
+      enableWebSearch: request.enableWebSearch,
+      topicId: request.topicId,
     });
 
-    const result = await AIService.answerQuestion(request);
+    const result = await AIService.answerQuestion(request, userId);
 
     res.status(200).json({
       success: true,
@@ -82,10 +104,22 @@ router.post(
       enableSearch,
       topic,
       maxSearchResults,
+      // RAG options
+      enableDocumentSearch,
+      enableWebSearch,
+      topicId,
+      documentIds,
+      maxDocumentChunks,
+      minScore,
     } = req.body;
 
     if (!question) {
       throw new ValidationError('Question is required');
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
     }
 
     const request: QuestionRequest = {
@@ -98,12 +132,22 @@ router.post(
       enableSearch: enableSearch !== false, // Default to true
       topic: topic?.trim(),
       maxSearchResults: maxSearchResults || 5,
+      // RAG options
+      enableDocumentSearch: enableDocumentSearch !== false, // Default to true
+      enableWebSearch: enableWebSearch !== false, // Default to true
+      topicId: topicId,
+      documentIds: documentIds,
+      maxDocumentChunks: maxDocumentChunks || 5,
+      minScore: minScore || 0.7,
     };
 
-    logger.info('AI streaming question request', {
-      userId: req.user?.id,
+    logger.info('AI streaming question request with RAG', {
+      userId,
       questionLength: request.question.length,
       hasContext: !!request.context,
+      enableDocumentSearch: request.enableDocumentSearch,
+      enableWebSearch: request.enableWebSearch,
+      topicId: request.topicId,
     });
 
     // Set headers for Server-Sent Events (SSE)
@@ -128,7 +172,7 @@ router.post(
 
     try {
       // Stream the response
-      const stream = AIService.answerQuestionStream(request);
+      const stream = AIService.answerQuestionStream(request, userId);
       
       for await (const chunk of stream) {
         // Send chunk as SSE format

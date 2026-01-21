@@ -3,6 +3,7 @@ import logger from '../config/logger';
 import { AppError, ValidationError } from '../types/error';
 import OpenAI from 'openai';
 import { SearchService, SearchRequest } from './search.service';
+import { RAGService, RAGOptions } from './rag.service';
 
 export interface QuestionRequest {
   question: string;
@@ -23,12 +24,22 @@ export interface QuestionRequest {
   startDate?: string; // ISO date string (YYYY-MM-DD)
   endDate?: string; // ISO date string (YYYY-MM-DD)
   country?: string; // ISO country code (e.g., 'US', 'UG', 'KE')
+  // RAG options
+  enableDocumentSearch?: boolean; // Search user's uploaded documents
+  enableWebSearch?: boolean; // Search web via Tavily
+  topicId?: string; // Topic ID for filtering documents
+  documentIds?: string[]; // Specific documents to search
+  maxDocumentChunks?: number; // Max document chunks to retrieve
+  minScore?: number; // Minimum similarity score for document chunks
 }
 
 export interface Source {
+  type: 'document' | 'web';
   title: string;
-  url: string;
+  url?: string;
+  documentId?: string;
   snippet?: string;
+  score?: number;
 }
 
 export interface QuestionResponse {
@@ -53,34 +64,36 @@ export class AIService {
   private static readonly DEFAULT_MAX_TOKENS = 1000;
 
   /**
-   * Build system prompt with context and search results
+   * Build system prompt with RAG context (documents + web search)
    */
-  private static buildSystemPrompt(context?: string, searchResults?: Array<{ title: string; url: string; content: string }>): string {
-    const basePrompt = `You are a helpful AI assistant that provides accurate, informative, and well-structured answers to user questions.
+  private static buildSystemPrompt(
+    ragContext?: string,
+    additionalContext?: string
+  ): string {
+    const basePrompt = `You are a helpful AI assistant that provides accurate, informative, and well-structured answers to user questions using Retrieval-Augmented Generation (RAG).
 
 Guidelines:
 - Provide clear, concise, and accurate answers
+- Use information from the provided document excerpts and web search results
 - If you don't know something, admit it rather than guessing
 - Use proper formatting (bullet points, paragraphs) when appropriate
-- Cite sources when context or search results are provided
-- Be friendly and professional
-- When using search results, cite them with [Source 1], [Source 2], etc.`;
+- Cite sources when referencing information:
+  - Document excerpts: [Document 1], [Document 2], etc.
+  - Web sources: [Web Source 1], [Web Source 2], etc.
+- Prioritize document excerpts when they directly answer the question
+- Combine document knowledge with web search results for comprehensive answers
+- Be friendly and professional`;
 
     let fullContext = '';
 
-    // Add search results if available
-    if (searchResults && searchResults.length > 0) {
-      fullContext += 'Search Results:\n';
-      searchResults.forEach((result, index) => {
-        fullContext += `[Source ${index + 1}] ${result.title}\n`;
-        fullContext += `URL: ${result.url}\n`;
-        fullContext += `Content: ${result.content}\n\n`;
-      });
+    // Add RAG context (documents + web search)
+    if (ragContext) {
+      fullContext += ragContext;
     }
 
     // Add additional context if provided
-    if (context) {
-      fullContext += `Additional Context:\n${context}\n`;
+    if (additionalContext) {
+      fullContext += `Additional Context:\n${additionalContext}\n`;
     }
 
     if (fullContext) {
@@ -88,7 +101,7 @@ Guidelines:
 
 ${fullContext}
 
-Use the provided context and search results to enhance your answers. If the information is relevant to the question, incorporate it into your response. Always cite sources using [Source N] format when referencing search results.`;
+Use the provided document excerpts and web search results to enhance your answers. When the information is relevant to the question, incorporate it into your response. Always cite sources using the format specified above.`;
     }
 
     return basePrompt;
@@ -99,16 +112,16 @@ Use the provided context and search results to enhance your answers. If the info
    */
   private static buildMessages(
     question: string,
-    context?: string,
-    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
-    searchResults?: Array<{ title: string; url: string; content: string }>
+    ragContext?: string,
+    additionalContext?: string,
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
   ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
-    // Add system prompt
+    // Add system prompt with RAG context
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt(context, searchResults),
+      content: this.buildSystemPrompt(ragContext, additionalContext),
     });
 
     // Add conversation history if provided
@@ -133,9 +146,12 @@ Use the provided context and search results to enhance your answers. If the info
   }
 
   /**
-   * Answer a question using OpenAI API (non-streaming)
+   * Answer a question using OpenAI API with RAG (non-streaming)
    */
-  static async answerQuestion(request: QuestionRequest): Promise<QuestionResponse> {
+  static async answerQuestion(
+    request: QuestionRequest,
+    userId?: string
+  ): Promise<QuestionResponse> {
     try {
       // Validate input
       if (!request.question || request.question.trim().length === 0) {
@@ -150,61 +166,109 @@ Use the provided context and search results to enhance your answers. If the info
       const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
       const maxTokens = request.maxTokens || this.DEFAULT_MAX_TOKENS;
 
-      // Perform search if enabled
-      let searchResults: Array<{ title: string; url: string; content: string }> | undefined;
+      // Retrieve RAG context (documents + web search)
+      let ragContext: string | undefined;
       let sources: Source[] | undefined;
 
-      if (request.enableSearch !== false) { // Default to true if not specified
+      if (userId) {
         try {
-          const searchRequest: SearchRequest = {
-            query: request.question,
-            topic: request.topic,
-            maxResults: request.maxSearchResults || 5,
+          const ragOptions: RAGOptions = {
+            userId,
+            topicId: request.topicId,
+            documentIds: request.documentIds,
+            enableDocumentSearch: request.enableDocumentSearch !== false, // Default to true
+            enableWebSearch: request.enableWebSearch !== false, // Default to true (if enableSearch is true)
+            maxDocumentChunks: request.maxDocumentChunks || 5,
+            maxWebResults: request.maxSearchResults || 5,
+            minScore: request.minScore || 0.7,
           };
 
-          const searchResponse = await SearchService.search(searchRequest);
+          // Only enable web search if enableSearch is true
+          if (request.enableSearch === false) {
+            ragOptions.enableWebSearch = false;
+          }
+
+          const context = await RAGService.retrieveContext(request.question, ragOptions);
           
-          if (searchResponse.results && searchResponse.results.length > 0) {
-            searchResults = searchResponse.results.map(r => ({
-              title: r.title,
-              url: r.url,
-              content: r.content,
-            }));
+          // Format context for prompt
+          ragContext = RAGService.formatContextForPrompt(context);
+          
+          // Extract sources
+          sources = RAGService.extractSources(context);
 
-            sources = searchResponse.results.map((r, index) => ({
-              title: r.title,
-              url: r.url,
-              snippet: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
-            }));
-
-            logger.info('Search results retrieved', {
+          logger.info('RAG context retrieved', {
+            userId,
+            documentChunks: context.documentContexts.length,
+            webResults: context.webSearchResults.length,
+            totalSources: sources.length,
+          });
+        } catch (ragError: any) {
+          // Log RAG error but don't fail the entire request
+          logger.warn('RAG retrieval failed, continuing without RAG context', {
+            error: ragError.message,
+            question: request.question,
+            userId,
+          });
+        }
+      } else {
+        // Fallback to old search method if no userId (backward compatibility)
+        if (request.enableSearch !== false) {
+          try {
+            const searchRequest: SearchRequest = {
               query: request.question,
-              resultsCount: searchResults.length,
               topic: request.topic,
+              maxResults: request.maxSearchResults || 5,
+            };
+
+            const searchResponse = await SearchService.search(searchRequest);
+            
+            if (searchResponse.results && searchResponse.results.length > 0) {
+              const webResults = searchResponse.results.map(r => ({
+                title: r.title,
+                url: r.url,
+                content: r.content,
+              }));
+
+              ragContext = RAGService.formatContextForPrompt({
+                documentContexts: [],
+                webSearchResults: webResults,
+              });
+
+              sources = searchResponse.results.map((r) => ({
+                type: 'web' as const,
+                title: r.title,
+                url: r.url,
+                snippet: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
+              }));
+
+              logger.info('Search results retrieved (fallback)', {
+                query: request.question,
+                resultsCount: webResults.length,
+              });
+            }
+          } catch (searchError: any) {
+            logger.warn('Search failed, continuing without search results', {
+              error: searchError.message,
+              question: request.question,
             });
           }
-        } catch (searchError: any) {
-          // Log search error but don't fail the entire request
-          logger.warn('Search failed, continuing without search results', {
-            error: searchError.message,
-            question: request.question,
-          });
         }
       }
 
-      // Build messages with search results
+      // Build messages with RAG context
       const messages = this.buildMessages(
         request.question,
+        ragContext,
         request.context,
-        request.conversationHistory,
-        searchResults
+        request.conversationHistory
       );
 
-      logger.info('Sending question to OpenAI', {
+      logger.info('Sending question to OpenAI with RAG', {
         model,
         questionLength: request.question.length,
         hasContext: !!request.context,
-        hasSearchResults: !!searchResults && searchResults.length > 0,
+        hasRAGContext: !!ragContext,
+        sourcesCount: sources?.length || 0,
         historyLength: request.conversationHistory?.length || 0,
       });
 
@@ -278,10 +342,13 @@ Use the provided context and search results to enhance your answers. If the info
   }
 
   /**
-   * Answer a question using OpenAI API (streaming)
+   * Answer a question using OpenAI API with RAG (streaming)
    * Returns an async generator that yields chunks of the response
    */
-  static async *answerQuestionStream(request: QuestionRequest): AsyncGenerator<string, void, unknown> {
+  static async *answerQuestionStream(
+    request: QuestionRequest,
+    userId?: string
+  ): AsyncGenerator<string, void, unknown> {
     try {
       // Validate input
       if (!request.question || request.question.trim().length === 0) {
@@ -296,60 +363,97 @@ Use the provided context and search results to enhance your answers. If the info
       const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
       const maxTokens = request.maxTokens || this.DEFAULT_MAX_TOKENS;
 
-      // Perform search if enabled (for streaming, we do search before streaming)
-      let searchResults: Array<{ title: string; url: string; content: string }> | undefined;
+      // Retrieve RAG context (documents + web search) before streaming
+      let ragContext: string | undefined;
 
-      if (request.enableSearch !== false) { // Default to true if not specified
+      if (userId) {
         try {
-          const searchRequest: SearchRequest = {
-            query: request.question,
-            topic: request.topic,
-            maxResults: request.maxSearchResults || 5,
-            timeRange: request.timeRange,
-            startDate: request.startDate,
-            endDate: request.endDate,
-            country: request.country,
+          const ragOptions: RAGOptions = {
+            userId,
+            topicId: request.topicId,
+            documentIds: request.documentIds,
+            enableDocumentSearch: request.enableDocumentSearch !== false,
+            enableWebSearch: request.enableWebSearch !== false,
+            maxDocumentChunks: request.maxDocumentChunks || 5,
+            maxWebResults: request.maxSearchResults || 5,
+            minScore: request.minScore || 0.7,
           };
 
-          const searchResponse = await SearchService.search(searchRequest);
-          
-          if (searchResponse.results && searchResponse.results.length > 0) {
-            searchResults = searchResponse.results.map(r => ({
-              title: r.title,
-              url: r.url,
-              content: r.content,
-            }));
+          // Only enable web search if enableSearch is true
+          if (request.enableSearch === false) {
+            ragOptions.enableWebSearch = false;
+          }
 
-            logger.info('Search results retrieved for streaming', {
+          const context = await RAGService.retrieveContext(request.question, ragOptions);
+          ragContext = RAGService.formatContextForPrompt(context);
+
+          logger.info('RAG context retrieved for streaming', {
+            userId,
+            documentChunks: context.documentContexts.length,
+            webResults: context.webSearchResults.length,
+          });
+        } catch (ragError: any) {
+          logger.warn('RAG retrieval failed during streaming, continuing without RAG context', {
+            error: ragError.message,
+            question: request.question,
+            userId,
+          });
+        }
+      } else {
+        // Fallback to old search method if no userId
+        if (request.enableSearch !== false) {
+          try {
+            const searchRequest: SearchRequest = {
               query: request.question,
-              resultsCount: searchResults.length,
               topic: request.topic,
+              maxResults: request.maxSearchResults || 5,
               timeRange: request.timeRange,
+              startDate: request.startDate,
+              endDate: request.endDate,
               country: request.country,
+            };
+
+            const searchResponse = await SearchService.search(searchRequest);
+            
+            if (searchResponse.results && searchResponse.results.length > 0) {
+              const webResults = searchResponse.results.map(r => ({
+                title: r.title,
+                url: r.url,
+                content: r.content,
+              }));
+
+              ragContext = RAGService.formatContextForPrompt({
+                documentContexts: [],
+                webSearchResults: webResults,
+              });
+
+              logger.info('Search results retrieved for streaming (fallback)', {
+                query: request.question,
+                resultsCount: webResults.length,
+              });
+            }
+          } catch (searchError: any) {
+            logger.warn('Search failed during streaming, continuing without search results', {
+              error: searchError.message,
+              question: request.question,
             });
           }
-        } catch (searchError: any) {
-          // Log search error but don't fail the entire request
-          logger.warn('Search failed during streaming, continuing without search results', {
-            error: searchError.message,
-            question: request.question,
-          });
         }
       }
 
-      // Build messages with search results
+      // Build messages with RAG context
       const messages = this.buildMessages(
         request.question,
+        ragContext,
         request.context,
-        request.conversationHistory,
-        searchResults
+        request.conversationHistory
       );
 
-      logger.info('Sending streaming question to OpenAI', {
+      logger.info('Sending streaming question to OpenAI with RAG', {
         model,
         questionLength: request.question.length,
         hasContext: !!request.context,
-        hasSearchResults: !!searchResults && searchResults.length > 0,
+        hasRAGContext: !!ragContext,
         historyLength: request.conversationHistory?.length || 0,
       });
 
