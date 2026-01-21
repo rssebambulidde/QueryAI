@@ -202,10 +202,62 @@ router.get(
       const input = document.getElementById('queryai-chat-input');
       const sendButton = document.getElementById('queryai-chat-send');
       
+      // Simple markdown to HTML converter
+      function markdownToHtml(markdown) {
+        if (!markdown) return '';
+        
+        let html = markdown;
+        
+        // Escape HTML first to prevent XSS
+        const div = document.createElement('div');
+        div.textContent = html;
+        html = div.innerHTML;
+        
+        // Convert markdown to HTML
+        // Bold: **text** or __text__
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+        
+        // Italic: *text* or _text_
+        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        html = html.replace(/_(.+?)_/g, '<em>$1</em>');
+        
+        // Code: `code`
+        html = html.replace(/`(.+?)`/g, '<code>$1</code>');
+        
+        // Links: [text](url)
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        
+        // Line breaks: Convert double newlines to paragraphs
+        html = html.split('\\n\\n').map(para => {
+          para = para.trim();
+          if (!para) return '';
+          // Convert single newlines to <br>
+          para = para.replace(/\\n/g, '<br>');
+          return '<p>' + para + '</p>';
+        }).join('');
+        
+        // Lists: - item or * item
+        html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+        html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+        
+        // Numbered lists: 1. item
+        html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+        
+        return html;
+      }
+      
       function addMessage(content, role) {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'queryai-message ' + role;
-        messageDiv.textContent = content;
+        
+        // For assistant messages, render markdown; for user messages, use plain text
+        if (role === 'assistant') {
+          messageDiv.innerHTML = markdownToHtml(content);
+        } else {
+          messageDiv.textContent = content;
+        }
+        
         messagesContainer.appendChild(messageDiv);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
         return messageDiv;
