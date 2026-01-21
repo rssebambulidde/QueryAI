@@ -31,15 +31,35 @@ router.get(
 
     // Serve HTML page with embedded chatbot
     const customization = config.customization || {};
-    const primaryColor = customization.primaryColor || '#f97316'; // Orange default
-    const backgroundColor = customization.backgroundColor || '#ffffff';
-    const textColor = customization.textColor || '#1f2937';
-    const greetingMessage = customization.greetingMessage || 'Hello! How can I help you today?';
+    const primaryColor = (customization.primaryColor || '#f97316').replace(/[<>'"]/g, ''); // Orange default, sanitize
+    const backgroundColor = (customization.backgroundColor || '#ffffff').replace(/[<>'"]/g, '');
+    const textColor = (customization.textColor || '#1f2937').replace(/[<>'"]/g, '');
+    const greetingMessage = (customization.greetingMessage || 'Hello! How can I help you today?')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
     const showBranding = customization.showBranding !== false;
 
-    const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    // Sanitize topic data
+    const topicName = topic.name
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    const topicDescription = topic.description
+      ? topic.description
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;')
+      : '';
+
+    const apiUrl = (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001')
+      .replace(/\/$/, ''); // Remove trailing slash
 
     res.setHeader('Content-Type', 'text/html');
+    res.setHeader('X-Frame-Options', 'ALLOWALL'); // Allow iframe embedding
     return res.send(`
 <!DOCTYPE html>
 <html lang="en">
@@ -137,8 +157,8 @@ router.get(
   <div id="queryai-chat-container">
     <div id="queryai-chat-header">
       <div>
-        <h2>${topic.name}</h2>
-        ${topic.description ? `<p style="font-size: 0.875rem; opacity: 0.9;">${topic.description}</p>` : ''}
+        <h2>${topicName}</h2>
+        ${topicDescription ? `<p style="font-size: 0.875rem; opacity: 0.9;">${topicDescription}</p>` : ''}
       </div>
     </div>
     <div id="queryai-chat-messages">
@@ -162,14 +182,6 @@ router.get(
       const input = document.getElementById('queryai-chat-input');
       const sendButton = document.getElementById('queryai-chat-send');
       
-      function addMessage(content, role) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'queryai-message ' + role;
-        messageDiv.textContent = content;
-        messagesContainer.appendChild(messageDiv);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      }
-      
       async function sendMessage() {
         const question = input.value.trim();
         if (!question) return;
@@ -178,6 +190,9 @@ router.get(
         input.value = '';
         sendButton.disabled = true;
         
+        // Show loading indicator
+        const loadingMessage = addMessage('Thinking...', 'assistant');
+        
         try {
           const response = await fetch(apiUrl + '/api/embed/' + configId + '/ask', {
             method: 'POST',
@@ -185,22 +200,46 @@ router.get(
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              question: question,
-              topicId: topicId
+              question: question
             })
           });
           
+          // Remove loading message
+          if (loadingMessage && loadingMessage.parentNode) {
+            loadingMessage.parentNode.removeChild(loadingMessage);
+          }
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: { message: 'Network error' } }));
+            throw new Error(errorData.error?.message || 'Request failed');
+          }
+          
           const data = await response.json();
-          if (data.success && data.data) {
+          if (data.success && data.data && data.data.answer) {
             addMessage(data.data.answer, 'assistant');
           } else {
+            console.error('Unexpected response format:', data);
             addMessage('Sorry, I encountered an error. Please try again.', 'assistant');
           }
         } catch (error) {
-          addMessage('Sorry, I encountered an error. Please try again.', 'assistant');
+          // Remove loading message if still present
+          if (loadingMessage && loadingMessage.parentNode) {
+            loadingMessage.parentNode.removeChild(loadingMessage);
+          }
+          console.error('Error sending message:', error);
+          addMessage('Sorry, I encountered an error: ' + (error.message || 'Unknown error'), 'assistant');
         } finally {
           sendButton.disabled = false;
         }
+      }
+      
+      function addMessage(content, role) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'queryai-message ' + role;
+        messageDiv.textContent = content;
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        return messageDiv;
       }
       
       sendButton.addEventListener('click', sendMessage);
