@@ -3,38 +3,70 @@
 import React, { useState, KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Send, Loader2, Filter } from 'lucide-react';
-import { SearchFilters, SearchFilters as SearchFiltersType } from './search-filters';
+import { UnifiedFilterPanel, UnifiedFilters } from './unified-filter-panel';
+import { Topic } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 interface ChatInputProps {
-  onSend: (message: string, filters?: SearchFiltersType) => void;
+  onSend: (message: string, filters?: UnifiedFilters) => void;
   disabled?: boolean;
   placeholder?: string;
-  conversationFilters?: SearchFiltersType; // Filters from the current conversation
+  // Unified filters props
+  topics?: Topic[];
+  selectedTopic?: Topic | null;
+  onTopicSelect?: (topic: Topic | null) => void;
+  unifiedFilters?: UnifiedFilters;
+  onUnifiedFiltersChange?: (filters: UnifiedFilters) => void;
+  onLoadTopics?: () => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   disabled = false,
   placeholder = 'Type your message...',
-  conversationFilters = {},
+  topics = [],
+  selectedTopic = null,
+  onTopicSelect,
+  unifiedFilters,
+  onUnifiedFiltersChange,
+  onLoadTopics,
 }) => {
   const [message, setMessage] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<SearchFiltersType>(conversationFilters);
-  
-  // Update filters when conversation filters change
-  // Only sync if local filters are empty to avoid overwriting user's in-progress changes
-  React.useEffect(() => {
-    const localFiltersEmpty = Object.keys(filters).length === 0;
-    if (localFiltersEmpty) {
-      setFilters(conversationFilters);
+  const [localFilters, setLocalFilters] = useState<UnifiedFilters>(
+    unifiedFilters || {
+      topicId: selectedTopic?.id || null,
+      topic: selectedTopic,
     }
-  }, [conversationFilters]);
+  );
+
+  // Update local filters when unifiedFilters prop changes
+  React.useEffect(() => {
+    if (unifiedFilters) {
+      setLocalFilters(unifiedFilters);
+    }
+  }, [unifiedFilters]);
+
+  // Update local filters when selectedTopic changes
+  React.useEffect(() => {
+    setLocalFilters(prev => ({
+      ...prev,
+      topicId: selectedTopic?.id || null,
+      topic: selectedTopic,
+    }));
+  }, [selectedTopic]);
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
-      const filtersToSend = Object.keys(filters).length > 0 ? filters : undefined;
+      // Check if we have any filters (topic or quick filters)
+      const hasFilters = localFilters.topicId || 
+                        localFilters.keyword || 
+                        localFilters.timeRange || 
+                        localFilters.startDate || 
+                        localFilters.endDate || 
+                        localFilters.country;
+      
+      const filtersToSend = hasFilters ? localFilters : undefined;
       onSend(message.trim(), filtersToSend);
       setMessage('');
       // Don't clear filters - keep them for the next message
@@ -43,9 +75,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  const handleFiltersChange = (newFilters: SearchFiltersType) => {
-    setFilters(newFilters);
+  const handleFiltersChange = (newFilters: UnifiedFilters) => {
+    setLocalFilters(newFilters);
+    if (onUnifiedFiltersChange) {
+      onUnifiedFiltersChange(newFilters);
+    }
   };
+
+  const handleTopicSelect = (topic: Topic | null) => {
+    const updatedFilters: UnifiedFilters = {
+      ...localFilters,
+      topicId: topic?.id || null,
+      topic: topic,
+      // Clear keyword if topic is selected (topic takes precedence)
+      keyword: topic ? undefined : localFilters.keyword,
+    };
+    handleFiltersChange(updatedFilters);
+    if (onTopicSelect) {
+      onTopicSelect(topic);
+    }
+  };
+
+  // Check if filters are active
+  const hasActiveFilters = localFilters.topicId || 
+                          localFilters.keyword || 
+                          localFilters.timeRange || 
+                          localFilters.startDate || 
+                          localFilters.endDate || 
+                          localFilters.country;
 
   const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -56,14 +113,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div className="relative">
-      {/* Advanced Search Filters - Positioned absolutely above input */}
+      {/* Unified Filter Panel - Positioned absolutely above input */}
       {showFilters && (
         <div className="absolute bottom-full left-0 right-0 mb-2 z-10">
-          <SearchFilters
-            filters={filters}
+          <UnifiedFilterPanel
+            filters={localFilters}
+            topics={topics}
+            selectedTopic={selectedTopic || localFilters.topic || null}
             onChange={handleFiltersChange}
+            onTopicSelect={handleTopicSelect}
             onClose={() => setShowFilters(false)}
             disabled={disabled}
+            onLoadTopics={onLoadTopics}
           />
         </div>
       )}
@@ -97,13 +158,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             variant="outline"
             className={cn(
               "px-3 py-3 border-gray-300 hover:bg-gray-50",
-              (Object.keys(filters).length > 0 || Object.keys(conversationFilters).length > 0) && "bg-blue-50 border-blue-300"
+              hasActiveFilters && "bg-blue-50 border-blue-300"
             )}
-            title="Advanced search filters"
+            title="Unified filters (Topics & Quick Filters)"
           >
             <Filter className={cn(
               "w-4 h-4",
-              (Object.keys(filters).length > 0 || Object.keys(conversationFilters).length > 0) ? "text-blue-600" : "text-gray-600"
+              hasActiveFilters ? "text-blue-600" : "text-gray-600"
             )} />
           </Button>
           <Button

@@ -9,7 +9,8 @@ import { aiApi, QuestionRequest, documentApi, conversationApi, topicApi, Topic }
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { Alert } from '@/components/ui/alert';
-import { Sparkles, MessageSquare, Filter, X, Tag } from 'lucide-react';
+import { Sparkles, MessageSquare, Filter, X } from 'lucide-react';
+import { UnifiedFilters } from './unified-filter-panel';
 
 export const ChatInterface: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -21,13 +22,15 @@ export const ChatInterface: React.FC = () => {
   const { toast } = useToast();
   const { currentConversationId, createConversation, refreshConversations, conversations, updateConversationFilters } = useConversationStore();
   
-  // Conversation filter settings state
-  const [conversationFilters, setConversationFilters] = useState<{ topic?: string; timeRange?: any; startDate?: string; endDate?: string; country?: string }>({});
+  // Unified filters state (replaces conversationFilters and topic selector)
+  const [unifiedFilters, setUnifiedFilters] = useState<UnifiedFilters>({
+    topicId: null,
+    topic: null,
+  });
   
   // Topic selection state
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
-  const [showTopicSelector, setShowTopicSelector] = useState(false);
   
   // RAG settings state
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
@@ -83,18 +86,15 @@ export const ChatInterface: React.FC = () => {
           const conversationResponse = await conversationApi.get(currentConversationId);
           if (conversationResponse.success && conversationResponse.data) {
             const conversation = conversationResponse.data;
-            if (conversation.metadata?.filters) {
-              setConversationFilters(conversation.metadata.filters);
-            } else {
-              setConversationFilters({});
-            }
             
             // Load topic if conversation has topicId
+            let loadedTopic: Topic | null = null;
             if (conversation.topic_id) {
               try {
                 const topicResponse = await topicApi.get(conversation.topic_id);
                 if (topicResponse.success && topicResponse.data) {
-                  setSelectedTopic(topicResponse.data);
+                  loadedTopic = topicResponse.data;
+                  setSelectedTopic(loadedTopic);
                 }
               } catch (error) {
                 console.warn('Failed to load topic:', error);
@@ -103,15 +103,27 @@ export const ChatInterface: React.FC = () => {
             } else {
               setSelectedTopic(null);
             }
+            
+            // Convert old conversation filters to unified filters format
+            const oldFilters = conversation.metadata?.filters || {};
+            setUnifiedFilters({
+              topicId: loadedTopic?.id || null,
+              topic: loadedTopic,
+              keyword: oldFilters.topic,
+              timeRange: oldFilters.timeRange,
+              startDate: oldFilters.startDate,
+              endDate: oldFilters.endDate,
+              country: oldFilters.country,
+            });
           }
         } catch (error: any) {
           console.error('Failed to load conversation data:', error);
           setMessages([]);
-          setConversationFilters({});
+          setUnifiedFilters({ topicId: null, topic: null });
         }
       } else {
         setMessages([]);
-        setConversationFilters({});
+        setUnifiedFilters({ topicId: null, topic: null });
       }
     };
 
@@ -172,24 +184,39 @@ export const ChatInterface: React.FC = () => {
     }
   }, [ragSettings]);
 
-  const handleSend = async (content: string, filters?: { topic?: string; timeRange?: any; startDate?: string; endDate?: string; country?: string }) => {
+  const handleSend = async (content: string, filters?: UnifiedFilters) => {
     if (!content.trim() || isLoading) return;
 
-    // Use provided filters if available, otherwise use conversation filters
-    // If filters are provided (even if same), they take precedence for this message
-    const activeFilters = filters !== undefined ? filters : conversationFilters;
+    // Use provided filters if available, otherwise use unified filters
+    const activeFilters: UnifiedFilters = filters !== undefined ? filters : unifiedFilters;
     
-    // Always save filters to conversation if they're provided and we have a conversation
-    // This ensures filters are updated even if they're the same (in case user wants to keep them)
-    if (filters !== undefined && currentConversationId) {
+    // Convert UnifiedFilters to old SearchFilters format for API and conversation metadata
+    const searchFilters = {
+      topic: activeFilters.topic?.name || activeFilters.keyword,
+      timeRange: activeFilters.timeRange,
+      startDate: activeFilters.startDate,
+      endDate: activeFilters.endDate,
+      country: activeFilters.country,
+    };
+    
+    // Always save filters to conversation if we have a conversation
+    if (currentConversationId) {
       try {
-        await updateConversationFilters(currentConversationId, filters);
+        await updateConversationFilters(currentConversationId, searchFilters);
         // Update local state immediately so UI reflects the change
-        setConversationFilters(filters);
+        setUnifiedFilters(activeFilters);
       } catch (error: any) {
         console.warn('Failed to save filters:', error);
         // Continue anyway - use the filters for this request even if save failed
       }
+    } else {
+      // Update local state even if no conversation yet
+      setUnifiedFilters(activeFilters);
+    }
+    
+    // Update selected topic if it changed
+    if (activeFilters.topic !== selectedTopic) {
+      setSelectedTopic(activeFilters.topic || null);
     }
 
     // Ensure we have a conversation
@@ -198,14 +225,14 @@ export const ChatInterface: React.FC = () => {
       try {
         // Create conversation with title from first message
         const title = content.length > 50 ? content.substring(0, 47) + '...' : content;
-        const newConversation = await createConversation(title, selectedTopic?.id);
+        const newConversation = await createConversation(title, activeFilters.topicId || undefined);
         conversationId = newConversation.id;
         
         // Save filters to new conversation if provided
-        if (filters !== undefined && Object.keys(filters).length > 0) {
+        if (Object.keys(searchFilters).length > 0) {
           try {
-            await updateConversationFilters(conversationId, filters);
-            setConversationFilters(filters);
+            await updateConversationFilters(conversationId, searchFilters);
+            setUnifiedFilters(activeFilters);
           } catch (error: any) {
             console.warn('Failed to save filters to new conversation:', error);
           }
@@ -259,14 +286,14 @@ export const ChatInterface: React.FC = () => {
         maxDocumentChunks: ragSettings.maxDocumentChunks,
         minScore: ragSettings.minScore,
         // Topic scoping
-        topicId: selectedTopic?.id, // Topic ID for document filtering
+        topicId: activeFilters.topicId || activeFilters.topic?.id, // Topic ID for document filtering
         // Web search options (for backward compatibility)
         enableSearch: ragSettings.enableWebSearch, // Map to enableWebSearch
-        topic: activeFilters?.topic?.trim(), // Topic/keyword filtering (for web search)
-        timeRange: activeFilters?.timeRange, // Time range filtering
-        startDate: activeFilters?.startDate, // Custom start date
-        endDate: activeFilters?.endDate, // Custom end date
-        country: activeFilters?.country, // Location filtering
+        topic: activeFilters.topic?.name || activeFilters.keyword, // Topic/keyword filtering (for web search)
+        timeRange: activeFilters.timeRange, // Time range filtering
+        startDate: activeFilters.startDate, // Custom start date
+        endDate: activeFilters.endDate, // Custom end date
+        country: activeFilters.country, // Location filtering
         maxSearchResults: ragSettings.maxWebResults,
       };
 
@@ -299,11 +326,11 @@ export const ChatInterface: React.FC = () => {
             minScore: ragSettings.minScore,
             // Web search options
             enableSearch: ragSettings.enableWebSearch,
-            topic: activeFilters?.topic?.trim(),
-            timeRange: activeFilters?.timeRange,
-            startDate: activeFilters?.startDate,
-            endDate: activeFilters?.endDate,
-            country: activeFilters?.country,
+            topic: activeFilters.topic?.name || activeFilters.keyword,
+            timeRange: activeFilters.timeRange,
+            startDate: activeFilters.startDate,
+            endDate: activeFilters.endDate,
+            country: activeFilters.country,
             maxSearchResults: ragSettings.maxWebResults,
           });
           
@@ -461,121 +488,16 @@ export const ChatInterface: React.FC = () => {
             </div>
           </div>
           
-          {/* Topic Selection */}
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-3">
-            <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4 text-gray-500" />
-              <span className="text-xs font-medium text-gray-700">Topic Scope:</span>
-              {selectedTopic ? (
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-md">
-                    {selectedTopic.name}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setSelectedTopic(null);
-                      if (currentConversationId) {
-                        conversationApi.update(currentConversationId, { topicId: undefined }).catch(console.warn);
-                      }
-                    }}
-                    className="text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ) : (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowTopicSelector(!showTopicSelector)}
-                    className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-300 rounded-md hover:bg-gray-50"
-                  >
-                    Select Topic
-                  </button>
-                  {showTopicSelector && (
-                    <>
-                      {/* Click outside to close */}
-                      <div
-                        className="fixed inset-0 z-[5]"
-                        onClick={() => setShowTopicSelector(false)}
-                      />
-                      <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-[10] max-h-64 overflow-y-auto">
-                        {topics.length === 0 ? (
-                          <div className="p-3 text-xs text-gray-500 text-center">
-                            <p>No topics yet.</p>
-                            <p className="mt-1">Create one in the Topics tab.</p>
-                          </div>
-                        ) : (
-                          <>
-                            {topics.map((topic) => (
-                              <button
-                                key={topic.id}
-                                onClick={() => {
-                                  setSelectedTopic(topic);
-                                  setShowTopicSelector(false);
-                                  if (currentConversationId) {
-                                    conversationApi.update(currentConversationId, { topicId: topic.id }).catch(console.warn);
-                                  }
-                                }}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                              >
-                                <div className="font-medium text-gray-900">{topic.name}</div>
-                                {topic.description && (
-                                  <div className="text-xs text-gray-500 mt-1">{topic.description}</div>
-                                )}
-                              </button>
-                            ))}
-                          </>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Active Filters Display */}
-          {currentConversationId && Object.keys(conversationFilters).length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap border-t border-gray-100 pt-3">
+          {/* Active Filters Display - Now handled by UnifiedFilterPanel */}
+          {selectedTopic && (
+            <div className="flex items-center gap-2 flex-wrap border-b border-gray-100 pb-3 mb-3">
               <span className="text-xs font-medium text-gray-700 flex items-center gap-1">
                 <Filter className="w-3 h-3" />
-                Active Filters:
+                Active Topic:
               </span>
-              {conversationFilters.topic && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md">
-                  Keyword: {conversationFilters.topic}
-                </span>
-              )}
-              {conversationFilters.timeRange && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md">
-                  Time: {conversationFilters.timeRange === 'day' ? 'Last 24 hours' : conversationFilters.timeRange === 'week' ? 'Last week' : conversationFilters.timeRange === 'month' ? 'Last month' : conversationFilters.timeRange === 'year' ? 'Last year' : conversationFilters.timeRange}
-                </span>
-              )}
-              {(conversationFilters.startDate || conversationFilters.endDate) && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md">
-                  {conversationFilters.startDate} - {conversationFilters.endDate}
-                </span>
-              )}
-              {conversationFilters.country && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md">
-                  Country: {conversationFilters.country}
-                </span>
-              )}
-              <button
-                onClick={async () => {
-                  try {
-                    await updateConversationFilters(currentConversationId, {});
-                    setConversationFilters({});
-                  } catch (error: any) {
-                    toast.error('Failed to clear filters');
-                  }
-                }}
-                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
-                title="Clear all filters"
-              >
-                <X className="w-3 h-3" />
-                Clear
-              </button>
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-md">
+                {selectedTopic.name}
+              </span>
             </div>
           )}
           
@@ -642,7 +564,33 @@ export const ChatInterface: React.FC = () => {
           <ChatInput
             onSend={handleSend}
             disabled={isLoading || isStreaming}
-            conversationFilters={conversationFilters}
+            topics={topics}
+            selectedTopic={selectedTopic}
+            onTopicSelect={(topic) => {
+              setSelectedTopic(topic);
+              setUnifiedFilters(prev => ({
+                ...prev,
+                topicId: topic?.id || null,
+                topic: topic,
+                keyword: topic ? undefined : prev.keyword, // Clear keyword if topic selected
+              }));
+              // Update conversation topic if we have one
+              if (currentConversationId) {
+                conversationApi.update(currentConversationId, { topicId: topic?.id || undefined }).catch(console.warn);
+              }
+            }}
+            unifiedFilters={unifiedFilters}
+            onUnifiedFiltersChange={setUnifiedFilters}
+            onLoadTopics={async () => {
+              try {
+                const response = await topicApi.list();
+                if (response.success && response.data) {
+                  setTopics(response.data);
+                }
+              } catch (error) {
+                console.warn('Failed to load topics:', error);
+              }
+            }}
             placeholder="Ask me anything..."
           />
         </div>
