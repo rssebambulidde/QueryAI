@@ -93,9 +93,10 @@ Guidelines:
 - Use information from the provided document excerpts and/or web search results based on the mode
 - If you don't know something based on the provided sources, admit it rather than guessing
 - Use proper formatting (bullet points, paragraphs) when appropriate
-- Cite sources when referencing information:
-  - Document excerpts: [Document 1], [Document 2], etc.
-  - Web sources: [Web Source 1], [Web Source 2], etc.
+- ALWAYS cite sources when referencing information. Use inline citations:
+  - For document excerpts: [Document 1], [Document 2], [Document 3], etc. (MANDATORY - cite every fact from documents)
+  - For web sources: [Web Source 1], [Web Source 2], etc.
+- When you reference information from a document, immediately follow it with the citation like this: "According to [Document 1], the process involves..." or "The policy states [Document 2] that..."
 - Be friendly and professional`;
 
     let fullContext = '';
@@ -120,7 +121,13 @@ Guidelines:
 
 ${fullContext}
 
-Use the provided sources to answer the question. ${enableDocumentSearch && !enableWebSearch ? 'Remember: You are in DOCUMENT-ONLY mode. Only use information from the document excerpts provided above.' : ''} Always cite sources using the format specified above.`;
+CRITICAL: Use the provided sources to answer the question. ${enableDocumentSearch && !enableWebSearch ? 'Remember: You are in DOCUMENT-ONLY mode. Only use information from the document excerpts provided above.' : ''} 
+
+CITATION REQUIREMENTS:
+- Every fact, statement, or piece of information you use from the document excerpts MUST be followed by a citation like [Document 1], [Document 2], etc.
+- Do NOT say "based on the document excerpts" - instead, cite specific documents like "According to [Document 1], the process involves..."
+- When you mention multiple facts, cite each one: "The policy [Document 1] states that... Additionally, [Document 2] requires..."
+- Always cite sources using the format specified above.`;
     }
 
     // If no context and document-only mode, provide clear instruction
