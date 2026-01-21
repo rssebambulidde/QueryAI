@@ -36,7 +36,7 @@ export const ChatInterface: React.FC = () => {
       enableDocumentSearch: true,
       enableWebSearch: true,
       maxDocumentChunks: 5,
-      minScore: 0.7,
+      minScore: 0.5, // Lower threshold to find more relevant documents
       maxWebResults: 5,
     };
   });

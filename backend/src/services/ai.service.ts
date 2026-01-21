@@ -68,20 +68,34 @@ export class AIService {
    */
   private static buildSystemPrompt(
     ragContext?: string,
-    additionalContext?: string
+    additionalContext?: string,
+    enableDocumentSearch?: boolean,
+    enableWebSearch?: boolean
   ): string {
+    const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
+    const hasWebResults = ragContext?.includes('Web Search Results:') || false;
+    
+    let modeInstruction = '';
+    if (enableDocumentSearch && !enableWebSearch) {
+      modeInstruction = `IMPORTANT: You are in DOCUMENT-ONLY mode. You MUST ONLY use information from the provided document excerpts. Do NOT use any general knowledge or web information. If the document excerpts do not contain the answer, you must clearly state that the information is not available in the provided documents.`;
+    } else if (!enableDocumentSearch && enableWebSearch) {
+      modeInstruction = `IMPORTANT: You are in WEB-ONLY mode. You MUST ONLY use information from the provided web search results.`;
+    } else if (enableDocumentSearch && enableWebSearch) {
+      modeInstruction = `You can use both document excerpts and web search results. Prioritize document excerpts when they directly answer the question.`;
+    }
+
     const basePrompt = `You are a helpful AI assistant that provides accurate, informative, and well-structured answers to user questions using Retrieval-Augmented Generation (RAG).
+
+${modeInstruction}
 
 Guidelines:
 - Provide clear, concise, and accurate answers
-- Use information from the provided document excerpts and web search results
-- If you don't know something, admit it rather than guessing
+- Use information from the provided document excerpts and/or web search results based on the mode
+- If you don't know something based on the provided sources, admit it rather than guessing
 - Use proper formatting (bullet points, paragraphs) when appropriate
 - Cite sources when referencing information:
   - Document excerpts: [Document 1], [Document 2], etc.
   - Web sources: [Web Source 1], [Web Source 2], etc.
-- Prioritize document excerpts when they directly answer the question
-- Combine document knowledge with web search results for comprehensive answers
 - Be friendly and professional`;
 
     let fullContext = '';
@@ -89,6 +103,11 @@ Guidelines:
     // Add RAG context (documents + web search)
     if (ragContext) {
       fullContext += ragContext;
+    }
+
+    // Add warning if document-only mode but no documents found
+    if (enableDocumentSearch && !enableWebSearch && !hasDocuments) {
+      fullContext += '\n\nWARNING: Document search was enabled but no relevant document excerpts were found. You must inform the user that the information is not available in their documents.';
     }
 
     // Add additional context if provided
@@ -101,7 +120,14 @@ Guidelines:
 
 ${fullContext}
 
-Use the provided document excerpts and web search results to enhance your answers. When the information is relevant to the question, incorporate it into your response. Always cite sources using the format specified above.`;
+Use the provided sources to answer the question. ${enableDocumentSearch && !enableWebSearch ? 'Remember: You are in DOCUMENT-ONLY mode. Only use information from the document excerpts provided above.' : ''} Always cite sources using the format specified above.`;
+    }
+
+    // If no context and document-only mode, provide clear instruction
+    if (enableDocumentSearch && !enableWebSearch) {
+      return `${basePrompt}
+
+No document excerpts were found for this query. You must inform the user that the information is not available in their documents.`;
     }
 
     return basePrompt;
@@ -114,14 +140,16 @@ Use the provided document excerpts and web search results to enhance your answer
     question: string,
     ragContext?: string,
     additionalContext?: string,
-    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
+    enableDocumentSearch?: boolean,
+    enableWebSearch?: boolean
   ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
     // Add system prompt with RAG context
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt(ragContext, additionalContext),
+      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch),
     });
 
     // Add conversation history if provided
@@ -260,7 +288,9 @@ Use the provided document excerpts and web search results to enhance your answer
         request.question,
         ragContext,
         request.context,
-        request.conversationHistory
+        request.conversationHistory,
+        request.enableDocumentSearch,
+        request.enableWebSearch
       );
 
       logger.info('Sending question to OpenAI with RAG', {
@@ -376,7 +406,7 @@ Use the provided document excerpts and web search results to enhance your answer
             enableWebSearch: request.enableWebSearch !== false,
             maxDocumentChunks: request.maxDocumentChunks || 5,
             maxWebResults: request.maxSearchResults || 5,
-            minScore: request.minScore || 0.7,
+            minScore: request.minScore || 0.5, // Lower default threshold to find more relevant documents
           };
 
           // Only enable web search if enableSearch is true
@@ -446,7 +476,9 @@ Use the provided document excerpts and web search results to enhance your answer
         request.question,
         ragContext,
         request.context,
-        request.conversationHistory
+        request.conversationHistory,
+        request.enableDocumentSearch,
+        request.enableWebSearch
       );
 
       logger.info('Sending streaming question to OpenAI with RAG', {
