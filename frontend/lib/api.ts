@@ -123,6 +123,7 @@ export interface DocumentItem {
   status?: 'stored' | 'processing' | 'extracted' | 'embedding' | 'embedded' | 'processed' | 'failed' | 'embedding_failed';
   textLength?: number;
   extractionError?: string;
+  embeddingError?: string;
   chunkCount?: number;
   createdAt?: string;
   updatedAt?: string;
