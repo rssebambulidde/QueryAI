@@ -73,7 +73,8 @@ export class AIService {
     additionalContext?: string,
     enableDocumentSearch?: boolean,
     enableWebSearch?: boolean,
-    timeFilter?: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string }
+    timeFilter?: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string },
+    topicName?: string
   ): string {
     const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
     const hasWebResults = ragContext?.includes('Web Search Results:') || false;
@@ -115,9 +116,15 @@ export class AIService {
       }
     }
 
+    // Add topic scope context if topic is selected
+    let topicScopeInstruction = '';
+    if (topicName) {
+      topicScopeInstruction = `\n\nTOPIC SCOPE: You are currently operating within the topic scope of "${topicName}". All your responses should be focused on this specific topic domain. When searching for information or providing answers:\n- Prioritize information directly related to "${topicName}"\n- If information is not available within this topic scope, clearly indicate this limitation\n- Maintain focus on the topic context throughout your response`;
+    }
+
     const basePrompt = `You are a helpful AI assistant that provides accurate, informative, and well-structured answers to user questions using Retrieval-Augmented Generation (RAG).
 
-${modeInstruction}${timeFilterInstruction}
+${modeInstruction}${timeFilterInstruction}${topicScopeInstruction}
 
 Guidelines:
 - Provide clear, concise, and accurate answers
@@ -204,14 +211,15 @@ No document excerpts were found for this query. You must inform the user that th
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
     enableDocumentSearch?: boolean,
     enableWebSearch?: boolean,
-    timeFilter?: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string }
+    timeFilter?: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string },
+    topicName?: string
   ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
     // Add system prompt with RAG context
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter),
+      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter, topicName),
     });
 
     // Add conversation history if provided
@@ -255,6 +263,24 @@ No document excerpts were found for this query. You must inform the user that th
       const model = request.model || this.DEFAULT_MODEL;
       const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
       const maxTokens = request.maxTokens || this.DEFAULT_MAX_TOKENS;
+
+      // Fetch topic details if topicId is provided
+      let topicName: string | undefined;
+      if (request.topicId && userId) {
+        try {
+          const { TopicService } = await import('./topic.service');
+          const topic = await TopicService.getTopic(request.topicId, userId);
+          if (topic) {
+            topicName = topic.name;
+            logger.info('Topic context loaded', { topicId: request.topicId, topicName });
+          }
+        } catch (topicError: any) {
+          logger.warn('Failed to fetch topic details', {
+            topicId: request.topicId,
+            error: topicError.message,
+          });
+        }
+      }
 
       // Retrieve RAG context (documents + web search)
       let ragContext: string | undefined;
@@ -351,6 +377,17 @@ No document excerpts were found for this query. You must inform the user that th
         }
       }
 
+      // Build time filter for prompt
+      const timeFilter = request.timeRange || request.startDate || request.endDate || request.topic || request.country
+        ? {
+            timeRange: request.timeRange,
+            startDate: request.startDate,
+            endDate: request.endDate,
+            topic: request.topic,
+            country: request.country,
+          }
+        : undefined;
+
       // Build messages with RAG context
       const messages = this.buildMessages(
         request.question,
@@ -358,7 +395,9 @@ No document excerpts were found for this query. You must inform the user that th
         request.context,
         request.conversationHistory,
         request.enableDocumentSearch,
-        request.enableWebSearch
+        request.enableWebSearch,
+        timeFilter,
+        topicName
       );
 
       logger.info('Sending question to OpenAI with RAG', {
@@ -515,6 +554,24 @@ No document excerpts were found for this query. You must inform the user that th
       const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
       const maxTokens = request.maxTokens || this.DEFAULT_MAX_TOKENS;
 
+      // Fetch topic details if topicId is provided
+      let topicName: string | undefined;
+      if (request.topicId && userId) {
+        try {
+          const { TopicService } = await import('./topic.service');
+          const topic = await TopicService.getTopic(request.topicId, userId);
+          if (topic) {
+            topicName = topic.name;
+            logger.info('Topic context loaded for streaming', { topicId: request.topicId, topicName });
+          }
+        } catch (topicError: any) {
+          logger.warn('Failed to fetch topic details for streaming', {
+            topicId: request.topicId,
+            error: topicError.message,
+          });
+        }
+      }
+
       // Retrieve RAG context (documents + web search) before streaming
       let ragContext: string | undefined;
 
@@ -618,7 +675,8 @@ No document excerpts were found for this query. You must inform the user that th
         request.conversationHistory,
         request.enableDocumentSearch,
         request.enableWebSearch,
-        timeFilter
+        timeFilter,
+        topicName
       );
 
       logger.info('Sending streaming question to OpenAI with RAG', {

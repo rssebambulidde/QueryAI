@@ -1,287 +1,355 @@
-import { openai } from '../config/openai';
-import config from '../config/env';
+import { supabaseAdmin } from '../config/database';
+import { Database } from '../types/database';
 import logger from '../config/logger';
-import { AppError } from '../types/error';
-import { ChunkingService, TextChunk } from './chunking.service';
-import { DocumentService } from './document.service';
+import { AppError, ValidationError } from '../types/error';
+import { TopicService } from './topic.service';
 
-export interface EmbeddingResult {
-  chunkId: string;
-  embedding: number[];
-  tokenCount: number;
+export interface CreateEmbeddingConfigInput {
+  userId: string;
+  topicId: string;
+  name: string;
+  customization?: {
+    primaryColor?: string;
+    secondaryColor?: string;
+    backgroundColor?: string;
+    textColor?: string;
+    avatarUrl?: string;
+    greetingMessage?: string;
+    theme?: 'light' | 'dark';
+    showBranding?: boolean;
+    [key: string]: any;
+  };
 }
 
-export interface EmbeddingMetadata {
-  model: string;
-  dimensions: number;
-  chunkCount: number;
-  totalTokens: number;
-  completedAt: string;
+export interface UpdateEmbeddingConfigInput {
+  name?: string;
+  customization?: Record<string, any>;
+  isActive?: boolean;
 }
-
-const EMBEDDING_MODEL = 'text-embedding-3-small';
-const EMBEDDING_DIMENSIONS = 1536;
-const BATCH_SIZE = 100; // Process up to 100 chunks at once
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
 
 /**
  * Embedding Service
- * Generates vector embeddings for text chunks using OpenAI API
+ * Handles embeddable chatbot configurations
  */
 export class EmbeddingService {
   /**
-   * Generate embedding for a single text chunk
+   * Generate embed code for a configuration
    */
-  static async generateEmbedding(text: string): Promise<number[]> {
-    if (!config.OPENAI_API_KEY) {
-      throw new AppError('OpenAI API key not configured', 500, 'OPENAI_NOT_CONFIGURED');
-    }
-
-    if (!text || text.trim().length === 0) {
-      throw new AppError('Text cannot be empty', 400, 'EMPTY_TEXT');
-    }
-
-    try {
-      const response = await openai.embeddings.create({
-        model: EMBEDDING_MODEL,
-        input: text.trim(),
-      });
-
-      if (!response.data || response.data.length === 0) {
-        throw new AppError('No embedding returned from OpenAI', 500, 'EMBEDDING_ERROR');
-      }
-
-      return response.data[0].embedding;
-    } catch (error: any) {
-      logger.error('Failed to generate embedding', {
-        error: error.message,
-        code: error.code,
-      });
-
-      if (error.status === 401) {
-        throw new AppError('Invalid OpenAI API key', 500, 'OPENAI_AUTH_ERROR');
-      }
-      if (error.status === 429) {
-        throw new AppError('OpenAI API rate limit exceeded', 429, 'RATE_LIMIT_ERROR');
-      }
-
-      throw new AppError(`Failed to generate embedding: ${error.message}`, 500, 'EMBEDDING_ERROR');
-    }
+  private static generateEmbedCode(configId: string, apiUrl: string): string {
+    const embedUrl = `${apiUrl}/embed/${configId}`;
+    
+    return `<!-- QueryAI Embeddable Chatbot -->
+<script>
+  (function() {
+    var script = document.createElement('script');
+    script.src = '${apiUrl}/embed/script.js';
+    script.setAttribute('data-config-id', '${configId}');
+    script.setAttribute('data-api-url', '${apiUrl}');
+    script.async = true;
+    document.head.appendChild(script);
+  })();
+</script>
+<!-- End QueryAI Embed -->`;
   }
 
   /**
-   * Generate embeddings for multiple text chunks (batch processing)
+   * Create embedding configuration
    */
-  static async generateEmbeddingsBatch(
-    texts: string[],
-    onProgress?: (completed: number, total: number) => void
-  ): Promise<number[][]> {
-    if (!config.OPENAI_API_KEY) {
-      throw new AppError('OpenAI API key not configured', 500, 'OPENAI_NOT_CONFIGURED');
-    }
+  static async createEmbeddingConfig(
+    input: CreateEmbeddingConfigInput
+  ): Promise<Database.EmbeddingConfig> {
+    try {
+      if (!input.userId) {
+        throw new ValidationError('User ID is required');
+      }
 
-    if (texts.length === 0) {
-      return [];
-    }
+      if (!input.topicId) {
+        throw new ValidationError('Topic ID is required');
+      }
 
-    const embeddings: number[][] = [];
-    const total = texts.length;
+      if (!input.name || input.name.trim().length === 0) {
+        throw new ValidationError('Configuration name is required');
+      }
 
-    logger.info('Starting batch embedding generation', {
-      totalChunks: total,
-      batchSize: BATCH_SIZE,
-    });
+      // Verify topic belongs to user
+      const topic = await TopicService.getTopic(input.topicId, input.userId);
+      if (!topic) {
+        throw new ValidationError('Topic not found or access denied');
+      }
 
-    // Process in batches
-    for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-      const batch = texts.slice(i, i + BATCH_SIZE);
-      const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-      const totalBatches = Math.ceil(texts.length / BATCH_SIZE);
+      // Check if name already exists for user/topic combination
+      const existing = await this.getEmbeddingConfigByName(
+        input.userId,
+        input.topicId,
+        input.name
+      );
+      if (existing) {
+        throw new ValidationError(
+          `Embedding configuration with name "${input.name}" already exists for this topic`
+        );
+      }
 
-      logger.debug(`Processing batch ${batchNumber}/${totalBatches}`, {
-        batchSize: batch.length,
-        startIndex: i,
+      const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const configId = `embed_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+      const { data, error } = await supabaseAdmin
+        .from('embedding_configs')
+        .insert({
+          id: configId,
+          user_id: input.userId,
+          topic_id: input.topicId,
+          name: input.name.trim(),
+          customization: input.customization || {},
+          embed_code: this.generateEmbedCode(configId, apiUrl),
+          is_active: true,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Error creating embedding config:', error);
+        throw new AppError(
+          `Failed to create embedding configuration: ${error.message}`,
+          500,
+          'EMBEDDING_CREATE_ERROR'
+        );
+      }
+
+      logger.info('Embedding config created', {
+        configId: data.id,
+        userId: input.userId,
+        topicId: input.topicId,
+        name: input.name,
       });
 
-      try {
-        // OpenAI supports batch requests
-        const response = await this.retryWithBackoff(
-          () =>
-            openai.embeddings.create({
-              model: EMBEDDING_MODEL,
-              input: batch.map(t => t.trim()),
-            }),
-          MAX_RETRIES
-        );
-
-        if (!response.data || response.data.length !== batch.length) {
-          throw new AppError(
-            `Expected ${batch.length} embeddings, got ${response.data?.length || 0}`,
-            500,
-            'EMBEDDING_BATCH_ERROR'
-          );
-        }
-
-        // Add embeddings in order
-        for (const item of response.data) {
-          embeddings.push(item.embedding);
-        }
-
-        const completed = Math.min(i + batch.length, total);
-        if (onProgress) {
-          onProgress(completed, total);
-        }
-
-        logger.debug(`Batch ${batchNumber} completed`, {
-          completed,
-          total,
-          progress: `${Math.round((completed / total) * 100)}%`,
-        });
-      } catch (error: any) {
-        logger.error(`Failed to process batch ${batchNumber}`, {
-          error: error.message,
-          batchSize: batch.length,
-        });
+      return data;
+    } catch (error) {
+      if (error instanceof ValidationError || error instanceof AppError) {
         throw error;
       }
-    }
-
-    logger.info('Batch embedding generation completed', {
-      totalEmbeddings: embeddings.length,
-    });
-
-    return embeddings;
-  }
-
-  /**
-   * Process document: chunk text and generate embeddings
-   */
-  static async processDocument(
-    documentId: string,
-    userId: string,
-    text: string,
-    options?: {
-      maxChunkSize?: number;
-      overlapSize?: number;
-    }
-  ): Promise<{
-    chunks: TextChunk[];
-    embeddings: number[][];
-    metadata: EmbeddingMetadata;
-  }> {
-    if (!text || text.trim().length === 0) {
-      throw new AppError('Document text is empty', 400, 'EMPTY_TEXT');
-    }
-
-    logger.info('Starting document embedding process', {
-      documentId,
-      textLength: text.length,
-    });
-
-    // Step 1: Chunk the text
-    const chunks = ChunkingService.chunkText(text, {
-      maxChunkSize: options?.maxChunkSize,
-      overlapSize: options?.overlapSize,
-    });
-
-    if (chunks.length === 0) {
-      throw new AppError('No chunks created from text', 400, 'NO_CHUNKS');
-    }
-
-    logger.info('Text chunking completed', {
-      documentId,
-      chunkCount: chunks.length,
-    });
-
-    // Step 2: Generate embeddings for all chunks
-    const chunkTexts = chunks.map(chunk => chunk.content);
-    const embeddings = await this.generateEmbeddingsBatch(chunkTexts, (completed, total) => {
-      logger.debug('Embedding progress', {
-        documentId,
-        completed,
-        total,
-        progress: `${Math.round((completed / total) * 100)}%`,
-      });
-    });
-
-    if (embeddings.length !== chunks.length) {
+      logger.error('Unexpected error creating embedding config:', error);
       throw new AppError(
-        `Mismatch: ${chunks.length} chunks but ${embeddings.length} embeddings`,
+        'Failed to create embedding configuration',
         500,
-        'EMBEDDING_MISMATCH'
+        'EMBEDDING_CREATE_ERROR'
       );
     }
-
-    // Step 3: Calculate metadata
-    const totalTokens = chunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0);
-    const metadata: EmbeddingMetadata = {
-      model: EMBEDDING_MODEL,
-      dimensions: EMBEDDING_DIMENSIONS,
-      chunkCount: chunks.length,
-      totalTokens,
-      completedAt: new Date().toISOString(),
-    };
-
-    logger.info('Document embedding process completed', {
-      documentId,
-      chunkCount: chunks.length,
-      totalTokens,
-    });
-
-    return {
-      chunks,
-      embeddings,
-      metadata,
-    };
   }
 
   /**
-   * Retry function with exponential backoff
+   * Get embedding config by ID
    */
-  private static async retryWithBackoff<T>(
-    fn: () => Promise<T>,
-    maxRetries: number,
-    delay: number = RETRY_DELAY
-  ): Promise<T> {
-    let lastError: Error | null = null;
+  static async getEmbeddingConfig(
+    configId: string,
+    userId?: string
+  ): Promise<Database.EmbeddingConfig | null> {
+    try {
+      let query = supabaseAdmin
+        .from('embedding_configs')
+        .select('*')
+        .eq('id', configId)
+        .eq('is_active', true);
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await fn();
-      } catch (error: any) {
-        lastError = error;
-
-        // Don't retry on authentication errors
-        if (error.status === 401) {
-          throw error;
-        }
-
-        // Don't retry on client errors (4xx) except 429
-        if (error.status >= 400 && error.status < 500 && error.status !== 429) {
-          throw error;
-        }
-
-        if (attempt < maxRetries) {
-          const backoffDelay = delay * Math.pow(2, attempt - 1);
-          logger.warn(`Retry attempt ${attempt}/${maxRetries} after ${backoffDelay}ms`, {
-            error: error.message,
-          });
-          await new Promise(resolve => setTimeout(resolve, backoffDelay));
-        }
+      // If userId provided, verify ownership (for authenticated requests)
+      if (userId) {
+        query = query.eq('user_id', userId);
       }
-    }
 
-    throw lastError || new Error('Retry failed');
+      const { data, error } = await query.single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        logger.error('Error fetching embedding config:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      logger.error('Unexpected error fetching embedding config:', error);
+      return null;
+    }
   }
 
   /**
-   * Get embedding model info
+   * Get embedding config by name
    */
-  static getModelInfo(): { model: string; dimensions: number } {
-    return {
-      model: EMBEDDING_MODEL,
-      dimensions: EMBEDDING_DIMENSIONS,
-    };
+  static async getEmbeddingConfigByName(
+    userId: string,
+    topicId: string,
+    name: string
+  ): Promise<Database.EmbeddingConfig | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('embedding_configs')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('topic_id', topicId)
+        .eq('name', name.trim())
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        logger.error('Error fetching embedding config by name:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      logger.error('Unexpected error fetching embedding config by name:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get all embedding configs for a user
+   */
+  static async getUserEmbeddingConfigs(
+    userId: string
+  ): Promise<Database.EmbeddingConfig[]> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('embedding_configs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        logger.error('Error fetching user embedding configs:', error);
+        throw new AppError(
+          `Failed to fetch embedding configurations: ${error.message}`,
+          500,
+          'EMBEDDING_FETCH_ERROR'
+        );
+      }
+
+      return data || [];
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      logger.error('Unexpected error fetching embedding configs:', error);
+      throw new AppError(
+        'Failed to fetch embedding configurations',
+        500,
+        'EMBEDDING_FETCH_ERROR'
+      );
+    }
+  }
+
+  /**
+   * Update embedding config
+   */
+  static async updateEmbeddingConfig(
+    configId: string,
+    userId: string,
+    updates: UpdateEmbeddingConfigInput
+  ): Promise<Database.EmbeddingConfig> {
+    try {
+      // Verify config belongs to user
+      const config = await this.getEmbeddingConfig(configId, userId);
+      if (!config) {
+        throw new AppError('Embedding configuration not found', 404, 'EMBEDDING_NOT_FOUND');
+      }
+
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+
+      if (updates.name !== undefined) {
+        updateData.name = updates.name.trim();
+      }
+
+      if (updates.customization !== undefined) {
+        // Merge with existing customization
+        const currentCustomization = config.customization || {};
+        updateData.customization = { ...currentCustomization, ...updates.customization };
+      }
+
+      if (updates.isActive !== undefined) {
+        updateData.is_active = updates.isActive;
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('embedding_configs')
+        .update(updateData)
+        .eq('id', configId)
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Error updating embedding config:', error);
+        throw new AppError(
+          `Failed to update embedding configuration: ${error.message}`,
+          500,
+          'EMBEDDING_UPDATE_ERROR'
+        );
+      }
+
+      logger.info('Embedding config updated', {
+        configId,
+        userId,
+        updates,
+      });
+
+      return data;
+    } catch (error) {
+      if (error instanceof AppError || error instanceof ValidationError) {
+        throw error;
+      }
+      logger.error('Unexpected error updating embedding config:', error);
+      throw new AppError(
+        'Failed to update embedding configuration',
+        500,
+        'EMBEDDING_UPDATE_ERROR'
+      );
+    }
+  }
+
+  /**
+   * Delete embedding config
+   */
+  static async deleteEmbeddingConfig(configId: string, userId: string): Promise<void> {
+    try {
+      // Verify config belongs to user
+      const config = await this.getEmbeddingConfig(configId, userId);
+      if (!config) {
+        throw new AppError('Embedding configuration not found', 404, 'EMBEDDING_NOT_FOUND');
+      }
+
+      const { error } = await supabaseAdmin
+        .from('embedding_configs')
+        .delete()
+        .eq('id', configId)
+        .eq('user_id', userId);
+
+      if (error) {
+        logger.error('Error deleting embedding config:', error);
+        throw new AppError(
+          `Failed to delete embedding configuration: ${error.message}`,
+          500,
+          'EMBEDDING_DELETE_ERROR'
+        );
+      }
+
+      logger.info('Embedding config deleted', {
+        configId,
+        userId,
+      });
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      logger.error('Unexpected error deleting embedding config:', error);
+      throw new AppError(
+        'Failed to delete embedding configuration',
+        500,
+        'EMBEDDING_DELETE_ERROR'
+      );
+    }
   }
 }

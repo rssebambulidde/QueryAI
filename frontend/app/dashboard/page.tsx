@@ -7,10 +7,12 @@ import { Button } from '@/components/ui/button';
 import { ChatInterface } from '@/components/chat/chat-interface';
 import { ConversationList } from '@/components/chat/conversation-list';
 import { DocumentManager } from '@/components/documents/document-manager';
-import { MessageSquare, FileText } from 'lucide-react';
+import { TopicManager } from '@/components/topics/topic-manager';
+import { ApiKeyManager } from '@/components/api-keys/api-key-manager';
+import { MessageSquare, FileText, Tag, Key } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type TabType = 'chat' | 'documents';
+type TabType = 'chat' | 'documents' | 'topics' | 'api-keys';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -107,6 +109,30 @@ export default function DashboardPage() {
               <FileText className="w-5 h-5" />
               Your Documents
             </button>
+            <button
+              onClick={() => setActiveTab('topics')}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                activeTab === 'topics'
+                  ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+              )}
+            >
+              <Tag className="w-5 h-5" />
+              Topics
+            </button>
+            <button
+              onClick={() => setActiveTab('api-keys')}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                activeTab === 'api-keys'
+                  ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+              )}
+            >
+              <Key className="w-5 h-5" />
+              API Keys
+            </button>
           </nav>
         </aside>
 
@@ -121,9 +147,17 @@ export default function DashboardPage() {
                 <ChatInterface />
               </div>
             </div>
-          ) : (
+          ) : activeTab === 'documents' ? (
             <div className="flex-1 overflow-y-auto p-6">
               <DocumentManager />
+            </div>
+          ) : activeTab === 'topics' ? (
+            <div className="flex-1 overflow-y-auto p-6">
+              <TopicManager />
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto p-6">
+              <ApiKeyManager />
             </div>
           )}
         </div>

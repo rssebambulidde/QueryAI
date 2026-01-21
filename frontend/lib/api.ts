@@ -129,6 +129,16 @@ export interface DocumentItem {
   updatedAt?: string;
 }
 
+export interface Topic {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  scope_config?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Conversation {
   id: string;
   user_id: string;
@@ -349,6 +359,150 @@ export const conversationApi = {
 
   saveMessage: async (id: string, data: { role: 'user' | 'assistant'; content: string; sources?: Source[]; metadata?: Record<string, any> }): Promise<ApiResponse<Message>> => {
     const response = await apiClient.post(`/api/conversations/${id}/messages`, data);
+    return response.data;
+  },
+};
+
+// Topic API
+export const topicApi = {
+  list: async (): Promise<ApiResponse<Topic[]>> => {
+    const response = await apiClient.get('/api/topics');
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<Topic>> => {
+    const response = await apiClient.get(`/api/topics/${id}`);
+    return response.data;
+  },
+
+  create: async (data: { name: string; description?: string; scopeConfig?: Record<string, any> }): Promise<ApiResponse<Topic>> => {
+    const response = await apiClient.post('/api/topics', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: { name?: string; description?: string; scopeConfig?: Record<string, any> }): Promise<ApiResponse<Topic>> => {
+    const response = await apiClient.put(`/api/topics/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/topics/${id}`);
+    return response.data;
+  },
+};
+
+// API Key interface
+export interface ApiKey {
+  id: string;
+  user_id: string;
+  topic_id?: string;
+  key_hash: string;
+  key_prefix: string;
+  name: string;
+  description?: string;
+  rate_limit_per_hour: number;
+  rate_limit_per_day: number;
+  is_active: boolean;
+  last_used_at?: string;
+  expires_at?: string;
+  created_at: string;
+  updated_at: string;
+  key?: string; // Only present on creation
+}
+
+// API Key API
+export const apiKeyApi = {
+  list: async (): Promise<ApiResponse<ApiKey[]>> => {
+    const response = await apiClient.get('/api/api-keys');
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<ApiKey>> => {
+    const response = await apiClient.get(`/api/api-keys/${id}`);
+    return response.data;
+  },
+
+  create: async (data: {
+    name: string;
+    description?: string;
+    topicId?: string;
+    rateLimitPerHour?: number;
+    rateLimitPerDay?: number;
+    expiresAt?: string;
+  }): Promise<ApiResponse<ApiKey>> => {
+    const response = await apiClient.post('/api/api-keys', data);
+    return response.data;
+  },
+
+  update: async (
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      rateLimitPerHour?: number;
+      rateLimitPerDay?: number;
+      isActive?: boolean;
+      expiresAt?: string;
+    }
+  ): Promise<ApiResponse<ApiKey>> => {
+    const response = await apiClient.put(`/api/api-keys/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/api-keys/${id}`);
+    return response.data;
+  },
+};
+
+// Embedding Config interface
+export interface EmbeddingConfig {
+  id: string;
+  user_id: string;
+  topic_id: string;
+  name: string;
+  embed_code?: string;
+  customization?: Record<string, any>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Embedding API
+export const embeddingApi = {
+  list: async (): Promise<ApiResponse<EmbeddingConfig[]>> => {
+    const response = await apiClient.get('/api/embeddings');
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<EmbeddingConfig>> => {
+    const response = await apiClient.get(`/api/embeddings/${id}`);
+    return response.data;
+  },
+
+  create: async (data: {
+    name: string;
+    topicId: string;
+    customization?: Record<string, any>;
+  }): Promise<ApiResponse<EmbeddingConfig>> => {
+    const response = await apiClient.post('/api/embeddings', data);
+    return response.data;
+  },
+
+  update: async (
+    id: string,
+    data: {
+      name?: string;
+      customization?: Record<string, any>;
+      isActive?: boolean;
+    }
+  ): Promise<ApiResponse<EmbeddingConfig>> => {
+    const response = await apiClient.put(`/api/embeddings/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/embeddings/${id}`);
     return response.data;
   },
 };
