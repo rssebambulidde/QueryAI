@@ -31,6 +31,8 @@ export interface QuestionRequest {
   documentIds?: string[]; // Specific documents to search
   maxDocumentChunks?: number; // Max document chunks to retrieve
   minScore?: number; // Minimum similarity score for document chunks
+  // Conversation management
+  conversationId?: string; // Save messages to this conversation (auto-create if not provided)
 }
 
 export interface Source {
@@ -357,7 +359,7 @@ No document excerpts were found for this query. You must inform the user that th
         tokensUsed: completion.usage.total_tokens,
       });
 
-      return {
+      const response = {
         answer,
         model: completion.model,
         sources,
@@ -367,6 +369,60 @@ No document excerpts were found for this query. You must inform the user that th
           totalTokens: completion.usage.total_tokens,
         },
       };
+
+      // Save messages to conversation if conversationId provided and userId available
+      if (request.conversationId && userId) {
+        try {
+          const { ConversationService } = await import('./conversation.service');
+          const { MessageService } = await import('./message.service');
+          
+          // Verify or create conversation
+          let conversationId = request.conversationId;
+          let conversation = await ConversationService.getConversation(conversationId, userId);
+          
+          if (!conversation) {
+            // Create new conversation with auto-generated title
+            const title = ConversationService.generateTitleFromMessage(request.question);
+            conversation = await ConversationService.createConversation({
+              userId,
+              title,
+              topicId: request.topicId,
+            });
+            conversationId = conversation.id;
+            logger.info('Created new conversation for message', { conversationId, userId });
+          }
+
+          // Save message pair
+          await MessageService.saveMessagePair(
+            conversationId,
+            request.question,
+            response.answer,
+            sources,
+            {
+              model: completion.model,
+              usage: response.usage,
+              ragUsed: !!ragContext,
+            }
+          );
+
+          logger.info('Messages saved to conversation', {
+            conversationId,
+            userId,
+          });
+
+          // Add conversationId to response
+          (response as any).conversationId = conversationId;
+        } catch (saveError: any) {
+          // Log error but don't fail the request
+          logger.warn('Failed to save messages to conversation', {
+            error: saveError.message,
+            conversationId: request.conversationId,
+            userId,
+          });
+        }
+      }
+
+      return response;
     } catch (error: any) {
       // Handle OpenAI-specific errors
       if (error instanceof ValidationError) {

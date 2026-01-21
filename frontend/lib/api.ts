@@ -1,6 +1,6 @@
-import axios, { AxiosError, AxiosInstance, AxiosProgressEvent } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 
-// API Client Configuration
+// API Base URL
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // Create axios instance
@@ -11,19 +11,14 @@ const apiClient: AxiosInstance = axios.create({
   },
 });
 
-// Request interceptor to add auth token
+// Add request interceptor to include auth token
 apiClient.interceptors.request.use(
   (config) => {
-    // Get token from localStorage
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('accessToken');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
-    }
-    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
-      delete config.headers['Content-Type'];
-      delete config.headers['content-type'];
     }
     return config;
   },
@@ -32,12 +27,12 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
+// Add response interceptor for error handling
 apiClient.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError) => {
+  async (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid - clear storage and redirect to login
+      // Token expired or invalid
       if (typeof window !== 'undefined') {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
@@ -48,8 +43,19 @@ apiClient.interceptors.response.use(
   }
 );
 
-// API Response Types
-export interface ApiResponse<T = any> {
+// Types
+export interface User {
+  id: string;
+  email: string;
+  full_name?: string;
+}
+
+export interface Session {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface ApiResponse<T> {
   success: boolean;
   message?: string;
   data?: T;
@@ -59,107 +65,6 @@ export interface ApiResponse<T = any> {
   };
 }
 
-// Auth Types
-export interface SignupData {
-  email: string;
-  password: string;
-  fullName?: string;
-}
-
-export interface LoginData {
-  email: string;
-  password: string;
-}
-
-export interface AuthResponse {
-  user: {
-    id: string;
-    email: string;
-    fullName?: string;
-  };
-  session: {
-    accessToken: string;
-    refreshToken: string;
-    expiresIn: number;
-  };
-}
-
-export interface User {
-  id: string;
-  email: string;
-  fullName?: string;
-}
-
-// Auth API Functions
-export const authApi = {
-  signup: async (data: SignupData): Promise<ApiResponse<AuthResponse>> => {
-    const response = await apiClient.post<ApiResponse<AuthResponse>>(
-      '/api/auth/signup',
-      data
-    );
-    return response.data;
-  },
-
-  login: async (data: LoginData): Promise<ApiResponse<AuthResponse>> => {
-    const response = await apiClient.post<ApiResponse<AuthResponse>>(
-      '/api/auth/login',
-      data
-    );
-    return response.data;
-  },
-
-  logout: async (): Promise<ApiResponse> => {
-    const response = await apiClient.post<ApiResponse>('/api/auth/logout');
-    return response.data;
-  },
-
-  refreshToken: async (refreshToken: string): Promise<ApiResponse<{
-    accessToken: string;
-    refreshToken: string;
-    expiresIn: number;
-  }>> => {
-    const response = await apiClient.post<ApiResponse<{
-      accessToken: string;
-      refreshToken: string;
-      expiresIn: number;
-    }>>(
-      '/api/auth/refresh',
-      { refreshToken }
-    );
-    return response.data;
-  },
-
-  forgotPassword: async (email: string): Promise<ApiResponse> => {
-    const response = await apiClient.post<ApiResponse>('/api/auth/forgot-password', { email });
-    return response.data;
-  },
-
-  resetPassword: async (data: {
-    password: string;
-    accessToken: string;
-    refreshToken: string;
-  }): Promise<ApiResponse> => {
-    const response = await apiClient.post<ApiResponse>(
-      '/api/auth/reset-password',
-      { password: data.password },
-      {
-        headers: {
-          Authorization: `Bearer ${data.accessToken}`,
-        },
-      }
-    );
-    return response.data;
-  },
-
-  getMe: async (): Promise<ApiResponse<{ user: User }>> => {
-    const response = await apiClient.get<ApiResponse<{ user: User }>>(
-      '/api/auth/me'
-    );
-    return response.data;
-  },
-};
-
-// AI API Types
 export interface QuestionRequest {
   question: string;
   context?: string;
@@ -171,27 +76,37 @@ export interface QuestionRequest {
   temperature?: number;
   maxTokens?: number;
   enableSearch?: boolean;
-  topic?: string; // Any keyword for topic filtering
+  topic?: string;
   maxSearchResults?: number;
-  includeDomains?: string[];
-  excludeDomains?: string[];
-  searchDepth?: 'basic' | 'advanced';
-  // Advanced search filters
-  timeRange?: TimeRange;
-  startDate?: string; // ISO date string (YYYY-MM-DD)
-  endDate?: string; // ISO date string (YYYY-MM-DD)
-  country?: string; // ISO country code (e.g., 'US', 'UG', 'KE')
+  timeRange?: 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
+  startDate?: string;
+  endDate?: string;
+  country?: string;
   // RAG options
-  enableDocumentSearch?: boolean; // Search user's uploaded documents
-  enableWebSearch?: boolean; // Search web via Tavily
-  topicId?: string; // Topic ID for filtering documents
-  documentIds?: string[]; // Specific documents to search
-  maxDocumentChunks?: number; // Max document chunks to retrieve
-  minScore?: number; // Minimum similarity score for document chunks
+  enableDocumentSearch?: boolean;
+  enableWebSearch?: boolean;
+  topicId?: string;
+  documentIds?: string[];
+  maxDocumentChunks?: number;
+  minScore?: number;
+  // Conversation management
+  conversationId?: string;
+}
+
+export interface QuestionResponse {
+  answer: string;
+  model: string;
+  sources?: Source[];
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  conversationId?: string;
 }
 
 export interface Source {
-  type?: 'document' | 'web';
+  type: 'document' | 'web';
   title: string;
   url?: string;
   documentId?: string;
@@ -199,281 +114,230 @@ export interface Source {
   score?: number;
 }
 
-export interface QuestionResponse {
-  answer: string;
-  model: string;
-  sources?: Source[];
-  usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-}
-
-// AI API Functions
-export const aiApi = {
-  ask: async (data: QuestionRequest): Promise<ApiResponse<QuestionResponse>> => {
-    const response = await apiClient.post<ApiResponse<QuestionResponse>>(
-      '/api/ai/ask',
-      data
-    );
-    return response.data;
-  },
-
-  askStream: async function* (
-    data: QuestionRequest
-  ): AsyncGenerator<string, void, unknown> {
-    // Get token from localStorage
-    const token = typeof window !== 'undefined' 
-      ? localStorage.getItem('accessToken') 
-      : null;
-
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    
-    const response = await fetch(`${API_URL}/api/ai/ask/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      // Try to get error message from response
-      let errorMessage = `Streaming request failed: ${response.statusText}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error?.message || errorData.message || errorMessage;
-      } catch (e) {
-        // If response is not JSON, use status text
-      }
-      throw new Error(errorMessage);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('Failed to get response reader');
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const parsed = JSON.parse(line.slice(6));
-              if (parsed.chunk) {
-                yield parsed.chunk;
-              }
-              if (parsed.done) {
-                return;
-              }
-              if (parsed.error) {
-                throw new Error(parsed.error.message || 'Streaming error');
-              }
-            } catch (e) {
-              // Skip invalid JSON
-            }
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  },
-};
-
-// Search API Types
-export type TimeRange = 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
-
-export interface SearchRequest {
-  query: string;
-  topic?: string; // Any keyword for topic filtering
-  maxResults?: number;
-  includeDomains?: string[];
-  excludeDomains?: string[];
-  // Time range filtering
-  timeRange?: TimeRange;
-  startDate?: string; // ISO date string (YYYY-MM-DD)
-  endDate?: string; // ISO date string (YYYY-MM-DD)
-  // Location filtering
-  country?: string; // ISO country code (e.g., 'US', 'UG', 'KE')
-}
-
-export interface SearchResult {
-  title: string;
-  url: string;
-  content: string;
-  score?: number;
-  publishedDate?: string;
-  author?: string;
-}
-
-export interface SearchResponse {
-  query: string;
-  results: SearchResult[];
-  topic?: string;
-  cached?: boolean;
-}
-
-// Search API Functions
-export const searchApi = {
-  search: async (data: SearchRequest): Promise<ApiResponse<SearchResponse>> => {
-    const response = await apiClient.post<ApiResponse<SearchResponse>>(
-      '/api/search',
-      data
-    );
-    return response.data;
-  },
-
-  getCacheStats: async (): Promise<ApiResponse<{
-    size: number;
-    maxSize: number;
-    entries: number;
-  }>> => {
-    const response = await apiClient.get<ApiResponse<{
-      size: number;
-      maxSize: number;
-      entries: number;
-    }>>('/api/search/cache/stats');
-    return response.data;
-  },
-
-  clearCache: async (): Promise<ApiResponse> => {
-    const response = await apiClient.delete<ApiResponse>('/api/search/cache');
-    return response.data;
-  },
-};
-
-// Document API Types
 export interface DocumentItem {
-  id?: string; // Document ID (Phase 2.3+)
+  id?: string;
   path: string;
   name: string;
   size: number;
   mimeType: string;
-  status?: 'stored' | 'processing' | 'extracted' | 'failed' | 'embedding' | 'embedded' | 'embedding_failed' | 'processed'; // Processing status
-  textLength?: number; // Character count of extracted text
-  chunkCount?: number; // Number of chunks for processed documents
-  extractionError?: string; // Error message if extraction failed
-  embeddingError?: string; // Error message if embedding failed
+  status?: 'processing' | 'extracted' | 'embedding' | 'processed' | 'failed' | 'embedding_failed';
+  textLength?: number;
+  extractionError?: string;
+  chunkCount?: number;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export const documentApi = {
-  upload: async (
-    file: File,
-    onProgress?: (progress: number) => void
-  ): Promise<ApiResponse<DocumentItem>> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    const response = await apiClient.post<ApiResponse<DocumentItem>>(
-      '/api/documents/upload',
-      formData,
-      {
-        timeout: 300000, // 5 minutes for large files (500+ pages)
-        onUploadProgress: (progressEvent: AxiosProgressEvent) => {
-          if (progressEvent.total && onProgress) {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            onProgress(percentCompleted);
-          }
-        },
-      }
-    );
+export interface Conversation {
+  id: string;
+  user_id: string;
+  topic_id?: string;
+  title?: string;
+  created_at: string;
+  updated_at: string;
+  messageCount?: number;
+  lastMessage?: string;
+  lastMessageAt?: string;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: Source[];
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export type TimeRange = 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
+
+// Auth API
+export const authApi = {
+  signup: async (data: { email: string; password: string; fullName?: string }): Promise<ApiResponse<{ user: User; session: Session }>> => {
+    const response = await apiClient.post('/api/auth/signup', data);
     return response.data;
   },
 
-  list: async (): Promise<ApiResponse<DocumentItem[]>> => {
-    const response = await apiClient.get<ApiResponse<DocumentItem[]>>(
-      '/api/documents'
-    );
+  login: async (data: { email: string; password: string }): Promise<ApiResponse<{ user: User; session: Session }>> => {
+    const response = await apiClient.post('/api/auth/login', data);
     return response.data;
   },
 
-  download: async (filePath: string): Promise<Blob> => {
-    try {
-      const response = await apiClient.get('/api/documents/download', {
-        params: { path: filePath },
-        responseType: 'blob',
-      });
-      return response.data as Blob;
-    } catch (error: any) {
-      // If response is a blob error, try to parse it as JSON
-      if (error.response?.data instanceof Blob) {
-        try {
-          const text = await error.response.data.text();
-          const errorData = JSON.parse(text);
-          throw new Error(errorData?.error?.message || errorData?.message || 'Failed to download document');
-        } catch {
-          throw new Error(error.response?.statusText || 'Failed to download document');
-        }
-      }
-      throw new Error(error.response?.data?.error?.message || error.response?.data?.message || error.message || 'Failed to download document');
-    }
-  },
-
-  delete: async (pathOrId: string): Promise<ApiResponse> => {
-    if (!pathOrId) {
-      throw new Error('Document ID or path is required');
-    }
-    
-    // Try to determine if it's an ID (UUID) or path
-    // UUID format: 8-4-4-4-12 hex characters
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const isId = uuidRegex.test(pathOrId.trim());
-    
-    const response = await apiClient.delete<ApiResponse>('/api/documents', {
-      data: isId ? { id: pathOrId.trim() } : { path: pathOrId.trim() },
-    });
+  logout: async (): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/logout');
     return response.data;
   },
 
-  clearProcessing: async (documentId: string): Promise<ApiResponse> => {
-    const response = await apiClient.post<ApiResponse>(`/api/documents/${documentId}/clear-processing`);
+  refreshToken: async (refreshToken: string): Promise<ApiResponse<Session>> => {
+    const response = await apiClient.post('/api/auth/refresh', { refreshToken });
     return response.data;
   },
 
-  getText: async (documentId: string): Promise<ApiResponse<{
-    documentId: string;
-    text: string;
-    stats: {
-      length: number;
-      wordCount: number;
-      pageCount?: number;
-      paragraphCount?: number;
-    };
-    extractedAt: string;
-  }>> => {
-    const response = await apiClient.get<ApiResponse<{
-      documentId: string;
-      text: string;
-      stats: any;
-      extractedAt: string;
-    }>>(`/api/documents/${documentId}/text`);
+  forgotPassword: async (email: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/forgot-password', { email });
     return response.data;
   },
 
-  retryExtraction: async (documentId: string): Promise<ApiResponse> => {
-    const response = await apiClient.post<ApiResponse>(`/api/documents/${documentId}/extract`);
+  resetPassword: async (data: { password: string; accessToken: string; refreshToken: string }): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/reset-password', data);
     return response.data;
   },
 
-  process: async (documentId: string, options?: { maxChunkSize?: number; overlapSize?: number }): Promise<ApiResponse> => {
-    const response = await apiClient.post<ApiResponse>(`/api/documents/${documentId}/process`, options || {});
+  getMe: async (): Promise<ApiResponse<{ user: User }>> => {
+    const response = await apiClient.get('/api/auth/me');
     return response.data;
   },
 };
 
-export default apiClient;
+// AI API
+export const aiApi = {
+  ask: async (request: QuestionRequest): Promise<ApiResponse<QuestionResponse>> => {
+    const response = await apiClient.post('/api/ai/ask', request);
+    return response.data;
+  },
+
+  askStream: async function* (request: QuestionRequest): AsyncGenerator<string, void, unknown> {
+    const response = await fetch(`${API_URL}/api/ai/ask/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: typeof window !== 'undefined' ? `Bearer ${localStorage.getItem('accessToken') || ''}` : '',
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error('No reader available');
+    }
+
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.chunk) {
+              yield data.chunk;
+            }
+            if (data.done) {
+              return;
+            }
+            if (data.error) {
+              throw new Error(data.error.message || 'Stream error');
+            }
+          } catch (e) {
+            // Skip invalid JSON
+          }
+        }
+      }
+    }
+  },
+};
+
+// Document API
+export const documentApi = {
+  list: async (): Promise<ApiResponse<DocumentItem[]>> => {
+    const response = await apiClient.get('/api/documents');
+    return response.data;
+  },
+
+  upload: async (file: File, onProgress?: (progress: number) => void): Promise<ApiResponse<DocumentItem>> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await apiClient.post('/api/documents/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(progress);
+        }
+      },
+    });
+    return response.data;
+  },
+
+  delete: async (pathOrId: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete('/api/documents', {
+      params: { path: pathOrId, id: pathOrId },
+    });
+    return response.data;
+  },
+
+  download: async (path: string): Promise<Blob> => {
+    const response = await apiClient.get(`/api/documents/download?path=${encodeURIComponent(path)}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  process: async (documentId: string, options?: { maxChunkSize?: number; overlapSize?: number }): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post(`/api/documents/${documentId}/process`, options || {});
+    return response.data;
+  },
+
+  clearProcessing: async (documentId: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/documents/${documentId}/chunks`);
+    return response.data;
+  },
+};
+
+// Conversation API
+export const conversationApi = {
+  list: async (options?: { limit?: number; offset?: number; includeMetadata?: boolean }): Promise<ApiResponse<Conversation[]>> => {
+    const response = await apiClient.get('/api/conversations', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<Conversation>> => {
+    const response = await apiClient.get(`/api/conversations/${id}`);
+    return response.data;
+  },
+
+  create: async (data: { title?: string; topicId?: string }): Promise<ApiResponse<Conversation>> => {
+    const response = await apiClient.post('/api/conversations', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: { title?: string; topicId?: string }): Promise<ApiResponse<Conversation>> => {
+    const response = await apiClient.put(`/api/conversations/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/conversations/${id}`);
+    return response.data;
+  },
+
+  getMessages: async (id: string, options?: { limit?: number; offset?: number }): Promise<ApiResponse<Message[]>> => {
+    const response = await apiClient.get(`/api/conversations/${id}/messages`, {
+      params: options,
+    });
+    return response.data;
+  },
+
+  saveMessage: async (id: string, data: { role: 'user' | 'assistant'; content: string; sources?: Source[]; metadata?: Record<string, any> }): Promise<ApiResponse<Message>> => {
+    const response = await apiClient.post(`/api/conversations/${id}/messages`, data);
+    return response.data;
+  },
+};

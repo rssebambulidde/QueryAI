@@ -35,6 +35,7 @@ router.post(
       documentIds,
       maxDocumentChunks,
       minScore,
+      conversationId,
     } = req.body;
 
     if (!question) {
@@ -62,7 +63,9 @@ router.post(
       topicId: topicId,
       documentIds: documentIds,
       maxDocumentChunks: maxDocumentChunks || 5,
-      minScore: minScore || 0.7,
+      minScore: minScore || 0.5,
+      // Conversation management
+      conversationId: conversationId,
     };
 
     logger.info('AI question request with RAG', {
@@ -111,6 +114,7 @@ router.post(
       documentIds,
       maxDocumentChunks,
       minScore,
+      conversationId,
     } = req.body;
 
     if (!question) {
@@ -138,7 +142,9 @@ router.post(
       topicId: topicId,
       documentIds: documentIds,
       maxDocumentChunks: maxDocumentChunks || 5,
-      minScore: minScore || 0.7,
+      minScore: minScore || 0.5,
+      // Conversation management
+      conversationId: conversationId,
     };
 
     logger.info('AI streaming question request with RAG', {
@@ -171,12 +177,62 @@ router.post(
     });
 
     try {
-      // Stream the response
+      // Stream the response and collect full answer
       const stream = AIService.answerQuestionStream(request, userId);
+      let fullAnswer = '';
       
       for await (const chunk of stream) {
+        fullAnswer += chunk;
         // Send chunk as SSE format
         res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+      }
+
+      // Save messages to conversation if conversationId provided and userId available
+      if (request.conversationId && userId && fullAnswer) {
+        try {
+          const { ConversationService } = await import('../services/conversation.service');
+          const { MessageService } = await import('../services/message.service');
+          
+          // Verify or create conversation
+          let conversationId = request.conversationId;
+          let conversation = await ConversationService.getConversation(conversationId, userId);
+          
+          if (!conversation) {
+            // Create new conversation with auto-generated title
+            const title = ConversationService.generateTitleFromMessage(request.question);
+            conversation = await ConversationService.createConversation({
+              userId,
+              title,
+              topicId: request.topicId,
+            });
+            conversationId = conversation.id;
+            logger.info('Created new conversation for streaming message', { conversationId, userId });
+          }
+
+          // Save message pair
+          await MessageService.saveMessagePair(
+            conversationId,
+            request.question,
+            fullAnswer,
+            undefined, // Sources not available in streaming mode
+            {
+              model: request.model || 'gpt-4o-mini',
+              streaming: true,
+            }
+          );
+
+          logger.info('Messages saved to conversation (streaming)', {
+            conversationId,
+            userId,
+          });
+        } catch (saveError: any) {
+          // Log error but don't fail the request
+          logger.warn('Failed to save messages to conversation (streaming)', {
+            error: saveError.message,
+            conversationId: request.conversationId,
+            userId,
+          });
+        }
       }
 
       // Send completion message

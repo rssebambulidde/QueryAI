@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { ChatInterface } from '@/components/chat/chat-interface';
+import { ConversationList } from '@/components/chat/conversation-list';
 import { DocumentManager } from '@/components/documents/document-manager';
 import { MessageSquare, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -97,8 +98,15 @@ export default function DashboardPage() {
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {activeTab === 'chat' ? (
-            <div className="flex-1 overflow-hidden">
-              <ChatInterface />
+            <div className="flex-1 flex overflow-hidden">
+              {/* Conversation List Sidebar */}
+              <div className="w-80 flex-shrink-0 border-r border-gray-200">
+                <ConversationList />
+              </div>
+              {/* Chat Interface */}
+              <div className="flex-1 overflow-hidden">
+                <ChatInterface />
+              </div>
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto p-6">

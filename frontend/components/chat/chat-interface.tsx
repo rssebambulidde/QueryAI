@@ -5,8 +5,9 @@ import { ChatMessage, Message, Source } from './chat-message';
 import { TypingIndicator } from './typing-indicator';
 import { ChatInput } from './chat-input';
 import { RAGSourceSelector, RAGSettings } from './rag-source-selector';
-import { aiApi, QuestionRequest, documentApi } from '@/lib/api';
+import { aiApi, QuestionRequest, documentApi, conversationApi } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
+import { useConversationStore } from '@/lib/store/conversation-store';
 import { Alert } from '@/components/ui/alert';
 import { Sparkles, MessageSquare, Trash2 } from 'lucide-react';
 
@@ -18,6 +19,7 @@ export const ChatInterface: React.FC = () => {
   const [sources, setSources] = useState<Source[] | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { currentConversationId, createConversation, refreshConversations } = useConversationStore();
   
   // RAG settings state
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
@@ -49,6 +51,35 @@ export const ChatInterface: React.FC = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
+
+  // Load messages when conversation changes
+  useEffect(() => {
+    const loadMessages = async () => {
+      if (currentConversationId) {
+        try {
+          const response = await conversationApi.getMessages(currentConversationId);
+          if (response.success && response.data) {
+            // Convert API messages to UI messages
+            const uiMessages: Message[] = response.data.map((msg) => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              timestamp: new Date(msg.created_at),
+              sources: msg.sources,
+            }));
+            setMessages(uiMessages);
+          }
+        } catch (error: any) {
+          console.error('Failed to load messages:', error);
+          setMessages([]);
+        }
+      } else {
+        setMessages([]);
+      }
+    };
+
+    loadMessages();
+  }, [currentConversationId]);
 
   // Load document count on mount
   useEffect(() => {
@@ -85,6 +116,18 @@ export const ChatInterface: React.FC = () => {
   const handleSend = async (content: string, filters?: { topic?: string; timeRange?: any; startDate?: string; endDate?: string; country?: string }) => {
     if (!content.trim() || isLoading) return;
 
+    // Ensure we have a conversation
+    let conversationId = currentConversationId;
+    if (!conversationId) {
+      try {
+        const newConversation = await createConversation();
+        conversationId = newConversation.id;
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to create conversation');
+        return;
+      }
+    }
+
     // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -120,6 +163,7 @@ export const ChatInterface: React.FC = () => {
       const request: QuestionRequest = {
         question: content,
         conversationHistory,
+        conversationId, // Include conversation ID for saving messages
         // RAG options
         enableDocumentSearch: ragSettings.enableDocumentSearch,
         enableWebSearch: ragSettings.enableWebSearch,
@@ -192,6 +236,10 @@ export const ChatInterface: React.FC = () => {
 
         setIsStreaming(false);
         setIsLoading(false);
+        
+        // Refresh conversations list to update last message
+        refreshConversations();
+        
         toast.success('Response received');
       } catch (streamError: any) {
         // If streaming fails, try non-streaming as fallback
@@ -211,6 +259,10 @@ export const ChatInterface: React.FC = () => {
             return updated;
           });
           setIsLoading(false);
+          
+          // Refresh conversations list to update last message
+          refreshConversations();
+          
           toast.success('Response received');
         } else {
           throw streamError; // Re-throw original error if fallback also fails
@@ -239,6 +291,8 @@ export const ChatInterface: React.FC = () => {
   const handleClear = () => {
     setMessages([]);
     setError(null);
+    // Note: We don't clear the conversation, just the local messages
+    // User can switch conversations to see different history
   };
 
   return (
