@@ -7,6 +7,14 @@ import logger from '../config/logger';
 
 const router = Router();
 
+// Handle OPTIONS requests for CORS preflight
+router.options('/:configId/ask', (req: Request, res: Response) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.status(200).end();
+});
+
 /**
  * GET /api/embed/:configId
  * Public endpoint to serve embeddable chatbot widget
