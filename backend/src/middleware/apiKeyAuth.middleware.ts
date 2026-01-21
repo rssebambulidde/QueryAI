@@ -46,13 +46,9 @@ export const apiKeyAuth = async (
     const rateLimit = await ApiKeyService.checkRateLimit(apiKeyRecord.id);
     if (!rateLimit.allowed) {
       throw new AppError(
-        'Rate limit exceeded',
+        `Rate limit exceeded. Remaining: ${rateLimit.remainingPerHour || 0}/hr, ${rateLimit.remainingPerDay || 0}/day`,
         429,
-        'RATE_LIMIT_EXCEEDED',
-        {
-          remainingPerHour: rateLimit.remainingPerHour,
-          remainingPerDay: rateLimit.remainingPerDay,
-        }
+        'RATE_LIMIT_EXCEEDED'
       );
     }
 
@@ -89,9 +85,8 @@ export const logApiKeyUsage = (
 ): void => {
   const startTime = Date.now();
 
-  // Override res.end to log usage after response
-  const originalEnd = res.end;
-  res.end = function (chunk?: any, encoding?: any) {
+  // Log usage when response finishes
+  res.on('finish', () => {
     const responseTime = Date.now() - startTime;
 
     // Log usage asynchronously (don't block response)
@@ -106,10 +101,7 @@ export const logApiKeyUsage = (
         logger.error('Failed to log API key usage:', error);
       });
     }
-
-    // Call original end
-    originalEnd.call(this, chunk, encoding);
-  };
+  });
 
   next();
 };

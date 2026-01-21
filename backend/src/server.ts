@@ -12,12 +12,11 @@ import authRoutes from './routes/auth.routes';
 import aiRoutes from './routes/ai.routes';
 import searchRoutes from './routes/search.routes';
 import documentsRoutes from './routes/documents.routes';
-import embeddingsRoutes from './routes/embeddings.routes';
+import embeddingConfigsRoutes from './routes/embeddings.routes';
 import conversationsRoutes from './routes/conversations.routes';
 import topicsRoutes from './routes/topics.routes';
 import apiKeysRoutes from './routes/api-keys.routes';
 import customApiRoutes from './routes/custom-api.routes';
-import embeddingsRoutes from './routes/embeddings.routes';
 import testRoutes from './routes/test.routes';
 import debugRoutes from './routes/debug.routes';
 
@@ -102,7 +101,7 @@ app.use('/api/documents', embeddingsRoutes); // Embedding endpoints use same bas
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/topics', topicsRoutes);
 app.use('/api/api-keys', apiKeysRoutes);
-app.use('/api/embeddings', embeddingsRoutes);
+app.use('/api/embeddings', embeddingConfigsRoutes);
 app.use('/api/v1', customApiRoutes); // Custom API with API key auth
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
-import { EmbeddingService, CreateEmbeddingConfigInput, UpdateEmbeddingConfigInput } from '../services/embedding.service';
+import { EmbeddingConfigService, CreateEmbeddingConfigInput, UpdateEmbeddingConfigInput } from '../services/embedding-config.service';
 import { authenticate } from '../middleware/auth.middleware';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../middleware/errorHandler';
 import { AppError, ValidationError } from '../types/error';
 import { AIService, QuestionRequest } from '../services/ai.service';
 import logger from '../config/logger';
@@ -18,7 +18,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
 
-    const configs = await EmbeddingService.getUserEmbeddingConfigs(userId);
+    const configs = await EmbeddingConfigService.getUserEmbeddingConfigs(userId);
 
     res.json({
       success: true,
@@ -38,7 +38,7 @@ router.get(
     const userId = req.user!.id;
     const configId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
-    const config = await EmbeddingService.getEmbeddingConfig(configId, userId);
+    const config = await EmbeddingConfigService.getEmbeddingConfig(configId, userId);
 
     if (!config) {
       throw new AppError('Embedding configuration not found', 404, 'EMBEDDING_NOT_FOUND');
@@ -77,7 +77,7 @@ router.post(
       customization,
     };
 
-    const config = await EmbeddingService.createEmbeddingConfig(input);
+    const config = await EmbeddingConfigService.createEmbeddingConfig(input);
 
     res.status(201).json({
       success: true,
@@ -103,7 +103,7 @@ router.put(
     if (customization !== undefined) updates.customization = customization;
     if (isActive !== undefined) updates.isActive = isActive;
 
-    const config = await EmbeddingService.updateEmbeddingConfig(configId, userId, updates);
+    const config = await EmbeddingConfigService.updateEmbeddingConfig(configId, userId, updates);
 
     res.json({
       success: true,
@@ -123,7 +123,7 @@ router.delete(
     const userId = req.user!.id;
     const configId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
-    await EmbeddingService.deleteEmbeddingConfig(configId, userId);
+    await EmbeddingConfigService.deleteEmbeddingConfig(configId, userId);
 
     res.json({
       success: true,
@@ -142,7 +142,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const configId = Array.isArray(req.params.configId) ? req.params.configId[0] : req.params.configId;
 
-    const config = await EmbeddingService.getEmbeddingConfig(configId);
+    const config = await EmbeddingConfigService.getEmbeddingConfig(configId);
     if (!config || !config.is_active) {
       return res.status(404).send('Embedding configuration not found or inactive');
     }
@@ -354,7 +354,7 @@ router.post(
       throw new ValidationError('Question is required');
     }
 
-    const config = await EmbeddingService.getEmbeddingConfig(configId);
+    const config = await EmbeddingConfigService.getEmbeddingConfig(configId);
     if (!config || !config.is_active) {
       throw new AppError('Embedding configuration not found or inactive', 404, 'EMBEDDING_NOT_FOUND');
     }

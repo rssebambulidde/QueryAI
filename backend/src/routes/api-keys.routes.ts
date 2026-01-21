@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ApiKeyService, CreateApiKeyInput, UpdateApiKeyInput } from '../services/api-key.service';
 import { authenticate } from '../middleware/auth.middleware';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../middleware/errorHandler';
 import { AppError, ValidationError } from '../types/error';
 
 const router = Router();

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { TopicService, CreateTopicInput, UpdateTopicInput } from '../services/topic.service';
 import { authenticate } from '../middleware/auth.middleware';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../middleware/errorHandler';
 import { AppError, ValidationError } from '../types/error';
 
 const router = Router();

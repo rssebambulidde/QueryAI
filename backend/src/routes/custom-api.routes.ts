@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { AIService, QuestionRequest } from '../services/ai.service';
 import { apiKeyAuth, logApiKeyUsage } from '../middleware/apiKeyAuth.middleware';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../middleware/errorHandler';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
 
