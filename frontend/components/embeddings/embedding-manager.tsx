@@ -200,12 +200,11 @@ export const EmbeddingManager: React.FC = () => {
   };
 
   const getEmbedUrl = (configId: string) => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').replace(/\/$/, '');
     return `${apiUrl}/api/embed/${configId}`;
   };
 
   const getEmbedCode = (configId: string) => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
     return `<iframe src="${getEmbedUrl(configId)}" width="100%" height="600" frameborder="0"></iframe>`;
   };
 
