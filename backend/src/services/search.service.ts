@@ -4,6 +4,117 @@ import { AppError, ValidationError } from '../types/error';
 
 export type TimeRange = 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
 
+/**
+ * Extract dates from text content using various date formats
+ * Returns array of parsed Date objects found in the content
+ */
+function extractDatesFromContent(content: string): Date[] {
+  const dates: Date[] = [];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  
+  if (!content) return dates;
+  
+  // Pattern 1: Full dates like "November 5, 2025" or "Nov 5, 2025"
+  const fullDatePattern = /\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[\s,]+(\d{1,2})[\s,]+(\d{4})\b/gi;
+  let match;
+  while ((match = fullDatePattern.exec(content)) !== null) {
+    try {
+      const dateStr = match[0];
+      const parsed = new Date(dateStr);
+      if (!isNaN(parsed.getTime())) {
+        dates.push(parsed);
+      }
+    } catch (e) {
+      // Ignore parsing errors
+    }
+  }
+  
+  // Pattern 2: ISO dates like "2025-11-05" or "2025/11/05"
+  const isoDatePattern = /\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/g;
+  while ((match = isoDatePattern.exec(content)) !== null) {
+    try {
+      const year = parseInt(match[1]);
+      const month = parseInt(match[2]) - 1; // Month is 0-indexed
+      const day = parseInt(match[3]);
+      const parsed = new Date(year, month, day);
+      if (!isNaN(parsed.getTime()) && year >= 2000 && year <= currentYear + 1) {
+        dates.push(parsed);
+      }
+    } catch (e) {
+      // Ignore parsing errors
+    }
+  }
+  
+  // Pattern 3: US format dates like "11/5/2025" or "11-5-2025"
+  const usDatePattern = /\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b/g;
+  while ((match = usDatePattern.exec(content)) !== null) {
+    try {
+      const month = parseInt(match[1]) - 1; // Month is 0-indexed
+      const day = parseInt(match[2]);
+      const year = parseInt(match[3]);
+      if (year >= 2000 && year <= currentYear + 1 && month >= 0 && month <= 11) {
+        const parsed = new Date(year, month, day);
+        if (!isNaN(parsed.getTime())) {
+          dates.push(parsed);
+        }
+      }
+    } catch (e) {
+      // Ignore parsing errors
+    }
+  }
+  
+  // Pattern 4: Years like "2025", "2026" (standalone years)
+  const yearPattern = /\b(20[2-9][0-9])\b/g;
+  const years = new Set<number>();
+  while ((match = yearPattern.exec(content)) !== null) {
+    const year = parseInt(match[1]);
+    if (year >= 2000 && year <= currentYear + 1) {
+      years.add(year);
+    }
+  }
+  
+  // For standalone years, create dates at the start of that year
+  years.forEach(year => {
+    dates.push(new Date(year, 0, 1));
+  });
+  
+  return dates;
+}
+
+/**
+ * Check if content mentions dates that are clearly outside the time range
+ */
+function hasDatesOutsideRange(content: string, cutoffDate: Date, isStrict: boolean): boolean {
+  if (!content) return false;
+  
+  const extractedDates = extractDatesFromContent(content);
+  const now = new Date();
+  
+  for (const date of extractedDates) {
+    // Exclude future dates (they're likely errors or irrelevant for recent content)
+    if (date > now) {
+      return true; // Has future date
+    }
+    
+    // For strict mode (last 24 hours), exclude any date outside range
+    if (isStrict && date < cutoffDate) {
+      return true; // Has date outside range
+    }
+    
+    // For non-strict mode, only exclude if date is clearly very old (more than 2x the range)
+    if (!isStrict) {
+      const rangeMs = now.getTime() - cutoffDate.getTime();
+      const dateDiff = now.getTime() - date.getTime();
+      if (dateDiff > rangeMs * 2) {
+        return true; // Date is clearly outside reasonable range
+      }
+    }
+  }
+  
+  return false;
+}
+
 export interface SearchRequest {
   query: string;
   topic?: string; // Any keyword for topic filtering
@@ -238,19 +349,129 @@ export class SearchService {
         }
         
         if (cutoffDate.getTime() > 0) {
+          const now = new Date();
+          // Determine if this is a strict time range (last 24 hours = very strict)
+          const isStrict = request.timeRange === 'day' || request.timeRange === 'd';
+          
           results = results.filter((result) => {
-            if (!result.publishedDate) {
-              // If no published date, include it (better to show than hide)
-              return true;
+            let hasValidPublishedDate = false;
+            let publishedDateWithinRange = false;
+            
+            // Layer 1: Check publishedDate if available
+            if (result.publishedDate) {
+              try {
+                const publishedDate = new Date(result.publishedDate);
+                
+                // Exclude future dates (they're likely errors)
+                if (publishedDate > now) {
+                  logger.warn('Excluding result with future publishedDate', {
+                    url: result.url,
+                    publishedDate: result.publishedDate,
+                    title: result.title,
+                  });
+                  return false;
+                }
+                
+                // Check if publishedDate is within the time range
+                publishedDateWithinRange = publishedDate >= cutoffDate;
+                hasValidPublishedDate = true;
+                
+                // For strict mode (last 24 hours), if publishedDate is outside range, exclude
+                if (isStrict && !publishedDateWithinRange) {
+                  logger.warn('Excluding result: publishedDate outside strict time range', {
+                    url: result.url,
+                    publishedDate: result.publishedDate,
+                    cutoffDate: cutoffDate.toISOString(),
+                    title: result.title,
+                  });
+                  return false;
+                }
+              } catch (e) {
+                logger.warn('Failed to parse publishedDate', {
+                  url: result.url,
+                  publishedDate: result.publishedDate,
+                  error: e,
+                });
+                // If we can't parse publishedDate, continue to content check
+              }
             }
             
-            try {
-              const publishedDate = new Date(result.publishedDate);
-              return publishedDate >= cutoffDate;
-            } catch (e) {
-              // If date parsing fails, include it
-              return true;
+            // Layer 2: Check content for dates
+            if (result.content) {
+              // Extract dates from content
+              const contentDates = extractDatesFromContent(result.content);
+              
+              // For strict mode (last 24 hours), exclude if no publishedDate and content has dates outside range
+              if (isStrict) {
+                if (!hasValidPublishedDate) {
+                  // No publishedDate available - exclude if content has any dates
+                  if (contentDates.length > 0) {
+                    logger.warn('Excluding result: no publishedDate but content has dates (strict mode)', {
+                      url: result.url,
+                      contentDates: contentDates.map(d => d.toISOString()),
+                      title: result.title,
+                    });
+                    return false;
+                  }
+                  // No dates in content and no publishedDate - exclude in strict mode
+                  return false;
+                }
+                
+                // Check if content mentions dates outside range
+                if (hasDatesOutsideRange(result.content, cutoffDate, true)) {
+                  logger.warn('Excluding result: content has dates outside strict time range', {
+                    url: result.url,
+                    publishedDate: result.publishedDate,
+                    contentDates: contentDates.map(d => d.toISOString()),
+                    title: result.title,
+                  });
+                  return false;
+                }
+              } else {
+                // Non-strict mode: use content dates as secondary check
+                if (!hasValidPublishedDate && contentDates.length > 0) {
+                  // No publishedDate, but we have content dates - check them
+                  const hasRecentContentDate = contentDates.some(date => date >= cutoffDate && date <= now);
+                  if (!hasRecentContentDate) {
+                    logger.warn('Excluding result: content dates outside time range', {
+                      url: result.url,
+                      contentDates: contentDates.map(d => d.toISOString()),
+                      title: result.title,
+                    });
+                    return false;
+                  }
+                  return true; // Content has recent date
+                }
+                
+                // Check if content has dates clearly outside range
+                if (hasDatesOutsideRange(result.content, cutoffDate, false)) {
+                  logger.warn('Excluding result: content has dates clearly outside time range', {
+                    url: result.url,
+                    publishedDate: result.publishedDate,
+                    contentDates: contentDates.map(d => d.toISOString()),
+                    title: result.title,
+                  });
+                  return false;
+                }
+              }
             }
+            
+            // Layer 3: Final decision
+            // For strict mode, must have valid publishedDate within range
+            if (isStrict) {
+              return hasValidPublishedDate && publishedDateWithinRange;
+            }
+            
+            // For non-strict mode:
+            // - If we have valid publishedDate, use it
+            // - If no publishedDate but content has recent dates, allow it
+            // - If no publishedDate and no content dates, exclude it
+            if (hasValidPublishedDate) {
+              return publishedDateWithinRange;
+            }
+            
+            // No publishedDate - exclude if we can't verify from content
+            return false;
           });
           
           logger.info('Filtered results by time range', {
@@ -265,17 +486,74 @@ export class SearchService {
         const startDate = request.startDate ? new Date(request.startDate) : new Date(0);
         const endDate = request.endDate ? new Date(request.endDate) : new Date();
         
+        const now = new Date();
         results = results.filter((result) => {
-          if (!result.publishedDate) {
-            return true; // Include if no date
+          let hasValidPublishedDate = false;
+          let publishedDateInRange = false;
+          
+          // Layer 1: Check publishedDate
+          if (result.publishedDate) {
+            try {
+              const publishedDate = new Date(result.publishedDate);
+              
+              // Exclude future dates
+              if (publishedDate > now) {
+                logger.warn('Excluding result with future date in custom range', {
+                  url: result.url,
+                  publishedDate: result.publishedDate,
+                  title: result.title,
+                });
+                return false;
+              }
+              
+              publishedDateInRange = publishedDate >= startDate && publishedDate <= endDate;
+              hasValidPublishedDate = true;
+            } catch (e) {
+              logger.warn('Failed to parse published date in custom range', {
+                url: result.url,
+                publishedDate: result.publishedDate,
+                error: e,
+              });
+            }
           }
           
-          try {
-            const publishedDate = new Date(result.publishedDate);
-            return publishedDate >= startDate && publishedDate <= endDate;
-          } catch (e) {
-            return true; // Include if date parsing fails
+          // Layer 2: Check content dates
+          if (result.content) {
+            const contentDates = extractDatesFromContent(result.content);
+            
+            if (!hasValidPublishedDate && contentDates.length > 0) {
+              // No publishedDate, but we have content dates - check them
+              const hasDateInRange = contentDates.some(date => 
+                date >= startDate && date <= endDate && date <= now
+              );
+              if (hasDateInRange) {
+                return true; // Content has date in range
+              }
+            }
+            
+            // Check if content has dates clearly outside range
+            const hasDatesOutside = contentDates.some(date => 
+              date < startDate || (date > endDate && date <= now) || date > now
+            );
+            if (hasDatesOutside && !hasValidPublishedDate) {
+              logger.warn('Excluding result: content dates outside custom range', {
+                url: result.url,
+                contentDates: contentDates.map(d => d.toISOString()),
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString(),
+                title: result.title,
+              });
+              return false;
+            }
           }
+          
+          // Final decision: use publishedDate if available, otherwise exclude
+          if (hasValidPublishedDate) {
+            return publishedDateInRange;
+          }
+          
+          // No publishedDate and can't verify from content - exclude
+          return false;
         });
         
         logger.info('Filtered results by custom date range', {
