@@ -215,14 +215,18 @@ router.get(
         const loadingMessage = addMessage('Thinking...', 'assistant');
         
         try {
-          const response = await fetch(apiUrl + '/api/embed/' + configId + '/ask', {
+          const fetchUrl = apiUrl + '/api/embed/' + configId + '/ask';
+          console.log('Fetching from:', fetchUrl);
+          
+          const response = await fetch(fetchUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               question: question
-            })
+            }),
+            mode: 'cors', // Explicitly enable CORS
           });
           
           // Remove loading message
