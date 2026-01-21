@@ -59,14 +59,66 @@ export class RAGService {
 
       const queryEmbedding = await EmbeddingService.generateEmbedding(query);
 
+      // Check if Pinecone is configured
+      const { isPineconeConfigured } = await import('../config/pinecone');
+      if (!isPineconeConfigured()) {
+        logger.warn('Pinecone is not configured - document search unavailable', {
+          userId: options.userId,
+          message: 'PINECONE_API_KEY environment variable is not set. Document search requires Pinecone to be configured.',
+        });
+        return [];
+      }
+
       // Search Pinecone for similar document chunks
-      const searchResults = await PineconeService.search(queryEmbedding, {
+      // Use lower default threshold (0.5) to find more relevant documents
+      const minScore = options.minScore || 0.5;
+      
+      logger.info('Searching Pinecone for document chunks', {
         userId: options.userId,
+        query: query.substring(0, 100),
         topK: options.maxDocumentChunks || 5,
+        minScore,
         topicId: options.topicId,
         documentIds: options.documentIds,
-        minScore: options.minScore || 0.7,
       });
+
+      let searchResults: any[] = [];
+      try {
+        searchResults = await PineconeService.search(queryEmbedding, {
+          userId: options.userId,
+          topK: options.maxDocumentChunks || 5,
+          topicId: options.topicId,
+          documentIds: options.documentIds,
+          minScore,
+        });
+      } catch (searchError: any) {
+        // If Pinecone search fails, log and return empty
+        if (searchError.code === 'PINECONE_NOT_CONFIGURED') {
+          logger.warn('Pinecone not configured, skipping document search', {
+            userId: options.userId,
+          });
+          return [];
+        }
+        // Re-throw other errors
+        throw searchError;
+      }
+
+      // If no results found with the threshold, try with a lower threshold (0.3) as fallback
+      if (searchResults.length === 0 && minScore > 0.3) {
+        logger.info('No results with minScore, trying lower threshold', {
+          userId: options.userId,
+          originalMinScore: minScore,
+          fallbackMinScore: 0.3,
+        });
+        
+        searchResults = await PineconeService.search(queryEmbedding, {
+          userId: options.userId,
+          topK: options.maxDocumentChunks || 5,
+          topicId: options.topicId,
+          documentIds: options.documentIds,
+          minScore: 0.3,
+        });
+      }
 
       if (searchResults.length === 0) {
         logger.info('No relevant document chunks found', {

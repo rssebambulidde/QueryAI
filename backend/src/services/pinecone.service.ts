@@ -364,7 +364,10 @@ export class PineconeService {
       logger.info('Semantic search completed', {
         queryTopK: topK,
         resultsCount: results.length,
+        matchesBeforeFilter: queryResponse.matches?.length || 0,
+        minScore: options.minScore || 0.7,
         userId: options.userId,
+        filter,
       });
 
       return results;
