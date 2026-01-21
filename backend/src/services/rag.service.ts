@@ -287,6 +287,7 @@ export class RAGService {
         formattedContext += `[Web Source ${index + 1}] ${result.title}\n`;
         formattedContext += `URL: ${result.url}\n`;
         formattedContext += `Content: ${result.content}\n\n`;
+        formattedContext += `IMPORTANT: When citing this source, use the format: [Web Source ${index + 1}](${result.url}) or mention the URL directly.\n\n`;
       });
     }
 

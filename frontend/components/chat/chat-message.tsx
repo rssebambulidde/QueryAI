@@ -32,23 +32,54 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
 
-  // Replace [Source N] patterns with hyperlinks using source titles
+  // Replace [Source N] and [Web Source N] patterns with hyperlinks using source titles
   const processContentWithSources = (content: string, sources?: Source[]): string => {
     if (!sources || sources.length === 0) return content;
     
-    // Replace [Source 1], [Source 2], etc. with markdown links using source titles
     let processedContent = content;
-    sources.forEach((source, index) => {
+    
+    // Process web sources first (they have URLs)
+    const webSources = sources.filter(s => s.type === 'web' && s.url);
+    webSources.forEach((source, index) => {
       const sourceNumber = index + 1;
-      const pattern = new RegExp(`\\[Source ${sourceNumber}\\]`, 'gi');
       
-      // Use the source title as the link text (fallback to "Source N" if no title)
-      const linkText = source.title || `Source ${sourceNumber}`;
+      // Replace [Web Source N] or [Web Source N](URL) patterns
+      const pattern1 = new RegExp(`\\[Web Source ${sourceNumber}\\](?:\\([^)]+\\))?`, 'gi');
+      const pattern2 = new RegExp(`\\[Web Source ${sourceNumber}\\]`, 'gi');
       
-      processedContent = processedContent.replace(
-        pattern,
-        `[${linkText}](${source.url} "${source.title || linkText}")`
-      );
+      const linkText = source.title || `Web Source ${sourceNumber}`;
+      const replacement = `[${linkText}](${source.url} "${source.title || linkText}")`;
+      
+      // Try pattern with URL first, then without
+      if (processedContent.match(pattern1)) {
+        processedContent = processedContent.replace(pattern1, replacement);
+      } else {
+        processedContent = processedContent.replace(pattern2, replacement);
+      }
+    });
+    
+    // Process document sources (they might not have URLs)
+    const documentSources = sources.filter(s => s.type === 'document');
+    documentSources.forEach((source, index) => {
+      const sourceNumber = index + 1;
+      const pattern = new RegExp(`\\[Document ${sourceNumber}\\]`, 'gi');
+      
+      // For documents, use the title as the link text
+      const linkText = source.title || `Document ${sourceNumber}`;
+      
+      // If document has a URL (for viewing), use it, otherwise just show the title
+      if (source.url) {
+        processedContent = processedContent.replace(
+          pattern,
+          `[${linkText}](${source.url} "${source.title || linkText}")`
+        );
+      } else {
+        // Just make it bold/emphasized if no URL
+        processedContent = processedContent.replace(
+          pattern,
+          `**${linkText}**`
+        );
+      }
     });
     
     return processedContent;

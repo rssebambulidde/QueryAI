@@ -95,8 +95,11 @@ Guidelines:
 - Use proper formatting (bullet points, paragraphs) when appropriate
 - ALWAYS cite sources when referencing information. Use inline citations:
   - For document excerpts: [Document 1], [Document 2], [Document 3], etc. (MANDATORY - cite every fact from documents)
-  - For web sources: [Web Source 1], [Web Source 2], etc.
+  - For web sources: [Web Source 1](URL), [Web Source 2](URL), etc. - ALWAYS include the URL in parentheses after the citation
 - When you reference information from a document, immediately follow it with the citation like this: "According to [Document 1], the process involves..." or "The policy states [Document 2] that..."
+- When you reference information from web sources, use this format: "According to [Web Source 1](https://example.com), the situation involves..." or "As reported by [Web Source 2](https://example.com/article)..."
+- Format your responses with clear structure: Use paragraphs for main points, bullet points for lists, and bold text for key terms when appropriate
+- Provide concise but comprehensive summaries that capture the essential information
 - Be friendly and professional`;
 
     let fullContext = '';
@@ -125,9 +128,19 @@ CRITICAL: Use the provided sources to answer the question. ${enableDocumentSearc
 
 CITATION REQUIREMENTS:
 - Every fact, statement, or piece of information you use from the document excerpts MUST be followed by a citation like [Document 1], [Document 2], etc.
-- Do NOT say "based on the document excerpts" - instead, cite specific documents like "According to [Document 1], the process involves..."
+- For web sources, ALWAYS include the URL in the citation: [Web Source 1](URL), [Web Source 2](URL), etc.
+- Do NOT say "based on the document excerpts" or "based on web sources" - instead, cite specific sources with inline citations
 - When you mention multiple facts, cite each one: "The policy [Document 1] states that... Additionally, [Document 2] requires..."
-- Always cite sources using the format specified above.`;
+- Always cite sources using the format specified above.
+
+RESPONSE FORMATTING:
+- Structure your response with clear, well-organized paragraphs
+- Use bullet points (• or -) for lists of items, steps, requirements, or key points
+- Use bold text (**text**) for key terms, important concepts, dates, or section headings
+- Provide a brief, comprehensive summary at the beginning (2-3 sentences) that captures the main answer
+- Keep paragraphs concise (3-4 sentences max) for better readability
+- Use proper spacing between sections and ideas
+- When presenting multiple points, use numbered lists or bullet points for clarity`;
     }
 
     // If no context and document-only mode, provide clear instruction
