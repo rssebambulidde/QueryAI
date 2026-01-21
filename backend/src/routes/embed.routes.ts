@@ -136,6 +136,46 @@ router.get(
       background: #f3f4f6;
       color: ${textColor};
     }
+    .queryai-message.assistant p {
+      margin: 0.5rem 0;
+      line-height: 1.5;
+    }
+    .queryai-message.assistant p:first-child {
+      margin-top: 0;
+    }
+    .queryai-message.assistant p:last-child {
+      margin-bottom: 0;
+    }
+    .queryai-message.assistant strong {
+      font-weight: 600;
+      color: ${textColor};
+    }
+    .queryai-message.assistant em {
+      font-style: italic;
+    }
+    .queryai-message.assistant code {
+      background: rgba(0, 0, 0, 0.1);
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.25rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+    }
+    .queryai-message.assistant ul,
+    .queryai-message.assistant ol {
+      margin: 0.5rem 0;
+      padding-left: 1.5rem;
+    }
+    .queryai-message.assistant li {
+      margin: 0.25rem 0;
+      line-height: 1.5;
+    }
+    .queryai-message.assistant a {
+      color: ${primaryColor};
+      text-decoration: underline;
+    }
+    .queryai-message.assistant a:hover {
+      opacity: 0.8;
+    }
     #queryai-chat-input-container {
       border-top: 1px solid #e5e7eb;
       padding: 1rem;
@@ -208,41 +248,48 @@ router.get(
         
         let html = markdown;
         
-        // Escape HTML first to prevent XSS
-        const div = document.createElement('div');
-        div.textContent = html;
-        html = div.innerHTML;
+        // Escape HTML first to prevent XSS (but preserve newlines)
+        html = html
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
         
-        // Convert markdown to HTML
-        // Bold: **text** or __text__
-        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+        // Convert newlines to <br> first (before other processing)
+        html = html.replace(/\n/g, '<br>');
         
-        // Italic: *text* or _text_
-        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-        
-        // Code: `code`
-        html = html.replace(/`(.+?)`/g, '<code>$1</code>');
-        
-        // Links: [text](url)
+        // Links: [text](url) - do this before other formatting
         html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
         
-        // Line breaks: Convert double newlines to paragraphs
-        html = html.split('\\n\\n').map(para => {
+        // Bold: **text** (but not if it's part of a link)
+        html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        
+        // Italic: *text* (but not if it's part of bold)
+        html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+        
+        // Code: `code`
+        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+        
+        // Convert <br><br> to paragraph breaks
+        html = html.split('<br><br>').map(para => {
           para = para.trim();
           if (!para) return '';
-          // Convert single newlines to <br>
-          para = para.replace(/\\n/g, '<br>');
+          // Remove leading/trailing <br> tags
+          para = para.replace(/^(<br>)+|(<br>)+$/g, '');
           return '<p>' + para + '</p>';
         }).join('');
         
-        // Lists: - item or * item
-        html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
-        html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+        // Lists: - item or * item (handle after paragraph conversion)
+        const listPattern = /(<p>)?(-|\*|\d+\.) (.+?)(<\/p>)?/g;
+        html = html.replace(listPattern, function(match, p1, marker, content, p4) {
+          const listType = /^\d+\./.test(marker) ? 'ol' : 'ul';
+          return '<' + listType + '><li>' + content + '</li></' + listType + '>';
+        });
         
-        // Numbered lists: 1. item
-        html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+        // Clean up nested lists
+        html = html.replace(/<\/ul>\s*<ul>/g, '');
+        html = html.replace(/<\/ol>\s*<ol>/g, '');
         
         return html;
       }
