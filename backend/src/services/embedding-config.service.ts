@@ -171,12 +171,15 @@ export class EmbeddingConfigService {
       let query = supabaseAdmin
         .from('embedding_configs')
         .select('*')
-        .eq('id', configId)
-        .eq('is_active', true);
+        .eq('id', configId);
 
       // If userId provided, verify ownership (for authenticated requests)
+      // Don't filter by is_active for authenticated requests - users should be able to see/edit inactive configs
       if (userId) {
         query = query.eq('user_id', userId);
+      } else {
+        // Only filter by is_active for public/unauthenticated requests (e.g., embed widget)
+        query = query.eq('is_active', true);
       }
 
       const { data, error } = await query.single();

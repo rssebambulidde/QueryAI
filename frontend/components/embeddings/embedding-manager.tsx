@@ -169,7 +169,12 @@ export const EmbeddingManager: React.FC = () => {
         loadEmbeddings();
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to update embedding configuration');
+      const errorMessage = error.response?.data?.error?.message 
+        || error.response?.data?.message 
+        || error.message 
+        || 'Failed to update embedding configuration';
+      toast.error(errorMessage);
+      console.error('Toggle active embedding error:', error);
     }
   };
 
