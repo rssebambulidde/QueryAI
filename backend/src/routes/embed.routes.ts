@@ -182,6 +182,15 @@ router.get(
       const input = document.getElementById('queryai-chat-input');
       const sendButton = document.getElementById('queryai-chat-send');
       
+      function addMessage(content, role) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'queryai-message ' + role;
+        messageDiv.textContent = content;
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        return messageDiv;
+      }
+      
       async function sendMessage() {
         const question = input.value.trim();
         if (!question) return;
@@ -231,15 +240,6 @@ router.get(
         } finally {
           sendButton.disabled = false;
         }
-      }
-      
-      function addMessage(content, role) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'queryai-message ' + role;
-        messageDiv.textContent = content;
-        messagesContainer.appendChild(messageDiv);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        return messageDiv;
       }
       
       sendButton.addEventListener('click', sendMessage);
