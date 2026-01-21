@@ -133,17 +133,20 @@ export const ChatInterface: React.FC = () => {
   const handleSend = async (content: string, filters?: { topic?: string; timeRange?: any; startDate?: string; endDate?: string; country?: string }) => {
     if (!content.trim() || isLoading) return;
 
-    // Use conversation filters if no filters provided, or merge provided filters with conversation filters
-    const activeFilters = filters || conversationFilters;
+    // Use provided filters if available, otherwise use conversation filters
+    // If filters are provided (even if same), they take precedence for this message
+    const activeFilters = filters !== undefined ? filters : conversationFilters;
     
-    // If filters are provided and different from conversation filters, update conversation
-    if (filters && currentConversationId && JSON.stringify(filters) !== JSON.stringify(conversationFilters)) {
+    // Always save filters to conversation if they're provided and we have a conversation
+    // This ensures filters are updated even if they're the same (in case user wants to keep them)
+    if (filters !== undefined && currentConversationId) {
       try {
         await updateConversationFilters(currentConversationId, filters);
+        // Update local state immediately so UI reflects the change
         setConversationFilters(filters);
       } catch (error: any) {
         console.warn('Failed to save filters:', error);
-        // Continue anyway
+        // Continue anyway - use the filters for this request even if save failed
       }
     }
 
@@ -157,10 +160,10 @@ export const ChatInterface: React.FC = () => {
         conversationId = newConversation.id;
         
         // Save filters to new conversation if provided
-        if (activeFilters && Object.keys(activeFilters).length > 0) {
+        if (filters !== undefined && Object.keys(filters).length > 0) {
           try {
-            await updateConversationFilters(conversationId, activeFilters);
-            setConversationFilters(activeFilters);
+            await updateConversationFilters(conversationId, filters);
+            setConversationFilters(filters);
           } catch (error: any) {
             console.warn('Failed to save filters to new conversation:', error);
           }

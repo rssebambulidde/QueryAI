@@ -24,8 +24,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [filters, setFilters] = useState<SearchFiltersType>(conversationFilters);
   
   // Update filters when conversation filters change
+  // Only sync if local filters are empty to avoid overwriting user's in-progress changes
   React.useEffect(() => {
-    setFilters(conversationFilters);
+    const localFiltersEmpty = Object.keys(filters).length === 0;
+    if (localFiltersEmpty) {
+      setFilters(conversationFilters);
+    }
   }, [conversationFilters]);
 
   const handleSend = () => {
@@ -33,7 +37,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       const filtersToSend = Object.keys(filters).length > 0 ? filters : undefined;
       onSend(message.trim(), filtersToSend);
       setMessage('');
-      setFilters({});
+      // Don't clear filters - keep them for the next message
+      // Filters will persist in the conversation
       setShowFilters(false);
     }
   };
