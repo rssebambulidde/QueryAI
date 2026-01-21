@@ -529,7 +529,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
 
       {/* Input - Centered layout */}
       <div className="bg-white border-t border-gray-200 shadow-lg relative">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-3xl mx-auto pb-4">
           <ChatInput
             onSend={handleSend}
             disabled={isLoading || isStreaming}
