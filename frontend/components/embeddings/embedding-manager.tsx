@@ -165,16 +165,31 @@ export const EmbeddingManager: React.FC = () => {
 
   const handleEdit = (embedding: EmbeddingConfig) => {
     setEditingEmbedding(embedding);
+    const defaultCustomization = {
+      primaryColor: '#f97316',
+      backgroundColor: '#ffffff',
+      textColor: '#1f2937',
+      greetingMessage: 'Hello! How can I help you today?',
+      showBranding: true,
+    };
+    
+    // Safely extract customization with type checking
+    let customization = defaultCustomization;
+    if (embedding.customization) {
+      const custom = embedding.customization as any;
+      customization = {
+        primaryColor: custom.primaryColor || defaultCustomization.primaryColor,
+        backgroundColor: custom.backgroundColor || defaultCustomization.backgroundColor,
+        textColor: custom.textColor || defaultCustomization.textColor,
+        greetingMessage: custom.greetingMessage || defaultCustomization.greetingMessage,
+        showBranding: custom.showBranding !== undefined ? custom.showBranding : defaultCustomization.showBranding,
+      };
+    }
+    
     setFormData({
       name: embedding.name,
       topicId: embedding.topic_id,
-      customization: embedding.customization || {
-        primaryColor: '#f97316',
-        backgroundColor: '#ffffff',
-        textColor: '#1f2937',
-        greetingMessage: 'Hello! How can I help you today?',
-        showBranding: true,
-      },
+      customization,
     });
     setShowCreateForm(false);
   };
