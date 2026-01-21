@@ -9,10 +9,11 @@ import { ConversationList } from '@/components/chat/conversation-list';
 import { DocumentManager } from '@/components/documents/document-manager';
 import { TopicManager } from '@/components/topics/topic-manager';
 import { ApiKeyManager } from '@/components/api-keys/api-key-manager';
-import { MessageSquare, FileText, Tag, Key } from 'lucide-react';
+import { EmbeddingManager } from '@/components/embeddings/embedding-manager';
+import { MessageSquare, FileText, Tag, Key, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys';
+type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -133,6 +134,18 @@ export default function DashboardPage() {
               <Key className="w-5 h-5" />
               API Keys
             </button>
+            <button
+              onClick={() => setActiveTab('embeddings')}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                activeTab === 'embeddings'
+                  ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+              )}
+            >
+              <Bot className="w-5 h-5" />
+              Embeddings
+            </button>
           </nav>
         </aside>
 
@@ -155,9 +168,13 @@ export default function DashboardPage() {
             <div className="flex-1 overflow-y-auto p-6">
               <TopicManager />
             </div>
-          ) : (
+          ) : activeTab === 'api-keys' ? (
             <div className="flex-1 overflow-y-auto p-6">
               <ApiKeyManager />
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto p-6">
+              <EmbeddingManager />
             </div>
           )}
         </div>

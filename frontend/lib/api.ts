@@ -453,6 +453,30 @@ export const apiKeyApi = {
     const response = await apiClient.delete(`/api/api-keys/${id}`);
     return response.data;
   },
+
+  getUsage: async (id: string, options?: { startDate?: string; endDate?: string; limit?: number }): Promise<ApiResponse<{
+    usage: Array<{
+      id: string;
+      api_key_id: string;
+      endpoint: string;
+      method: string;
+      status_code?: number;
+      response_time_ms?: number;
+      created_at: string;
+    }>;
+    statistics: {
+      totalRequests: number;
+      successCount: number;
+      errorCount: number;
+      avgResponseTime: number;
+      endpointStats: Record<string, { count: number; avgTime: number }>;
+    };
+  }>> => {
+    const response = await apiClient.get(`/api/api-keys/${id}/usage`, {
+      params: options,
+    });
+    return response.data;
+  },
 };
 
 // Embedding Config interface

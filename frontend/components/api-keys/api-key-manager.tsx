@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { apiKeyApi, ApiKey, topicApi, Topic } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
-import { Plus, Edit2, Trash2, X, Save, Copy, Eye, EyeOff } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Save, Copy, Eye, EyeOff, BarChart3, Calendar } from 'lucide-react';
 
 export const ApiKeyManager: React.FC = () => {
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
@@ -15,6 +15,9 @@ export const ApiKeyManager: React.FC = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingKey, setEditingKey] = useState<ApiKey | null>(null);
   const [newKey, setNewKey] = useState<string | null>(null);
+  const [viewingUsage, setViewingUsage] = useState<string | null>(null);
+  const [usageData, setUsageData] = useState<any>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -206,6 +209,28 @@ export const ApiKeyManager: React.FC = () => {
     if (!topicId) return 'No topic (all topics)';
     const topic = topics.find((t) => t.id === topicId);
     return topic ? topic.name : 'Unknown topic';
+  };
+
+  const loadUsage = async (apiKeyId: string) => {
+    setUsageLoading(true);
+    try {
+      const response = await apiKeyApi.getUsage(apiKeyId, {
+        limit: 100,
+      });
+      if (response.success && response.data) {
+        setUsageData(response.data);
+        setViewingUsage(apiKeyId);
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load usage data');
+    } finally {
+      setUsageLoading(false);
+    }
+  };
+
+  const closeUsage = () => {
+    setViewingUsage(null);
+    setUsageData(null);
   };
 
   return (
@@ -408,6 +433,15 @@ export const ApiKeyManager: React.FC = () => {
                 <Button
                   variant="ghost"
                   size="sm"
+                  onClick={() => loadUsage(apiKey.id)}
+                  className="h-8 w-8 p-0"
+                  title="View Usage Statistics"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => handleToggleActive(apiKey)}
                   className="h-8 w-8 p-0"
                   title={apiKey.is_active ? 'Deactivate' : 'Activate'}
@@ -438,6 +472,148 @@ export const ApiKeyManager: React.FC = () => {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Usage Statistics Modal */}
+      {viewingUsage && usageData && (
+        <>
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-40"
+            onClick={closeUsage}
+          />
+          <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-white rounded-lg shadow-xl z-50 overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">API Usage Statistics</h3>
+                <Button variant="ghost" size="sm" onClick={closeUsage}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {usageLoading ? (
+                <div className="text-center py-8 text-gray-500">Loading usage data...</div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Statistics Summary */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <div className="text-sm text-gray-500">Total Requests</div>
+                      <div className="text-2xl font-semibold text-gray-900 mt-1">
+                        {usageData.statistics.totalRequests}
+                      </div>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <div className="text-sm text-green-600">Successful</div>
+                      <div className="text-2xl font-semibold text-green-700 mt-1">
+                        {usageData.statistics.successCount}
+                      </div>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-4">
+                      <div className="text-sm text-red-600">Errors</div>
+                      <div className="text-2xl font-semibold text-red-700 mt-1">
+                        {usageData.statistics.errorCount}
+                      </div>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <div className="text-sm text-blue-600">Avg Response Time</div>
+                      <div className="text-2xl font-semibold text-blue-700 mt-1">
+                        {usageData.statistics.avgResponseTime}ms
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Endpoint Statistics */}
+                  {Object.keys(usageData.statistics.endpointStats).length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-3">Endpoint Statistics</h4>
+                      <div className="space-y-2">
+                        {Object.entries(usageData.statistics.endpointStats).map(([endpoint, stats]: [string, any]) => (
+                          <div
+                            key={endpoint}
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                          >
+                            <div>
+                              <div className="font-medium text-gray-900">{endpoint}</div>
+                              <div className="text-sm text-gray-500">
+                                {stats.count} requests
+                              </div>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              Avg: {stats.avgTime}ms
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recent Usage Logs */}
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-3">Recent Requests</h4>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-gray-700 font-medium">Time</th>
+                            <th className="px-4 py-2 text-left text-gray-700 font-medium">Endpoint</th>
+                            <th className="px-4 py-2 text-left text-gray-700 font-medium">Method</th>
+                            <th className="px-4 py-2 text-left text-gray-700 font-medium">Status</th>
+                            <th className="px-4 py-2 text-left text-gray-700 font-medium">Response Time</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {usageData.usage.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                                No usage data yet
+                              </td>
+                            </tr>
+                          ) : (
+                            usageData.usage.map((log: any) => (
+                              <tr key={log.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-2 text-gray-600">
+                                  {new Date(log.created_at).toLocaleString()}
+                                </td>
+                                <td className="px-4 py-2 text-gray-900 font-mono text-xs">
+                                  {log.endpoint}
+                                </td>
+                                <td className="px-4 py-2 text-gray-600">
+                                  <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">
+                                    {log.method}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2">
+                                  {log.status_code ? (
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-xs ${
+                                        log.status_code >= 200 && log.status_code < 300
+                                          ? 'bg-green-100 text-green-700'
+                                          : log.status_code >= 400
+                                          ? 'bg-red-100 text-red-700'
+                                          : 'bg-gray-100 text-gray-700'
+                                      }`}
+                                    >
+                                      {log.status_code}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-2 text-gray-600">
+                                  {log.response_time_ms ? `${log.response_time_ms}ms` : '-'}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

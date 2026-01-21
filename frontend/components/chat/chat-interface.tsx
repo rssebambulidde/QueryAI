@@ -143,6 +143,28 @@ export const ChatInterface: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Load topics on mount and refresh when needed
+  useEffect(() => {
+    const loadTopics = async () => {
+      try {
+        const response = await topicApi.list();
+        if (response.success && response.data) {
+          setTopics(response.data);
+        }
+      } catch (error) {
+        console.warn('Failed to load topics:', error);
+      }
+    };
+    loadTopics();
+    
+    // Refresh topics when window regains focus (in case topics were created in another tab)
+    const handleFocus = () => {
+      loadTopics();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
   // Save RAG settings to localStorage when they change
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -470,34 +492,42 @@ export const ChatInterface: React.FC = () => {
                     Select Topic
                   </button>
                   {showTopicSelector && (
-                    <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto">
-                      {topics.length === 0 ? (
-                        <div className="p-3 text-xs text-gray-500 text-center">
-                          No topics. Create one in Topics tab.
-                        </div>
-                      ) : (
-                        <>
-                          {topics.map((topic) => (
-                            <button
-                              key={topic.id}
-                              onClick={() => {
-                                setSelectedTopic(topic);
-                                setShowTopicSelector(false);
-                                if (currentConversationId) {
-                                  conversationApi.update(currentConversationId, { topicId: topic.id }).catch(console.warn);
-                                }
-                              }}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                            >
-                              <div className="font-medium text-gray-900">{topic.name}</div>
-                              {topic.description && (
-                                <div className="text-xs text-gray-500 mt-1">{topic.description}</div>
-                              )}
-                            </button>
-                          ))}
-                        </>
-                      )}
-                    </div>
+                    <>
+                      {/* Click outside to close */}
+                      <div
+                        className="fixed inset-0 z-[5]"
+                        onClick={() => setShowTopicSelector(false)}
+                      />
+                      <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-[10] max-h-64 overflow-y-auto">
+                        {topics.length === 0 ? (
+                          <div className="p-3 text-xs text-gray-500 text-center">
+                            <p>No topics yet.</p>
+                            <p className="mt-1">Create one in the Topics tab.</p>
+                          </div>
+                        ) : (
+                          <>
+                            {topics.map((topic) => (
+                              <button
+                                key={topic.id}
+                                onClick={() => {
+                                  setSelectedTopic(topic);
+                                  setShowTopicSelector(false);
+                                  if (currentConversationId) {
+                                    conversationApi.update(currentConversationId, { topicId: topic.id }).catch(console.warn);
+                                  }
+                                }}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                              >
+                                <div className="font-medium text-gray-900">{topic.name}</div>
+                                {topic.description && (
+                                  <div className="text-xs text-gray-500 mt-1">{topic.description}</div>
+                                )}
+                              </button>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               )}
