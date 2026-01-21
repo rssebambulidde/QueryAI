@@ -526,11 +526,7 @@ export const ChatInterface: React.FC = () => {
             onSend={handleSend}
             disabled={isLoading || isStreaming}
             conversationFilters={conversationFilters}
-            placeholder={
-              isLoading || isStreaming
-                ? 'AI is thinking...'
-                : 'Ask me anything...'
-            }
+            placeholder="Ask me anything..."
           />
         </div>
       </div>

@@ -72,7 +72,8 @@ export class AIService {
     ragContext?: string,
     additionalContext?: string,
     enableDocumentSearch?: boolean,
-    enableWebSearch?: boolean
+    enableWebSearch?: boolean,
+    timeFilter?: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string }
   ): string {
     const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
     const hasWebResults = ragContext?.includes('Web Search Results:') || false;
@@ -86,9 +87,37 @@ export class AIService {
       modeInstruction = `You can use both document excerpts and web search results. Prioritize document excerpts when they directly answer the question.`;
     }
 
+    // Add time filter context if applicable
+    let timeFilterInstruction = '';
+    if (timeFilter) {
+      if (timeFilter.timeRange) {
+        const timeRangeLabels: Record<string, string> = {
+          'day': 'last 24 hours',
+          'd': 'last 24 hours',
+          'week': 'last 7 days',
+          'w': 'last 7 days',
+          'month': 'last 30 days',
+          'm': 'last 30 days',
+          'year': 'last 12 months',
+          'y': 'last 12 months',
+        };
+        const timeLabel = timeRangeLabels[timeFilter.timeRange] || timeFilter.timeRange;
+        timeFilterInstruction = `\n\nCRITICAL TIME FILTER CONTEXT: The user has applied a time filter for "${timeLabel}". All information you provide MUST be from this time period. When responding:\n- Explicitly mention that the information is from the specified time period (e.g., "Based on information from the last 24 hours...")\n- If the sources don't contain information from this time period, clearly state that no recent information is available\n- Emphasize the recency of the information in your response\n- Do NOT include information that is clearly outside this time range`;
+      } else if (timeFilter.startDate || timeFilter.endDate) {
+        timeFilterInstruction = `\n\nCRITICAL TIME FILTER CONTEXT: The user has applied a custom date range filter (${timeFilter.startDate || 'start'} to ${timeFilter.endDate || 'end'}). All information you provide MUST be from this date range.`;
+      }
+      
+      if (timeFilter.topic) {
+        timeFilterInstruction += `\n- The search is filtered by topic/keyword: "${timeFilter.topic}"`;
+      }
+      if (timeFilter.country) {
+        timeFilterInstruction += `\n- The search is filtered by country: "${timeFilter.country}"`;
+      }
+    }
+
     const basePrompt = `You are a helpful AI assistant that provides accurate, informative, and well-structured answers to user questions using Retrieval-Augmented Generation (RAG).
 
-${modeInstruction}
+${modeInstruction}${timeFilterInstruction}
 
 Guidelines:
 - Provide clear, concise, and accurate answers
@@ -174,14 +203,15 @@ No document excerpts were found for this query. You must inform the user that th
     additionalContext?: string,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
     enableDocumentSearch?: boolean,
-    enableWebSearch?: boolean
+    enableWebSearch?: boolean,
+    timeFilter?: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string }
   ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
     // Add system prompt with RAG context
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch),
+      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter),
     });
 
     // Add conversation history if provided
@@ -569,6 +599,17 @@ No document excerpts were found for this query. You must inform the user that th
         }
       }
 
+      // Build time filter context for prompt
+      const timeFilter = request.timeRange || request.startDate || request.endDate || request.topic || request.country
+        ? {
+            timeRange: request.timeRange,
+            startDate: request.startDate,
+            endDate: request.endDate,
+            topic: request.topic,
+            country: request.country,
+          }
+        : undefined;
+
       // Build messages with RAG context
       const messages = this.buildMessages(
         request.question,
@@ -576,7 +617,8 @@ No document excerpts were found for this query. You must inform the user that th
         request.context,
         request.conversationHistory,
         request.enableDocumentSearch,
-        request.enableWebSearch
+        request.enableWebSearch,
+        timeFilter
       );
 
       logger.info('Sending streaming question to OpenAI with RAG', {

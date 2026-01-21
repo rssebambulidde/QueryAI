@@ -248,9 +248,11 @@ export class SearchService {
       // Build search query with topic filtering
       let searchQuery = request.query.trim();
       
-      // Add topic to query if provided
+      // Add topic to query if provided - use quotes to make it more specific
       if (request.topic) {
-        searchQuery = `${request.topic} ${searchQuery}`;
+        // Use quoted phrase to ensure the topic is treated as a required term
+        const topicPhrase = request.topic.includes(' ') ? `"${request.topic}"` : request.topic;
+        searchQuery = `${topicPhrase} ${searchQuery}`;
       }
       
       // Add time-based keywords to query for better filtering (subtle enhancement)
@@ -321,6 +323,41 @@ export class SearchService {
         publishedDate: result.published_date,
         author: result.author,
       }));
+
+      // Filter results by topic/keyword if provided - ensure results are actually about the topic
+      if (request.topic) {
+        const topicLower = request.topic.toLowerCase().trim();
+        const topicWords = topicLower.split(/\s+/);
+        
+        results = results.filter((result) => {
+          // Check if topic appears in title or content
+          const titleLower = (result.title || '').toLowerCase();
+          const contentLower = (result.content || '').toLowerCase();
+          const combinedText = `${titleLower} ${contentLower}`;
+          
+          // For multi-word topics, check if all significant words appear
+          // For single-word topics, check if the word appears
+          if (topicWords.length > 1) {
+            // Multi-word topic: require the full phrase or all significant words
+            const hasFullPhrase = combinedText.includes(topicLower);
+            // Also check if all significant words (2+ chars) appear
+            const significantWords = topicWords.filter(w => w.length >= 2);
+            const hasAllWords = significantWords.length > 0 && 
+              significantWords.every(word => combinedText.includes(word));
+            
+            return hasFullPhrase || hasAllWords;
+          } else {
+            // Single-word topic: just check if it appears
+            return combinedText.includes(topicLower);
+          }
+        });
+        
+        logger.info('Filtered results by topic/keyword', {
+          topic: request.topic,
+          originalCount: (response.results || []).length,
+          filteredCount: results.length,
+        });
+      }
 
       // Filter results by time range if specified
       if (request.timeRange && !request.startDate && !request.endDate) {
