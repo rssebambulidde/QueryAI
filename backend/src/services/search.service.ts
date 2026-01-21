@@ -141,6 +141,26 @@ export class SearchService {
       if (request.topic) {
         searchQuery = `${request.topic} ${searchQuery}`;
       }
+      
+      // Add time-based keywords to query for better filtering (subtle enhancement)
+      if (request.timeRange && !request.startDate && !request.endDate) {
+        const timeKeywords: Record<string, string> = {
+          'day': 'recent OR today OR "last 24 hours"',
+          'd': 'recent OR today OR "last 24 hours"',
+          'week': 'recent OR "this week" OR "last 7 days"',
+          'w': 'recent OR "this week" OR "last 7 days"',
+          'month': 'recent OR "this month" OR "last 30 days"',
+          'm': 'recent OR "this month" OR "last 30 days"',
+          'year': 'recent OR "this year" OR "last 12 months"',
+          'y': 'recent OR "this year" OR "last 12 months"',
+        };
+        
+        const timeKeyword = timeKeywords[request.timeRange];
+        if (timeKeyword) {
+          // Add time context more subtly to help search engine prioritize recent content
+          searchQuery = `${searchQuery} ${timeKeyword}`;
+        }
+      }
 
       logger.info('Performing Tavily search', {
         query: searchQuery,
@@ -182,7 +202,7 @@ export class SearchService {
       const response = await tavilyClient.search(searchQuery, tavilyOptions);
 
       // Transform Tavily results to our format
-      const results: SearchResult[] = (response.results || []).map((result: any) => ({
+      let results: SearchResult[] = (response.results || []).map((result: any) => ({
         title: result.title || 'Untitled',
         url: result.url || '',
         content: result.content || '',
@@ -190,6 +210,81 @@ export class SearchService {
         publishedDate: result.published_date,
         author: result.author,
       }));
+
+      // Filter results by time range if specified
+      if (request.timeRange && !request.startDate && !request.endDate) {
+        const now = new Date();
+        let cutoffDate: Date;
+        
+        switch (request.timeRange) {
+          case 'day':
+          case 'd':
+            cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000); // Last 24 hours
+            break;
+          case 'week':
+          case 'w':
+            cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // Last 7 days
+            break;
+          case 'month':
+          case 'm':
+            cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // Last 30 days
+            break;
+          case 'year':
+          case 'y':
+            cutoffDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000); // Last 365 days
+            break;
+          default:
+            cutoffDate = new Date(0); // No filtering
+        }
+        
+        if (cutoffDate.getTime() > 0) {
+          results = results.filter((result) => {
+            if (!result.publishedDate) {
+              // If no published date, include it (better to show than hide)
+              return true;
+            }
+            
+            try {
+              const publishedDate = new Date(result.publishedDate);
+              return publishedDate >= cutoffDate;
+            } catch (e) {
+              // If date parsing fails, include it
+              return true;
+            }
+          });
+          
+          logger.info('Filtered results by time range', {
+            timeRange: request.timeRange,
+            cutoffDate: cutoffDate.toISOString(),
+            originalCount: (response.results || []).length,
+            filteredCount: results.length,
+          });
+        }
+      } else if (request.startDate || request.endDate) {
+        // Filter by custom date range
+        const startDate = request.startDate ? new Date(request.startDate) : new Date(0);
+        const endDate = request.endDate ? new Date(request.endDate) : new Date();
+        
+        results = results.filter((result) => {
+          if (!result.publishedDate) {
+            return true; // Include if no date
+          }
+          
+          try {
+            const publishedDate = new Date(result.publishedDate);
+            return publishedDate >= startDate && publishedDate <= endDate;
+          } catch (e) {
+            return true; // Include if date parsing fails
+          }
+        });
+        
+        logger.info('Filtered results by custom date range', {
+          startDate: request.startDate,
+          endDate: request.endDate,
+          originalCount: (response.results || []).length,
+          filteredCount: results.length,
+        });
+      }
 
       const searchResponse: SearchResponse = {
         query: request.query,
