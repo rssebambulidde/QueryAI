@@ -90,17 +90,15 @@ export class EmbeddingConfigService {
       }
 
       const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const configId = `embed_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
+      // Insert without specifying id - let database generate UUID
       const { data, error } = await supabaseAdmin
         .from('embedding_configs')
         .insert({
-          id: configId,
           user_id: input.userId,
           topic_id: input.topicId,
           name: input.name.trim(),
           customization: input.customization || {},
-          embed_code: this.generateEmbedCode(configId, apiUrl),
           is_active: true,
         })
         .select()
@@ -115,14 +113,32 @@ export class EmbeddingConfigService {
         );
       }
 
+      // Update with embed_code after getting the generated ID
+      const configId = data.id;
+      const embedCode = this.generateEmbedCode(configId, apiUrl);
+      
+      const { data: updatedData, error: updateError } = await supabaseAdmin
+        .from('embedding_configs')
+        .update({ embed_code: embedCode })
+        .eq('id', configId)
+        .select()
+        .single();
+
+      if (updateError) {
+        logger.error('Error updating embedding config with embed code:', updateError);
+        // Don't fail - embed_code is optional, just log the error
+      }
+
+      const finalData = updatedData || data;
+
       logger.info('Embedding config created', {
-        configId: data.id,
+        configId: finalData.id,
         userId: input.userId,
         topicId: input.topicId,
         name: input.name,
       });
 
-      return data;
+      return finalData;
     } catch (error) {
       if (error instanceof ValidationError || error instanceof AppError) {
         throw error;
