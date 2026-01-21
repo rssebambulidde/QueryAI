@@ -299,7 +299,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
   const hasFilters = filters.topic || filters.timeRange || filters.startDate || filters.endDate || filters.country;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-lg animate-in fade-in slide-in-from-top-2 space-y-4">
+    <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-xl animate-in fade-in slide-in-from-bottom-2 space-y-4 max-h-[70vh] overflow-y-auto">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-600" />

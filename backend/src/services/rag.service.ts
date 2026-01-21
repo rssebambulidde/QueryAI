@@ -32,6 +32,12 @@ export interface RAGOptions {
   maxDocumentChunks?: number;
   maxWebResults?: number;
   minScore?: number;
+  // Web search filters
+  topic?: string; // Topic/keyword for web search
+  timeRange?: 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
+  startDate?: string;
+  endDate?: string;
+  country?: string;
 }
 
 /**
@@ -200,9 +206,22 @@ export class RAGService {
     try {
       const searchRequest: SearchRequest = {
         query,
-        topic: options.topicId ? undefined : undefined, // Topic filtering handled separately
+        topic: options.topic || undefined, // Use topic filter from options
         maxResults: options.maxWebResults || 5,
+        timeRange: options.timeRange,
+        startDate: options.startDate,
+        endDate: options.endDate,
+        country: options.country,
       };
+
+      logger.info('Performing web search with filters', {
+        query: query.substring(0, 100),
+        topic: options.topic,
+        timeRange: options.timeRange,
+        country: options.country,
+        startDate: options.startDate,
+        endDate: options.endDate,
+      });
 
       const searchResponse = await SearchService.search(searchRequest);
 
