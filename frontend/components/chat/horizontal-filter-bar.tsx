@@ -355,7 +355,66 @@ export const HorizontalFilterBar: React.FC<HorizontalFilterBarProps> = ({
   const hasFilters = selectedTopic || filters.keyword || filters.timeRange || filters.startDate || filters.endDate || filters.country;
 
   return (
-    <div className="bg-gray-50 border-b border-gray-200 px-4 py-2.5">
+    <div className="bg-gray-50 border-b border-gray-200 px-4 py-2.5 relative">
+      {/* Create Topic Modal - Positioned above filter bar */}
+      {showCreateTopic && (
+        <div className="absolute bottom-full left-4 right-4 mb-2 p-4 bg-white border border-gray-200 rounded-lg shadow-xl z-[100]">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-semibold text-gray-900">Create New Topic</span>
+            <button
+              onClick={() => {
+                setShowCreateTopic(false);
+                setNewTopicName('');
+                setNewTopicDescription('');
+              }}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <input
+            type="text"
+            value={newTopicName}
+            onChange={(e) => setNewTopicName(e.target.value)}
+            placeholder="Topic name"
+            disabled={disabled}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md mb-2 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && newTopicName.trim()) {
+                handleCreateTopic();
+              }
+            }}
+          />
+          <textarea
+            value={newTopicDescription}
+            onChange={(e) => setNewTopicDescription(e.target.value)}
+            placeholder="Description (optional)"
+            disabled={disabled}
+            rows={2}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md mb-3 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleCreateTopic}
+              disabled={disabled || !newTopicName.trim()}
+              className="flex-1 px-3 py-2 text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Create
+            </button>
+            <button
+              onClick={() => {
+                setShowCreateTopic(false);
+                setNewTopicName('');
+                setNewTopicDescription('');
+              }}
+              className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-3 flex-wrap">
         {/* Topic Selector */}
         <div className="flex items-center gap-2" ref={topicDropdownRef}>
@@ -431,59 +490,6 @@ export const HorizontalFilterBar: React.FC<HorizontalFilterBarProps> = ({
             </div>
           )}
 
-          {/* Create Topic Modal */}
-          {showCreateTopic && (
-            <div className="absolute top-full left-0 mt-1 w-64 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-gray-900">Create Topic</span>
-                <button
-                  onClick={() => {
-                    setShowCreateTopic(false);
-                    setNewTopicName('');
-                    setNewTopicDescription('');
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-              <input
-                type="text"
-                value={newTopicName}
-                onChange={(e) => setNewTopicName(e.target.value)}
-                placeholder="Topic name"
-                disabled={disabled}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded mb-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-              <textarea
-                value={newTopicDescription}
-                onChange={(e) => setNewTopicDescription(e.target.value)}
-                placeholder="Description (optional)"
-                disabled={disabled}
-                rows={2}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded mb-2 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleCreateTopic}
-                  disabled={disabled || !newTopicName.trim()}
-                  className="flex-1 px-2 py-1.5 text-xs bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
-                >
-                  Create
-                </button>
-                <button
-                  onClick={() => {
-                    setShowCreateTopic(false);
-                    setNewTopicName('');
-                    setNewTopicDescription('');
-                  }}
-                  className="px-2 py-1.5 text-xs border border-gray-300 rounded hover:bg-gray-100"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Divider */}
