@@ -95,7 +95,12 @@ export const EmbeddingManager: React.FC = () => {
         loadEmbeddings();
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to create embedding configuration');
+      const errorMessage = error.response?.data?.error?.message 
+        || error.response?.data?.message 
+        || error.message 
+        || 'Failed to create embedding configuration';
+      toast.error(errorMessage);
+      console.error('Create embedding error:', error);
     }
   };
 
@@ -145,7 +150,12 @@ export const EmbeddingManager: React.FC = () => {
         loadEmbeddings();
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to delete embedding configuration');
+      const errorMessage = error.response?.data?.error?.message 
+        || error.response?.data?.message 
+        || error.message 
+        || 'Failed to delete embedding configuration';
+      toast.error(errorMessage);
+      console.error('Delete embedding error:', error);
     }
   };
 
