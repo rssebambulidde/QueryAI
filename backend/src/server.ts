@@ -89,8 +89,14 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Request logging
 app.use(requestLogger);
 
-// Rate limiting
-app.use('/api/', apiLimiter);
+// Rate limiting (exclude embed routes as they're public)
+app.use('/api/', (req, res, next) => {
+  // Skip rate limiting for public embed routes
+  if (req.path.startsWith('/embed/')) {
+    return next();
+  }
+  return apiLimiter(req, res, next);
+});
 
 // API Routes
 app.use('/api/test', testRoutes);

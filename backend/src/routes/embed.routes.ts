@@ -55,11 +55,23 @@ router.get(
           .replace(/'/g, '&#39;')
       : '';
 
-    const apiUrl = (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001')
-      .replace(/\/$/, ''); // Remove trailing slash
+    // Get API URL - use the request's origin if available, otherwise use env var
+    let apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    
+    // If we have the request origin, use it (for same-origin requests)
+    if (req.headers.origin) {
+      apiUrl = req.headers.origin;
+    } else if (req.headers.host) {
+      // Fallback to request host
+      const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      apiUrl = `${protocol}://${req.headers.host}`;
+    }
+    
+    apiUrl = apiUrl.replace(/\/$/, ''); // Remove trailing slash
 
     res.setHeader('Content-Type', 'text/html');
     res.setHeader('X-Frame-Options', 'ALLOWALL'); // Allow iframe embedding
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Allow embedding from any origin
     return res.send(`
 <!DOCTYPE html>
 <html lang="en">
