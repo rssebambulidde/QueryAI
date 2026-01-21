@@ -9,7 +9,7 @@ import { aiApi, QuestionRequest, documentApi, conversationApi } from '@/lib/api'
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { Alert } from '@/components/ui/alert';
-import { Sparkles, MessageSquare, Trash2, Filter, X } from 'lucide-react';
+import { Sparkles, MessageSquare, Filter, X } from 'lucide-react';
 
 export const ChatInterface: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -55,15 +55,16 @@ export const ChatInterface: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
-  // Load messages when conversation changes
+  // Load messages and filters when conversation changes
   useEffect(() => {
-    const loadMessages = async () => {
+    const loadConversationData = async () => {
       if (currentConversationId) {
         try {
-          const response = await conversationApi.getMessages(currentConversationId);
-          if (response.success && response.data) {
+          // Load messages
+          const messagesResponse = await conversationApi.getMessages(currentConversationId);
+          if (messagesResponse.success && messagesResponse.data) {
             // Convert API messages to UI messages
-            const uiMessages: Message[] = response.data.map((msg) => ({
+            const uiMessages: Message[] = messagesResponse.data.map((msg) => ({
               id: msg.id,
               role: msg.role,
               content: msg.content,
@@ -72,16 +73,29 @@ export const ChatInterface: React.FC = () => {
             }));
             setMessages(uiMessages);
           }
+          
+          // Load conversation details to get filters from metadata
+          const conversationResponse = await conversationApi.get(currentConversationId);
+          if (conversationResponse.success && conversationResponse.data) {
+            const conversation = conversationResponse.data;
+            if (conversation.metadata?.filters) {
+              setConversationFilters(conversation.metadata.filters);
+            } else {
+              setConversationFilters({});
+            }
+          }
         } catch (error: any) {
-          console.error('Failed to load messages:', error);
+          console.error('Failed to load conversation data:', error);
           setMessages([]);
+          setConversationFilters({});
         }
       } else {
         setMessages([]);
+        setConversationFilters({});
       }
     };
 
-    loadMessages();
+    loadConversationData();
   }, [currentConversationId]);
 
   // Load document count on mount
@@ -317,12 +331,6 @@ export const ChatInterface: React.FC = () => {
     }
   };
 
-  const handleClear = () => {
-    setMessages([]);
-    setError(null);
-    // Note: We don't clear the conversation, just the local messages
-    // User can switch conversations to see different history
-  };
 
   const handleEditMessage = async (messageId: string, newContent: string) => {
     // Find the message and update it
@@ -362,15 +370,6 @@ export const ChatInterface: React.FC = () => {
                 <p className="text-xs text-gray-500">Powered by RAG (Documents + Web Search)</p>
               </div>
             </div>
-            {messages.length > 0 && (
-              <button
-                onClick={handleClear}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Clear Chat
-              </button>
-            )}
           </div>
           
           {/* Active Filters Display */}

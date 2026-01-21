@@ -75,15 +75,9 @@ router.get(
       throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
     }
 
-    // Get metadata
-    const metadata = await ConversationService.getConversationMetadata(conversationId);
-
     res.json({
       success: true,
-      data: {
-        ...conversation,
-        ...metadata,
-      },
+      data: conversation,
     });
   })
 );
