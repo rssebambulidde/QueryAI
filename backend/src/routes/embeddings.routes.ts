@@ -163,7 +163,7 @@ router.get(
     const showBranding = customization.showBranding !== false;
 
     res.setHeader('Content-Type', 'text/html');
-    res.send(`
+    return res.send(`
 <!DOCTYPE html>
 <html lang="en">
 <head>

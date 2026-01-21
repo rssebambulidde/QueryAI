@@ -97,7 +97,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/documents', documentsRoutes);
-app.use('/api/documents', embeddingsRoutes); // Embedding endpoints use same base path
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/topics', topicsRoutes);
 app.use('/api/api-keys', apiKeysRoutes);

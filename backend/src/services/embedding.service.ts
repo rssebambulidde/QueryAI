@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import config from '../config/env';
 import logger from '../config/logger';
 import { AppError } from '../types/error';
-import { ChunkingService } from './chunking.service';
+import { ChunkingService, ChunkingOptions, TextChunk } from './chunking.service';
 import { PineconeService } from './pinecone.service';
 
 /**
@@ -60,18 +60,10 @@ export class EmbeddingService {
     documentId: string,
     userId: string,
     text: string,
-    chunkingOptions?: {
-      chunkSize?: number;
-      chunkOverlap?: number;
-    },
+    chunkingOptions?: ChunkingOptions,
     topicId?: string
   ): Promise<{
-    chunks: Array<{
-      content: string;
-      chunkIndex: number;
-      startChar?: number;
-      endChar?: number;
-    }>;
+    chunks: TextChunk[];
     embeddings: number[][];
     metadata: {
       totalChunks: number;
@@ -100,16 +92,18 @@ export class EmbeddingService {
       });
 
       // Store embeddings in Pinecone
+      // Generate chunk IDs for Pinecone
+      const chunksWithIds = chunks.map((chunk, index) => ({
+        id: `${documentId}_chunk_${index}`,
+        chunkIndex: chunk.chunkIndex,
+        content: chunk.content,
+      }));
+
       await PineconeService.upsertVectors(
         documentId,
-        userId,
-        chunks.map((chunk, index) => ({
-          content: chunk.content,
-          chunkIndex: index,
-          startChar: chunk.startChar,
-          endChar: chunk.endChar,
-        })),
+        chunksWithIds,
         embeddings,
+        userId,
         topicId
       );
 
@@ -119,16 +113,11 @@ export class EmbeddingService {
       });
 
       return {
-        chunks: chunks.map((chunk, index) => ({
-          content: chunk.content,
-          chunkIndex: index,
-          startChar: chunk.startChar,
-          endChar: chunk.endChar,
-        })),
+        chunks: chunks, // chunks is already TextChunk[]
         embeddings,
         metadata: {
           totalChunks: chunks.length,
-          totalTokens: chunks.reduce((sum, chunk) => sum + (chunk.tokenCount || 0), 0),
+          totalTokens: chunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0),
         },
       };
     } catch (error: any) {
