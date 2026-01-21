@@ -26,6 +26,7 @@ export namespace Database {
     user_id: string;
     topic_id?: string;
     title?: string;
+    metadata?: Record<string, any>; // Stores filter settings and other conversation-specific data
     created_at: string;
     updated_at: string;
   }

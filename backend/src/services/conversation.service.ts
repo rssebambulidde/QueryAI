@@ -12,6 +12,7 @@ export interface CreateConversationInput {
 export interface UpdateConversationInput {
   title?: string;
   topicId?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface ConversationWithMetadata extends Database.Conversation {
@@ -233,13 +234,27 @@ export class ConversationService {
         throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
       }
 
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+      };
+      
+      if (updates.title !== undefined) {
+        updateData.title = updates.title;
+      }
+      
+      if (updates.topicId !== undefined) {
+        updateData.topic_id = updates.topicId;
+      }
+      
+      if (updates.metadata !== undefined) {
+        // Merge with existing metadata
+        const currentMetadata = (conversation as any).metadata || {};
+        updateData.metadata = { ...currentMetadata, ...updates.metadata };
+      }
+
       const { data, error } = await supabaseAdmin
         .from('conversations')
-        .update({
-          title: updates.title,
-          topic_id: updates.topicId !== undefined ? updates.topicId : conversation.topic_id,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', conversationId)
         .eq('user_id', userId)
         .select()

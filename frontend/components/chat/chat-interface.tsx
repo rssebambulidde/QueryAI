@@ -9,7 +9,7 @@ import { aiApi, QuestionRequest, documentApi, conversationApi } from '@/lib/api'
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { Alert } from '@/components/ui/alert';
-import { Sparkles, MessageSquare, Trash2 } from 'lucide-react';
+import { Sparkles, MessageSquare, Trash2, Filter, X } from 'lucide-react';
 
 export const ChatInterface: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -19,7 +19,10 @@ export const ChatInterface: React.FC = () => {
   const [sources, setSources] = useState<Source[] | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const { currentConversationId, createConversation, refreshConversations } = useConversationStore();
+  const { currentConversationId, createConversation, refreshConversations, conversations, updateConversationFilters } = useConversationStore();
+  
+  // Conversation filter settings state
+  const [conversationFilters, setConversationFilters] = useState<{ topic?: string; timeRange?: any; startDate?: string; endDate?: string; country?: string }>({});
   
   // RAG settings state
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
@@ -116,6 +119,20 @@ export const ChatInterface: React.FC = () => {
   const handleSend = async (content: string, filters?: { topic?: string; timeRange?: any; startDate?: string; endDate?: string; country?: string }) => {
     if (!content.trim() || isLoading) return;
 
+    // Use conversation filters if no filters provided, or merge provided filters with conversation filters
+    const activeFilters = filters || conversationFilters;
+    
+    // If filters are provided and different from conversation filters, update conversation
+    if (filters && currentConversationId && JSON.stringify(filters) !== JSON.stringify(conversationFilters)) {
+      try {
+        await updateConversationFilters(currentConversationId, filters);
+        setConversationFilters(filters);
+      } catch (error: any) {
+        console.warn('Failed to save filters:', error);
+        // Continue anyway
+      }
+    }
+
     // Ensure we have a conversation
     let conversationId = currentConversationId;
     if (!conversationId) {
@@ -124,6 +141,16 @@ export const ChatInterface: React.FC = () => {
         const title = content.length > 50 ? content.substring(0, 47) + '...' : content;
         const newConversation = await createConversation(title);
         conversationId = newConversation.id;
+        
+        // Save filters to new conversation if provided
+        if (activeFilters && Object.keys(activeFilters).length > 0) {
+          try {
+            await updateConversationFilters(conversationId, activeFilters);
+            setConversationFilters(activeFilters);
+          } catch (error: any) {
+            console.warn('Failed to save filters to new conversation:', error);
+          }
+        }
       } catch (error: any) {
         toast.error(error.message || 'Failed to create conversation');
         return;
@@ -174,11 +201,11 @@ export const ChatInterface: React.FC = () => {
         minScore: ragSettings.minScore,
         // Web search options (for backward compatibility)
         enableSearch: ragSettings.enableWebSearch, // Map to enableWebSearch
-        topic: filters?.topic?.trim(), // Topic/keyword filtering
-        timeRange: filters?.timeRange, // Time range filtering
-        startDate: filters?.startDate, // Custom start date
-        endDate: filters?.endDate, // Custom end date
-        country: filters?.country, // Location filtering
+        topic: activeFilters?.topic?.trim(), // Topic/keyword filtering
+        timeRange: activeFilters?.timeRange, // Time range filtering
+        startDate: activeFilters?.startDate, // Custom start date
+        endDate: activeFilters?.endDate, // Custom end date
+        country: activeFilters?.country, // Location filtering
         maxSearchResults: ragSettings.maxWebResults,
       };
 
@@ -211,11 +238,11 @@ export const ChatInterface: React.FC = () => {
             minScore: ragSettings.minScore,
             // Web search options
             enableSearch: ragSettings.enableWebSearch,
-            topic: filters?.topic?.trim(),
-            timeRange: filters?.timeRange,
-            startDate: filters?.startDate,
-            endDate: filters?.endDate,
-            country: filters?.country,
+            topic: activeFilters?.topic?.trim(),
+            timeRange: activeFilters?.timeRange,
+            startDate: activeFilters?.startDate,
+            endDate: activeFilters?.endDate,
+            country: activeFilters?.country,
             maxSearchResults: ragSettings.maxWebResults,
           });
           
@@ -346,6 +373,51 @@ export const ChatInterface: React.FC = () => {
             )}
           </div>
           
+          {/* Active Filters Display */}
+          {currentConversationId && Object.keys(conversationFilters).length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap border-t border-gray-100 pt-3">
+              <span className="text-xs font-medium text-gray-700 flex items-center gap-1">
+                <Filter className="w-3 h-3" />
+                Active Filters:
+              </span>
+              {conversationFilters.topic && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md">
+                  Keyword: {conversationFilters.topic}
+                </span>
+              )}
+              {conversationFilters.timeRange && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md">
+                  Time: {conversationFilters.timeRange === 'day' ? 'Last 24 hours' : conversationFilters.timeRange === 'week' ? 'Last week' : conversationFilters.timeRange === 'month' ? 'Last month' : conversationFilters.timeRange === 'year' ? 'Last year' : conversationFilters.timeRange}
+                </span>
+              )}
+              {(conversationFilters.startDate || conversationFilters.endDate) && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md">
+                  {conversationFilters.startDate} - {conversationFilters.endDate}
+                </span>
+              )}
+              {conversationFilters.country && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md">
+                  Country: {conversationFilters.country}
+                </span>
+              )}
+              <button
+                onClick={async () => {
+                  try {
+                    await updateConversationFilters(currentConversationId, {});
+                    setConversationFilters({});
+                  } catch (error: any) {
+                    toast.error('Failed to clear filters');
+                  }
+                }}
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                title="Clear all filters"
+              >
+                <X className="w-3 h-3" />
+                Clear
+              </button>
+            </div>
+          )}
+          
           {/* RAG Source Selector */}
           <div className="flex items-center justify-between border-t border-gray-100 pt-3">
             <div className="flex items-center gap-2">
@@ -409,6 +481,7 @@ export const ChatInterface: React.FC = () => {
           <ChatInput
             onSend={handleSend}
             disabled={isLoading || isStreaming}
+            conversationFilters={conversationFilters}
             placeholder={
               isLoading || isStreaming
                 ? 'AI is thinking...'

@@ -134,6 +134,16 @@ export interface Conversation {
   user_id: string;
   topic_id?: string;
   title?: string;
+  metadata?: {
+    filters?: {
+      topic?: string;
+      timeRange?: TimeRange;
+      startDate?: string;
+      endDate?: string;
+      country?: string;
+    };
+    [key: string]: any;
+  };
   created_at: string;
   updated_at: string;
   messageCount?: number;
@@ -320,7 +330,7 @@ export const conversationApi = {
     return response.data;
   },
 
-  update: async (id: string, data: { title?: string; topicId?: string }): Promise<ApiResponse<Conversation>> => {
+  update: async (id: string, data: { title?: string; topicId?: string; metadata?: any; filters?: any }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.put(`/api/conversations/${id}`, data);
     return response.data;
   },

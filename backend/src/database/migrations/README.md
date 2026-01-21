@@ -6,6 +6,10 @@ This directory contains SQL migration files for setting up the QueryAI database 
 
 1. **001_initial_schema.sql** - Creates all database tables and indexes
 2. **002_row_level_security.sql** - Sets up Row Level Security (RLS) policies
+3. **003_documents_text_extraction.sql** - Adds text extraction fields to documents table
+4. **004_add_embedding_status.sql** - Adds embedding status tracking
+5. **005_add_stored_status.sql** - Adds stored status for documents
+6. **006_add_conversation_metadata.sql** - Adds metadata field to conversations for filter settings
 
 ## How to Run Migrations
 
@@ -50,6 +54,10 @@ psql -h your-project.supabase.co -U postgres -d postgres
 **Important:** Run migrations in order:
 1. First: `001_initial_schema.sql` (creates tables)
 2. Then: `002_row_level_security.sql` (adds RLS policies)
+3. Then: `003_documents_text_extraction.sql` (adds text extraction support)
+4. Then: `004_add_embedding_status.sql` (adds embedding status)
+5. Then: `005_add_stored_status.sql` (adds stored status)
+6. Finally: `006_add_conversation_metadata.sql` (adds conversation metadata for filters)
 
 ## Verification
 

@@ -10,16 +10,23 @@ interface ChatInputProps {
   onSend: (message: string, filters?: SearchFiltersType) => void;
   disabled?: boolean;
   placeholder?: string;
+  conversationFilters?: SearchFiltersType; // Filters from the current conversation
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   disabled = false,
   placeholder = 'Type your message...',
+  conversationFilters = {},
 }) => {
   const [message, setMessage] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<SearchFiltersType>({});
+  const [filters, setFilters] = useState<SearchFiltersType>(conversationFilters);
+  
+  // Update filters when conversation filters change
+  React.useEffect(() => {
+    setFilters(conversationFilters);
+  }, [conversationFilters]);
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
@@ -85,13 +92,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             variant="outline"
             className={cn(
               "px-3 py-3 border-gray-300 hover:bg-gray-50",
-              Object.keys(filters).length > 0 && "bg-blue-50 border-blue-300"
+              (Object.keys(filters).length > 0 || Object.keys(conversationFilters).length > 0) && "bg-blue-50 border-blue-300"
             )}
             title="Advanced search filters"
           >
             <Filter className={cn(
               "w-4 h-4",
-              Object.keys(filters).length > 0 ? "text-blue-600" : "text-gray-600"
+              (Object.keys(filters).length > 0 || Object.keys(conversationFilters).length > 0) ? "text-blue-600" : "text-gray-600"
             )} />
           </Button>
           <Button

@@ -15,6 +15,7 @@ interface ConversationState {
   createConversation: (title?: string, topicId?: string) => Promise<Conversation>;
   selectConversation: (id: string | null) => void;
   updateConversation: (id: string, title: string) => Promise<void>;
+  updateConversationFilters: (id: string, filters: any) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   clearCurrentConversation: () => void;
   refreshConversations: () => Promise<void>;
@@ -82,6 +83,24 @@ export const useConversationStore = create<ConversationState>()(
           }
         } catch (error: any) {
           set({ error: error.message || 'Failed to update conversation' });
+          throw error;
+        }
+      },
+
+      updateConversationFilters: async (id: string, filters: any) => {
+        try {
+          const response = await conversationApi.update(id, { filters });
+          if (response.success && response.data) {
+            set((state) => ({
+              conversations: state.conversations.map((conv) =>
+                conv.id === id ? response.data! : conv
+              ),
+            }));
+          } else {
+            throw new Error(response.message || 'Failed to update filters');
+          }
+        } catch (error: any) {
+          set({ error: error.message || 'Failed to update filters' });
           throw error;
         }
       },

@@ -97,19 +97,26 @@ router.put(
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
     const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const { title, topicId } = req.body;
+    const { title, topicId, metadata, filters } = req.body;
 
-    if (!title && topicId === undefined) {
-      throw new AppError('Title or topicId is required', 400, 'VALIDATION_ERROR');
+    if (!title && topicId === undefined && metadata === undefined && filters === undefined) {
+      throw new AppError('At least one field (title, topicId, metadata, or filters) is required', 400, 'VALIDATION_ERROR');
+    }
+
+    // If filters are provided, merge them into metadata
+    const updateData: any = {};
+    if (title !== undefined) updateData.title = title;
+    if (topicId !== undefined) updateData.topicId = topicId;
+    if (metadata !== undefined) updateData.metadata = metadata;
+    if (filters !== undefined) {
+      // Store filters in metadata
+      updateData.metadata = { filters };
     }
 
     const conversation = await ConversationService.updateConversation(
       conversationId,
       userId,
-      {
-        title,
-        topicId,
-      }
+      updateData
     );
 
     res.json({
