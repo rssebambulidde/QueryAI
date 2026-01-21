@@ -283,6 +283,27 @@ export const ChatInterface: React.FC = () => {
         setIsStreaming(false);
         setIsLoading(false);
         
+        // Reload messages from database to ensure they're persisted and displayed
+        if (conversationId) {
+          try {
+            const messagesResponse = await conversationApi.getMessages(conversationId);
+            if (messagesResponse.success && messagesResponse.data) {
+              // Convert API messages to UI messages
+              const uiMessages: Message[] = messagesResponse.data.map((msg) => ({
+                id: msg.id,
+                role: msg.role,
+                content: msg.content,
+                timestamp: new Date(msg.created_at),
+                sources: msg.sources,
+              }));
+              setMessages(uiMessages);
+            }
+          } catch (error: any) {
+            console.warn('Failed to reload messages after streaming:', error);
+            // Continue - messages are already in local state
+          }
+        }
+        
         // Refresh conversations list to update last message and title (if first message)
         refreshConversations();
         
@@ -305,6 +326,27 @@ export const ChatInterface: React.FC = () => {
             return updated;
           });
           setIsLoading(false);
+          
+          // Reload messages from database to ensure they're persisted
+          if (conversationId) {
+            try {
+              const messagesResponse = await conversationApi.getMessages(conversationId);
+              if (messagesResponse.success && messagesResponse.data) {
+                // Convert API messages to UI messages
+                const uiMessages: Message[] = messagesResponse.data.map((msg) => ({
+                  id: msg.id,
+                  role: msg.role,
+                  content: msg.content,
+                  timestamp: new Date(msg.created_at),
+                  sources: msg.sources,
+                }));
+                setMessages(uiMessages);
+              }
+            } catch (error: any) {
+              console.warn('Failed to reload messages after fallback:', error);
+              // Continue - messages are already in local state
+            }
+          }
           
           // Refresh conversations list to update last message
           refreshConversations();

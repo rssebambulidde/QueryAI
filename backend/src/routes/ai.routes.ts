@@ -177,6 +177,42 @@ router.post(
     });
 
     try {
+      // Retrieve RAG context first to get sources
+      let sources: any[] | undefined = undefined;
+      let ragContext: any = null;
+      
+      if (userId) {
+        try {
+          const { RAGService } = await import('../services/rag.service');
+          const ragOptions: any = {
+            userId,
+            topicId: request.topicId,
+            documentIds: request.documentIds,
+            enableDocumentSearch: request.enableDocumentSearch !== false,
+            enableWebSearch: request.enableWebSearch !== false,
+            maxDocumentChunks: request.maxDocumentChunks || 5,
+            maxWebResults: request.maxSearchResults || 5,
+            minScore: request.minScore || 0.5,
+            topic: request.topic,
+            timeRange: request.timeRange,
+            startDate: request.startDate,
+            endDate: request.endDate,
+            country: request.country,
+          };
+          
+          if (request.enableSearch === false) {
+            ragOptions.enableWebSearch = false;
+          }
+          
+          ragContext = await RAGService.retrieveContext(request.question, ragOptions);
+          sources = RAGService.extractSources(ragContext);
+        } catch (ragError: any) {
+          logger.warn('Failed to retrieve RAG context for sources in streaming', {
+            error: ragError.message,
+          });
+        }
+      }
+      
       // Stream the response and collect full answer
       const stream = AIService.answerQuestionStream(request, userId);
       let fullAnswer = '';
@@ -209,12 +245,12 @@ router.post(
             logger.info('Created new conversation for streaming message', { conversationId, userId });
           }
 
-          // Save message pair
+          // Save message pair with sources
           await MessageService.saveMessagePair(
             conversationId,
             request.question,
             fullAnswer,
-            undefined, // Sources not available in streaming mode
+            sources, // Include sources from RAG context
             {
               model: request.model || 'gpt-4o-mini',
               streaming: true,
