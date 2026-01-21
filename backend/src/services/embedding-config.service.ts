@@ -85,7 +85,7 @@ export class EmbeddingConfigService {
       );
       if (existing) {
         throw new ValidationError(
-          `Embedding configuration with name "${input.name}" already exists for this topic`
+          `An embedding configuration with the name "${input.name}" already exists for this topic. Please choose a different name.`
         );
       }
 
