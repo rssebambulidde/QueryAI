@@ -422,18 +422,19 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
       className="bg-white border border-gray-200 rounded-xl shadow-xl animate-in fade-in slide-in-from-bottom-2 max-h-[80vh] overflow-y-auto relative z-[100]"
     >
       {/* Header */}
-      <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-[60] shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-600" />
-            <h3 className="text-sm font-semibold text-gray-900">Unified Filters</h3>
+      <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-[60] shadow-sm overflow-visible">
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-shrink">
+            <Filter className="w-4 h-4 text-gray-600 flex-shrink-0" />
+            <h3 className="text-sm font-semibold text-gray-900 truncate">Unified Filters</h3>
           </div>
-          <div className="flex items-center gap-2 relative z-[70]">
+          <div className="flex items-center gap-2 relative z-[70] flex-shrink-0">
             {hasFilters && (
               <button
                 onClick={handleClear}
                 disabled={disabled}
-                className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 hover:bg-gray-100 rounded transition-colors"
+                className="text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-3 py-1.5 rounded-md transition-colors whitespace-nowrap border border-gray-300 hover:border-gray-400"
+                title="Clear all filters"
               >
                 Clear All
               </button>
@@ -441,7 +442,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
             <button
               onClick={onClose}
               disabled={disabled}
-              className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors relative z-[70] flex items-center justify-center min-w-[32px] min-h-[32px]"
+              className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors relative z-[70] flex items-center justify-center min-w-[32px] min-h-[32px] flex-shrink-0"
               title="Close filters"
             >
               <X className="w-5 h-5" />
