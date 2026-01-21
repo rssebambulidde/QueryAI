@@ -13,6 +13,7 @@ import aiRoutes from './routes/ai.routes';
 import searchRoutes from './routes/search.routes';
 import documentsRoutes from './routes/documents.routes';
 import embeddingConfigsRoutes from './routes/embeddings.routes';
+import embedRoutes from './routes/embed.routes';
 import conversationsRoutes from './routes/conversations.routes';
 import topicsRoutes from './routes/topics.routes';
 import apiKeysRoutes from './routes/api-keys.routes';
@@ -101,6 +102,8 @@ app.use('/api/conversations', conversationsRoutes);
 app.use('/api/topics', topicsRoutes);
 app.use('/api/api-keys', apiKeysRoutes);
 app.use('/api/embeddings', embeddingConfigsRoutes);
+// Mount embed routes separately for public access
+app.use('/api/embed', embedRoutes);
 app.use('/api/v1', customApiRoutes); // Custom API with API key auth
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
