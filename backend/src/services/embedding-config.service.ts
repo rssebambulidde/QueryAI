@@ -106,6 +106,14 @@ export class EmbeddingConfigService {
 
       if (error) {
         logger.error('Error creating embedding config:', error);
+        
+        // Check for unique constraint violation (PostgreSQL error code 23505)
+        if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+          throw new ValidationError(
+            `An embedding configuration with this name already exists for this topic. Please choose a different name.`
+          );
+        }
+        
         throw new AppError(
           `Failed to create embedding configuration: ${error.message}`,
           500,
