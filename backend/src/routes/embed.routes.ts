@@ -291,6 +291,7 @@ router.post(
       questionLength: question.length,
     });
 
+    try {
       // Note: For embedded chatbot, we use the config's user_id but scope to the topic
       // This ensures topic-based access control
       const response = await AIService.answerQuestion(request, config.user_id);
@@ -298,12 +299,30 @@ router.post(
       logger.info('Embedded chatbot response generated', {
         configId,
         topicId: config.topic_id,
+        answerLength: response.answer?.length || 0,
       });
 
-    res.json({
-      success: true,
-      data: response,
-    });
+      res.json({
+        success: true,
+        data: response,
+      });
+    } catch (error: any) {
+      logger.error('Error generating embedded chatbot response', {
+        configId,
+        topicId: config.topic_id,
+        error: error.message,
+        stack: error.stack,
+      });
+
+      // Return error response instead of throwing
+      res.status(500).json({
+        success: false,
+        error: {
+          message: error.message || 'Failed to generate response',
+          code: 'EMBEDDING_RESPONSE_ERROR',
+        },
+      });
+    }
   })
 );
 
