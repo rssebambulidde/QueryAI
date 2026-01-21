@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useConversationStore } from '@/lib/store/conversation-store';
+import { useAuthStore } from '@/lib/store/auth-store';
 import { ConversationItem } from './conversation-item';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,10 +22,22 @@ export const ConversationList: React.FC = () => {
   } = useConversationStore();
   const [searchQuery, setSearchQuery] = useState('');
   const { toast } = useToast();
+  const { isAuthenticated } = useAuthStore();
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
-    loadConversations();
-  }, [loadConversations]);
+    // Only load conversations if user is authenticated and we haven't loaded yet
+    if (isAuthenticated && !hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      loadConversations().catch((error) => {
+        console.error('Failed to load conversations:', error);
+        hasLoadedRef.current = false; // Allow retry on error
+      });
+    } else if (!isAuthenticated) {
+      // Reset when user logs out
+      hasLoadedRef.current = false;
+    }
+  }, [isAuthenticated, loadConversations]);
 
   const filteredConversations = conversations.filter((conv) =>
     conv.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||

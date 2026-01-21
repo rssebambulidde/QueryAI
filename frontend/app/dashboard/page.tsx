@@ -14,15 +14,30 @@ type TabType = 'chat' | 'documents';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, logout } = useAuthStore();
+  const { user, isAuthenticated, isLoading, logout, checkAuth } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabType>('chat');
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
 
+  // Check auth on mount
   useEffect(() => {
-    // Redirect if not authenticated (wait for loading to finish)
-    if (!isLoading && !isAuthenticated) {
+    if (!hasCheckedAuth) {
+      checkAuth()
+        .catch(() => {
+          // Auth check failed, will redirect below
+        })
+        .finally(() => {
+          setHasCheckedAuth(true);
+        });
+    }
+  }, [hasCheckedAuth, checkAuth]);
+
+  // Redirect if not authenticated (wait for loading and auth check to finish)
+  useEffect(() => {
+    if (hasCheckedAuth && !isLoading && !isAuthenticated) {
       router.push('/login');
     }
-  }, [isAuthenticated, isLoading, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isLoading, hasCheckedAuth]); // router is stable, no need to include
 
   const handleLogout = async () => {
     await logout();
