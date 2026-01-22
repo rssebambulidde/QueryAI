@@ -55,8 +55,13 @@ export class CollectionService {
           // Unique constraint violation
           throw new ValidationError('A collection with this name already exists');
         }
+        if (error.code === '42P01' || error.message?.includes('relation "collections" does not exist')) {
+          // Table doesn't exist - migration not run
+          logger.error('Collections table does not exist. Please run migrations 009_collections.sql and 010_collections_rls.sql');
+          throw new AppError('Collections feature not available. Please run database migrations first.', 500, 'MIGRATION_REQUIRED');
+        }
         logger.error('Error creating collection:', error);
-        throw new AppError('Failed to create collection', 500);
+        throw new AppError(`Failed to create collection: ${error.message || 'Unknown error'}`, 500);
       }
 
       logger.info('Collection created successfully', { collectionId: data.id, userId: input.user_id });

@@ -62,8 +62,15 @@ export const CollectionManager: React.FC = () => {
         await loadCollections();
       }
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error?.message || error.message || 'Failed to create collection';
+      let errorMessage = error.response?.data?.error?.message || error.message || 'Failed to create collection';
+      
+      // Provide helpful message for migration errors
+      if (errorMessage.includes('MIGRATION_REQUIRED') || errorMessage.includes('relation') || errorMessage.includes('does not exist')) {
+        errorMessage = 'Collections feature requires database migration. Please contact support or check migration guide.';
+      }
+      
       toast.error(errorMessage);
+      console.error('Collection creation error:', error);
     } finally {
       setIsCreating(false);
     }
