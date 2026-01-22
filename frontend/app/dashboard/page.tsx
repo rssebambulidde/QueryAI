@@ -9,11 +9,12 @@ import { DocumentManager } from '@/components/documents/document-manager';
 import { TopicManager } from '@/components/topics/topic-manager';
 import { ApiKeyManager } from '@/components/api-keys/api-key-manager';
 import { EmbeddingManager } from '@/components/embeddings/embedding-manager';
+import { CollectionManager } from '@/components/collections/collection-manager';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { RAGSettings } from '@/components/chat/rag-source-selector';
 import { documentApi } from '@/lib/api';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings';
+type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -159,11 +160,15 @@ export default function DashboardPage() {
             <div className="flex-1 overflow-y-auto p-6">
               <ApiKeyManager />
             </div>
-          ) : (
+          ) : activeTab === 'embeddings' ? (
             <div className="flex-1 overflow-y-auto p-6">
               <EmbeddingManager />
             </div>
-          )}
+          ) : activeTab === 'collections' ? (
+            <div className="flex-1 overflow-y-auto p-6">
+              <CollectionManager />
+            </div>
+          ) : null}
         </div>
       </main>
     </div>

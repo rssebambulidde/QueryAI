@@ -10,7 +10,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings';
+type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections';
 
 interface AppSidebarProps {
   activeTab: TabType;
@@ -33,6 +33,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [showSourceSelection, setShowSourceSelection] = useState(false);
   const [showConversations, setShowConversations] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [selectedConversationForCollection, setSelectedConversationForCollection] = useState<string | null>(null);
   const { toast } = useToast();
   
   const {
@@ -316,6 +318,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                               isActive={conversation.id === currentConversationId}
                               onSelect={() => selectConversation(conversation.id)}
                               onDelete={(e) => handleDeleteConversation(conversation.id, e)}
+                              onSaveToCollection={(conversationId) => {
+                                setSelectedConversationForCollection(conversationId);
+                                setShowSaveDialog(true);
+                              }}
                               formatTime={formatTime}
                             />
                           ))}
@@ -377,8 +383,35 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             <Bot className="w-5 h-5" />
             Embeddings
           </button>
+          <button
+            onClick={() => onTabChange('collections')}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+              activeTab === 'collections'
+                ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+            )}
+          >
+            <Folder className="w-5 h-5" />
+            Collections
+          </button>
         </nav>
       </div>
+
+      {/* Save to Collection Dialog */}
+      {selectedConversationForCollection && (
+        <SaveToCollectionDialog
+          conversationId={selectedConversationForCollection}
+          isOpen={showSaveDialog}
+          onClose={() => {
+            setShowSaveDialog(false);
+            setSelectedConversationForCollection(null);
+          }}
+          onSaved={() => {
+            // Refresh conversations if needed
+          }}
+        />
+      )}
     </div>
   );
 };

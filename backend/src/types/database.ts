@@ -129,4 +129,22 @@ export namespace Database {
     response_time_ms?: number;
     created_at: string;
   }
+
+  export interface Collection {
+    id: string;
+    user_id: string;
+    name: string;
+    description?: string;
+    color?: string;
+    icon?: string;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface CollectionConversation {
+    id: string;
+    collection_id: string;
+    conversation_id: string;
+    added_at: string;
+  }
 }

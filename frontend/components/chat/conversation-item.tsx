@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Conversation } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { MessageSquare, Trash2, Edit2, Check, X } from 'lucide-react';
+import { MessageSquare, Trash2, Edit2, Check, X, Folder } from 'lucide-react';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
@@ -13,6 +13,7 @@ interface ConversationItemProps {
   isActive: boolean;
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
+  onSaveToCollection?: (conversationId: string) => void;
   formatTime: (dateString?: string) => string;
 }
 
@@ -21,6 +22,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   isActive,
   onSelect,
   onDelete,
+  onSaveToCollection,
   formatTime,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -110,6 +112,18 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                   {conversation.title || 'New Conversation'}
                 </h3>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {onSaveToCollection && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSaveToCollection(conversation.id);
+                      }}
+                      className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded"
+                      title="Save to Collection"
+                    >
+                      <Folder className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

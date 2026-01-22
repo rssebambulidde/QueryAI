@@ -17,6 +17,7 @@ import embedRoutes from './routes/embed.routes';
 import conversationsRoutes from './routes/conversations.routes';
 import topicsRoutes from './routes/topics.routes';
 import apiKeysRoutes from './routes/api-keys.routes';
+import collectionsRoutes from './routes/collections.routes';
 import customApiRoutes from './routes/custom-api.routes';
 import testRoutes from './routes/test.routes';
 import debugRoutes from './routes/debug.routes';
@@ -107,6 +108,7 @@ app.use('/api/documents', documentsRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/topics', topicsRoutes);
 app.use('/api/api-keys', apiKeysRoutes);
+app.use('/api/collections', collectionsRoutes);
 app.use('/api/embeddings', embeddingConfigsRoutes);
 // Mount embed routes separately for public access
 app.use('/api/embed', embedRoutes);
