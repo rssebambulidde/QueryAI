@@ -111,15 +111,15 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                 )}>
                   {conversation.title || 'New Conversation'}
                 </h3>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1">
                   {onSaveToCollection && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onSaveToCollection(conversation.id);
                       }}
-                      className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded"
-                      title="Save to Collection"
+                      className="p-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded transition-opacity opacity-100"
+                      title="Add to Collection"
                     >
                       <Folder className="w-3.5 h-3.5" />
                     </button>

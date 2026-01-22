@@ -383,9 +383,24 @@ export const CollectionManager: React.FC = () => {
                 </div>
 
                 <div className="pt-4 border-t border-gray-200">
-                  <p className="text-sm font-medium text-gray-700 mb-2">
-                    Conversations ({selectedCollection.conversation_count || 0})
-                  </p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">
+                      Conversations ({selectedCollection.conversation_count || 0})
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        // Open dialog to add conversations - we'll need to get conversation list
+                        // For now, show a message to use the folder icon in conversation list
+                        toast.info('Click the folder icon (📁) next to any conversation in the sidebar to add it to this collection');
+                      }}
+                      className="h-7 text-xs"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Add
+                    </Button>
+                  </div>
                   
                   {/* Search within collection */}
                   <div className="mb-3">
@@ -472,6 +487,21 @@ export const CollectionManager: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Add Conversations Dialog */}
+        {selectedCollection && (
+          <AddConversationsToCollectionDialog
+            collectionId={selectedCollection.id}
+            isOpen={showAddConversationsDialog}
+            onClose={() => {
+              setShowAddConversationsDialog(false);
+            }}
+            onAdded={async () => {
+              // Reload collection to show updated conversations
+              await handleViewCollection(selectedCollection);
+            }}
+          />
         )}
       </div>
     </div>
