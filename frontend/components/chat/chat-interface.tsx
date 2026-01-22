@@ -404,11 +404,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           }
         }
         
-        // Store follow-up questions in message if available
+        // Store follow-up questions in message if available and mark as complete
         if (followUpQuestions && followUpQuestions.length > 0) {
           assistantMessage = {
             ...assistantMessage,
             followUpQuestions,
+            isStreaming: false, // Mark as complete
+          };
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = assistantMessage;
+            return updated;
+          });
+        } else {
+          // Mark as complete even if no follow-up questions
+          assistantMessage = {
+            ...assistantMessage,
+            isStreaming: false,
           };
           setMessages((prev) => {
             const updated = [...prev];
