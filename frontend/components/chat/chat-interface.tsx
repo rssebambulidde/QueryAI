@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { ChatMessage, Message } from './chat-message';
 import { TypingIndicator } from './typing-indicator';
 import { ChatInput } from './chat-input';
@@ -14,6 +15,43 @@ import { UnifiedFilters } from './unified-filter-panel';
 
 interface ChatInterfaceProps {
   ragSettings?: RAGSettings;
+}
+
+type ApiMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: Source[];
+  metadata?: { followUpQuestions?: string[]; isActionResponse?: boolean; actionType?: string };
+  created_at: string;
+};
+
+function mapApiMessagesToUi(apiMessages: ApiMessage[]): Message[] {
+  return apiMessages.map((msg) => {
+    let content = msg.content;
+    let followUpQuestions: string[] | undefined = msg.metadata?.followUpQuestions;
+    if (!followUpQuestions) {
+      const followUpMatch = content.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+      if (followUpMatch) {
+        content = content.substring(0, followUpMatch.index).trim();
+        const questionsText = followUpMatch[1];
+        followUpQuestions = questionsText
+          .split('\n')
+          .map((line) => line.replace(/^-\s+/, '').trim())
+          .filter((q) => q.length > 0)
+          .slice(0, 4);
+      }
+    }
+    return {
+      id: msg.id,
+      role: msg.role,
+      content,
+      timestamp: new Date(msg.created_at),
+      sources: msg.sources,
+      followUpQuestions,
+      isActionResponse: msg.metadata?.isActionResponse,
+    };
+  });
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propRagSettings }) => {
@@ -83,35 +121,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           // Load messages
           const messagesResponse = await conversationApi.getMessages(currentConversationId);
           if (messagesResponse.success && messagesResponse.data) {
-            // Convert API messages to UI messages
-            const uiMessages: Message[] = messagesResponse.data.map((msg) => {
-              // Extract follow-up questions from content if present
-              let content = msg.content;
-              let followUpQuestions: string[] | undefined;
-              
-              const followUpMatch = content.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
-              if (followUpMatch) {
-                // Remove follow-up questions section from content
-                content = content.substring(0, followUpMatch.index).trim();
-                
-                // Parse the questions
-                const questionsText = followUpMatch[1];
-                followUpQuestions = questionsText
-                  .split('\n')
-                  .map(line => line.replace(/^-\s+/, '').trim())
-                  .filter(q => q.length > 0)
-                  .slice(0, 4);
-              }
-              
-              return {
-                id: msg.id,
-                role: msg.role,
-                content,
-                timestamp: new Date(msg.created_at),
-                sources: msg.sources,
-                followUpQuestions,
-              };
-            });
+            const uiMessages = mapApiMessagesToUi(messagesResponse.data as ApiMessage[]);
             setMessages(uiMessages);
           }
           
@@ -218,10 +228,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     }
   }, [ragSettings, propRagSettings]);
 
-  const handleSend = async (content: string, filters?: UnifiedFilters) => {
+  type SendOptions = {
+    isResend?: boolean;
+    resendUserMessageId?: string;
+    resendHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  };
+
+  const handleSend = async (content: string, filters?: UnifiedFilters, options?: SendOptions) => {
     if (!content.trim() || isLoading) return;
 
-    // Use provided filters if available, otherwise use unified filters
+    const isResend = options?.isResend === true;
     const activeFilters: UnifiedFilters = filters !== undefined ? filters : unifiedFilters;
     
     // Convert UnifiedFilters to old SearchFilters format for API and conversation metadata
@@ -253,9 +269,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       setSelectedTopic(activeFilters.topic || null);
     }
 
-    // Ensure we have a conversation
     let conversationId = currentConversationId;
-    if (!conversationId) {
+    if (!conversationId && !isResend) {
       try {
         // Create conversation with title from first message
         // Clean up the title: remove extra whitespace, limit length, ensure it's meaningful
@@ -290,44 +305,38 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       }
     }
 
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content,
-      timestamp: new Date(),
-    };
-
-    const isFirstMessage = messages.length === 0;
-    setMessages((prev) => [...prev, userMessage]);
-    
-    // Update conversation title if this is the first message
-    if (conversationId && isFirstMessage) {
-      try {
-        let title = content.trim();
-        title = title.replace(/[?]+$/, '').trim();
-        if (title.length > 60) {
-          const cutAt = title.substring(0, 60).lastIndexOf(' ');
-          title = cutAt > 20 ? title.substring(0, cutAt) + '...' : title.substring(0, 57) + '...';
+    if (!isResend) {
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content,
+        timestamp: new Date(),
+      };
+      const isFirstMessage = messages.length === 0;
+      setMessages((prev) => [...prev, userMessage]);
+      if (conversationId && isFirstMessage) {
+        try {
+          let title = content.trim().replace(/[?]+$/, '').trim();
+          if (title.length > 60) {
+            const cutAt = title.substring(0, 60).lastIndexOf(' ');
+            title = cutAt > 20 ? title.substring(0, cutAt) + '...' : title.substring(0, 57) + '...';
+          }
+          if (title && title.length > 0) {
+            await updateConversation(conversationId, title);
+          }
+        } catch (error: any) {
+          console.warn('Failed to update conversation title:', error);
         }
-        if (title && title.length > 0) {
-          await updateConversation(conversationId, title);
-        }
-      } catch (error: any) {
-        console.warn('Failed to update conversation title:', error);
       }
     }
     setIsLoading(true);
     setError(null);
 
     try {
-      // Build conversation history for context
-      const conversationHistory = messages.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }));
+      const conversationHistory = isResend && options?.resendHistory
+        ? options.resendHistory
+        : messages.map((msg) => ({ role: msg.role, content: msg.content }));
 
-      // Use streaming for better UX
       setIsStreaming(true);
       let assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -340,27 +349,24 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       // Add empty assistant message for streaming
       setMessages((prev) => [...prev, assistantMessage]);
 
-      // Build request with RAG settings
       const request: QuestionRequest = {
         question: content,
         conversationHistory,
-        conversationId, // Include conversation ID for saving messages
-        // RAG options
+        conversationId,
         enableDocumentSearch: ragSettings.enableDocumentSearch,
         enableWebSearch: ragSettings.enableWebSearch,
         documentIds: ragSettings.documentIds,
         maxDocumentChunks: ragSettings.maxDocumentChunks,
         minScore: ragSettings.minScore,
-        // Topic scoping
-        topicId: activeFilters.topicId || activeFilters.topic?.id, // Topic ID for document filtering
-        // Web search options (for backward compatibility)
-        enableSearch: ragSettings.enableWebSearch, // Map to enableWebSearch
-        topic: activeFilters.topic?.name || activeFilters.keyword, // Topic/keyword filtering (for web search)
-        timeRange: activeFilters.timeRange, // Time range filtering
-        startDate: activeFilters.startDate, // Custom start date
-        endDate: activeFilters.endDate, // Custom end date
-        country: activeFilters.country, // Location filtering
+        topicId: activeFilters.topicId || activeFilters.topic?.id,
+        enableSearch: ragSettings.enableWebSearch,
+        topic: activeFilters.topic?.name || activeFilters.keyword,
+        timeRange: activeFilters.timeRange,
+        startDate: activeFilters.startDate,
+        endDate: activeFilters.endDate,
+        country: activeFilters.country,
         maxSearchResults: ragSettings.maxWebResults,
+        ...(isResend && options?.resendUserMessageId && { resendUserMessageId: options.resendUserMessageId }),
       };
 
       try {
@@ -489,35 +495,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           try {
             const messagesResponse = await conversationApi.getMessages(conversationId);
             if (messagesResponse.success && messagesResponse.data) {
-              // Convert API messages to UI messages
-              const uiMessages: Message[] = messagesResponse.data.map((msg) => {
-                // Extract follow-up questions from content if present
-                let content = msg.content;
-                let followUpQuestions: string[] | undefined;
-                
-                const followUpMatch = content.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
-                if (followUpMatch) {
-                  // Remove follow-up questions section from content
-                  content = content.substring(0, followUpMatch.index).trim();
-                  
-                  // Parse the questions
-                  const questionsText = followUpMatch[1];
-                  followUpQuestions = questionsText
-                    .split('\n')
-                    .map(line => line.replace(/^-\s+/, '').trim())
-                    .filter(q => q.length > 0)
-                    .slice(0, 4);
-                }
-                
-                return {
-                  id: msg.id,
-                  role: msg.role,
-                  content,
-                  timestamp: new Date(msg.created_at),
-                  sources: msg.sources,
-                  followUpQuestions,
-                };
-              });
+              const uiMessages = mapApiMessagesToUi(messagesResponse.data);
               setMessages(uiMessages);
             }
           } catch (error: any) {
@@ -573,14 +551,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             try {
               const messagesResponse = await conversationApi.getMessages(conversationId);
               if (messagesResponse.success && messagesResponse.data) {
-                // Convert API messages to UI messages
-                const uiMessages: Message[] = messagesResponse.data.map((msg) => ({
-                  id: msg.id,
-                  role: msg.role,
-                  content: msg.content,
-                  timestamp: new Date(msg.created_at),
-                  sources: msg.sources,
-                }));
+                const uiMessages = mapApiMessagesToUi(messagesResponse.data);
                 setMessages(uiMessages);
               }
             } catch (error: any) {
@@ -619,25 +590,29 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
 
 
   const handleEditMessage = async (messageId: string, newContent: string) => {
-    // Find the message and update it
     const messageIndex = messages.findIndex((m) => m.id === messageId);
     if (messageIndex === -1) return;
 
     const message = messages[messageIndex];
     if (message.role !== 'user') return;
 
-    // Update the message in the UI
-    setMessages((prev) => {
-      const updated = [...prev];
-      updated[messageIndex] = { ...message, content: newContent };
-      return updated;
+    const resendHistory = messages
+      .slice(0, messageIndex)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    flushSync(() => {
+      setMessages((prev) => {
+        const updated = prev.slice(0, messageIndex + 1);
+        updated[messageIndex] = { ...message, content: newContent };
+        return updated;
+      });
     });
 
-    // Remove all messages after this one (user and assistant)
-    setMessages((prev) => prev.slice(0, messageIndex + 1));
-
-    // Resend the edited message
-    await handleSend(newContent);
+    await handleSend(newContent, undefined, {
+      isResend: true,
+      resendUserMessageId: message.id,
+      resendHistory,
+    });
   };
 
   return (
@@ -680,17 +655,29 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                   handleSend(question);
                 }}
                 userQuestion={userQuestion}
-                onActionResponse={(content) => {
-                  // Add action response as a new assistant message
+                onActionResponse={async (content, actionType) => {
                   const actionMessage: Message = {
                     id: (Date.now() + 1).toString(),
                     role: 'assistant',
                     content,
                     timestamp: new Date(),
-                    sources: message.sources, // Preserve sources from original message
-                    isActionResponse: true, // Mark as action response to hide action buttons
+                    sources: message.sources,
+                    isActionResponse: true,
                   };
                   setMessages((prev) => [...prev, actionMessage]);
+                  if (currentConversationId && actionType) {
+                    try {
+                      await conversationApi.saveMessage(currentConversationId, {
+                        role: 'assistant',
+                        content,
+                        sources: message.sources,
+                        metadata: { isActionResponse: true, actionType },
+                      });
+                    } catch (err) {
+                      console.warn('Failed to persist action response:', err);
+                      toast.error('Could not save to conversation');
+                    }
+                  }
                 }}
                 isStreaming={isStreaming && index === messages.length - 1}
               />

@@ -218,6 +218,54 @@ export class MessageService {
   }
 
   /**
+   * Update a message's content (e.g. when user edits their question)
+   */
+  static async updateMessage(
+    messageId: string,
+    userId: string,
+    updates: { content: string }
+  ): Promise<Database.Message | null> {
+    try {
+      const { data: message, error: fetchError } = await supabaseAdmin
+        .from('messages')
+        .select('conversation_id')
+        .eq('id', messageId)
+        .single();
+
+      if (fetchError || !message) {
+        throw new AppError('Message not found', 404, 'MESSAGE_NOT_FOUND');
+      }
+
+      const conversation = await ConversationService.getConversation(
+        message.conversation_id,
+        userId
+      );
+      if (!conversation) {
+        throw new AppError('Message not found', 404, 'MESSAGE_NOT_FOUND');
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('messages')
+        .update({ content: updates.content.trim() })
+        .eq('id', messageId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Error updating message:', error);
+        throw new AppError(`Failed to update message: ${error.message}`, 500, 'MESSAGE_UPDATE_ERROR');
+      }
+
+      await ConversationService.updateConversationTimestamp(message.conversation_id);
+      return data;
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      logger.error('Unexpected error updating message:', error);
+      throw new AppError('Failed to update message', 500, 'MESSAGE_UPDATE_ERROR');
+    }
+  }
+
+  /**
    * Delete a single message
    */
   static async deleteMessage(

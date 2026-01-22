@@ -531,7 +531,7 @@ No document excerpts were found for this query. You must inform the user that th
             logger.info('Created new conversation for message', { conversationId, userId });
           }
 
-          // Save message pair
+          // Save message pair with follow-up questions in metadata
           await MessageService.saveMessagePair(
             conversationId,
             request.question,
@@ -541,6 +541,7 @@ No document excerpts were found for this query. You must inform the user that th
               model: completion.model,
               usage: response.usage,
               ragUsed: !!ragContext,
+              ...(response.followUpQuestions && response.followUpQuestions.length > 0 && { followUpQuestions: response.followUpQuestions }),
             }
           );
 

@@ -66,55 +66,21 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
     return processed;
   }, [content, sources]);
 
-  // Extract sources referenced in each paragraph/section
+  const wrapperClass = 'ai-response-content font-sans text-[15px] leading-[1.72] tracking-[0.01em] text-gray-800 antialiased max-w-none';
+
   const renderContentWithInlineCitations = () => {
     if (!sources || sources.length === 0) {
-          return (
-            <div className="prose prose-sm max-w-none text-justify leading-relaxed">
-              <style jsx>{`
-                .prose {
-                  text-align: justify;
-                  font-size: 15px;
-                  line-height: 1.75;
-                  letter-spacing: 0.01em;
-                }
-                .prose p {
-                  margin-bottom: 1rem;
-                  text-align: justify;
-                  font-size: 15px;
-                  line-height: 1.75;
-                }
-                .prose h2 {
-                  font-size: 1.5rem;
-                  font-weight: 700;
-                  margin-top: 1.5rem;
-                  margin-bottom: 1rem;
-                  text-align: left;
-                }
-                .prose h3 {
-                  font-size: 1.25rem;
-                  font-weight: 600;
-                  margin-top: 1.25rem;
-                  margin-bottom: 0.75rem;
-                  text-align: left;
-                }
-                .prose h4 {
-                  font-size: 1.1rem;
-                  font-weight: 600;
-                  margin-top: 1rem;
-                  margin-bottom: 0.5rem;
-                  text-align: left;
-                }
-              `}</style>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeHighlight]}
-                components={getMarkdownComponents(isUser)}
-              >
-                {processedContent}
-              </ReactMarkdown>
-            </div>
-          );
+      return (
+        <div className={wrapperClass}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight]}
+            components={getMarkdownComponents(isUser)}
+          >
+            {processedContent}
+          </ReactMarkdown>
+        </div>
+      );
     }
 
     // Split content by paragraphs and process each
@@ -179,41 +145,58 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
       }
     });
 
-    return <>{result}</>;
+    return <div className={wrapperClass}>{result}</div>;
   };
 
   return renderContentWithInlineCitations();
 };
 
-// Markdown components configuration
+// Markdown components: neat, well-aligned AI response typography
 const getMarkdownComponents = (isUser: boolean) => ({
-  h1: ({ node, ...props }: any) => <h1 className="text-lg font-bold mt-4 mb-2 first:mt-0" {...props} />,
-  h2: ({ node, ...props }: any) => <h2 className="text-base font-bold mt-3 mb-2 first:mt-0" {...props} />,
-  h3: ({ node, ...props }: any) => <h3 className="text-sm font-bold mt-2 mb-1 first:mt-0" {...props} />,
-  ul: ({ node, ...props }: any) => <ul className="list-disc list-inside my-2 space-y-1" {...props} />,
-  ol: ({ node, ...props }: any) => <ol className="list-decimal list-inside my-2 space-y-1" {...props} />,
-  li: ({ node, ...props }: any) => <li className="ml-4" {...props} />,
-  p: ({ node, ...props }: any) => <p className="my-2 first:mt-0 last:mb-0" {...props} />,
+  h1: ({ node, ...props }: any) => (
+    <h1 className="text-xl font-bold mt-5 mb-2.5 first:mt-0 text-gray-900 text-left" {...props} />
+  ),
+  h2: ({ node, ...props }: any) => (
+    <h2 className="text-lg font-bold mt-4 mb-2 first:mt-0 text-gray-900 text-left" {...props} />
+  ),
+  h3: ({ node, ...props }: any) => (
+    <h3 className="text-base font-semibold mt-3 mb-1.5 first:mt-0 text-gray-900 text-left" {...props} />
+  ),
+  h4: ({ node, ...props }: any) => (
+    <h4 className="text-[15px] font-semibold mt-2.5 mb-1 first:mt-0 text-gray-900 text-left" {...props} />
+  ),
+  ul: ({ node, ...props }: any) => (
+    <ul className="list-disc list-outside ml-4 my-3 space-y-1.5 text-left" {...props} />
+  ),
+  ol: ({ node, ...props }: any) => (
+    <ol className="list-decimal list-outside ml-4 my-3 space-y-1.5 text-left" {...props} />
+  ),
+  li: ({ node, ...props }: any) => (
+    <li className="pl-1 [&>p]:my-0.5" {...props} />
+  ),
+  p: ({ node, ...props }: any) => (
+    <p className="my-3 first:mt-0 last:mb-0 text-left text-justify" {...props} />
+  ),
   code: ({ node, inline, className, children, ...props }: any) => {
     if (inline) {
       return (
-        <code className="bg-gray-100 text-orange-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+        <code className="bg-gray-100 text-orange-600 px-1.5 py-0.5 rounded text-sm font-mono align-baseline" {...props}>
           {children}
         </code>
       );
     }
     return (
-      <code className={`block p-3 rounded-lg overflow-x-auto text-sm font-mono my-2 ${className || ''}`} {...props}>
+      <code className={`block p-3 rounded-lg overflow-x-auto text-sm font-mono my-3 bg-gray-900 text-gray-100 ${className || ''}`} {...props}>
         {children}
       </code>
     );
   },
   blockquote: ({ node, ...props }: any) => (
-    <blockquote className="border-l-4 border-gray-300 pl-4 my-2 italic text-gray-600" {...props} />
+    <blockquote className="border-l-4 border-gray-300 pl-4 my-3 italic text-gray-600 text-left" {...props} />
   ),
   a: ({ node, href, title, children, ...props }: any) => (
     <a
-      className="text-orange-600 hover:text-orange-800 underline hover:opacity-80 transition-opacity font-medium"
+      className="text-orange-600 hover:text-orange-700 underline underline-offset-2 font-medium"
       href={href}
       target="_blank"
       rel="noopener noreferrer"
@@ -223,7 +206,7 @@ const getMarkdownComponents = (isUser: boolean) => ({
       {children}
     </a>
   ),
-  strong: ({ node, ...props }: any) => <strong className="font-semibold" {...props} />,
+  strong: ({ node, ...props }: any) => <strong className="font-semibold text-gray-900" {...props} />,
   em: ({ node, ...props }: any) => <em className="italic" {...props} />,
-  hr: ({ node, ...props }: any) => <hr className="my-4 border-gray-300" {...props} />,
+  hr: ({ node, ...props }: any) => <hr className="my-4 border-gray-200" {...props} />,
 });

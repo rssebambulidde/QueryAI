@@ -115,6 +115,7 @@ router.post(
       maxDocumentChunks,
       minScore,
       conversationId,
+      resendUserMessageId,
     } = req.body;
 
     if (!question) {
@@ -177,6 +178,18 @@ router.post(
     });
 
     try {
+      const isResend = !!resendUserMessageId && !!request.conversationId && userId;
+
+      if (isResend) {
+        const { MessageService } = await import('../services/message.service');
+        await MessageService.updateMessage(resendUserMessageId, userId, { content: request.question });
+        const all = await MessageService.getAllMessages(request.conversationId!, userId);
+        const idx = all.findIndex((m) => m.id === resendUserMessageId);
+        if (idx >= 0 && idx + 1 < all.length && all[idx + 1].role === 'assistant') {
+          await MessageService.deleteMessage(all[idx + 1].id, userId);
+        }
+      }
+
       // Retrieve RAG context first to get sources
       let sources: any[] | undefined = undefined;
       let ragContext: any = null;
@@ -250,12 +263,10 @@ router.post(
           const { ConversationService } = await import('../services/conversation.service');
           const { MessageService } = await import('../services/message.service');
           
-          // Verify or create conversation
           let conversationId = request.conversationId;
           let conversation = await ConversationService.getConversation(conversationId, userId);
           
           if (!conversation) {
-            // Create new conversation with auto-generated title
             const title = ConversationService.generateTitleFromMessage(request.question);
             conversation = await ConversationService.createConversation({
               userId,
@@ -266,24 +277,38 @@ router.post(
             logger.info('Created new conversation for streaming message', { conversationId, userId });
           }
 
-          // Save message pair with sources
-          await MessageService.saveMessagePair(
-            conversationId,
-            request.question,
-            fullAnswer,
-            sources, // Include sources from RAG context
-            {
-              model: request.model || 'gpt-4o-mini',
-              streaming: true,
-            }
-          );
+          if (isResend) {
+            await MessageService.saveMessage({
+              conversationId,
+              role: 'assistant',
+              content: fullAnswer,
+              sources: sources ?? undefined,
+              metadata: {
+                model: request.model || 'gpt-4o-mini',
+                streaming: true,
+                ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
+              },
+            });
+          } else {
+            await MessageService.saveMessagePair(
+              conversationId,
+              request.question,
+              fullAnswer,
+              sources,
+              {
+                model: request.model || 'gpt-4o-mini',
+                streaming: true,
+                ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
+              }
+            );
+          }
 
           logger.info('Messages saved to conversation (streaming)', {
             conversationId,
             userId,
+            isResend,
           });
         } catch (saveError: any) {
-          // Log error but don't fail the request
           logger.warn('Failed to save messages to conversation (streaming)', {
             error: saveError.message,
             conversationId: request.conversationId,

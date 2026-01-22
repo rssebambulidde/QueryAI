@@ -91,6 +91,7 @@ export interface QuestionRequest {
   minScore?: number;
   // Conversation management
   conversationId?: string;
+  resendUserMessageId?: string; // When editing: update this user message and replace following assistant
 }
 
 export interface QuestionResponse {

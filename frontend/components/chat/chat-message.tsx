@@ -33,7 +33,7 @@ interface ChatMessageProps {
   onEdit?: (messageId: string, newContent: string) => void;
   onFollowUpClick?: (question: string) => void;
   userQuestion?: string; // The user's original question for context
-  onActionResponse?: (content: string) => void; // Callback for action responses
+  onActionResponse?: (content: string, actionType?: 'summary' | 'essay' | 'report') => void; // Callback for action responses
   isStreaming?: boolean; // Whether the message is currently streaming
 }
 
@@ -175,10 +175,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
         {/* Message Bubble */}
         <div
           className={cn(
-            'rounded-2xl px-4 py-3 shadow-sm',
+            'rounded-2xl shadow-sm',
             isUser
-              ? 'bg-gradient-to-br from-orange-600 to-orange-700 text-white'
-              : 'bg-white border border-gray-200 text-gray-900'
+              ? 'px-4 py-3 bg-gradient-to-br from-orange-600 to-orange-700 text-white'
+              : 'px-4 py-3.5 bg-white border border-gray-200 text-gray-900'
           )}
         >
           {/* Role Label */}
@@ -193,9 +193,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
 
           {/* Content */}
           <div className={cn(
-            'prose prose-sm max-w-none break-words leading-relaxed',
-            isUser ? 'prose-invert' : '',
-            !isUser && 'prose-headings:text-gray-900 prose-p:text-gray-800 prose-strong:text-gray-900 prose-code:text-orange-600 prose-code:bg-gray-100 prose-code:px-1 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100'
+            'max-w-none break-words',
+            isUser ? 'prose prose-sm prose-invert max-w-none' : 'min-w-0'
           )}>
             {isUser && isEditing ? (
               <div className="space-y-2">
@@ -295,7 +294,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
                   message.sources
                 );
                 if (response.success && response.data) {
-                  onActionResponse(response.data.summary);
+                  onActionResponse(response.data.summary, 'summary');
                 } else {
                   toast.error(response.message || 'Failed to generate summary');
                 }
@@ -315,7 +314,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
                   message.sources
                 );
                 if (response.success && response.data) {
-                  onActionResponse(response.data.essay);
+                  onActionResponse(response.data.essay, 'essay');
                 } else {
                   toast.error(response.message || 'Failed to generate essay');
                 }
@@ -335,7 +334,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
                   message.sources
                 );
                 if (response.success && response.data) {
-                  onActionResponse(response.data.report);
+                  onActionResponse(response.data.report, 'report');
                 } else {
                   toast.error(response.message || 'Failed to generate report');
                 }
