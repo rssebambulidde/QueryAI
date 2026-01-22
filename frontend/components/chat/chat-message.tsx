@@ -403,41 +403,63 @@ const generateFollowUpQuestions = (content: string, sources?: Source[], userQues
     return common.includes(word);
   };
   
-  const keyTerms = extractKeyTerms(content);
-  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 15);
-  
-  // Extract main topics from first few sentences
-  const mainTopics: string[] = [];
-  sentences.slice(0, 3).forEach(sentence => {
-    const words = sentence.split(/\s+/).filter(w => w.length > 4);
-    if (words.length > 0) {
-      // Find noun phrases or important terms
-      const importantWords = words.filter(w => 
-        !['the', 'this', 'that', 'these', 'those', 'there', 'here', 'what', 'which', 'how', 'when', 'where', 'why', 'who', 'can', 'will', 'should', 'could', 'would', 'may', 'might'].includes(w.toLowerCase())
-      );
-      if (importantWords.length > 0) {
-        mainTopics.push(importantWords.slice(0, 3).join(' '));
-      }
-    }
-  });
-  
-  // Generate context-aware questions based on content analysis
+  const keyTerms = extractKeyTerms(content, true);
   const contentLower = content.toLowerCase();
   
-  // Question 1: Deep dive into main topic
-  if (keyTerms.length > 0) {
-    const mainTerm = keyTerms[0];
-    if (contentLower.includes('explain') || contentLower.includes('describe')) {
-      questions.push(`Tell me more about ${mainTerm}`);
-    } else if (contentLower.includes('how') || contentLower.includes('process') || contentLower.includes('work')) {
-      questions.push(`How does ${mainTerm} work?`);
-    } else if (contentLower.includes('what') || contentLower.includes('is') || contentLower.includes('are')) {
-      questions.push(`What is ${mainTerm}?`);
-    } else {
-      questions.push(`Tell me more about ${mainTerm}`);
+  // Get the main topic - prioritize user question, then first key term
+  let mainTopic = '';
+  if (userQuestion) {
+    // Extract main topic from user question
+    const userWords = userQuestion.trim().split(/\s+/);
+    // Remove question words and common words
+    const topicWords = userWords.filter(w => {
+      const wLower = w.toLowerCase();
+      return !['what', 'is', 'are', 'how', 'does', 'do', 'can', 'will', 'should', 'could', 'would', 'tell', 'me', 'about', 'explain', 'describe'].includes(wLower) && w.length > 2;
+    });
+    if (topicWords.length > 0) {
+      mainTopic = topicWords.slice(0, 3).join(' ');
     }
-  } else if (mainTopics.length > 0) {
-    questions.push(`Tell me more about ${mainTopics[0]}`);
+  }
+  
+  // Fallback to first key term if no topic from user question
+  if (!mainTopic && keyTerms.length > 0) {
+    mainTopic = keyTerms[0];
+  }
+  
+  // If still no topic, try to extract from first sentence
+  if (!mainTopic) {
+    const firstSentence = content.split(/[.!?]+/)[0]?.trim();
+    if (firstSentence) {
+      // Look for the subject (usually after "is", "are", "refers to", etc.)
+      const subjectMatch = firstSentence.match(/(?:is|are|refers to|means|stands for)\s+([^.,!?]+)/i);
+      if (subjectMatch) {
+        mainTopic = subjectMatch[1].trim().split(/\s+/).slice(0, 3).join(' ');
+      } else {
+        // Take first significant capitalized phrase
+        const caps = firstSentence.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/);
+        if (caps && !sectionHeadings.has(caps[0].toLowerCase())) {
+          mainTopic = caps[0];
+        }
+      }
+    }
+  }
+  
+  // Generate context-aware questions based on content analysis
+  const userQuestionLower = userQuestion?.toLowerCase() || '';
+  
+  // Question 1: Deep dive into main topic
+  if (mainTopic) {
+    if (userQuestionLower.includes('what') || userQuestionLower.includes('is') || userQuestionLower.includes('are')) {
+      questions.push(`How does ${mainTopic} work?`);
+    } else if (userQuestionLower.includes('how')) {
+      questions.push(`What is ${mainTopic}?`);
+    } else if (userQuestionLower.includes('explain') || userQuestionLower.includes('tell me')) {
+      questions.push(`What are the key features of ${mainTopic}?`);
+    } else {
+      questions.push(`Tell me more about ${mainTopic}`);
+    }
+  } else {
+    questions.push('Can you explain this in more detail?');
   }
   
   // Question 2: Related aspects or implications
@@ -449,10 +471,12 @@ const generateFollowUpQuestions = (content: string, sources?: Source[], userQues
     questions.push('What is the historical context?');
   } else if (contentLower.includes('history') || contentLower.includes('past') || contentLower.includes('previous')) {
     questions.push('What is the current status?');
-  } else if (keyTerms.length > 1) {
-    questions.push(`How does ${keyTerms[0]} relate to ${keyTerms[1]}?`);
-  } else if (mainTopics.length > 1) {
-    questions.push(`What about ${mainTopics[1]}?`);
+  } else if (mainTopic && keyTerms.length > 1) {
+    questions.push(`How does ${mainTopic} relate to ${keyTerms[1]}?`);
+  } else if (mainTopic) {
+    questions.push(`What are the use cases for ${mainTopic}?`);
+  } else {
+    questions.push('What are the related topics?');
   }
   
   // Question 3: Source-specific or detailed follow-up
@@ -460,26 +484,38 @@ const generateFollowUpQuestions = (content: string, sources?: Source[], userQues
     const webSources = sources.filter(s => s.type === 'web');
     const docSources = sources.filter(s => s.type === 'document');
     
-    if (webSources.length > 0 && keyTerms.length > 0) {
-      questions.push(`What are the latest developments regarding ${keyTerms[0]}?`);
-    } else if (docSources.length > 0) {
-      questions.push('Can you provide more details from the documents?');
+    if (webSources.length > 0 && mainTopic) {
+      questions.push(`What are the latest developments regarding ${mainTopic}?`);
+    } else if (docSources.length > 0 && mainTopic) {
+      questions.push(`Can you provide more details about ${mainTopic} from the documents?`);
+    } else if (mainTopic) {
+      questions.push(`Can you provide more specific examples of ${mainTopic}?`);
     } else {
       questions.push('Can you provide more specific examples?');
     }
   } else if (contentLower.includes('example') || contentLower.includes('instance') || contentLower.includes('case')) {
-    questions.push('Are there other examples or use cases?');
+    if (mainTopic) {
+      questions.push(`Are there other examples of ${mainTopic}?`);
+    } else {
+      questions.push('Are there other examples or use cases?');
+    }
+  } else if (mainTopic) {
+    questions.push(`Can you provide examples of ${mainTopic}?`);
   } else {
     questions.push('Can you provide more specific examples?');
   }
   
   // Question 4: Next steps or related topics
   if (contentLower.includes('step') || contentLower.includes('process') || contentLower.includes('procedure')) {
-    questions.push('What are the best practices or tips?');
+    if (mainTopic) {
+      questions.push(`What are the best practices for ${mainTopic}?`);
+    } else {
+      questions.push('What are the best practices or tips?');
+    }
   } else if (contentLower.includes('compare') || contentLower.includes('difference') || contentLower.includes('versus')) {
     questions.push('What are the similarities?');
-  } else if (keyTerms.length > 0) {
-    questions.push(`What should I know about ${keyTerms[0]}?`);
+  } else if (mainTopic) {
+    questions.push(`What should I know about ${mainTopic}?`);
   } else {
     questions.push('What are the key takeaways?');
   }
@@ -491,7 +527,9 @@ const generateFollowUpQuestions = (content: string, sources?: Source[], userQues
   
   // Fill remaining slots with generic but relevant questions
   while (uniqueQuestions.length < 4) {
-    if (keyTerms.length > 0) {
+    if (mainTopic) {
+      uniqueQuestions.push(`Tell me more about ${mainTopic}`);
+    } else if (keyTerms.length > 0) {
       uniqueQuestions.push(`Tell me more about ${keyTerms[uniqueQuestions.length % keyTerms.length]}`);
     } else {
       uniqueQuestions.push('Can you elaborate on this?');
