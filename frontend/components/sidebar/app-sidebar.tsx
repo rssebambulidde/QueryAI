@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { ConversationItem as ConversationItemComponent } from '@/components/chat/conversation-item';
+import { SaveToCollectionDialog } from '@/components/collections/save-to-collection-dialog';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
