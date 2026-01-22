@@ -393,14 +393,12 @@ export const CollectionManager: React.FC = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        // Open dialog to add conversations - we'll need to get conversation list
-                        // For now, show a message to use the folder icon in conversation list
-                        toast.info('Click the folder icon (📁) next to any conversation in the sidebar to add it to this collection');
+                        setShowAddConversationsDialog(true);
                       }}
                       className="h-7 text-xs"
                     >
-                      <Plus className="w-3 h-3 mr-1" />
-                      Add
+                      <FolderPlus className="w-3 h-3 mr-1" />
+                      Add Conversations
                     </Button>
                   </div>
                   
