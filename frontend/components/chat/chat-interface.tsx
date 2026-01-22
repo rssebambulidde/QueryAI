@@ -365,21 +365,32 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           }
         }
         
-        // Store follow-up questions in message metadata if available
+        // Extract follow-up questions from the complete response if not already received
+        if (!followUpQuestions) {
+          const followUpMatch = assistantMessage.content.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+          if (followUpMatch) {
+            // Remove follow-up questions section from content
+            assistantMessage.content = assistantMessage.content.substring(0, followUpMatch.index).trim();
+            
+            // Parse the questions
+            const questionsText = followUpMatch[1];
+            followUpQuestions = questionsText
+              .split('\n')
+              .map(line => line.replace(/^-\s+/, '').trim())
+              .filter(q => q.length > 0)
+              .slice(0, 4);
+          }
+        }
+        
+        // Store follow-up questions in message if available
         if (followUpQuestions && followUpQuestions.length > 0) {
           assistantMessage = {
             ...assistantMessage,
-            // Store follow-up questions in a way we can access later
-            // We'll add a custom property to the message
+            followUpQuestions,
           };
-          // Store in a separate state or add to message
           setMessages((prev) => {
             const updated = [...prev];
-            const lastMessage = updated[updated.length - 1];
-            if (lastMessage) {
-              // Add follow-up questions to the message
-              (lastMessage as any).followUpQuestions = followUpQuestions;
-            }
+            updated[updated.length - 1] = assistantMessage;
             return updated;
           });
         }
