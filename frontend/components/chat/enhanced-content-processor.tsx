@@ -95,7 +95,7 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
           const numMatch = match.match(/(\d+)/);
           if (numMatch) {
             const sourceIndex = parseInt(numMatch[1]) - 1;
-            if (sourceIndex >= 0 && sourceIndex < sources.length) {
+            if (sourceIndex >= 0 && sourceIndex < sources.length && sources[sourceIndex]) {
               sourceIndices.add(sourceIndex);
             }
           }

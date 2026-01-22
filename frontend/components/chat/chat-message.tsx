@@ -10,16 +10,8 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
 import { EnhancedContentProcessor } from './enhanced-content-processor';
+import { Source } from '@/lib/api';
 import 'highlight.js/styles/github-dark.css';
-
-export interface Source {
-  type?: 'document' | 'web';
-  title: string;
-  url?: string;
-  documentId?: string;
-  snippet?: string;
-  score?: number;
-}
 
 export interface Message {
   id: string;
