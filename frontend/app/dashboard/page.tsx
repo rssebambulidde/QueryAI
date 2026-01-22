@@ -13,6 +13,7 @@ import { CollectionManager } from '@/components/collections/collection-manager';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { RAGSettings } from '@/components/chat/rag-source-selector';
 import { documentApi } from '@/lib/api';
+import { useConversationStore } from '@/lib/store/conversation-store';
 
 type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections';
 
@@ -40,6 +41,7 @@ export default function DashboardPage() {
   });
   const [documentCount, setDocumentCount] = useState(0);
   const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
+  const { selectConversation } = useConversationStore();
 
   // Check auth on mount
   useEffect(() => {
@@ -170,9 +172,7 @@ export default function DashboardPage() {
                  onConversationSelect={(conversationId) => {
                    // Switch to chat tab and select the conversation
                    setActiveTab('chat');
-                   // The conversation will be selected via the store
-                   const store = require('@/lib/store/conversation-store').useConversationStore.getState();
-                   store.selectConversation(conversationId);
+                   selectConversation(conversationId);
                  }}
                />
              </div>
