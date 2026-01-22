@@ -340,16 +340,18 @@ export class RAGService {
       score?: number;
     }> = [];
 
-    // Add document sources
-    context.documentContexts.forEach((doc, index) => {
-      sources.push({
-        type: 'document',
-        title: doc.documentName,
-        documentId: doc.documentId,
-        snippet: doc.content.substring(0, 200) + (doc.content.length > 200 ? '...' : ''),
-        score: doc.score,
+    // Add document sources - only include documents with meaningful relevance scores (>= 0.6)
+    context.documentContexts
+      .filter((doc) => doc.score >= 0.6) // Only include documents with good relevance
+      .forEach((doc, index) => {
+        sources.push({
+          type: 'document',
+          title: doc.documentName,
+          documentId: doc.documentId,
+          snippet: doc.content.substring(0, 200) + (doc.content.length > 200 ? '...' : ''),
+          score: doc.score,
+        });
       });
-    });
 
     // Add web sources
     context.webSearchResults.forEach((result, index) => {
