@@ -13,13 +13,16 @@ import { EnhancedContentProcessor } from './enhanced-content-processor';
 import { Source } from '@/lib/api';
 import 'highlight.js/styles/github-dark.css';
 
-export interface Message {
+export interface ChatMessageType {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
   sources?: Source[];
 }
+
+// Keep Message as an alias for backward compatibility
+export type Message = ChatMessageType;
 
 interface ChatMessageProps {
   message: Message;
