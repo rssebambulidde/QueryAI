@@ -1,12 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
 import { Copy, Edit2, Check, X } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
+import { SourceCitation } from './source-citation';
+import { FollowUpQuestions } from './follow-up-questions';
+import { EnhancedContentProcessor } from './enhanced-content-processor';
 import 'highlight.js/styles/github-dark.css';
 
 export interface Source {
@@ -31,7 +34,7 @@ interface ChatMessageProps {
   onEdit?: (messageId: string, newContent: string) => void;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
@@ -219,70 +222,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit }) => 
             ) : isUser ? (
               <div className="whitespace-pre-wrap">{message.content}</div>
             ) : (
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeHighlight]}
-                components={{
-                  // Customize heading styles
-                  h1: ({ node, ...props }) => <h1 className="text-lg font-bold mt-4 mb-2 first:mt-0" {...props} />,
-                  h2: ({ node, ...props }) => <h2 className="text-base font-bold mt-3 mb-2 first:mt-0" {...props} />,
-                  h3: ({ node, ...props }) => <h3 className="text-sm font-bold mt-2 mb-1 first:mt-0" {...props} />,
-                  // Customize list styles
-                  ul: ({ node, ...props }) => <ul className="list-disc list-inside my-2 space-y-1" {...props} />,
-                  ol: ({ node, ...props }) => <ol className="list-decimal list-inside my-2 space-y-1" {...props} />,
-                  li: ({ node, ...props }) => <li className="ml-4" {...props} />,
-                  // Customize paragraph
-                  p: ({ node, ...props }) => <p className="my-2 first:mt-0 last:mb-0" {...props} />,
-                  // Customize code blocks
-                  code: ({ node, inline, className, children, ...props }: any) => {
-                    if (inline) {
-                      return (
-                        <code className="bg-gray-100 text-orange-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
-                          {children}
-                        </code>
-                      );
-                    }
-                    return (
-                      <code className={cn("block p-3 rounded-lg overflow-x-auto text-sm font-mono my-2", className)} {...props}>
-                        {children}
-                      </code>
-                    );
-                  },
-                  // Customize blockquotes
-                  blockquote: ({ node, ...props }) => (
-                    <blockquote className="border-l-4 border-gray-300 pl-4 my-2 italic text-gray-600" {...props} />
-                  ),
-                  // Customize links - special styling for source links
-                  a: ({ node, href, title, children, ...props }: any) => {
-                    const isSourceLink = href && message.sources?.some((s, idx) => s.url === href);
-                    return (
-                      <a 
-                        className={cn(
-                          "underline hover:opacity-80 transition-opacity",
-                          isSourceLink 
-                            ? "text-orange-600 font-medium hover:text-orange-800" 
-                            : "text-orange-600 hover:text-orange-800"
-                        )}
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={title}
-                        {...props}
-                      >
-                        {children}
-                      </a>
-                    );
-                  },
-                  // Customize strong/bold
-                  strong: ({ node, ...props }) => <strong className="font-semibold" {...props} />,
-                  // Customize emphasis/italic
-                  em: ({ node, ...props }) => <em className="italic" {...props} />,
-                  // Customize horizontal rule
-                  hr: ({ node, ...props }) => <hr className="my-4 border-gray-300" {...props} />,
-                }}
-              >
-                {processedContent}
-              </ReactMarkdown>
+              <>
+                <EnhancedContentProcessor
+                  content={message.content}
+                  sources={message.sources}
+                  isUser={false}
+                />
+                {/* Show all sources at the end if they exist */}
+                {hasSources && message.sources && message.sources.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-gray-200">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-medium text-gray-600">Sources:</span>
+                      {message.sources.map((source, index) => (
+                        <SourceCitation
+                          key={index}
+                          source={source}
+                          index={index}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

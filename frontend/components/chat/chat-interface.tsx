@@ -508,10 +508,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           )}
 
           {messages.map((message) => (
-            <ChatMessage 
-              key={message.id} 
+            <ChatMessage
+              key={message.id}
               message={message}
               onEdit={handleEditMessage}
+              onFollowUpClick={(question) => {
+                // Send the follow-up question as a new message
+                handleSend(question);
+              }}
             />
           ))}
 
