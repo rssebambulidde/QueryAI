@@ -277,7 +277,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       timestamp: new Date(),
     };
 
+    const isFirstMessage = messages.length === 0;
     setMessages((prev) => [...prev, userMessage]);
+    
+    // Update conversation title if this is the first message
+    if (conversationId && isFirstMessage) {
+      try {
+        let title = content.trim();
+        title = title.replace(/[?]+$/, '').trim();
+        if (title.length > 60) {
+          const cutAt = title.substring(0, 60).lastIndexOf(' ');
+          title = cutAt > 20 ? title.substring(0, cutAt) + '...' : title.substring(0, 57) + '...';
+        }
+        if (title && title.length > 0) {
+          await updateConversation(conversationId, title);
+        }
+      } catch (error: any) {
+        console.warn('Failed to update conversation title:', error);
+      }
+    }
     setIsLoading(true);
     setError(null);
 
