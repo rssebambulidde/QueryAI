@@ -32,6 +32,7 @@ export interface Message {
 interface ChatMessageProps {
   message: Message;
   onEdit?: (messageId: string, newContent: string) => void;
+  onFollowUpClick?: (question: string) => void;
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick }) => {
@@ -291,7 +292,63 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
             </div>
           </div>
         </div>
+
+        {/* Follow-up Questions for Assistant Messages */}
+        {!isUser && onFollowUpClick && (
+          <FollowUpQuestions
+            questions={generateFollowUpQuestions(message.content, message.sources)}
+            onQuestionClick={onFollowUpClick}
+            className="mt-3"
+          />
+        )}
       </div>
     </div>
   );
+};
+
+// Generate follow-up questions based on the response content
+const generateFollowUpQuestions = (content: string, sources?: Source[]): string[] => {
+  const questions: string[] = [];
+  
+  // Extract key topics/concepts from the content
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 20);
+  
+  // Look for patterns that suggest follow-up questions
+  const patterns = [
+    /(?:about|regarding|concerning|related to)\s+([^.,!?]+)/gi,
+    /(?:including|such as|like)\s+([^.,!?]+)/gi,
+  ];
+  
+  const topics = new Set<string>();
+  patterns.forEach(pattern => {
+    let match;
+    while ((match = pattern.exec(content)) !== null) {
+      const topic = match[1].trim();
+      if (topic.length > 5 && topic.length < 50) {
+        topics.add(topic);
+      }
+    }
+  });
+  
+  // Generate questions based on content structure
+  if (content.toLowerCase().includes('how')) {
+    questions.push('Can you explain this in more detail?');
+  }
+  if (content.toLowerCase().includes('what') || content.toLowerCase().includes('which')) {
+    questions.push('What are the key takeaways?');
+  }
+  if (sources && sources.length > 0) {
+    questions.push('Can you provide more information about this?');
+  }
+  
+  // Add generic follow-ups
+  if (questions.length < 3) {
+    questions.push('What are the next steps?');
+  }
+  if (questions.length < 4) {
+    questions.push('Are there any related topics I should know about?');
+  }
+  
+  // Limit to 4 questions
+  return questions.slice(0, 4);
 };
