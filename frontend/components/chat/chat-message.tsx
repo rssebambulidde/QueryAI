@@ -290,10 +290,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
           </div>
         </div>
 
-        {/* Follow-up Questions for Assistant Messages */}
-        {!isUser && onFollowUpClick && (
+        {/* Follow-up Questions for Assistant Messages - Only show AI-generated questions */}
+        {!isUser && onFollowUpClick && message.followUpQuestions && message.followUpQuestions.length > 0 && (
           <FollowUpQuestions
-            questions={message.followUpQuestions || generateFollowUpQuestions(message.content, message.sources, userQuestion)}
+            questions={message.followUpQuestions}
             onQuestionClick={onFollowUpClick}
             className="mt-3"
           />
