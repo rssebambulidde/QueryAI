@@ -237,7 +237,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     if (!conversationId) {
       try {
         // Create conversation with title from first message
-        const title = content.length > 50 ? content.substring(0, 47) + '...' : content;
+        // Clean up the title: remove extra whitespace, limit length, ensure it's meaningful
+        let title = content.trim();
+        // Remove question marks and other trailing punctuation for cleaner title
+        title = title.replace(/[?]+$/, '').trim();
+        // Limit to 60 characters for better display
+        if (title.length > 60) {
+          // Try to cut at a word boundary
+          const cutAt = title.substring(0, 60).lastIndexOf(' ');
+          title = cutAt > 20 ? title.substring(0, cutAt) + '...' : title.substring(0, 57) + '...';
+        }
+        // Ensure we have a title (fallback if empty)
+        if (!title || title.length === 0) {
+          title = 'New Conversation';
+        }
         const newConversation = await createConversation(title, activeFilters.topicId || undefined);
         conversationId = newConversation.id;
         

@@ -301,49 +301,155 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
   );
 };
 
-// Generate follow-up questions based on the response content
+// Generate follow-up questions based on the response content (Perplexity.ai style)
 const generateFollowUpQuestions = (content: string, sources?: Source[]): string[] => {
   const questions: string[] = [];
   
-  // Extract key topics/concepts from the content
-  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 20);
+  // Extract key entities, topics, and concepts from the content
+  const extractKeyTerms = (text: string): string[] => {
+    const terms = new Set<string>();
+    
+    // Extract capitalized phrases (likely entities/topics)
+    const capitalizedPhrases = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g);
+    if (capitalizedPhrases) {
+      capitalizedPhrases.forEach(phrase => {
+        if (phrase.length > 3 && phrase.length < 40 && !isCommonWord(phrase)) {
+          terms.add(phrase);
+        }
+      });
+    }
+    
+    // Extract quoted terms
+    const quotedTerms = text.match(/"([^"]+)"/g);
+    if (quotedTerms) {
+      quotedTerms.forEach(term => {
+        const clean = term.replace(/"/g, '').trim();
+        if (clean.length > 3 && clean.length < 50) {
+          terms.add(clean);
+        }
+      });
+    }
+    
+    // Extract terms after "such as", "including", "like"
+    const listPatterns = [
+      /(?:such as|including|like|for example|e\.g\.)\s+([^.,!?;]+)/gi,
+      /(?:about|regarding|concerning|related to)\s+([^.,!?;]+)/gi,
+    ];
+    
+    listPatterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const items = match[1].split(/,|and|or/).map(i => i.trim());
+        items.forEach(item => {
+          if (item.length > 3 && item.length < 40) {
+            terms.add(item);
+          }
+        });
+      }
+    });
+    
+    return Array.from(terms).slice(0, 10);
+  };
   
-  // Look for patterns that suggest follow-up questions
-  const patterns = [
-    /(?:about|regarding|concerning|related to)\s+([^.,!?]+)/gi,
-    /(?:including|such as|like)\s+([^.,!?]+)/gi,
-  ];
+  const isCommonWord = (word: string): boolean => {
+    const common = ['The', 'This', 'That', 'These', 'Those', 'There', 'Here', 'What', 'Which', 'How', 'When', 'Where', 'Why', 'Who'];
+    return common.includes(word);
+  };
   
-  const topics = new Set<string>();
-  patterns.forEach(pattern => {
-    let match;
-    while ((match = pattern.exec(content)) !== null) {
-      const topic = match[1].trim();
-      if (topic.length > 5 && topic.length < 50) {
-        topics.add(topic);
+  const keyTerms = extractKeyTerms(content);
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 15);
+  
+  // Extract main topics from first few sentences
+  const mainTopics: string[] = [];
+  sentences.slice(0, 3).forEach(sentence => {
+    const words = sentence.split(/\s+/).filter(w => w.length > 4);
+    if (words.length > 0) {
+      // Find noun phrases or important terms
+      const importantWords = words.filter(w => 
+        !['the', 'this', 'that', 'these', 'those', 'there', 'here', 'what', 'which', 'how', 'when', 'where', 'why', 'who', 'can', 'will', 'should', 'could', 'would', 'may', 'might'].includes(w.toLowerCase())
+      );
+      if (importantWords.length > 0) {
+        mainTopics.push(importantWords.slice(0, 3).join(' '));
       }
     }
   });
   
-  // Generate questions based on content structure
-  if (content.toLowerCase().includes('how')) {
-    questions.push('Can you explain this in more detail?');
+  // Generate context-aware questions based on content analysis
+  const contentLower = content.toLowerCase();
+  
+  // Question 1: Deep dive into main topic
+  if (keyTerms.length > 0) {
+    const mainTerm = keyTerms[0];
+    if (contentLower.includes('explain') || contentLower.includes('describe')) {
+      questions.push(`Tell me more about ${mainTerm}`);
+    } else if (contentLower.includes('how') || contentLower.includes('process') || contentLower.includes('work')) {
+      questions.push(`How does ${mainTerm} work?`);
+    } else if (contentLower.includes('what') || contentLower.includes('is') || contentLower.includes('are')) {
+      questions.push(`What is ${mainTerm}?`);
+    } else {
+      questions.push(`Tell me more about ${mainTerm}`);
+    }
+  } else if (mainTopics.length > 0) {
+    questions.push(`Tell me more about ${mainTopics[0]}`);
   }
-  if (content.toLowerCase().includes('what') || content.toLowerCase().includes('which')) {
+  
+  // Question 2: Related aspects or implications
+  if (contentLower.includes('benefit') || contentLower.includes('advantage') || contentLower.includes('pros')) {
+    questions.push('What are the disadvantages or challenges?');
+  } else if (contentLower.includes('disadvantage') || contentLower.includes('challenge') || contentLower.includes('problem')) {
+    questions.push('What are the benefits or solutions?');
+  } else if (contentLower.includes('current') || contentLower.includes('now') || contentLower.includes('recent')) {
+    questions.push('What is the historical context?');
+  } else if (contentLower.includes('history') || contentLower.includes('past') || contentLower.includes('previous')) {
+    questions.push('What is the current status?');
+  } else if (keyTerms.length > 1) {
+    questions.push(`How does ${keyTerms[0]} relate to ${keyTerms[1]}?`);
+  } else if (mainTopics.length > 1) {
+    questions.push(`What about ${mainTopics[1]}?`);
+  }
+  
+  // Question 3: Source-specific or detailed follow-up
+  if (sources && sources.length > 0) {
+    const webSources = sources.filter(s => s.type === 'web');
+    const docSources = sources.filter(s => s.type === 'document');
+    
+    if (webSources.length > 0 && keyTerms.length > 0) {
+      questions.push(`What are the latest developments regarding ${keyTerms[0]}?`);
+    } else if (docSources.length > 0) {
+      questions.push('Can you provide more details from the documents?');
+    } else {
+      questions.push('Can you provide more specific examples?');
+    }
+  } else if (contentLower.includes('example') || contentLower.includes('instance') || contentLower.includes('case')) {
+    questions.push('Are there other examples or use cases?');
+  } else {
+    questions.push('Can you provide more specific examples?');
+  }
+  
+  // Question 4: Next steps or related topics
+  if (contentLower.includes('step') || contentLower.includes('process') || contentLower.includes('procedure')) {
+    questions.push('What are the best practices or tips?');
+  } else if (contentLower.includes('compare') || contentLower.includes('difference') || contentLower.includes('versus')) {
+    questions.push('What are the similarities?');
+  } else if (keyTerms.length > 0) {
+    questions.push(`What should I know about ${keyTerms[0]}?`);
+  } else {
     questions.push('What are the key takeaways?');
   }
-  if (sources && sources.length > 0) {
-    questions.push('Can you provide more information about this?');
+  
+  // Ensure we have exactly 4 questions, remove duplicates, and limit length
+  const uniqueQuestions = Array.from(new Set(questions))
+    .filter(q => q.length > 10 && q.length < 100)
+    .slice(0, 4);
+  
+  // Fill remaining slots with generic but relevant questions
+  while (uniqueQuestions.length < 4) {
+    if (keyTerms.length > 0) {
+      uniqueQuestions.push(`Tell me more about ${keyTerms[uniqueQuestions.length % keyTerms.length]}`);
+    } else {
+      uniqueQuestions.push('Can you elaborate on this?');
+    }
   }
   
-  // Add generic follow-ups
-  if (questions.length < 3) {
-    questions.push('What are the next steps?');
-  }
-  if (questions.length < 4) {
-    questions.push('Are there any related topics I should know about?');
-  }
-  
-  // Limit to 4 questions
-  return questions.slice(0, 4);
+  return uniqueQuestions.slice(0, 4);
 };
