@@ -655,6 +655,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                   handleSend(question);
                 }}
                 userQuestion={userQuestion}
+                onActionResponse={(content) => {
+                  // Add action response as a new assistant message
+                  const actionMessage: Message = {
+                    id: (Date.now() + 1).toString(),
+                    role: 'assistant',
+                    content,
+                    timestamp: new Date(),
+                    sources: message.sources, // Preserve sources from original message
+                  };
+                  setMessages((prev) => [...prev, actionMessage]);
+                }}
               />
             );
           })}

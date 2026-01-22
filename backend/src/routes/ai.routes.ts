@@ -310,4 +310,76 @@ router.post(
   })
 );
 
+/**
+ * POST /api/ai/summarize
+ * Generate a summary of a previous AI response
+ */
+router.post(
+  '/summarize',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { originalResponse, keyword, sources } = req.body;
+
+    if (!originalResponse || !keyword) {
+      throw new ValidationError('originalResponse and keyword are required');
+    }
+
+    const summary = await AIService.summarizeResponse(originalResponse, keyword, sources);
+
+    res.status(200).json({
+      success: true,
+      data: { summary },
+    });
+  })
+);
+
+/**
+ * POST /api/ai/essay
+ * Generate a formal essay based on a previous AI response
+ */
+router.post(
+  '/essay',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { originalResponse, keyword, sources } = req.body;
+
+    if (!originalResponse || !keyword) {
+      throw new ValidationError('originalResponse and keyword are required');
+    }
+
+    const essay = await AIService.writeEssay(originalResponse, keyword, sources);
+
+    res.status(200).json({
+      success: true,
+      data: { essay },
+    });
+  })
+);
+
+/**
+ * POST /api/ai/report
+ * Generate a detailed report based on a previous AI response
+ */
+router.post(
+  '/report',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { originalResponse, keyword, sources } = req.body;
+
+    if (!originalResponse || !keyword) {
+      throw new ValidationError('originalResponse and keyword are required');
+    }
+
+    const report = await AIService.generateDetailedReport(originalResponse, keyword, sources);
+
+    res.status(200).json({
+      success: true,
+      data: { report },
+    });
+  })
+);
+
 export default router;

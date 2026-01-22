@@ -165,31 +165,49 @@ ${fullContext}
 
 CRITICAL: Use the provided sources to answer the question. ${enableDocumentSearch && !enableWebSearch ? 'Remember: You are in DOCUMENT-ONLY mode. Only use information from the document excerpts provided above.' : ''} 
 
-RESPONSE FORMATTING (CRITICAL - FOLLOW EXACTLY):
-1. ALWAYS start with a brief summary (2-3 lines) that captures the main answer to the question
-2. After the summary, provide detailed information in well-organized paragraphs
-3. Use bullet points (• or -) for lists of items, steps, requirements, or key points
-4. Use bold text (**text**) for key terms, important concepts, dates, or section headings
-5. Keep paragraphs concise (3-4 sentences max) for better readability
-6. Use proper spacing between sections and ideas
+RESPONSE FORMATTING (CRITICAL - FOLLOW EXACTLY - PARAGRAPH-PER-SOURCE):
+You MUST format your response as 3-5 short, spaced paragraphs following these rules:
 
-CITATION FORMAT (CRITICAL - FOLLOW EXACTLY):
-- Do NOT place citations inline within sentences
-- Place ALL citations on separate lines after each paragraph or section
-- Format: After each paragraph, add a blank line, then "Sources:" followed by citations on the same line
-- Example format:
-  
-  [Your paragraph content here explaining the information]
-  
-  Sources: [Document 1], [Web Source 1](https://example.com), [Web Source 2](https://example.com/article)
-  
-  [Next paragraph with different information]
-  
-  Sources: [Document 2], [Web Source 3](https://example.com/news)
-  
-- For web sources, ALWAYS include the full URL: [Web Source N](URL)
-- Group all citations for a paragraph together on one line, separated by commas
-- Each paragraph should have its own "Sources:" line with only the citations relevant to that paragraph
+1. EACH PARAGRAPH MUST:
+   - Cover ONE distinct idea or perspective
+   - Be derived from ONE source (either one document or one web source)
+   - Be 2-4 sentences long
+   - Be visually separated with blank lines between paragraphs
+   - Include exactly ONE inline clickable source hyperlink embedded within the paragraph
+
+2. INLINE SOURCE ATTRIBUTION (CRITICAL):
+   - Each paragraph MUST contain exactly ONE clickable source link embedded inline
+   - For web sources: Use format [source title](URL) where the link is clickable
+   - For documents: Use format [Document Name](document://documentId) or just mention the document name as a link
+   - The source link should appear naturally within the paragraph text, not at the end
+   - Example: "SQL is a standard language used to manage relational databases, allowing users to query and modify structured data efficiently. [official documentation](https://example.com/docs)"
+   - Another example: "Relational systems such as MySQL and PostgreSQL rely on SQL to define schemas and enforce data integrity. [Database Guide](document://doc123)"
+
+3. PARAGRAPH STRUCTURE:
+   - NO numbered lists, bullet points, or structured sections
+   - NO introduction or conclusion paragraphs
+   - Each paragraph is standalone and covers one perspective
+   - Paragraphs should flow naturally but be distinct from each other
+   - Use proper spacing (blank line) between each paragraph
+
+4. SOURCE DISTRIBUTION:
+   - Use different sources for different paragraphs when possible
+   - Each paragraph should reference a different source or different aspect from sources
+   - Do NOT repeat the same source in consecutive paragraphs unless necessary
+
+5. FORMATTING:
+   - Use bold text (**text**) for key terms or important concepts within paragraphs
+   - Keep language clear and concise
+   - Focus on the user's question and keyword throughout
+
+Example format:
+SQL is a standard language used to manage relational databases, allowing users to query and modify structured data efficiently. [SQL Documentation](https://example.com/sql-docs)
+
+Relational systems such as MySQL and PostgreSQL rely on SQL to define schemas and enforce data integrity. [Database Systems Guide](document://db-guide-123)
+
+SQL supports complex operations such as joins and aggregations, enabling advanced data analysis directly within databases. [Advanced SQL Tutorial](https://example.com/advanced-sql)
+
+IMPORTANT: There is NO separate "Sources:" section. All source attribution is inline within each paragraph.
 
 FOLLOW-UP QUESTIONS (CRITICAL - REQUIRED):
 After your complete answer, you MUST include a section with exactly 4 intelligent, contextually relevant follow-up questions.
@@ -794,6 +812,141 @@ No document excerpts were found for this query. You must inform the user that th
 
       logger.error('Unexpected error in AI service (streaming):', error);
       throw new AppError('Failed to generate AI response', 500, 'AI_SERVICE_ERROR');
+    }
+  }
+
+  /**
+   * Generate a summary of a previous AI response
+   */
+  static async summarizeResponse(
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[]
+  ): Promise<string> {
+    const model = this.DEFAULT_MODEL;
+    const temperature = this.DEFAULT_TEMPERATURE;
+
+    const prompt = `You are a helpful assistant. Create a concise summary of the following AI response about "${keyword}".
+
+Original Response:
+${originalResponse}
+
+${sources && sources.length > 0 ? `Sources used: ${sources.map(s => s.title).join(', ')}` : ''}
+
+Instructions:
+- Create a short paragraph (3-5 sentences) or bullet points summarizing the key points
+- Use the keyword "${keyword}" naturally in the summary
+- Do not add new information beyond what's in the original response
+- Keep it concise and focused on the main ideas
+- Format as plain text (no markdown formatting needed)
+
+Summary:`;
+
+    try {
+      const completion = await openai.chat.completions.create({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature,
+        max_tokens: 300,
+      });
+
+      return completion.choices[0]?.message?.content || 'Summary could not be generated.';
+    } catch (error: any) {
+      logger.error('Error generating summary:', error);
+      throw new AppError('Failed to generate summary', 500, 'SUMMARY_ERROR');
+    }
+  }
+
+  /**
+   * Generate a formal essay based on a previous AI response
+   */
+  static async writeEssay(
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[]
+  ): Promise<string> {
+    const model = this.DEFAULT_MODEL;
+    const temperature = this.DEFAULT_TEMPERATURE;
+
+    const prompt = `You are a professional writer. Create a formal essay based on the following AI response about "${keyword}".
+
+Original Response:
+${originalResponse}
+
+${sources && sources.length > 0 ? `Sources used: ${sources.map(s => s.title).join(', ')}` : ''}
+
+Instructions:
+- Create a professional essay with a clear title, introduction, body paragraphs, and conclusion
+- Use formal tone throughout
+- Use the keyword "${keyword}" naturally throughout the essay
+- Structure: Title, Introduction, Body (2-3 paragraphs), Conclusion
+- Each section should be clearly labeled
+- Expand on the ideas from the original response in a structured, academic style
+- Use markdown formatting for headings (## for title, ### for sections)
+
+Essay:`;
+
+    try {
+      const completion = await openai.chat.completions.create({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature,
+        max_tokens: 1500,
+      });
+
+      return completion.choices[0]?.message?.content || 'Essay could not be generated.';
+    } catch (error: any) {
+      logger.error('Error generating essay:', error);
+      throw new AppError('Failed to generate essay', 500, 'ESSAY_ERROR');
+    }
+  }
+
+  /**
+   * Generate a detailed report based on a previous AI response
+   */
+  static async generateDetailedReport(
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[]
+  ): Promise<string> {
+    const model = this.DEFAULT_MODEL;
+    const temperature = this.DEFAULT_TEMPERATURE;
+
+    const prompt = `You are a research analyst. Create a comprehensive, structured report based on the following AI response about "${keyword}".
+
+Original Response:
+${originalResponse}
+
+${sources && sources.length > 0 ? `Sources used: ${sources.map(s => s.title).join(', ')}` : ''}
+
+Instructions:
+- Create an in-depth report with the following structure:
+  1. Title
+  2. Executive Summary (2-3 paragraphs)
+  3. Introduction
+  4. Multiple sections with sub-sections (at least 3-4 main sections)
+  5. Conclusion
+- Use formal, professional language
+- Use the keyword "${keyword}" naturally throughout
+- Expand significantly on the original response with detailed explanations, implications, and analysis
+- Include numbered sections and sub-sections
+- Use markdown formatting (## for title, ### for main sections, #### for sub-sections)
+- Make it comprehensive and research-grade
+
+Report:`;
+
+    try {
+      const completion = await openai.chat.completions.create({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature,
+        max_tokens: 2500,
+      });
+
+      return completion.choices[0]?.message?.content || 'Report could not be generated.';
+    } catch (error: any) {
+      logger.error('Error generating detailed report:', error);
+      throw new AppError('Failed to generate detailed report', 500, 'REPORT_ERROR');
     }
   }
 }

@@ -273,6 +273,21 @@ export const aiApi = {
       }
     }
   },
+
+  summarize: async (originalResponse: string, keyword: string, sources?: Source[]): Promise<ApiResponse<{ summary: string }>> => {
+    const response = await apiClient.post('/api/ai/summarize', { originalResponse, keyword, sources });
+    return response.data;
+  },
+
+  writeEssay: async (originalResponse: string, keyword: string, sources?: Source[]): Promise<ApiResponse<{ essay: string }>> => {
+    const response = await apiClient.post('/api/ai/essay', { originalResponse, keyword, sources });
+    return response.data;
+  },
+
+  generateReport: async (originalResponse: string, keyword: string, sources?: Source[]): Promise<ApiResponse<{ report: string }>> => {
+    const response = await apiClient.post('/api/ai/report', { originalResponse, keyword, sources });
+    return response.data;
+  },
 };
 
 // Document API

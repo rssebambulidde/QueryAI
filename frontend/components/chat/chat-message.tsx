@@ -30,6 +30,7 @@ interface ChatMessageProps {
   onEdit?: (messageId: string, newContent: string) => void;
   onFollowUpClick?: (question: string) => void;
   userQuestion?: string; // The user's original question for context
+  onActionResponse?: (content: string) => void; // Callback for action responses
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick, userQuestion }) => {
