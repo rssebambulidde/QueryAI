@@ -28,9 +28,10 @@ interface ChatMessageProps {
   message: Message;
   onEdit?: (messageId: string, newContent: string) => void;
   onFollowUpClick?: (question: string) => void;
+  userQuestion?: string; // The user's original question for context
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick, userQuestion }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
@@ -291,7 +292,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
         {/* Follow-up Questions for Assistant Messages */}
         {!isUser && onFollowUpClick && (
           <FollowUpQuestions
-            questions={generateFollowUpQuestions(message.content, message.sources)}
+            questions={generateFollowUpQuestions(message.content, message.sources, userQuestion)}
             onQuestionClick={onFollowUpClick}
             className="mt-3"
           />
@@ -302,18 +303,60 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
 };
 
 // Generate follow-up questions based on the response content (Perplexity.ai style)
-const generateFollowUpQuestions = (content: string, sources?: Source[]): string[] => {
+const generateFollowUpQuestions = (content: string, sources?: Source[], userQuestion?: string): string[] => {
   const questions: string[] = [];
   
+  // Section headings to ignore (common in AI responses)
+  const sectionHeadings = new Set([
+    'summary', 'key points', 'sources', 'conclusion', 'introduction', 
+    'overview', 'details', 'examples', 'benefits', 'advantages', 
+    'disadvantages', 'features', 'specifications', 'requirements',
+    'description', 'definition', 'explanation', 'background', 'context'
+  ]);
+  
   // Extract key entities, topics, and concepts from the content
-  const extractKeyTerms = (text: string): string[] => {
+  const extractKeyTerms = (text: string, excludeHeadings: boolean = true): string[] => {
     const terms = new Set<string>();
     
-    // Extract capitalized phrases (likely entities/topics)
+    // First, try to extract from user's question if available
+    if (userQuestion) {
+      const userLower = userQuestion.toLowerCase();
+      // Extract main topic from user question (usually the first significant word/phrase)
+      const userWords = userQuestion.split(/\s+/).filter(w => w.length > 2);
+      if (userWords.length > 0) {
+        // Take first 1-3 words as potential topic
+        const potentialTopic = userWords.slice(0, 3).join(' ').trim();
+        if (potentialTopic.length > 2 && potentialTopic.length < 50) {
+          terms.add(potentialTopic);
+        }
+      }
+    }
+    
+    // Extract from first sentence (usually contains the main topic)
+    const firstSentence = text.split(/[.!?]+/)[0]?.trim();
+    if (firstSentence) {
+      // Extract capitalized phrases from first sentence (likely the main topic)
+      const firstSentenceCaps = firstSentence.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g);
+      if (firstSentenceCaps) {
+        firstSentenceCaps.forEach(phrase => {
+          const phraseLower = phrase.toLowerCase();
+          if (phrase.length > 2 && phrase.length < 40 && 
+              !isCommonWord(phrase) && 
+              (!excludeHeadings || !sectionHeadings.has(phraseLower))) {
+            terms.add(phrase);
+          }
+        });
+      }
+    }
+    
+    // Extract capitalized phrases (likely entities/topics) - but skip section headings
     const capitalizedPhrases = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g);
     if (capitalizedPhrases) {
       capitalizedPhrases.forEach(phrase => {
-        if (phrase.length > 3 && phrase.length < 40 && !isCommonWord(phrase)) {
+        const phraseLower = phrase.toLowerCase();
+        if (phrase.length > 2 && phrase.length < 40 && 
+            !isCommonWord(phrase) && 
+            (!excludeHeadings || !sectionHeadings.has(phraseLower))) {
           terms.add(phrase);
         }
       });
@@ -324,13 +367,15 @@ const generateFollowUpQuestions = (content: string, sources?: Source[]): string[
     if (quotedTerms) {
       quotedTerms.forEach(term => {
         const clean = term.replace(/"/g, '').trim();
-        if (clean.length > 3 && clean.length < 50) {
+        const cleanLower = clean.toLowerCase();
+        if (clean.length > 2 && clean.length < 50 && 
+            (!excludeHeadings || !sectionHeadings.has(cleanLower))) {
           terms.add(clean);
         }
       });
     }
     
-    // Extract terms after "such as", "including", "like"
+    // Extract terms after "such as", "including", "like" - but only if not section headings
     const listPatterns = [
       /(?:such as|including|like|for example|e\.g\.)\s+([^.,!?;]+)/gi,
       /(?:about|regarding|concerning|related to)\s+([^.,!?;]+)/gi,
@@ -341,7 +386,9 @@ const generateFollowUpQuestions = (content: string, sources?: Source[]): string[
       while ((match = pattern.exec(text)) !== null) {
         const items = match[1].split(/,|and|or/).map(i => i.trim());
         items.forEach(item => {
-          if (item.length > 3 && item.length < 40) {
+          const itemLower = item.toLowerCase();
+          if (item.length > 2 && item.length < 40 && 
+              (!excludeHeadings || !sectionHeadings.has(itemLower))) {
             terms.add(item);
           }
         });
@@ -352,7 +399,7 @@ const generateFollowUpQuestions = (content: string, sources?: Source[]): string[
   };
   
   const isCommonWord = (word: string): boolean => {
-    const common = ['The', 'This', 'That', 'These', 'Those', 'There', 'Here', 'What', 'Which', 'How', 'When', 'Where', 'Why', 'Who'];
+    const common = ['The', 'This', 'That', 'These', 'Those', 'There', 'Here', 'What', 'Which', 'How', 'When', 'Where', 'Why', 'Who', 'Summary', 'Key', 'Points', 'Sources'];
     return common.includes(word);
   };
   

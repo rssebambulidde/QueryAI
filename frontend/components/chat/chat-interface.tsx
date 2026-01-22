@@ -538,17 +538,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             </div>
           )}
 
-          {messages.map((message) => (
-            <ChatMessage
-              key={message.id}
-              message={message}
-              onEdit={handleEditMessage}
-              onFollowUpClick={(question) => {
-                // Send the follow-up question as a new message
-                handleSend(question);
-              }}
-            />
-          ))}
+          {messages.map((message, index) => {
+            // Find the user question that preceded this assistant message
+            const userQuestion = index > 0 && message.role === 'assistant' 
+              ? messages[index - 1]?.content 
+              : undefined;
+            
+            return (
+              <ChatMessage 
+                key={message.id} 
+                message={message}
+                onEdit={handleEditMessage}
+                onFollowUpClick={(question) => {
+                  // Send the follow-up question as a new message
+                  handleSend(question);
+                }}
+                userQuestion={userQuestion}
+              />
+            );
+          })}
 
           {isStreaming && <TypingIndicator />}
 
