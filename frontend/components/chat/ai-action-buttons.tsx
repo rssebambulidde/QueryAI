@@ -22,7 +22,6 @@ export const AIActionButtons: React.FC<AIActionButtonsProps> = ({
 }) => {
   return (
     <div className={cn('flex items-center gap-2 mt-4 pt-3 border-t border-gray-200', className)}>
-      <span className="text-xs font-medium text-gray-600 mr-2">Actions:</span>
       <Button
         size="sm"
         variant="outline"

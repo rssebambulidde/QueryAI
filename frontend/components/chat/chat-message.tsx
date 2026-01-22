@@ -21,6 +21,8 @@ export interface ChatMessageType {
   timestamp: Date;
   sources?: Source[];
   followUpQuestions?: string[]; // AI-generated follow-up questions
+  isActionResponse?: boolean; // Flag to indicate if this is an action-generated response
+  isStreaming?: boolean; // Flag to indicate if message is still streaming
 }
 
 // Keep Message as an alias for backward compatibility
@@ -32,9 +34,10 @@ interface ChatMessageProps {
   onFollowUpClick?: (question: string) => void;
   userQuestion?: string; // The user's original question for context
   onActionResponse?: (content: string) => void; // Callback for action responses
+  isStreaming?: boolean; // Whether the message is currently streaming
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick, userQuestion, onActionResponse }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick, userQuestion, onActionResponse, isStreaming = false }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
@@ -229,21 +232,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
                   sources={message.sources}
                   isUser={false}
                 />
-                {/* Show all sources at the end if they exist */}
-                {hasSources && message.sources && message.sources.length > 0 && (
-                  <div className="mt-4 pt-3 border-t border-gray-200">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-gray-600">Sources:</span>
-                      {message.sources.map((source, index) => (
-                        <SourceCitation
-                          key={index}
-                          source={source}
-                          index={index}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Sources are now inline in the content, no separate section needed */}
               </>
             )}
           </div>
@@ -293,8 +282,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
           </div>
         </div>
 
-        {/* AI Action Buttons for Assistant Messages */}
-        {!isUser && onActionResponse && (
+        {/* AI Action Buttons for Assistant Messages - Only show on complete responses, not action responses */}
+        {!isUser && onActionResponse && !message.isActionResponse && !isStreaming && !message.isStreaming && (
           <AIActionButtons
             onSummarize={async () => {
               if (!userQuestion) return;

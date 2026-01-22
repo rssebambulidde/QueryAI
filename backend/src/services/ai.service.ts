@@ -876,13 +876,14 @@ ${originalResponse}
 ${sources && sources.length > 0 ? `Sources used: ${sources.map(s => s.title).join(', ')}` : ''}
 
 Instructions:
-- Create a professional essay with a clear title, introduction, body paragraphs, and conclusion
+- Create a professional essay with a natural flow
 - Use formal tone throughout
 - Use the keyword "${keyword}" naturally throughout the essay
-- Structure: Title, Introduction, Body (2-3 paragraphs), Conclusion
-- Each section should be clearly labeled
+- Structure should flow naturally: Start with an introduction, develop ideas in the middle, and conclude
+- DO NOT use explicit section labels like "Introduction:", "Body:", "Conclusion:", "Main Section:"
+- Write as a continuous, flowing essay without section headers
 - Expand on the ideas from the original response in a structured, academic style
-- Use markdown formatting for headings (## for title, ### for sections)
+- Use markdown formatting only for the title (## Title) if needed, but make the essay read naturally
 
 Essay:`;
 

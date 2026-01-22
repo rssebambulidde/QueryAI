@@ -334,6 +334,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         role: 'assistant',
         content: '',
         timestamp: new Date(),
+        isStreaming: true, // Mark as streaming
       };
 
       // Add empty assistant message for streaming
@@ -663,9 +664,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                     content,
                     timestamp: new Date(),
                     sources: message.sources, // Preserve sources from original message
+                    isActionResponse: true, // Mark as action response to hide action buttons
                   };
                   setMessages((prev) => [...prev, actionMessage]);
                 }}
+                isStreaming={isStreaming && index === messages.length - 1}
               />
             );
           })}
