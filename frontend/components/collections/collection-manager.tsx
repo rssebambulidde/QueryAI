@@ -133,20 +133,21 @@ export const CollectionManager: React.FC = () => {
     }
   };
 
-  const handleSearchCollection = async () => {
-    if (!selectedCollection || !collectionSearchQuery.trim()) {
+  const handleSearchCollection = async (query: string) => {
+    if (!selectedCollection || !query.trim()) {
       setCollectionSearchResults([]);
       return;
     }
 
     try {
       setIsSearching(true);
-      const response = await collectionApi.search(selectedCollection.id, collectionSearchQuery.trim());
+      const response = await collectionApi.search(selectedCollection.id, query.trim());
       if (response.success && response.data) {
         setCollectionSearchResults(response.data);
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to search collection');
+      setCollectionSearchResults([]);
     } finally {
       setIsSearching(false);
     }
@@ -385,16 +386,17 @@ export const CollectionManager: React.FC = () => {
                         placeholder="Search conversations..."
                         value={collectionSearchQuery}
                         onChange={(e) => {
-                          setCollectionSearchQuery(e.target.value);
-                          if (e.target.value.trim()) {
-                            handleSearchCollection();
+                          const value = e.target.value;
+                          setCollectionSearchQuery(value);
+                          if (value.trim()) {
+                            handleSearchCollection(value);
                           } else {
                             setCollectionSearchResults([]);
                           }
                         }}
                         onKeyPress={(e) => {
                           if (e.key === 'Enter') {
-                            handleSearchCollection();
+                            handleSearchCollection(collectionSearchQuery);
                           }
                         }}
                         className="pl-7 pr-7 h-8 text-xs"
