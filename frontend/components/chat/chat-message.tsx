@@ -19,6 +19,7 @@ export interface ChatMessageType {
   content: string;
   timestamp: Date;
   sources?: Source[];
+  followUpQuestions?: string[]; // AI-generated follow-up questions
 }
 
 // Keep Message as an alias for backward compatibility
@@ -292,7 +293,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
         {/* Follow-up Questions for Assistant Messages */}
         {!isUser && onFollowUpClick && (
           <FollowUpQuestions
-            questions={generateFollowUpQuestions(message.content, message.sources, userQuestion)}
+            questions={message.followUpQuestions || generateFollowUpQuestions(message.content, message.sources, userQuestion)}
             onQuestionClick={onFollowUpClick}
             className="mt-3"
           />

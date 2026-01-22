@@ -97,6 +97,7 @@ export interface QuestionResponse {
   answer: string;
   model: string;
   sources?: Source[];
+  followUpQuestions?: string[]; // AI-generated follow-up questions
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -218,7 +219,7 @@ export const aiApi = {
     return response.data;
   },
 
-  askStream: async function* (request: QuestionRequest): AsyncGenerator<string, void, unknown> {
+  askStream: async function* (request: QuestionRequest): AsyncGenerator<string | { followUpQuestions?: string[] }, void, unknown> {
     const response = await fetch(`${API_URL}/api/ai/ask/stream`, {
       method: 'POST',
       headers: {
@@ -255,6 +256,9 @@ export const aiApi = {
             const data = JSON.parse(line.slice(6));
             if (data.chunk) {
               yield data.chunk;
+            }
+            if (data.followUpQuestions) {
+              yield { followUpQuestions: data.followUpQuestions };
             }
             if (data.done) {
               return;

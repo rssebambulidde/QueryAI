@@ -48,6 +48,7 @@ export interface QuestionResponse {
   answer: string;
   model: string;
   sources?: Source[];
+  followUpQuestions?: string[]; // AI-generated follow-up questions
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -188,7 +189,24 @@ CITATION FORMAT (CRITICAL - FOLLOW EXACTLY):
   
 - For web sources, ALWAYS include the full URL: [Web Source N](URL)
 - Group all citations for a paragraph together on one line, separated by commas
-- Each paragraph should have its own "Sources:" line with only the citations relevant to that paragraph`;
+- Each paragraph should have its own "Sources:" line with only the citations relevant to that paragraph
+
+FOLLOW-UP QUESTIONS (CRITICAL - REQUIRED):
+After your complete answer, you MUST include a section with exactly 4 intelligent, contextually relevant follow-up questions.
+Format: Add a line break, then "FOLLOW_UP_QUESTIONS:" followed by exactly 4 questions, one per line, each starting with "- "
+These questions should:
+- Be directly related to the user's question and your answer
+- Explore different aspects, deeper details, or related topics
+- Be specific and actionable (not generic)
+- Help the user learn more about the topic
+- Be phrased as complete questions (e.g., "How does X work?" not just "X details")
+- Use the actual topic/subject from the user's question, NOT section headings like "Summary" or "Key Points"
+Example format:
+FOLLOW_UP_QUESTIONS:
+- How does [main topic] work in practice?
+- What are the key benefits and challenges of [main topic]?
+- Can you provide examples of [main topic] in real-world applications?
+- What should I know about [related aspect]?`;
     }
 
     // If no context and document-only mode, provide clear instruction
@@ -417,7 +435,39 @@ No document excerpts were found for this query. You must inform the user that th
         max_tokens: maxTokens,
       });
 
-      const answer = completion.choices[0]?.message?.content || 'No response generated';
+      const fullResponse = completion.choices[0]?.message?.content || 'No response generated';
+      
+      // Parse follow-up questions from the response
+      let answer = fullResponse;
+      let followUpQuestions: string[] | undefined;
+      
+      // Look for FOLLOW_UP_QUESTIONS section
+      const followUpMatch = fullResponse.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+      if (followUpMatch) {
+        // Extract the answer (everything before FOLLOW_UP_QUESTIONS)
+        answer = fullResponse.substring(0, followUpMatch.index).trim();
+        
+        // Parse the questions
+        const questionsText = followUpMatch[1];
+        followUpQuestions = questionsText
+          .split('\n')
+          .map(line => line.replace(/^-\s+/, '').trim())
+          .filter(q => q.length > 0)
+          .slice(0, 4); // Ensure max 4 questions
+        
+        // If we didn't get 4 questions, try alternative formats
+        if (followUpQuestions.length < 4) {
+          // Try to find questions in other formats
+          const altMatch = fullResponse.match(/(?:follow.?up|suggested|related)\s+questions?:?\s*\n((?:[-•*]\s+[^\n]+\n?)+)/i);
+          if (altMatch) {
+            const altQuestions = altMatch[1]
+              .split('\n')
+              .map(line => line.replace(/^[-•*]\s+/, '').trim())
+              .filter(q => q.length > 0);
+            followUpQuestions = [...followUpQuestions, ...altQuestions].slice(0, 4);
+          }
+        }
+      }
 
       if (!completion.usage) {
         throw new AppError('OpenAI API did not return usage information', 500, 'AI_API_ERROR');
@@ -426,12 +476,14 @@ No document excerpts were found for this query. You must inform the user that th
       logger.info('OpenAI response received', {
         model: completion.model,
         tokensUsed: completion.usage.total_tokens,
+        hasFollowUpQuestions: !!followUpQuestions,
       });
 
       const response = {
         answer,
         model: completion.model,
         sources,
+        followUpQuestions: followUpQuestions && followUpQuestions.length > 0 ? followUpQuestions : undefined,
         usage: {
           promptTokens: completion.usage.prompt_tokens,
           completionTokens: completion.usage.completion_tokens,

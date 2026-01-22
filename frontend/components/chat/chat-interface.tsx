@@ -343,14 +343,43 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
 
       try {
         // Try streaming first
+        let followUpQuestions: string[] | undefined;
         for await (const chunk of aiApi.askStream(request)) {
+          // Check if this is a follow-up questions object
+          if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
+            followUpQuestions = chunk.followUpQuestions;
+            continue;
+          }
+          
+          // Regular text chunk
+          if (typeof chunk === 'string') {
+            assistantMessage = {
+              ...assistantMessage,
+              content: assistantMessage.content + chunk,
+            };
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = assistantMessage;
+              return updated;
+            });
+          }
+        }
+        
+        // Store follow-up questions in message metadata if available
+        if (followUpQuestions && followUpQuestions.length > 0) {
           assistantMessage = {
             ...assistantMessage,
-            content: assistantMessage.content + chunk,
+            // Store follow-up questions in a way we can access later
+            // We'll add a custom property to the message
           };
+          // Store in a separate state or add to message
           setMessages((prev) => {
             const updated = [...prev];
-            updated[updated.length - 1] = assistantMessage;
+            const lastMessage = updated[updated.length - 1];
+            if (lastMessage) {
+              // Add follow-up questions to the message
+              (lastMessage as any).followUpQuestions = followUpQuestions;
+            }
             return updated;
           });
         }

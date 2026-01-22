@@ -222,6 +222,27 @@ router.post(
         // Send chunk as SSE format
         res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
       }
+      
+      // Parse follow-up questions from the complete answer
+      let followUpQuestions: string[] | undefined;
+      const followUpMatch = fullAnswer.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+      if (followUpMatch) {
+        // Extract questions
+        const questionsText = followUpMatch[1];
+        followUpQuestions = questionsText
+          .split('\n')
+          .map(line => line.replace(/^-\s+/, '').trim())
+          .filter(q => q.length > 0)
+          .slice(0, 4);
+        
+        // Remove follow-up questions section from answer
+        fullAnswer = fullAnswer.substring(0, followUpMatch.index).trim();
+      }
+      
+      // Send follow-up questions if found
+      if (followUpQuestions && followUpQuestions.length > 0) {
+        res.write(`data: ${JSON.stringify({ followUpQuestions })}\n\n`);
+      }
 
       // Save messages to conversation if conversationId provided and userId available
       if (request.conversationId && userId && fullAnswer) {
