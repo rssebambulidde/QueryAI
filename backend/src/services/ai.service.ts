@@ -876,14 +876,19 @@ ${originalResponse}
 ${sources && sources.length > 0 ? `Sources used: ${sources.map(s => s.title).join(', ')}` : ''}
 
 Instructions:
-- Create a professional essay with a natural flow
+- Create a professional essay with proper structure
 - Use formal tone throughout
 - Use the keyword "${keyword}" naturally throughout the essay
-- Structure should flow naturally: Start with an introduction, develop ideas in the middle, and conclude
-- DO NOT use explicit section labels like "Introduction:", "Body:", "Conclusion:", "Main Section:"
-- Write as a continuous, flowing essay without section headers
+- Structure MUST include:
+  1. A clear title (use ## Title format)
+  2. An introduction paragraph (start naturally, do NOT label it "Introduction:")
+  3. Body paragraphs (2-3 paragraphs developing the main ideas - do NOT label them "Body:" or "Main Section:")
+  4. A conclusion paragraph (end naturally, do NOT label it "Conclusion:")
+- DO NOT use explicit section labels like "Introduction:", "Body:", "Main Section:", "Conclusion:"
+- Write as a continuous, flowing essay where sections flow naturally into each other
+- Use markdown formatting: ## for title, regular paragraphs for content
 - Expand on the ideas from the original response in a structured, academic style
-- Use markdown formatting only for the title (## Title) if needed, but make the essay read naturally
+- Make it read naturally while maintaining clear structure
 
 Essay:`;
 
@@ -921,16 +926,20 @@ ${originalResponse}
 ${sources && sources.length > 0 ? `Sources used: ${sources.map(s => s.title).join(', ')}` : ''}
 
 Instructions:
-- Create an in-depth, comprehensive report
+- Create an in-depth, comprehensive report with proper structure
 - Use formal, professional language
 - Use the keyword "${keyword}" naturally throughout
+- Structure MUST include:
+  1. A clear title (use ## Title format)
+  2. An introduction section (start naturally, do NOT label it "Introduction:")
+  3. Multiple main sections (3-4 sections with clear topics - do NOT label them "Body:" or "Main Section:")
+  4. A conclusion section (end naturally, do NOT label it "Conclusion:")
+- DO NOT use explicit section labels like "Introduction:", "Body:", "Main Section:", "Conclusion:", "Executive Summary:"
+- Use markdown formatting: ## for title, ### for main section headings, regular paragraphs for content
+- Each main section should have a descriptive heading (e.g., "## Key Features" not "## Main Section")
+- Write as a continuous, flowing report where sections flow naturally into each other
 - Expand significantly on the original response with detailed explanations, implications, and analysis
-- Structure should flow naturally without explicit section labels
-- DO NOT use labels like "Executive Summary:", "Introduction:", "Body:", "Main Section:", "Conclusion:"
-- Write as a continuous, flowing report that reads naturally
-- Use markdown formatting only for the title (## Title) if needed
-- Organize content logically but let it flow naturally without section headers
-- Make it comprehensive and research-grade
+- Make it comprehensive and research-grade while reading naturally
 
 Report:`;
 

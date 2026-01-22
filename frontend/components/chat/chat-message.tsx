@@ -349,8 +349,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
           />
         )}
 
-        {/* Follow-up Questions for Assistant Messages - Only show AI-generated questions */}
-        {!isUser && onFollowUpClick && message.followUpQuestions && message.followUpQuestions.length > 0 && (
+        {/* Follow-up Questions for Assistant Messages - Show AI-generated questions */}
+        {!isUser && onFollowUpClick && message.followUpQuestions && message.followUpQuestions.length > 0 && !message.isActionResponse && (
           <FollowUpQuestions
             questions={message.followUpQuestions}
             onQuestionClick={onFollowUpClick}

@@ -69,15 +69,52 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
   // Extract sources referenced in each paragraph/section
   const renderContentWithInlineCitations = () => {
     if (!sources || sources.length === 0) {
-      return (
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeHighlight]}
-          components={getMarkdownComponents(isUser)}
-        >
-          {processedContent}
-        </ReactMarkdown>
-      );
+          return (
+            <div className="prose prose-sm max-w-none text-justify leading-relaxed">
+              <style jsx>{`
+                .prose {
+                  text-align: justify;
+                  font-size: 15px;
+                  line-height: 1.75;
+                  letter-spacing: 0.01em;
+                }
+                .prose p {
+                  margin-bottom: 1rem;
+                  text-align: justify;
+                  font-size: 15px;
+                  line-height: 1.75;
+                }
+                .prose h2 {
+                  font-size: 1.5rem;
+                  font-weight: 700;
+                  margin-top: 1.5rem;
+                  margin-bottom: 1rem;
+                  text-align: left;
+                }
+                .prose h3 {
+                  font-size: 1.25rem;
+                  font-weight: 600;
+                  margin-top: 1.25rem;
+                  margin-bottom: 0.75rem;
+                  text-align: left;
+                }
+                .prose h4 {
+                  font-size: 1.1rem;
+                  font-weight: 600;
+                  margin-top: 1rem;
+                  margin-bottom: 0.5rem;
+                  text-align: left;
+                }
+              `}</style>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeHighlight]}
+                components={getMarkdownComponents(isUser)}
+              >
+                {processedContent}
+              </ReactMarkdown>
+            </div>
+          );
     }
 
     // Split content by paragraphs and process each
