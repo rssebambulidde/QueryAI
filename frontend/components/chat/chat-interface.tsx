@@ -512,10 +512,29 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         
         const fallbackResponse = await aiApi.ask(request);
         if (fallbackResponse.success && fallbackResponse.data) {
+          // Extract follow-up questions from answer if present
+          let answer = fallbackResponse.data.answer;
+          let followUpQuestions = fallbackResponse.data.followUpQuestions;
+          
+          // Also check if questions are embedded in the answer
+          if (!followUpQuestions) {
+            const followUpMatch = answer.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+            if (followUpMatch) {
+              answer = answer.substring(0, followUpMatch.index).trim();
+              const questionsText = followUpMatch[1];
+              followUpQuestions = questionsText
+                .split('\n')
+                .map(line => line.replace(/^-\s+/, '').trim())
+                .filter(q => q.length > 0)
+                .slice(0, 4);
+            }
+          }
+          
           assistantMessage = {
             ...assistantMessage,
-            content: fallbackResponse.data.answer,
+            content: answer,
             sources: fallbackResponse.data.sources,
+            followUpQuestions,
           };
           setMessages((prev) => {
             const updated = [...prev];
