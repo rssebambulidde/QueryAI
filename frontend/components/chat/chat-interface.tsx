@@ -24,7 +24,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   const [sources, setSources] = useState<Source[] | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const { currentConversationId, createConversation, refreshConversations, conversations, updateConversationFilters } = useConversationStore();
+  const { currentConversationId, createConversation, refreshConversations, conversations, updateConversationFilters, updateConversation } = useConversationStore();
   
   // Unified filters state (replaces conversationFilters and topic selector)
   const [unifiedFilters, setUnifiedFilters] = useState<UnifiedFilters>({
