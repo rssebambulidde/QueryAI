@@ -921,17 +921,15 @@ ${originalResponse}
 ${sources && sources.length > 0 ? `Sources used: ${sources.map(s => s.title).join(', ')}` : ''}
 
 Instructions:
-- Create an in-depth report with the following structure:
-  1. Title
-  2. Executive Summary (2-3 paragraphs)
-  3. Introduction
-  4. Multiple sections with sub-sections (at least 3-4 main sections)
-  5. Conclusion
+- Create an in-depth, comprehensive report
 - Use formal, professional language
 - Use the keyword "${keyword}" naturally throughout
 - Expand significantly on the original response with detailed explanations, implications, and analysis
-- Include numbered sections and sub-sections
-- Use markdown formatting (## for title, ### for main sections, #### for sub-sections)
+- Structure should flow naturally without explicit section labels
+- DO NOT use labels like "Executive Summary:", "Introduction:", "Body:", "Main Section:", "Conclusion:"
+- Write as a continuous, flowing report that reads naturally
+- Use markdown formatting only for the title (## Title) if needed
+- Organize content logically but let it flow naturally without section headers
 - Make it comprehensive and research-grade
 
 Report:`;
