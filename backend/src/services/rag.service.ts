@@ -76,8 +76,8 @@ export class RAGService {
       }
 
       // Search Pinecone for similar document chunks
-      // Use lower default threshold (0.5) to find more relevant documents
-      const minScore = options.minScore || 0.5;
+      // Use higher default threshold (0.7) to ensure relevance
+      const minScore = options.minScore || 0.7;
       
       logger.info('Searching Pinecone for document chunks', {
         userId: options.userId,
@@ -109,22 +109,29 @@ export class RAGService {
         throw searchError;
       }
 
-      // If no results found with the threshold, try with a lower threshold (0.3) as fallback
-      if (searchResults.length === 0 && minScore > 0.3) {
-        logger.info('No results with minScore, trying lower threshold', {
+      // Filter results by relevance - only include documents with meaningful similarity
+      // If no results with current threshold, try slightly lower (0.6) but not too low
+      if (searchResults.length === 0 && minScore > 0.6) {
+        logger.info('No results with minScore, trying slightly lower threshold', {
           userId: options.userId,
           originalMinScore: minScore,
-          fallbackMinScore: 0.3,
         });
         
+        // Try with slightly lower threshold (0.6) if no results, but not too low
         searchResults = await PineconeService.search(queryEmbedding, {
           userId: options.userId,
           topK: options.maxDocumentChunks || 5,
           topicId: options.topicId,
           documentIds: options.documentIds,
-          minScore: 0.3,
+          minScore: 0.6,
         });
       }
+      
+      // Additional filtering: Remove results with very low scores
+      searchResults = searchResults.filter((result: any) => {
+        const score = result.score || result.metadata?.score || 0;
+        return score >= 0.6; // Hard minimum threshold to avoid irrelevant documents
+      });
 
       if (searchResults.length === 0) {
         logger.info('No relevant document chunks found', {

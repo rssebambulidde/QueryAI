@@ -314,7 +314,7 @@ No document excerpts were found for this query. You must inform the user that th
             enableWebSearch: request.enableWebSearch !== false, // Default to true (if enableSearch is true)
             maxDocumentChunks: request.maxDocumentChunks || 5,
             maxWebResults: request.maxSearchResults || 5,
-            minScore: request.minScore || 0.5, // Lower default threshold to find more relevant documents
+            minScore: request.minScore || 0.7, // Higher threshold to ensure relevance
             // Web search filters
             topic: request.topic,
             timeRange: request.timeRange,
@@ -637,7 +637,7 @@ No document excerpts were found for this query. You must inform the user that th
             enableWebSearch: request.enableWebSearch !== false,
             maxDocumentChunks: request.maxDocumentChunks || 5,
             maxWebResults: request.maxSearchResults || 5,
-            minScore: request.minScore || 0.5, // Lower default threshold to find more relevant documents
+            minScore: request.minScore || 0.7, // Higher threshold to ensure relevance
             // Web search filters
             topic: request.topic,
             timeRange: request.timeRange,
