@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, FileText, Tag, Key, Bot, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X } from 'lucide-react';
+import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
 import { useConversationStore } from '@/lib/store/conversation-store';
