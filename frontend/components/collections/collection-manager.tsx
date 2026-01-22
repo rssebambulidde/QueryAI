@@ -10,7 +10,11 @@ import { Plus, Trash2, Edit2, Folder, Search, X, MessageSquare, FolderPlus } fro
 import { AddConversationsToCollectionDialog } from './add-conversations-to-collection-dialog';
 import { cn } from '@/lib/utils';
 
-export const CollectionManager: React.FC = () => {
+interface CollectionManagerProps {
+  onConversationSelect?: (conversationId: string) => void;
+}
+
+export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversationSelect }) => {
   const { toast } = useToast();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -451,7 +455,15 @@ export const CollectionManager: React.FC = () => {
                       {collectionSearchResults.map((conversation) => (
                         <div
                           key={conversation.id}
-                          className="p-2 bg-gray-50 rounded border border-gray-200 text-sm"
+                          onClick={() => {
+                            if (onConversationSelect) {
+                              onConversationSelect(conversation.id);
+                            }
+                          }}
+                          className={cn(
+                            "p-2 bg-gray-50 rounded border border-gray-200 text-sm cursor-pointer hover:bg-gray-100 hover:border-gray-300 transition-colors",
+                            onConversationSelect && "hover:shadow-sm"
+                          )}
                         >
                           <p className="font-medium text-gray-900">
                             {conversation.title || 'Untitled Conversation'}
@@ -467,7 +479,15 @@ export const CollectionManager: React.FC = () => {
                       {selectedCollection.conversations.map((conversation) => (
                         <div
                           key={conversation.id}
-                          className="p-2 bg-gray-50 rounded border border-gray-200 text-sm"
+                          onClick={() => {
+                            if (onConversationSelect) {
+                              onConversationSelect(conversation.id);
+                            }
+                          }}
+                          className={cn(
+                            "p-2 bg-gray-50 rounded border border-gray-200 text-sm cursor-pointer hover:bg-gray-100 hover:border-gray-300 transition-colors",
+                            onConversationSelect && "hover:shadow-sm"
+                          )}
                         >
                           <p className="font-medium text-gray-900">
                             {conversation.title || 'Untitled Conversation'}

@@ -164,10 +164,18 @@ export default function DashboardPage() {
             <div className="flex-1 overflow-y-auto p-6">
               <EmbeddingManager />
             </div>
-          ) : activeTab === 'collections' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <CollectionManager />
-            </div>
+           ) : activeTab === 'collections' ? (
+             <div className="flex-1 overflow-y-auto p-6">
+               <CollectionManager 
+                 onConversationSelect={(conversationId) => {
+                   // Switch to chat tab and select the conversation
+                   setActiveTab('chat');
+                   // The conversation will be selected via the store
+                   const store = require('@/lib/store/conversation-store').useConversationStore.getState();
+                   store.selectConversation(conversationId);
+                 }}
+               />
+             </div>
           ) : null}
         </div>
       </main>

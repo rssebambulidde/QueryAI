@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X } from 'lucide-react';
+import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { ConversationItem as ConversationItemComponent } from '@/components/chat/conversation-item';
 import { SaveToCollectionDialog } from '@/components/collections/save-to-collection-dialog';
+import { collectionApi, Collection } from '@/lib/api';
+import { CollectionConversationsList } from './collection-conversations-list';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -36,6 +38,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [selectedConversationForCollection, setSelectedConversationForCollection] = useState<string | null>(null);
+  const [showCollections, setShowCollections] = useState(true);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [isLoadingCollections, setIsLoadingCollections] = useState(false);
+  const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const { toast } = useToast();
   
   const {
@@ -56,6 +62,35 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       });
     }
   }, [activeTab, loadConversations]);
+
+  // Load collections when chat tab is active
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      loadCollections();
+    }
+  }, [activeTab]);
+
+  const loadCollections = async () => {
+    try {
+      setIsLoadingCollections(true);
+      const response = await collectionApi.list();
+      if (response.success && response.data) {
+        setCollections(response.data);
+      }
+    } catch (error: any) {
+      console.error('Failed to load collections:', error);
+    } finally {
+      setIsLoadingCollections(false);
+    }
+  };
+
+  const handleCollectionClick = async (collectionId: string) => {
+    if (expandedCollectionId === collectionId) {
+      setExpandedCollectionId(null);
+    } else {
+      setExpandedCollectionId(collectionId);
+    }
+  };
 
   const filteredConversations = conversations.filter((conv) =>
     conv.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
