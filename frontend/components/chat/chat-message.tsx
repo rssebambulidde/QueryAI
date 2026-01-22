@@ -293,6 +293,73 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
           </div>
         </div>
 
+        {/* AI Action Buttons for Assistant Messages */}
+        {!isUser && onActionResponse && (
+          <AIActionButtons
+            onSummarize={async () => {
+              if (!userQuestion) return;
+              setIsActionLoading(true);
+              try {
+                const response = await aiApi.summarize(
+                  message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
+                  userQuestion,
+                  message.sources
+                );
+                if (response.success && response.data) {
+                  onActionResponse(response.data.summary);
+                } else {
+                  toast.error(response.message || 'Failed to generate summary');
+                }
+              } catch (error: any) {
+                toast.error(error.message || 'Failed to generate summary');
+              } finally {
+                setIsActionLoading(false);
+              }
+            }}
+            onWriteEssay={async () => {
+              if (!userQuestion) return;
+              setIsActionLoading(true);
+              try {
+                const response = await aiApi.writeEssay(
+                  message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
+                  userQuestion,
+                  message.sources
+                );
+                if (response.success && response.data) {
+                  onActionResponse(response.data.essay);
+                } else {
+                  toast.error(response.message || 'Failed to generate essay');
+                }
+              } catch (error: any) {
+                toast.error(error.message || 'Failed to generate essay');
+              } finally {
+                setIsActionLoading(false);
+              }
+            }}
+            onDetailedReport={async () => {
+              if (!userQuestion) return;
+              setIsActionLoading(true);
+              try {
+                const response = await aiApi.generateReport(
+                  message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
+                  userQuestion,
+                  message.sources
+                );
+                if (response.success && response.data) {
+                  onActionResponse(response.data.report);
+                } else {
+                  toast.error(response.message || 'Failed to generate report');
+                }
+              } catch (error: any) {
+                toast.error(error.message || 'Failed to generate report');
+              } finally {
+                setIsActionLoading(false);
+              }
+            }}
+            isLoading={isActionLoading}
+          />
+        )}
+
         {/* Follow-up Questions for Assistant Messages - Only show AI-generated questions */}
         {!isUser && onFollowUpClick && message.followUpQuestions && message.followUpQuestions.length > 0 && (
           <FollowUpQuestions
