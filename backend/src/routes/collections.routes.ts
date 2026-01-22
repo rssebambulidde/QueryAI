@@ -34,7 +34,7 @@ router.get(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const collectionId = req.params.id;
+    const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
     const collection = await CollectionService.getCollectionWithConversations(collectionId, userId);
 
@@ -86,7 +86,7 @@ router.put(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const collectionId = req.params.id;
+    const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { name, description, color, icon } = req.body;
 
     const updates: UpdateCollectionInput = {};
@@ -113,7 +113,7 @@ router.delete(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const collectionId = req.params.id;
+    const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
     await CollectionService.deleteCollection(collectionId, userId);
 
@@ -133,8 +133,8 @@ router.post(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const collectionId = req.params.id;
-    const conversationId = req.params.conversationId;
+    const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const conversationId = Array.isArray(req.params.conversationId) ? req.params.conversationId[0] : req.params.conversationId;
 
     await CollectionService.addConversationToCollection(collectionId, conversationId, userId);
 
@@ -154,8 +154,8 @@ router.delete(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const collectionId = req.params.id;
-    const conversationId = req.params.conversationId;
+    const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const conversationId = Array.isArray(req.params.conversationId) ? req.params.conversationId[0] : req.params.conversationId;
 
     await CollectionService.removeConversationFromCollection(collectionId, conversationId, userId);
 
@@ -175,8 +175,8 @@ router.get(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const collectionId = req.params.id;
-    const searchQuery = req.query.q as string;
+    const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const searchQuery = Array.isArray(req.query.q) ? req.query.q[0] : (req.query.q as string);
 
     if (!searchQuery || typeof searchQuery !== 'string') {
       throw new ValidationError('Search query is required');

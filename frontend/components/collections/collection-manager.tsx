@@ -17,6 +17,9 @@ export const CollectionManager: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
+  const [collectionSearchResults, setCollectionSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<CreateCollectionInput>({
