@@ -465,13 +465,34 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             const messagesResponse = await conversationApi.getMessages(conversationId);
             if (messagesResponse.success && messagesResponse.data) {
               // Convert API messages to UI messages
-              const uiMessages: Message[] = messagesResponse.data.map((msg) => ({
-                id: msg.id,
-                role: msg.role,
-                content: msg.content,
-                timestamp: new Date(msg.created_at),
-                sources: msg.sources,
-              }));
+              const uiMessages: Message[] = messagesResponse.data.map((msg) => {
+                // Extract follow-up questions from content if present
+                let content = msg.content;
+                let followUpQuestions: string[] | undefined;
+                
+                const followUpMatch = content.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+                if (followUpMatch) {
+                  // Remove follow-up questions section from content
+                  content = content.substring(0, followUpMatch.index).trim();
+                  
+                  // Parse the questions
+                  const questionsText = followUpMatch[1];
+                  followUpQuestions = questionsText
+                    .split('\n')
+                    .map(line => line.replace(/^-\s+/, '').trim())
+                    .filter(q => q.length > 0)
+                    .slice(0, 4);
+                }
+                
+                return {
+                  id: msg.id,
+                  role: msg.role,
+                  content,
+                  timestamp: new Date(msg.created_at),
+                  sources: msg.sources,
+                  followUpQuestions,
+                };
+              });
               setMessages(uiMessages);
             }
           } catch (error: any) {
