@@ -352,7 +352,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       const request: QuestionRequest = {
         question: content,
         conversationHistory,
-        conversationId,
+        conversationId: conversationId ?? undefined,
         enableDocumentSearch: ragSettings.enableDocumentSearch,
         enableWebSearch: ragSettings.enableWebSearch,
         documentIds: ragSettings.documentIds,
