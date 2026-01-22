@@ -10,7 +10,8 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
 import { EnhancedContentProcessor } from './enhanced-content-processor';
-import { Source } from '@/lib/api';
+import { AIActionButtons } from './ai-action-buttons';
+import { Source, aiApi } from '@/lib/api';
 import 'highlight.js/styles/github-dark.css';
 
 export interface ChatMessageType {
@@ -33,12 +34,13 @@ interface ChatMessageProps {
   onActionResponse?: (content: string) => void; // Callback for action responses
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick, userQuestion }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick, userQuestion, onActionResponse }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [isHovered, setIsHovered] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
   const { toast } = useToast();
 
   const handleCopy = async () => {
