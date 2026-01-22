@@ -222,7 +222,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
             ) : (
               <>
                 <EnhancedContentProcessor
-                  content={message.content.replace(/FOLLOW_UP_QUESTIONS:.*$/is, '').trim()}
+                  content={message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim()}
                   sources={message.sources}
                   isUser={false}
                 />
