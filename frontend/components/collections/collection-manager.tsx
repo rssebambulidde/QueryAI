@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { collectionApi, Collection, CreateCollectionInput } from '@/lib/api';
+import { collectionApi, Collection, CreateCollectionInput, conversationApi, Conversation } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Trash2, Edit2, Folder, Search, X, MessageSquare } from 'lucide-react';
+import { Plus, Trash2, Edit2, Folder, Search, X, MessageSquare, FolderPlus } from 'lucide-react';
+import { AddConversationsToCollectionDialog } from './add-conversations-to-collection-dialog';
 import { cn } from '@/lib/utils';
 
 export const CollectionManager: React.FC = () => {
@@ -20,6 +21,7 @@ export const CollectionManager: React.FC = () => {
   const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
   const [collectionSearchResults, setCollectionSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [showAddConversationsDialog, setShowAddConversationsDialog] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<CreateCollectionInput>({
