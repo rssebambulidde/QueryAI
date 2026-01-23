@@ -183,10 +183,11 @@ This roadmap outlines the phased development approach for the AI Knowledge Hub p
 - [ ] Add search within collections
 
 ### 3.5 Export Functionality
-- [ ] Implement PDF export
-- [ ] Format answers for export
-- [ ] Include sources in export
-- [ ] Add export button to UI
+- [x] Implement PDF export
+- [x] Format answers for export
+- [x] Include sources in export
+- [x] Add export button to UI
+- **Implementation plan:** [PHASE_3.5_EXPORT_IMPLEMENTATION_PLAN.md](./PHASE_3.5_EXPORT_IMPLEMENTATION_PLAN.md)
 
 ### 3.6 Analytics Dashboard (Premium)
 - [ ] Create usage tracking

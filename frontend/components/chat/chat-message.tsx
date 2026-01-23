@@ -12,6 +12,7 @@ import { FollowUpQuestions } from './follow-up-questions';
 import { EnhancedContentProcessor } from './enhanced-content-processor';
 import { AIActionButtons } from './ai-action-buttons';
 import { Source, aiApi } from '@/lib/api';
+import { exportToPdf } from '@/lib/export-pdf';
 import 'highlight.js/styles/github-dark.css';
 
 export interface ChatMessageType {
@@ -358,6 +359,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
                 toast.error(error.message || 'Failed to generate report');
               } finally {
                 setIsActionLoading(false);
+              }
+            }}
+            onExport={() => {
+              try {
+                const content = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
+                exportToPdf({
+                  question: userQuestion ?? '',
+                  answer: content,
+                  sources: message.sources ?? [],
+                });
+              } catch {
+                toast.error('Failed to export PDF');
               }
             }}
             isLoading={isActionLoading}
