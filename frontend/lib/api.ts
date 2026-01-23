@@ -99,6 +99,7 @@ export interface QuestionResponse {
   model: string;
   sources?: Source[];
   followUpQuestions?: string[]; // AI-generated follow-up questions
+  refusal?: boolean; // true when response is an off-topic refusal (11.1)
   usage?: {
     promptTokens: number;
     completionTokens: number;
