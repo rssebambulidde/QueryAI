@@ -65,7 +65,7 @@ export class AIService {
   // Default model configuration
   private static readonly DEFAULT_MODEL = 'gpt-3.5-turbo';
   private static readonly DEFAULT_TEMPERATURE = 0.7;
-  private static readonly DEFAULT_MAX_TOKENS = 1000;
+  private static readonly DEFAULT_MAX_TOKENS = 1800; // enough for answer + FOLLOW_UP_QUESTIONS on 2nd+ turns and in research mode
 
   /**
    * Build system prompt with RAG context (documents + web search)
@@ -257,10 +257,10 @@ You MUST format your response as 3-5 short, spaced paragraphs following these ru
    - Be visually separated with blank lines between paragraphs
    - Include exactly ONE inline clickable source hyperlink embedded within the paragraph
 
-2. INLINE SOURCE ATTRIBUTION (CRITICAL):
-   - Each paragraph MUST contain exactly ONE clickable source link embedded inline
-   - For web sources: Use [Web Source N](URL) when the context provides "Web Source 1", "Web Source 2", etc., or [source title](URL); always use markdown [text](URL) so it is clickable—never bold or plain text for the source
-   - For documents: Use format [Document Name](document://documentId) or [Document N] when the context provides "Document 1", etc.
+2. INLINE SOURCE ATTRIBUTION (CRITICAL - ALWAYS USE CLICKABLE LINKS):
+   - Each paragraph MUST contain exactly ONE clickable source link embedded inline. Never use bold or plain text for a source—always use markdown [text](URL).
+   - For web sources: You MUST use [Web Source 1](URL), [Web Source 2](URL), etc. exactly as labeled in the "Web Search Results" context. The URLs are in that context. This makes links work in the app.
+   - For documents: Use [Document 1], [Document 2], etc. as in the "Relevant Document Excerpts" context, or [Document Name](document://id) when a URL is shown.
    - The source link should appear naturally within the paragraph text, not at the end
    - Example: "SQL is a standard language used to manage relational databases, allowing users to query and modify structured data efficiently. [official documentation](https://example.com/docs)"
    - Another example: "Relational systems such as MySQL and PostgreSQL rely on SQL to define schemas and enforce data integrity. [Database Guide](document://doc123)"
@@ -291,9 +291,9 @@ SQL supports complex operations such as joins and aggregations, enabling advance
 
 IMPORTANT: There is NO separate "Sources:" section. All source attribution is inline within each paragraph.
 
-FOLLOW-UP QUESTIONS (CRITICAL - REQUIRED):
-After your complete answer, you MUST include a section with exactly 4 intelligent, contextually relevant follow-up questions.
-Format: Add a line break, then "FOLLOW_UP_QUESTIONS:" followed by exactly 4 questions, one per line, each starting with "- "
+FOLLOW-UP QUESTIONS (CRITICAL - REQUIRED ON EVERY RESPONSE):
+You MUST include a FOLLOW_UP_QUESTIONS block on EVERY response: the first answer, every follow-up answer, multi-turn conversations, and when in Research Topic Mode. Never omit it—even if the user asked a follow-up question. If your answer is long, still end with the FOLLOW_UP_QUESTIONS block; do not truncate or omit it.
+After your complete answer, add a line break, then "FOLLOW_UP_QUESTIONS:" followed by exactly 4 questions, one per line, each starting with "- "
 These questions should:
 - Be directly related to the user's question and your answer
 - Explore different aspects, deeper details, or related topics
@@ -342,15 +342,14 @@ No document excerpts were found for this query. You must inform the user that th
       content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter, topicName, topicDescription, topicScopeConfig),
     });
 
-    // Add conversation history if provided
+    // Add conversation history if provided (strip FOLLOW_UP_QUESTIONS from assistant content to save tokens and give the model room to emit its own)
     if (conversationHistory && conversationHistory.length > 0) {
-      // Limit history to last 10 messages to avoid token limits
       const recentHistory = conversationHistory.slice(-10);
       for (const msg of recentHistory) {
-        messages.push({
-          role: msg.role,
-          content: msg.content,
-        });
+        const content = msg.role === 'assistant'
+          ? (msg.content || '').replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim()
+          : (msg.content || '').trim();
+        messages.push({ role: msg.role, content });
       }
     }
 
@@ -602,7 +601,7 @@ No document excerpts were found for this query. You must inform the user that th
       let followUpQuestions: string[] | undefined;
       
       // Look for FOLLOW_UP_QUESTIONS section (lenient: Follow-up questions, bullets - * •)
-      const followUpMatch = fullResponse.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
+      let followUpMatch = fullResponse.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
       if (followUpMatch) {
         answer = fullResponse.substring(0, followUpMatch.index).trim();
         const questionsText = followUpMatch[1];
@@ -611,10 +610,7 @@ No document excerpts were found for this query. You must inform the user that th
           .map(line => line.replace(/^[-*•]\s+/, '').trim())
           .filter(q => q.length > 0)
           .slice(0, 4);
-        
-        // If we didn't get 4 questions, try alternative formats
         if (followUpQuestions.length < 4) {
-          // Try to find questions in other formats
           const altMatch = fullResponse.match(/(?:follow.?up|suggested|related)\s+questions?:?\s*\n((?:[-•*]\s+[^\n]+\n?)+)/i);
           if (altMatch) {
             const altQuestions = altMatch[1]
@@ -622,6 +618,23 @@ No document excerpts were found for this query. You must inform the user that th
               .map(line => line.replace(/^[-•*]\s+/, '').trim())
               .filter(q => q.length > 0);
             followUpQuestions = [...followUpQuestions, ...altQuestions].slice(0, 4);
+          }
+        }
+      } else {
+        // Fallback: 1–4 bullet lines at end (model sometimes varies format on 2nd+ turns / research mode)
+        const tail = fullResponse.slice(-700);
+        const bulletLines = tail.split(/\n/).filter((l: string) => /^\s*[-*•]\s+.{10,}/.test(l));
+        if (bulletLines.length >= 1 && bulletLines.length <= 6) {
+          followUpQuestions = bulletLines
+            .map((l: string) => l.replace(/^\s*[-*•]\s+/, '').trim())
+            .filter((q: string) => q.length > 5 && q.length < 200)
+            .slice(0, 4);
+          if (followUpQuestions.length >= 1) {
+            const idx = tail.indexOf(bulletLines[0]);
+            if (idx >= 0) {
+              const start = Math.max(0, fullResponse.length - 700 + idx);
+              answer = fullResponse.substring(0, start).trim();
+            }
           }
         }
       }

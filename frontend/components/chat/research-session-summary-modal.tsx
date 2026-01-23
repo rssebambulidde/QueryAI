@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Copy, X } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 
@@ -88,10 +90,24 @@ export const ResearchSessionSummaryModal: React.FC<ResearchSessionSummaryModalPr
             </div>
           )}
           {phase === 'result' && (
-            <div className="prose prose-sm max-w-none">
-              <pre className="whitespace-pre-wrap font-sans text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+            <div className="prose prose-sm max-w-none text-gray-700 bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  h2: ({ node, ...p }) => <h2 className="text-base font-bold mt-4 mb-2 first:mt-0 text-gray-900" {...p} />,
+                  h3: ({ node, ...p }) => <h3 className="text-sm font-semibold mt-3 mb-1.5 text-gray-900" {...p} />,
+                  p: ({ node, ...p }) => <p className="my-2 text-[15px] leading-relaxed" {...p} />,
+                  ul: ({ node, ...p }) => <ul className="list-disc list-outside ml-4 my-2 space-y-1" {...p} />,
+                  ol: ({ node, ...p }) => <ol className="list-decimal list-outside ml-4 my-2 space-y-1" {...p} />,
+                  li: ({ node, ...p }) => <li className="pl-1" {...p} />,
+                  strong: ({ node, ...p }) => <strong className="font-semibold text-gray-900" {...p} />,
+                  a: ({ node, href, ...p }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-orange-600 hover:text-orange-700 underline underline-offset-2 font-medium" {...p} />
+                  ),
+                }}
+              >
                 {summary}
-              </pre>
+              </ReactMarkdown>
             </div>
           )}
         </div>

@@ -310,10 +310,11 @@ export class RAGService {
     if (context.webSearchResults.length > 0) {
       formattedContext += 'Web Search Results:\n\n';
       context.webSearchResults.forEach((result, index) => {
-        formattedContext += `[Web Source ${index + 1}] ${result.title}\n`;
+        const n = index + 1;
+        formattedContext += `[Web Source ${n}] ${result.title}\n`;
         formattedContext += `URL: ${result.url}\n`;
         formattedContext += `Content: ${result.content}\n\n`;
-        formattedContext += `IMPORTANT: When citing this source, use the format: [Web Source ${index + 1}](${result.url}) or mention the URL directly.\n\n`;
+        formattedContext += `CITING: You MUST use [Web Source ${n}](${result.url}) inline when using this source—this exact format is required for clickable links.\n\n`;
       });
     }
 

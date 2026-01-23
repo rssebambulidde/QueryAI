@@ -430,46 +430,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           });
         }
 
-        // After streaming completes, fetch sources separately
-        // This is a lightweight call that just gets the sources
-        // We use a minimal request to avoid regenerating the full response
-        try {
-          const sourceResponse = await aiApi.ask({
-            question: content,
-            conversationHistory: [], // Don't include history to save tokens
-            topicId: activeFilters.topicId ?? activeFilters.topic?.id ?? undefined,
-            // RAG options
-            enableDocumentSearch: ragSettings.enableDocumentSearch,
-            enableWebSearch: ragSettings.enableWebSearch,
-            documentIds: ragSettings.documentIds,
-            maxDocumentChunks: ragSettings.maxDocumentChunks,
-            minScore: ragSettings.minScore,
-            // Web search options
-            enableSearch: ragSettings.enableWebSearch,
-            topic: activeFilters.topic?.name || activeFilters.keyword,
-            timeRange: activeFilters.timeRange,
-            startDate: activeFilters.startDate,
-            endDate: activeFilters.endDate,
-            country: activeFilters.country,
-            maxSearchResults: ragSettings.maxWebResults,
-          });
-          
-          if (sourceResponse.success && sourceResponse.data?.sources && sourceResponse.data.sources.length > 0) {
-            assistantMessage = {
-              ...assistantMessage,
-              sources: sourceResponse.data.sources,
-            };
-            setMessages((prev) => {
-              const updated = [...prev];
-              updated[updated.length - 1] = assistantMessage;
-              return updated;
-            });
-          }
-        } catch (sourceError) {
-          // If getting sources fails, continue without them
-          // This is not critical - the main response is already shown
-          console.warn('Failed to get sources:', sourceError);
-        }
+        // Sources are persisted with the message by the backend; the reload from getMessages below will include them.
 
         setIsStreaming(false);
         setIsLoading(false);

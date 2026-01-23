@@ -313,7 +313,7 @@ router.post(
       
       // Parse follow-up questions from the complete answer (lenient: FOLLOW_UP_QUESTIONS/Follow-up, bullets - * •)
       let followUpQuestions: string[] | undefined;
-      const followUpMatch = fullAnswer.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
+      let followUpMatch = fullAnswer.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
       if (followUpMatch) {
         const questionsText = followUpMatch[1];
         followUpQuestions = questionsText
@@ -321,9 +321,24 @@ router.post(
           .map(line => line.replace(/^[-*•]\s+/, '').trim())
           .filter(q => q.length > 0)
           .slice(0, 4);
-        
-        // Remove follow-up questions section from answer
         fullAnswer = fullAnswer.substring(0, followUpMatch.index).trim();
+      } else {
+        // Fallback: extract 1–4 bullet lines from the end (model sometimes varies FOLLOW_UP format)
+        const tail = fullAnswer.slice(-700);
+        const bulletLines = tail.split(/\n/).filter((l) => /^\s*[-*•]\s+.{10,}/.test(l));
+        if (bulletLines.length >= 1 && bulletLines.length <= 6) {
+          followUpQuestions = bulletLines
+            .map((l) => l.replace(/^\s*[-*•]\s+/, '').trim())
+            .filter((q) => q.length > 5 && q.length < 200)
+            .slice(0, 4);
+          if (followUpQuestions.length >= 1) {
+            const idx = tail.indexOf(bulletLines[0]);
+            if (idx >= 0) {
+              const start = Math.max(0, fullAnswer.length - 700 + idx);
+              fullAnswer = fullAnswer.substring(0, start).trim();
+            }
+          }
+        }
       }
       
       // Send follow-up questions if found
