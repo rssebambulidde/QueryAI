@@ -103,7 +103,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
       if (response.success && response.data) {
         toast.success('Topic updated successfully');
         setEditingTopic(null);
-        setFormData({ name: '', description: '' });
+        setFormData({ name: '', description: '', suggestedStarters: '', strict: true });
         loadTopics();
       }
     } catch (error: any) {
