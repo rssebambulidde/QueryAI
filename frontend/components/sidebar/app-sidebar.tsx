@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen } from 'lucide-react';
+import { SidebarTopicFilters } from './sidebar-topic-filters';
 import { cn } from '@/lib/utils';
 import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
 import { useConversationStore } from '@/lib/store/conversation-store';
@@ -42,6 +43,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isLoadingCollections, setIsLoadingCollections] = useState(false);
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
+  const [showTopicsFilters, setShowTopicsFilters] = useState(false);
   const { toast } = useToast();
   
   const {
@@ -383,18 +385,43 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             <FileText className="w-5 h-5" />
             Your Documents
           </button>
-          <button
-            onClick={() => onTabChange('topics')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              activeTab === 'topics'
-                ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+          <div>
+            <button
+              onClick={() => onTabChange('topics')}
+              className={cn(
+                'w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                activeTab === 'topics'
+                  ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <Tag className="w-5 h-5" />
+                Topics
+              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowTopicsFilters(!showTopicsFilters);
+                }}
+                className="p-1 hover:bg-orange-100 rounded transition-colors"
+                title={showTopicsFilters ? 'Collapse filters' : 'Expand topic & filters'}
+              >
+                {showTopicsFilters ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </button>
+            </button>
+
+            {showTopicsFilters && (
+              <div className="mt-2">
+                <SidebarTopicFilters />
+              </div>
             )}
-          >
-            <Tag className="w-5 h-5" />
-            Topics
-          </button>
+          </div>
           <button
             onClick={() => onTabChange('api-keys')}
             className={cn(

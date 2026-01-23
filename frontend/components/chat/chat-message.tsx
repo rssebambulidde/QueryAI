@@ -181,15 +181,17 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
               : 'px-4 py-3.5 bg-white border border-gray-200 text-gray-900'
           )}
         >
-          {/* Role Label */}
-          <div
-            className={cn(
-              'text-xs font-semibold mb-2 uppercase tracking-wide',
-              isUser ? 'text-orange-100' : 'text-gray-500'
-            )}
-          >
-            {isUser ? 'You' : 'Query Assistant'}
-          </div>
+          {/* Role Label - hide when assistant is streaming with empty content */}
+          {!(!isUser && (isStreaming || message.isStreaming) && !(message.content || '').trim()) && (
+            <div
+              className={cn(
+                'text-xs font-semibold mb-2 uppercase tracking-wide',
+                isUser ? 'text-orange-100' : 'text-gray-500'
+              )}
+            >
+              {isUser ? 'You' : 'Query Assistant'}
+            </div>
+          )}
 
           {/* Content */}
           <div className={cn(
@@ -224,14 +226,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
               </div>
             ) : isUser ? (
               <div className="whitespace-pre-wrap">{message.content}</div>
+            ) : !isUser && (isStreaming || message.isStreaming) && !(message.content || '').trim() ? (
+              <div className="flex items-center gap-1.5 text-gray-500">
+                <span className="text-sm">Query assistant, thinking.</span>
+                <span className="flex gap-0.5" aria-hidden>
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </span>
+              </div>
             ) : (
               <>
                 <EnhancedContentProcessor
-                  content={message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim()}
+                  content={(message.content || '').replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim()}
                   sources={message.sources}
                   isUser={false}
                 />
-                {/* Sources are now inline in the content, no separate section needed */}
               </>
             )}
           </div>

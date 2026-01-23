@@ -3,12 +3,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { ChatMessage, Message } from './chat-message';
-import { TypingIndicator } from './typing-indicator';
 import { ChatInput } from './chat-input';
 import { RAGSourceSelector, RAGSettings } from './rag-source-selector';
 import { aiApi, QuestionRequest, documentApi, conversationApi, topicApi, Topic, Source } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
+import { useFilterStore } from '@/lib/store/filter-store';
 import { Alert } from '@/components/ui/alert';
 import { MessageSquare } from 'lucide-react';
 import { UnifiedFilters } from './unified-filter-panel';
@@ -63,16 +63,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { currentConversationId, createConversation, refreshConversations, conversations, updateConversationFilters, updateConversation } = useConversationStore();
-  
-  // Unified filters state (replaces conversationFilters and topic selector)
-  const [unifiedFilters, setUnifiedFilters] = useState<UnifiedFilters>({
-    topicId: null,
-    topic: null,
-  });
-  
-  // Topic selection state
-  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
-  const [topics, setTopics] = useState<Topic[]>([]);
+  const { unifiedFilters, setUnifiedFilters, selectedTopic, setSelectedTopic } = useFilterStore();
   
   // RAG settings state - use prop if provided, otherwise load from localStorage
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
@@ -163,15 +154,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           console.error('Failed to load conversation data:', error);
           setMessages([]);
           setUnifiedFilters({ topicId: null, topic: null });
+          setSelectedTopic(null);
         }
       } else {
         setMessages([]);
         setUnifiedFilters({ topicId: null, topic: null });
+        setSelectedTopic(null);
       }
     };
 
     loadConversationData();
-  }, [currentConversationId]);
+  }, [currentConversationId, setUnifiedFilters, setSelectedTopic]);
 
   // Load document count on mount
   useEffect(() => {
@@ -196,28 +189,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     // Refresh document count every 30 seconds
     const interval = setInterval(loadDocumentCount, 30000);
     return () => clearInterval(interval);
-  }, []);
-
-  // Load topics on mount and refresh when needed
-  useEffect(() => {
-    const loadTopics = async () => {
-      try {
-        const response = await topicApi.list();
-        if (response.success && response.data) {
-          setTopics(response.data);
-        }
-      } catch (error) {
-        console.warn('Failed to load topics:', error);
-      }
-    };
-    loadTopics();
-    
-    // Refresh topics when window regains focus (in case topics were created in another tab)
-    const handleFocus = () => {
-      loadTopics();
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   // Save RAG settings to localStorage when they change
@@ -260,13 +231,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         // Continue anyway - use the filters for this request even if save failed
       }
     } else {
-      // Update local state even if no conversation yet
       setUnifiedFilters(activeFilters);
-    }
-    
-    // Update selected topic if it changed
-    if (activeFilters.topic !== selectedTopic) {
-      setSelectedTopic(activeFilters.topic || null);
     }
 
     let conversationId = currentConversationId;
@@ -506,8 +471,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         
         // Refresh conversations list to update last message and title (if first message)
         refreshConversations();
-        
-        toast.success('Response received');
       } catch (streamError: any) {
         // If streaming fails, try non-streaming as fallback
         console.warn('Streaming failed, falling back to non-streaming:', streamError);
@@ -560,10 +523,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             }
           }
           
-          // Refresh conversations list to update last message
           refreshConversations();
-          
-          toast.success('Response received');
         } else {
           throw streamError; // Re-throw original error if fallback also fails
         }
@@ -684,8 +644,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             );
           })}
 
-          {isStreaming && <TypingIndicator />}
-
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-800">{error}</p>
@@ -700,35 +658,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       <div className="bg-white border-t border-gray-200 shadow-lg relative">
         <div className="max-w-3xl mx-auto pb-4">
           <ChatInput
-            onSend={handleSend}
+            onSend={(msg) => handleSend(msg)}
             disabled={isLoading || isStreaming}
-            topics={topics}
-            selectedTopic={selectedTopic}
-            onTopicSelect={(topic) => {
-              setSelectedTopic(topic);
-              setUnifiedFilters(prev => ({
-                ...prev,
-                topicId: topic?.id || null,
-                topic: topic,
-                keyword: topic ? undefined : prev.keyword, // Clear keyword if topic selected
-              }));
-              // Update conversation topic if we have one
-              if (currentConversationId) {
-                conversationApi.update(currentConversationId, { topicId: topic?.id || undefined }).catch(console.warn);
-              }
-            }}
-            unifiedFilters={unifiedFilters}
-            onUnifiedFiltersChange={setUnifiedFilters}
-            onLoadTopics={async () => {
-              try {
-                const response = await topicApi.list();
-                if (response.success && response.data) {
-                  setTopics(response.data);
-                }
-              } catch (error) {
-                console.warn('Failed to load topics:', error);
-              }
-            }}
             placeholder="Ask me anything..."
           />
         </div>
