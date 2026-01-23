@@ -311,15 +311,14 @@ router.post(
         res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
       }
       
-      // Parse follow-up questions from the complete answer
+      // Parse follow-up questions from the complete answer (lenient: FOLLOW_UP_QUESTIONS/Follow-up, bullets - * •)
       let followUpQuestions: string[] | undefined;
-      const followUpMatch = fullAnswer.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+      const followUpMatch = fullAnswer.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
       if (followUpMatch) {
-        // Extract questions
         const questionsText = followUpMatch[1];
         followUpQuestions = questionsText
           .split('\n')
-          .map(line => line.replace(/^-\s+/, '').trim())
+          .map(line => line.replace(/^[-*•]\s+/, '').trim())
           .filter(q => q.length > 0)
           .slice(0, 4);
         

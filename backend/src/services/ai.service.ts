@@ -259,8 +259,8 @@ You MUST format your response as 3-5 short, spaced paragraphs following these ru
 
 2. INLINE SOURCE ATTRIBUTION (CRITICAL):
    - Each paragraph MUST contain exactly ONE clickable source link embedded inline
-   - For web sources: Use format [source title](URL) where the link is clickable
-   - For documents: Use format [Document Name](document://documentId) or just mention the document name as a link
+   - For web sources: Use [Web Source N](URL) when the context provides "Web Source 1", "Web Source 2", etc., or [source title](URL); always use markdown [text](URL) so it is clickable—never bold or plain text for the source
+   - For documents: Use format [Document Name](document://documentId) or [Document N] when the context provides "Document 1", etc.
    - The source link should appear naturally within the paragraph text, not at the end
    - Example: "SQL is a standard language used to manage relational databases, allowing users to query and modify structured data efficiently. [official documentation](https://example.com/docs)"
    - Another example: "Relational systems such as MySQL and PostgreSQL rely on SQL to define schemas and enforce data integrity. [Database Guide](document://doc123)"
@@ -601,19 +601,16 @@ No document excerpts were found for this query. You must inform the user that th
       let answer = fullResponse;
       let followUpQuestions: string[] | undefined;
       
-      // Look for FOLLOW_UP_QUESTIONS section
-      const followUpMatch = fullResponse.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+      // Look for FOLLOW_UP_QUESTIONS section (lenient: Follow-up questions, bullets - * •)
+      const followUpMatch = fullResponse.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
       if (followUpMatch) {
-        // Extract the answer (everything before FOLLOW_UP_QUESTIONS)
         answer = fullResponse.substring(0, followUpMatch.index).trim();
-        
-        // Parse the questions
         const questionsText = followUpMatch[1];
         followUpQuestions = questionsText
           .split('\n')
-          .map(line => line.replace(/^-\s+/, '').trim())
+          .map(line => line.replace(/^[-*•]\s+/, '').trim())
           .filter(q => q.length > 0)
-          .slice(0, 4); // Ensure max 4 questions
+          .slice(0, 4);
         
         // If we didn't get 4 questions, try alternative formats
         if (followUpQuestions.length < 4) {

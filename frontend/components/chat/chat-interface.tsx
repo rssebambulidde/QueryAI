@@ -33,13 +33,13 @@ function mapApiMessagesToUi(apiMessages: ApiMessage[]): Message[] {
     let content = msg.content;
     let followUpQuestions: string[] | undefined = msg.metadata?.followUpQuestions;
     if (!followUpQuestions) {
-      const followUpMatch = content.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+      const followUpMatch = content.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
       if (followUpMatch) {
         content = content.substring(0, followUpMatch.index).trim();
         const questionsText = followUpMatch[1];
         followUpQuestions = questionsText
           .split('\n')
-          .map((line) => line.replace(/^-\s+/, '').trim())
+          .map((line) => line.replace(/^[-*•]\s+/, '').trim())
           .filter((q) => q.length > 0)
           .slice(0, 4);
       }
@@ -123,12 +123,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     if (prev !== null && nextId === null) {
       setMessages((m) => [
         ...m,
-        { id: `topic-change-${Date.now()}`, role: 'assistant', content: 'Research mode has been disabled. You can ask about any topic.', timestamp: new Date() },
+        { id: `topic-change-${Date.now()}`, role: 'assistant', content: 'Research mode has been disabled. You can ask about any topic.', timestamp: new Date(), isTopicChangeMessage: true },
       ]);
     } else if (prev !== null && nextId !== null && selectedTopic) {
       setMessages((m) => [
         ...m,
-        { id: `topic-change-${Date.now()}`, role: 'assistant', content: `Research topic is now: **${selectedTopic.name}**. I'll focus on that from here.`, timestamp: new Date() },
+        { id: `topic-change-${Date.now()}`, role: 'assistant', content: `Research topic is now: **${selectedTopic.name}**. I'll focus on that from here.`, timestamp: new Date(), isTopicChangeMessage: true },
       ]);
     }
     prevTopicIdRef.current = nextId;
@@ -390,18 +390,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           }
         }
         
-        // Extract follow-up questions from the complete response if not already received
+        // Extract follow-up questions from the complete response if not already received (lenient regex)
         if (!followUpQuestions) {
-          const followUpMatch = assistantMessage.content.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+          const followUpMatch = assistantMessage.content.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
           if (followUpMatch) {
-            // Remove follow-up questions section from content
             assistantMessage.content = assistantMessage.content.substring(0, followUpMatch.index).trim();
-            
-            // Parse the questions
             const questionsText = followUpMatch[1];
             followUpQuestions = questionsText
               .split('\n')
-              .map(line => line.replace(/^-\s+/, '').trim())
+              .map(line => line.replace(/^[-*•]\s+/, '').trim())
               .filter(q => q.length > 0)
               .slice(0, 4);
           }
@@ -518,13 +515,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           
           // Also check if questions are embedded in the answer
           if (!followUpQuestions) {
-            const followUpMatch = answer.match(/FOLLOW_UP_QUESTIONS:\s*\n((?:-\s+[^\n]+\n?)+)/i);
+            const followUpMatch = answer.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
             if (followUpMatch) {
               answer = answer.substring(0, followUpMatch.index).trim();
               const questionsText = followUpMatch[1];
               followUpQuestions = questionsText
                 .split('\n')
-                .map(line => line.replace(/^-\s+/, '').trim())
+                .map(line => line.replace(/^[-*•]\s+/, '').trim())
                 .filter(q => q.length > 0)
                 .slice(0, 4);
             }
@@ -592,12 +589,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     if (hasEligible) {
       setShowResearchSummaryModal(true);
     } else {
+      // Clear conversation's topic_id so Research badge disappears from list
+      if (currentConversationId) {
+        conversationApi.update(currentConversationId, { topicId: null }).then(() => refreshConversations()).catch(console.warn);
+      }
       setSelectedTopic(null);
     }
   };
 
   const handleCloseResearchSummaryModal = () => {
     setShowResearchSummaryModal(false);
+    // Clear conversation's topic_id so Research badge disappears from list
+    if (currentConversationId) {
+      conversationApi.update(currentConversationId, { topicId: null as any }).then(() => refreshConversations()).catch(console.warn);
+    }
     setSelectedTopic(null);
   };
 

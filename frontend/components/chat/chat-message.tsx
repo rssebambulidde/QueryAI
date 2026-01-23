@@ -24,6 +24,7 @@ export interface ChatMessageType {
   isActionResponse?: boolean; // Flag to indicate if this is an action-generated response
   isStreaming?: boolean; // Flag to indicate if message is still streaming
   isRefusal?: boolean; // true when response is an off-topic refusal (11.1)
+  isTopicChangeMessage?: boolean; // synthetic "Research mode disabled" / "topic now" – hide action buttons
 }
 
 // Keep Message as an alias for backward compatibility
@@ -296,8 +297,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
           </div>
         </div>
 
-        {/* AI Action Buttons for Assistant Messages - Only show on complete responses, not action responses */}
-        {!isUser && onActionResponse && !message.isActionResponse && !isStreaming && !message.isStreaming && (
+        {/* AI Action Buttons for Assistant Messages - Only show on complete responses, not action/topic-change */}
+        {!isUser && onActionResponse && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
           <AIActionButtons
             onSummarize={async () => {
               if (!userQuestion) return;

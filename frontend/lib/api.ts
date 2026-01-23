@@ -369,7 +369,7 @@ export const conversationApi = {
     return response.data;
   },
 
-  update: async (id: string, data: { title?: string; topicId?: string; metadata?: any; filters?: any }): Promise<ApiResponse<Conversation>> => {
+  update: async (id: string, data: { title?: string; topicId?: string | null; metadata?: any; filters?: any }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.put(`/api/conversations/${id}`, data);
     return response.data;
   },

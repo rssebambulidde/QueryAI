@@ -21,7 +21,7 @@ export const SidebarTopicFilters: React.FC = () => {
     loadTopics,
     isLoadingTopics,
   } = useFilterStore();
-  const { currentConversationId } = useConversationStore();
+  const { currentConversationId, refreshConversations } = useConversationStore();
 
   const [showTopicDropdown, setShowTopicDropdown] = useState(false);
   const [showCreateTopic, setShowCreateTopic] = useState(false);
@@ -49,8 +49,10 @@ export const SidebarTopicFilters: React.FC = () => {
       keyword: topic ? undefined : prev.keyword,
     }));
     if (currentConversationId) {
+      // Pass null when clearing so Research badge is removed from conversation list
       conversationApi
-        .update(currentConversationId, { topicId: topic?.id ?? undefined })
+        .update(currentConversationId, { topicId: topic === null ? null : (topic?.id ?? undefined) })
+        .then(() => refreshConversations())
         .catch(console.warn);
     }
   };
@@ -89,6 +91,9 @@ export const SidebarTopicFilters: React.FC = () => {
       endDate: undefined,
       country: undefined,
     });
+    if (currentConversationId) {
+      conversationApi.update(currentConversationId, { topicId: null }).then(() => refreshConversations()).catch(console.warn);
+    }
   };
 
   const hasFilters =
