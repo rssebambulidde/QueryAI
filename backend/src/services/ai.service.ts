@@ -49,6 +49,7 @@ export interface QuestionResponse {
   model: string;
   sources?: Source[];
   followUpQuestions?: string[]; // AI-generated follow-up questions
+  refusal?: boolean; // true when response is an off-topic refusal (e.g. from pre-check) (11.1)
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -69,13 +70,78 @@ export class AIService {
   /**
    * Build system prompt with RAG context (documents + web search)
    */
+  /** Refusal message when off-topic (pre-check or model refusal). */
+  static getRefusalMessage(topicName: string): string {
+    return `I'm currently in Research Topic Mode and limited to **${topicName}**. Your question seems outside this scope. You can ask about ${topicName} or disable research mode to ask anything.`;
+  }
+
+  /** Single meta follow-up for off-topic refusals. */
+  static getRefusalFollowUp(topicName: string): string {
+    return `Would you like to ask something about ${topicName}?`;
+  }
+
+  /**
+   * Off-topic pre-check: lightweight LLM call. Returns true = on-topic (proceed), false = off-topic (refuse).
+   * When in doubt, returns true to avoid blocking valid questions.
+   */
+  static async runOffTopicPreCheck(
+    question: string,
+    topicName: string,
+    topicDescription?: string,
+    topicScopeConfig?: Record<string, any> | null
+  ): Promise<boolean> {
+    const scopeLine = this.deriveScopeFromConfig(topicScopeConfig);
+    const desc = topicDescription || 'general';
+    const prompt = `Topic: ${topicName}. Description: ${desc}.${scopeLine}
+
+Question: ${question}
+
+Is this question clearly within the topic? Answer only YES or NO.`;
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+        max_tokens: 10,
+      });
+      const text = (completion.choices[0]?.message?.content || '').trim().toUpperCase();
+      // Treat as off-topic only when the answer clearly starts with NO
+      if (/^NO\b/.test(text)) return false;
+      return true;
+    } catch (err: any) {
+      logger.warn('Off-topic pre-check failed, proceeding with full flow', { error: err?.message });
+      return true; // on error, proceed to avoid blocking
+    }
+  }
+
+  /**
+   * Derive a short scope line from topic.scope_config for the Research Topic Mode prompt.
+   * Supports: { keywords: string[], subtopics: string[] }
+   */
+  private static deriveScopeFromConfig(scopeConfig?: Record<string, any> | null): string {
+    if (!scopeConfig || typeof scopeConfig !== 'object') return '';
+    const parts: string[] = [];
+    if (Array.isArray(scopeConfig.keywords) && scopeConfig.keywords.length > 0) {
+      const kw = scopeConfig.keywords.slice(0, 10).filter((s: any) => typeof s === 'string').join(', ');
+      if (kw) parts.push(`keywords: ${kw}`);
+    }
+    if (Array.isArray(scopeConfig.subtopics) && scopeConfig.subtopics.length > 0) {
+      const st = scopeConfig.subtopics.slice(0, 10).filter((s: any) => typeof s === 'string').join(', ');
+      if (st) parts.push(`subtopics: ${st}`);
+    }
+    if (parts.length === 0) return '';
+    return ` Scope includes: ${parts.join('; ')}.`;
+  }
+
   private static buildSystemPrompt(
     ragContext?: string,
     additionalContext?: string,
     enableDocumentSearch?: boolean,
     enableWebSearch?: boolean,
     timeFilter?: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string },
-    topicName?: string
+    topicName?: string,
+    topicDescription?: string,
+    topicScopeConfig?: Record<string, any> | null
   ): string {
     const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
     const hasWebResults = ragContext?.includes('Web Search Results:') || false;
@@ -117,10 +183,26 @@ export class AIService {
       }
     }
 
-    // Add topic scope context if topic is selected
+    // Research Topic Mode: when topicName is set, scope all answers. If scope_config.strict !== false, also refuse off-topic (12.1).
     let topicScopeInstruction = '';
     if (topicName) {
-      topicScopeInstruction = `\n\nTOPIC SCOPE: You are currently operating within the topic scope of "${topicName}". All your responses should be focused on this specific topic domain. When searching for information or providing answers:\n- Prioritize information directly related to "${topicName}"\n- If information is not available within this topic scope, clearly indicate this limitation\n- Maintain focus on the topic context throughout your response`;
+      const isStrict = topicScopeConfig?.strict !== false; // default true
+      if (isStrict) {
+        topicScopeInstruction = `\n\nRESEARCH TOPIC MODE (STRICT): You are in **Research Topic Mode**. Your research topic is: **${topicName}**.${topicDescription ? ` Scope: ${topicDescription}` : ''}${this.deriveScopeFromConfig(topicScopeConfig)}
+
+You MUST:
+- Answer fully and use documents/web search ONLY for questions that are clearly on-topic or reasonably related to "${topicName}".
+- REFUSE off-topic questions: If the user's question is clearly unrelated to "${topicName}", give a short, polite refusal (1–2 sentences). Do NOT provide a substantive answer and do NOT use document or web sources for off-topic questions. Example: "That's outside my current research focus on ${topicName}. Would you like to ask something about ${topicName}?"
+- For questions that are tangential: give a brief, steered answer that ties back to "${topicName}" when possible.
+- When you refuse as off-topic: do NOT include a FOLLOW_UP_QUESTIONS block, or include only one meta follow-up such as "Would you like to ask something about ${topicName}?"`;
+      } else {
+        topicScopeInstruction = `\n\nTOPIC SCOPE: You are currently operating within the topic scope of "${topicName}".${topicDescription ? ` Scope: ${topicDescription}` : ''}${this.deriveScopeFromConfig(topicScopeConfig)}
+
+All your responses should be focused on this specific topic domain. When searching for information or providing answers:
+- Prioritize information directly related to "${topicName}"
+- If information is not available within this topic scope, clearly indicate this limitation
+- Maintain focus on the topic context throughout your response`;
+      }
     }
 
     const basePrompt = `You are a helpful AI assistant that provides accurate, informative, and well-structured answers to user questions using Retrieval-Augmented Generation (RAG).
@@ -218,7 +300,7 @@ These questions should:
 - Be specific and actionable (not generic)
 - Help the user learn more about the topic
 - Be phrased as complete questions (e.g., "How does X work?" not just "X details")
-- Use the actual topic/subject from the user's question, NOT section headings like "Summary" or "Key Points"
+- Use the actual topic/subject from the user's question, NOT section headings like "Summary" or "Key Points"${topicName ? `\n- When in Research Topic Mode: all 4 follow-up questions must be clearly within the topic "${topicName}" and help the user explore it further.` : ''}
 Example format:
 FOLLOW_UP_QUESTIONS:
 - How does [main topic] work in practice?
@@ -248,14 +330,16 @@ No document excerpts were found for this query. You must inform the user that th
     enableDocumentSearch?: boolean,
     enableWebSearch?: boolean,
     timeFilter?: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string },
-    topicName?: string
+    topicName?: string,
+    topicDescription?: string,
+    topicScopeConfig?: Record<string, any> | null
   ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
     // Add system prompt with RAG context
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter, topicName),
+      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter, topicName, topicDescription, topicScopeConfig),
     });
 
     // Add conversation history if provided
@@ -300,14 +384,18 @@ No document excerpts were found for this query. You must inform the user that th
       const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
       const maxTokens = request.maxTokens || this.DEFAULT_MAX_TOKENS;
 
-      // Fetch topic details if topicId is provided
+      // Fetch topic details if topicId is provided (for Research Topic Mode)
       let topicName: string | undefined;
+      let topicDescription: string | undefined;
+      let topicScopeConfig: Record<string, any> | null | undefined;
       if (request.topicId && userId) {
         try {
           const { TopicService } = await import('./topic.service');
           const topic = await TopicService.getTopic(request.topicId, userId);
           if (topic) {
             topicName = topic.name;
+            topicDescription = topic.description ?? undefined;
+            topicScopeConfig = topic.scope_config ?? null;
             logger.info('Topic context loaded', { topicId: request.topicId, topicName });
           }
         } catch (topicError: any) {
@@ -315,6 +403,58 @@ No document excerpts were found for this query. You must inform the user that th
             topicId: request.topicId,
             error: topicError.message,
           });
+        }
+      }
+
+      // Off-topic pre-check: skip RAG and return refusal when enabled and question is off-topic (8.x, 13.1)
+      const preCheckEnabled =
+        !!topicName &&
+        process.env.ENABLE_OFF_TOPIC_PRE_CHECK !== 'false' &&
+        topicScopeConfig?.enable_off_topic_pre_check !== false;
+      if (preCheckEnabled && topicName) {
+        const onTopic = await this.runOffTopicPreCheck(
+          request.question,
+          topicName,
+          topicDescription,
+          topicScopeConfig
+        );
+        if (!onTopic) {
+          const refusal = this.getRefusalMessage(topicName);
+          const followUp = this.getRefusalFollowUp(topicName);
+          let conversationIdForResponse = request.conversationId;
+          if (request.conversationId && userId) {
+            try {
+              const { ConversationService } = await import('./conversation.service');
+              const { MessageService } = await import('./message.service');
+              let conversation = await ConversationService.getConversation(request.conversationId, userId);
+              let cid = request.conversationId;
+              if (!conversation) {
+                conversation = await ConversationService.createConversation({
+                  userId,
+                  title: ConversationService.generateTitleFromMessage(request.question),
+                  topicId: request.topicId,
+                });
+                cid = conversation.id;
+                conversationIdForResponse = cid;
+              }
+              await MessageService.saveMessagePair(cid, request.question, refusal, [], {
+                followUpQuestions: [followUp],
+                isRefusal: true,
+              });
+            } catch (e: any) {
+              logger.warn('Failed to save refusal to conversation', { error: e?.message });
+            }
+          }
+          const response: QuestionResponse = {
+            answer: refusal,
+            model: model,
+            sources: [],
+            followUpQuestions: [followUp],
+            refusal: true,
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          };
+          (response as any).conversationId = conversationIdForResponse;
+          return response;
         }
       }
 
@@ -433,7 +573,9 @@ No document excerpts were found for this query. You must inform the user that th
         request.enableDocumentSearch,
         request.enableWebSearch,
         timeFilter,
-        topicName
+        topicName,
+        topicDescription,
+        topicScopeConfig
       );
 
       logger.info('Sending question to OpenAI with RAG', {
@@ -625,14 +767,18 @@ No document excerpts were found for this query. You must inform the user that th
       const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
       const maxTokens = request.maxTokens || this.DEFAULT_MAX_TOKENS;
 
-      // Fetch topic details if topicId is provided
+      // Fetch topic details if topicId is provided (for Research Topic Mode)
       let topicName: string | undefined;
+      let topicDescription: string | undefined;
+      let topicScopeConfig: Record<string, any> | null | undefined;
       if (request.topicId && userId) {
         try {
           const { TopicService } = await import('./topic.service');
           const topic = await TopicService.getTopic(request.topicId, userId);
           if (topic) {
             topicName = topic.name;
+            topicDescription = topic.description ?? undefined;
+            topicScopeConfig = topic.scope_config ?? null;
             logger.info('Topic context loaded for streaming', { topicId: request.topicId, topicName });
           }
         } catch (topicError: any) {
@@ -747,7 +893,9 @@ No document excerpts were found for this query. You must inform the user that th
         request.enableDocumentSearch,
         request.enableWebSearch,
         timeFilter,
-        topicName
+        topicName,
+        topicDescription,
+        topicScopeConfig
       );
 
       logger.info('Sending streaming question to OpenAI with RAG', {
@@ -813,6 +961,55 @@ No document excerpts were found for this query. You must inform the user that th
 
       logger.error('Unexpected error in AI service (streaming):', error);
       throw new AppError('Failed to generate AI response', 500, 'AI_SERVICE_ERROR');
+    }
+  }
+
+  /**
+   * Generate a research session summary from a conversation (7.1).
+   * Loads messages, filters out refusals, and produces a short report for the topic.
+   */
+  static async generateResearchSessionSummary(
+    conversationId: string,
+    userId: string,
+    topicName: string
+  ): Promise<string> {
+    const { MessageService } = await import('./message.service');
+    const messages = await MessageService.getMessages(conversationId, userId, { limit: 50 });
+    const refusalPattern = /outside|limited to|disable research mode|research (mode|topic)/i;
+    const blocks: string[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      if (m.role === 'user') {
+        blocks.push(`Q: ${(m.content || '').replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim()}`);
+      } else if (m.role === 'assistant') {
+        const content = (m.content || '').replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
+        if (content.length < 80 && refusalPattern.test(content)) continue; // skip refusals
+        blocks.push(`A: ${content}`);
+      }
+    }
+    const qaText = blocks.join('\n\n');
+    if (!qaText || qaText.length < 50) {
+      return 'Not enough on-topic Q&A in this conversation to generate a summary.';
+    }
+    const prompt = `You are a research assistant. Create a short **Research Session Summary** for the topic "${topicName}" based on the following Q&A from a conversation.
+
+Format as markdown with 2-4 short sections (e.g. ## Key findings, ## Main topics covered, ## Takeaways). Keep it concise (about 1-2 paragraphs or 5-10 bullet points total). Do not add information beyond what is in the Q&A.
+
+Q&A:
+${qaText.slice(-6000)}
+
+Research Session Summary:`;
+    try {
+      const completion = await openai.chat.completions.create({
+        model: this.DEFAULT_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.4,
+        max_tokens: 800,
+      });
+      return completion.choices[0]?.message?.content || 'Summary could not be generated.';
+    } catch (err: any) {
+      logger.error('Error generating research session summary:', err);
+      throw new AppError('Failed to generate research session summary', 500, 'RESEARCH_SUMMARY_ERROR');
     }
   }
 

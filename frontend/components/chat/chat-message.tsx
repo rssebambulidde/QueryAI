@@ -23,10 +23,13 @@ export interface ChatMessageType {
   followUpQuestions?: string[]; // AI-generated follow-up questions
   isActionResponse?: boolean; // Flag to indicate if this is an action-generated response
   isStreaming?: boolean; // Flag to indicate if message is still streaming
+  isRefusal?: boolean; // true when response is an off-topic refusal (11.1)
 }
 
 // Keep Message as an alias for backward compatibility
 export type Message = ChatMessageType;
+
+const REFUSAL_PATTERN = /outside|limited to|disable research mode|research (mode|topic)/i;
 
 interface ChatMessageProps {
   message: Message;
@@ -35,9 +38,11 @@ interface ChatMessageProps {
   userQuestion?: string; // The user's original question for context
   onActionResponse?: (content: string, actionType?: 'summary' | 'essay' | 'report') => void; // Callback for action responses
   isStreaming?: boolean; // Whether the message is currently streaming
+  selectedTopicName?: string | null; // For refusal hint (11.2)
+  onExitResearchMode?: () => void; // For refusal hint "exit research mode" action
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick, userQuestion, onActionResponse, isStreaming = false }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick, userQuestion, onActionResponse, isStreaming = false, selectedTopicName, onExitResearchMode }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
@@ -366,6 +371,30 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
             className="mt-3"
           />
         )}
+
+        {/* 11.2 Refusal hint: when message is a refusal and in research mode */}
+        {!isUser &&
+          selectedTopicName &&
+          (message.isRefusal || (REFUSAL_PATTERN.test(message.content || '') && (message.content?.length || 0) < 500)) && (
+            <div className="mt-2 px-3 py-2 rounded-lg bg-orange-50 border border-orange-200 text-sm text-orange-800">
+              This question seems outside <strong>{selectedTopicName}</strong>.{' '}
+              {onExitResearchMode ? (
+                <>
+                  Ask something about {selectedTopicName} or{' '}
+                  <button
+                    type="button"
+                    onClick={onExitResearchMode}
+                    className="font-medium underline hover:no-underline"
+                  >
+                    exit research mode
+                  </button>{' '}
+                  to ask anything.
+                </>
+              ) : (
+                `Ask something about ${selectedTopicName} or exit research mode to ask anything.`
+              )}
+            </div>
+          )}
       </div>
     </div>
   );

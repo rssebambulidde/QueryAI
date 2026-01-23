@@ -28,6 +28,10 @@ router.post(
       enableSearch,
       topic,
       maxSearchResults,
+      timeRange,
+      startDate,
+      endDate,
+      country,
       // RAG options
       enableDocumentSearch,
       enableWebSearch,
@@ -57,6 +61,10 @@ router.post(
       enableSearch: enableSearch !== false, // Default to true
       topic: topic?.trim(),
       maxSearchResults: maxSearchResults || 5,
+      timeRange,
+      startDate,
+      endDate,
+      country,
       // RAG options
       enableDocumentSearch: enableDocumentSearch !== false, // Default to true
       enableWebSearch: enableWebSearch !== false, // Default to true
@@ -107,6 +115,10 @@ router.post(
       enableSearch,
       topic,
       maxSearchResults,
+      timeRange,
+      startDate,
+      endDate,
+      country,
       // RAG options
       enableDocumentSearch,
       enableWebSearch,
@@ -137,6 +149,10 @@ router.post(
       enableSearch: enableSearch !== false, // Default to true
       topic: topic?.trim(),
       maxSearchResults: maxSearchResults || 5,
+      timeRange,
+      startDate,
+      endDate,
+      country,
       // RAG options
       enableDocumentSearch: enableDocumentSearch !== false, // Default to true
       enableWebSearch: enableWebSearch !== false, // Default to true
@@ -187,6 +203,65 @@ router.post(
         const idx = all.findIndex((m) => m.id === resendUserMessageId);
         if (idx >= 0 && idx + 1 < all.length && all[idx + 1].role === 'assistant') {
           await MessageService.deleteMessage(all[idx + 1].id, userId);
+        }
+      }
+
+      // Off-topic pre-check (before RAG): skip RAG and stream refusal when enabled (8.x, 13.1)
+      let topicName: string | undefined;
+      let topicDescription: string | undefined;
+      let topicScopeConfig: any;
+      if (request.topicId && userId) {
+        try {
+          const { TopicService } = await import('../services/topic.service');
+          const topic = await TopicService.getTopic(request.topicId, userId);
+          if (topic) {
+            topicName = topic.name;
+            topicDescription = topic.description ?? undefined;
+            topicScopeConfig = topic.scope_config ?? null;
+          }
+        } catch (_) {}
+      }
+      const preCheckEnabled =
+        !!topicName &&
+        process.env.ENABLE_OFF_TOPIC_PRE_CHECK !== 'false' &&
+        topicScopeConfig?.enable_off_topic_pre_check !== false;
+      if (preCheckEnabled) {
+        const onTopic = await AIService.runOffTopicPreCheck(
+          request.question,
+          topicName!,
+          topicDescription,
+          topicScopeConfig
+        );
+        if (!onTopic) {
+          const refusal = AIService.getRefusalMessage(topicName!);
+          const followUp = AIService.getRefusalFollowUp(topicName!);
+          res.write(`data: ${JSON.stringify({ chunk: refusal })}\n\n`);
+          res.write(`data: ${JSON.stringify({ followUpQuestions: [followUp], refusal: true })}\n\n`);
+          if (request.conversationId && userId) {
+            try {
+              const { ConversationService } = await import('../services/conversation.service');
+              const { MessageService } = await import('../services/message.service');
+              let conv = await ConversationService.getConversation(request.conversationId, userId);
+              let cid = request.conversationId;
+              if (!conv) {
+                conv = await ConversationService.createConversation({
+                  userId,
+                  title: ConversationService.generateTitleFromMessage(request.question),
+                  topicId: request.topicId,
+                });
+                cid = conv.id;
+              }
+              await MessageService.saveMessagePair(cid, request.question, refusal, [], {
+                followUpQuestions: [followUp],
+                isRefusal: true,
+              });
+            } catch (e: any) {
+              logger.warn('Failed to save refusal to conversation (streaming)', { error: e?.message });
+            }
+          }
+          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.end();
+          return;
         }
       }
 
@@ -403,6 +478,35 @@ router.post(
     res.status(200).json({
       success: true,
       data: { report },
+    });
+  })
+);
+
+/**
+ * POST /api/ai/research-session-summary (7.1)
+ * Generate a research session summary when exiting research mode
+ */
+router.post(
+  '/research-session-summary',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { conversationId, topicName } = req.body;
+
+    if (!conversationId || !topicName) {
+      throw new ValidationError('conversationId and topicName are required');
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const summary = await AIService.generateResearchSessionSummary(conversationId, userId, topicName);
+
+    res.status(200).json({
+      success: true,
+      data: { summary },
     });
   })
 );

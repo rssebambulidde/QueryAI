@@ -104,13 +104,18 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-1 gap-2">
                 <h3 className={cn(
-                  'text-sm font-medium truncate',
+                  'text-sm font-medium truncate min-w-0',
                   isActive ? 'text-orange-900' : 'text-gray-900'
                 )}>
                   {conversation.title || 'New Conversation'}
                 </h3>
+                {conversation.topic_id && (
+                  <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 bg-orange-100 rounded">
+                    Research
+                  </span>
+                )}
                 <div className="flex items-center gap-1">
                   {onSaveToCollection && (
                     <button

@@ -220,7 +220,7 @@ export const aiApi = {
     return response.data;
   },
 
-  askStream: async function* (request: QuestionRequest): AsyncGenerator<string | { followUpQuestions?: string[] }, void, unknown> {
+  askStream: async function* (request: QuestionRequest): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean }, void, unknown> {
     const response = await fetch(`${API_URL}/api/ai/ask/stream`, {
       method: 'POST',
       headers: {
@@ -259,7 +259,7 @@ export const aiApi = {
               yield data.chunk;
             }
             if (data.followUpQuestions) {
-              yield { followUpQuestions: data.followUpQuestions };
+              yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal };
             }
             if (data.done) {
               return;
@@ -287,6 +287,11 @@ export const aiApi = {
 
   generateReport: async (originalResponse: string, keyword: string, sources?: Source[]): Promise<ApiResponse<{ report: string }>> => {
     const response = await apiClient.post('/api/ai/report', { originalResponse, keyword, sources });
+    return response.data;
+  },
+
+  researchSessionSummary: async (conversationId: string, topicName: string): Promise<ApiResponse<{ summary: string }>> => {
+    const response = await apiClient.post('/api/ai/research-session-summary', { conversationId, topicName });
     return response.data;
   },
 };

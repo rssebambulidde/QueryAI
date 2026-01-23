@@ -12,6 +12,8 @@ import { useFilterStore } from '@/lib/store/filter-store';
 import { Alert } from '@/components/ui/alert';
 import { MessageSquare } from 'lucide-react';
 import { UnifiedFilters } from './unified-filter-panel';
+import { ResearchModeBanner } from './research-mode-banner';
+import { ResearchSessionSummaryModal } from './research-session-summary-modal';
 
 interface ChatInterfaceProps {
   ragSettings?: RAGSettings;
@@ -22,7 +24,7 @@ type ApiMessage = {
   role: 'user' | 'assistant';
   content: string;
   sources?: Source[];
-  metadata?: { followUpQuestions?: string[]; isActionResponse?: boolean; actionType?: string };
+  metadata?: { followUpQuestions?: string[]; isActionResponse?: boolean; actionType?: string; isRefusal?: boolean };
   created_at: string;
 };
 
@@ -50,6 +52,7 @@ function mapApiMessagesToUi(apiMessages: ApiMessage[]): Message[] {
       sources: msg.sources,
       followUpQuestions,
       isActionResponse: msg.metadata?.isActionResponse,
+      isRefusal: msg.metadata?.isRefusal,
     };
   });
 }
@@ -99,10 +102,37 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   const [documentCount, setDocumentCount] = useState(0);
   const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
 
+  // 7.1 Research session summary: offer on exit when there is on-topic Q&A
+  const [showResearchSummaryModal, setShowResearchSummaryModal] = useState(false);
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
+
+  // 10.2 Optional in-thread "Topic changed" message when user switches topic mid-conversation
+  const prevTopicIdRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const nextId = selectedTopic?.id ?? null;
+    if (prevTopicIdRef.current === undefined) {
+      prevTopicIdRef.current = nextId;
+      return;
+    }
+    if (prevTopicIdRef.current === nextId) return;
+    const prev = prevTopicIdRef.current;
+    if (prev !== null && nextId === null) {
+      setMessages((m) => [
+        ...m,
+        { id: `topic-change-${Date.now()}`, role: 'assistant', content: 'Research mode has been disabled. You can ask about any topic.', timestamp: new Date() },
+      ]);
+    } else if (prev !== null && nextId !== null && selectedTopic) {
+      setMessages((m) => [
+        ...m,
+        { id: `topic-change-${Date.now()}`, role: 'assistant', content: `Research topic is now: **${selectedTopic.name}**. I'll focus on that from here.`, timestamp: new Date() },
+      ]);
+    }
+    prevTopicIdRef.current = nextId;
+  }, [selectedTopic]);
 
   // Load messages and filters when conversation changes
   useEffect(() => {
@@ -337,10 +367,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       try {
         // Try streaming first
         let followUpQuestions: string[] | undefined;
+        let isRefusal = false;
         for await (const chunk of aiApi.askStream(request)) {
-          // Check if this is a follow-up questions object
+          // Check if this is a follow-up questions object (may include refusal)
           if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
             followUpQuestions = chunk.followUpQuestions;
+            if ((chunk as { refusal?: boolean }).refusal) isRefusal = true;
             continue;
           }
           
@@ -375,12 +407,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           }
         }
         
-        // Store follow-up questions in message if available and mark as complete
+        // Store follow-up questions and isRefusal in message if available and mark as complete
         if (followUpQuestions && followUpQuestions.length > 0) {
           assistantMessage = {
             ...assistantMessage,
             followUpQuestions,
-            isStreaming: false, // Mark as complete
+            isStreaming: false,
+            isRefusal: isRefusal || undefined,
           };
           setMessages((prev) => {
             const updated = [...prev];
@@ -388,10 +421,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             return updated;
           });
         } else {
-          // Mark as complete even if no follow-up questions
           assistantMessage = {
             ...assistantMessage,
             isStreaming: false,
+            isRefusal: isRefusal || undefined,
           };
           setMessages((prev) => {
             const updated = [...prev];
@@ -407,6 +440,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           const sourceResponse = await aiApi.ask({
             question: content,
             conversationHistory: [], // Don't include history to save tokens
+            topicId: activeFilters.topicId ?? activeFilters.topic?.id ?? undefined,
             // RAG options
             enableDocumentSearch: ragSettings.enableDocumentSearch,
             enableWebSearch: ragSettings.enableWebSearch,
@@ -501,6 +535,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             content: answer,
             sources: fallbackResponse.data.sources,
             followUpQuestions,
+            isRefusal: fallbackResponse.data?.refusal ? true : undefined,
           };
           setMessages((prev) => {
             const updated = [...prev];
@@ -549,6 +584,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   };
 
 
+  // 7.1 Exit research mode: offer research session summary when there is on-topic Q&A
+  const handleExitResearchMode = () => {
+    const hasEligible = currentConversationId && selectedTopic && messages.some(
+      (m) => m.role === 'assistant' && (m.content?.length || 0) > 100
+    );
+    if (hasEligible) {
+      setShowResearchSummaryModal(true);
+    } else {
+      setSelectedTopic(null);
+    }
+  };
+
+  const handleCloseResearchSummaryModal = () => {
+    setShowResearchSummaryModal(false);
+    setSelectedTopic(null);
+  };
+
   const handleEditMessage = async (messageId: string, newContent: string) => {
     const messageIndex = messages.findIndex((m) => m.id === messageId);
     if (messageIndex === -1) return;
@@ -577,6 +629,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
 
   return (
     <div className="flex flex-col h-full bg-white">
+      <ResearchModeBanner onExit={handleExitResearchMode} />
       {/* Messages - Centered layout like Perplexity */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
@@ -611,10 +664,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                 message={message}
                 onEdit={handleEditMessage}
                 onFollowUpClick={(question) => {
-                  // Send the follow-up question as a new message
                   handleSend(question);
                 }}
                 userQuestion={userQuestion}
+                selectedTopicName={selectedTopic?.name ?? null}
+                onExitResearchMode={handleExitResearchMode}
                 onActionResponse={async (content, actionType) => {
                   const actionMessage: Message = {
                     id: (Date.now() + 1).toString(),
@@ -654,9 +708,48 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         </div>
       </div>
 
+      <ResearchSessionSummaryModal
+        open={showResearchSummaryModal}
+        onClose={handleCloseResearchSummaryModal}
+        onRequestSummary={async () => {
+          if (!currentConversationId || !selectedTopic) return null;
+          const r = await aiApi.researchSessionSummary(currentConversationId, selectedTopic.name);
+          return r.success && r.data ? r.data.summary : null;
+        }}
+        topicName={selectedTopic?.name || ''}
+      />
+
       {/* Input - Centered layout */}
       <div className="bg-white border-t border-gray-200 shadow-lg relative">
         <div className="max-w-3xl mx-auto pb-4">
+          {/* 6.1 On-topic suggested starters when in research mode */}
+          {selectedTopic && (
+            <div className="px-4 pt-3 pb-1">
+              <span className="text-xs text-gray-500 mr-2">Try:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  (Array.isArray(selectedTopic.scope_config?.suggested_starters) &&
+                    selectedTopic.scope_config.suggested_starters.length > 0
+                    ? selectedTopic.scope_config.suggested_starters.slice(0, 4)
+                    : [
+                        `What are the key concepts in ${selectedTopic.name}?`,
+                        `How does ${selectedTopic.name} work in practice?`,
+                      ]
+                  ) as string[]
+                ).map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    onClick={() => handleSend(q)}
+                    disabled={isLoading || isStreaming}
+                    className="px-2.5 py-1 text-xs rounded-full bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100 disabled:opacity-50"
+                  >
+                    {q.length > 50 ? q.slice(0, 47) + '...' : q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <ChatInput
             onSend={(msg) => handleSend(msg)}
             disabled={isLoading || isStreaming}

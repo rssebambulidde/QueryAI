@@ -108,8 +108,11 @@ export const SidebarTopicFilters: React.FC = () => {
         <div className="relative" ref={topicDropdownRef}>
           {selectedTopic ? (
             <div className="flex items-center justify-between gap-1 px-2.5 py-1.5 bg-orange-50 border border-orange-200 rounded-md">
-              <span className="text-xs font-medium text-orange-900 truncate flex-1">
-                {selectedTopic.name}
+              <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 bg-orange-100 rounded">
+                  Research
+                </span>
+                <span className="text-xs font-medium text-orange-900 truncate">{selectedTopic.name}</span>
               </span>
               <button
                 type="button"

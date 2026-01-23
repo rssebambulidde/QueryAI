@@ -26,6 +26,8 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    suggestedStarters: '',
+    strict: true,
   });
 
   // Load topics
@@ -54,14 +56,19 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
     }
 
     try {
+      const suggested_starters = formData.suggestedStarters
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
       const response = await topicApi.create({
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
+        scopeConfig: { suggested_starters, strict: formData.strict },
       });
 
       if (response.success && response.data) {
         toast.success('Topic created successfully');
-        setFormData({ name: '', description: '' });
+        setFormData({ name: '', description: '', suggestedStarters: '', strict: true });
         setShowCreateForm(false);
         loadTopics();
       }
@@ -78,9 +85,19 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
     }
 
     try {
+      const suggested_starters = formData.suggestedStarters
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const scopeConfig = {
+        ...(editingTopic.scope_config || {}),
+        suggested_starters,
+        strict: formData.strict,
+      };
       const response = await topicApi.update(editingTopic.id, {
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
+        scopeConfig,
       });
 
       if (response.success && response.data) {
@@ -116,9 +133,13 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
 
   const handleEdit = (topic: Topic) => {
     setEditingTopic(topic);
+    const sc = topic.scope_config || {};
+    const starters = Array.isArray(sc.suggested_starters) ? sc.suggested_starters : [];
     setFormData({
       name: topic.name,
       description: topic.description || '',
+      suggestedStarters: starters.join('\n'),
+      strict: sc.strict !== false,
     });
     setShowCreateForm(false);
   };
@@ -131,12 +152,12 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
 
   const cancelEdit = () => {
     setEditingTopic(null);
-    setFormData({ name: '', description: '' });
+    setFormData({ name: '', description: '', suggestedStarters: '', strict: true });
   };
 
   const cancelCreate = () => {
     setShowCreateForm(false);
-    setFormData({ name: '', description: '' });
+    setFormData({ name: '', description: '', suggestedStarters: '', strict: true });
   };
 
   return (
@@ -148,7 +169,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
           onClick={() => {
             setShowCreateForm(true);
             setEditingTopic(null);
-            setFormData({ name: '', description: '' });
+            setFormData({ name: '', description: '', suggestedStarters: '', strict: true });
           }}
           size="sm"
           className="flex items-center gap-2"
@@ -184,6 +205,25 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             rows={2}
           />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={formData.strict}
+              onChange={(e) => setFormData({ ...formData, strict: e.target.checked })}
+              className="rounded border-gray-300"
+            />
+            Research mode only (refuse off-topic questions)
+          </label>
+          <div>
+            <label className="text-sm text-gray-600">Suggested starter questions (one per line, optional)</label>
+            <Textarea
+              placeholder="e.g. What are the key concepts?&#10;How does X work in practice?"
+              value={formData.suggestedStarters}
+              onChange={(e) => setFormData({ ...formData, suggestedStarters: e.target.value })}
+              rows={2}
+              className="mt-1"
+            />
+          </div>
           <div className="flex gap-2">
             <Button
               onClick={editingTopic ? handleUpdate : handleCreate}
