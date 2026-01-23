@@ -1,6 +1,0 @@
-# Use npm install instead of npm ci so the build works when
-# package-lock.json is out of sync with package.json (e.g. after adding jspdf).
-# Run "npm install" locally and commit package-lock.json, then you can
-# remove this override to restore npm ci for reproducible builds.
-[phases.install]
-cmds = ["npm install"]
