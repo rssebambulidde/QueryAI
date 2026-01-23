@@ -340,8 +340,18 @@ router.post(
           }
         }
       }
+
+      // Mandatory follow-ups: if still none, generate from latest Q&A (research or not)
+      if ((!followUpQuestions || followUpQuestions.length === 0) && fullAnswer) {
+        try {
+          const generated = await AIService.generateFollowUpQuestions(request.question, fullAnswer, topicName);
+          if (generated.length > 0) followUpQuestions = generated;
+        } catch (genErr: any) {
+          logger.warn('Follow-up questions fallback failed in streaming', { error: genErr?.message });
+        }
+      }
       
-      // Send follow-up questions if found
+      // Send follow-up questions (required on every response)
       if (followUpQuestions && followUpQuestions.length > 0) {
         res.write(`data: ${JSON.stringify({ followUpQuestions })}\n\n`);
       }

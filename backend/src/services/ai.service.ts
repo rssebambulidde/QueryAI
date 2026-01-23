@@ -291,9 +291,28 @@ SQL supports complex operations such as joins and aggregations, enabling advance
 
 IMPORTANT: There is NO separate "Sources:" section. All source attribution is inline within each paragraph.
 
-FOLLOW-UP QUESTIONS (CRITICAL - REQUIRED ON EVERY RESPONSE):
-You MUST include a FOLLOW_UP_QUESTIONS block on EVERY response: the first answer, every follow-up answer, multi-turn conversations, and when in Research Topic Mode. Never omit it—even if the user asked a follow-up question. If your answer is long, still end with the FOLLOW_UP_QUESTIONS block; do not truncate or omit it.
-Each set of follow-up questions must be specifically tailored to the current user question and your answer in this turn—do not repeat generic or previous follow-ups.
+${this.getFollowUpBlock(topicName)}`;
+    }
+
+    // If no context and document-only mode, provide clear instruction
+    if (enableDocumentSearch && !enableWebSearch) {
+      return `${basePrompt}
+
+No document excerpts were found for this query. You must inform the user that the information is not available in their documents.
+
+${this.getFollowUpBlock(topicName)}`;
+    }
+
+    return `${basePrompt}
+
+${this.getFollowUpBlock(topicName)}`;
+  }
+
+  /** FOLLOW_UP_QUESTIONS block: mandatory on every response (research or not), dynamic from latest Q&A. */
+  private static getFollowUpBlock(topicName?: string): string {
+    return `FOLLOW-UP QUESTIONS (MANDATORY - EVERY RESPONSE, RESEARCH MODE OR NOT):
+This is NON-NEGOTIABLE: every response in the conversation thread MUST end with a FOLLOW_UP_QUESTIONS block. Applies to: first answer, every follow-up, multi-turn, and Research Topic Mode. The only exception is off-topic refusals (those use at most one meta follow-up).
+The 4 questions MUST be dynamically generated from the latest user question and your answer in this turn—based on the specific subject and content just discussed, not generic templates or previous follow-ups. If your answer is long, still end with the FOLLOW_UP_QUESTIONS block; do not truncate or omit it.
 After your complete answer, add a line break, then "FOLLOW_UP_QUESTIONS:" followed by exactly 4 questions, one per line, each starting with "- "
 These questions should:
 - Be directly related to the user's question and your answer
@@ -308,16 +327,36 @@ FOLLOW_UP_QUESTIONS:
 - What are the key benefits and challenges of [main topic]?
 - Can you provide examples of [main topic] in real-world applications?
 - What should I know about [related aspect]?`;
+  }
+
+  /**
+   * Generate 2–4 follow-up questions from the latest Q&A when the main model omits them.
+   * Used as a fallback so every response has follow-ups (research or not).
+   */
+  static async generateFollowUpQuestions(question: string, answer: string, topicName?: string): Promise<string[]> {
+    const ans = answer.length > 1500 ? answer.slice(0, 1500) + '...' : answer;
+    const prompt = `Based on this exchange, generate exactly 4 short follow-up questions.
+
+User asked: ${question}
+
+Assistant answered: ${ans}
+${topicName ? `\nKeep all questions clearly within the research topic: "${topicName}".` : ''}
+
+Output only the 4 questions, one per line. No numbering or bullets. Each must be a complete question and derived from the specific content above.`;
+    try {
+      const c = await openai.chat.completions.create({
+        model: this.DEFAULT_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.5,
+        max_tokens: 300,
+      });
+      const text = c.choices[0]?.message?.content || '';
+      const lines = text.split('\n').map((l) => l.replace(/^\s*[-*•]?\s*\d*\.?\s*/, '').trim()).filter((l) => l.length > 5 && l.length < 200);
+      return lines.slice(0, 4);
+    } catch (err: any) {
+      logger.warn('Failed to generate follow-up questions fallback', { error: err?.message });
+      return [];
     }
-
-    // If no context and document-only mode, provide clear instruction
-    if (enableDocumentSearch && !enableWebSearch) {
-      return `${basePrompt}
-
-No document excerpts were found for this query. You must inform the user that the information is not available in their documents.`;
-    }
-
-    return basePrompt;
   }
 
   /**
@@ -638,6 +677,12 @@ No document excerpts were found for this query. You must inform the user that th
             }
           }
         }
+      }
+
+      // Mandatory follow-ups: if still none, generate from latest Q&A (research or not)
+      if ((!followUpQuestions || followUpQuestions.length === 0) && answer) {
+        const generated = await this.generateFollowUpQuestions(request.question, answer, topicName);
+        if (generated.length > 0) followUpQuestions = generated;
       }
 
       if (!completion.usage) {
