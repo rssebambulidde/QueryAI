@@ -295,6 +295,11 @@ export const aiApi = {
     const response = await apiClient.post('/api/ai/research-session-summary', { conversationId, topicName });
     return response.data;
   },
+
+  suggestedStarters: async (topicId: string): Promise<ApiResponse<{ starters: string[] }>> => {
+    const response = await apiClient.get('/api/ai/suggested-starters', { params: { topicId } });
+    return response.data;
+  },
 };
 
 // Document API

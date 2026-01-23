@@ -293,6 +293,7 @@ IMPORTANT: There is NO separate "Sources:" section. All source attribution is in
 
 FOLLOW-UP QUESTIONS (CRITICAL - REQUIRED ON EVERY RESPONSE):
 You MUST include a FOLLOW_UP_QUESTIONS block on EVERY response: the first answer, every follow-up answer, multi-turn conversations, and when in Research Topic Mode. Never omit it—even if the user asked a follow-up question. If your answer is long, still end with the FOLLOW_UP_QUESTIONS block; do not truncate or omit it.
+Each set of follow-up questions must be specifically tailored to the current user question and your answer in this turn—do not repeat generic or previous follow-ups.
 After your complete answer, add a line break, then "FOLLOW_UP_QUESTIONS:" followed by exactly 4 questions, one per line, each starting with "- "
 These questions should:
 - Be directly related to the user's question and your answer
@@ -1020,6 +1021,46 @@ Research Session Summary:`;
     } catch (err: any) {
       logger.error('Error generating research session summary:', err);
       throw new AppError('Failed to generate research session summary', 500, 'RESEARCH_SUMMARY_ERROR');
+    }
+  }
+
+  /**
+   * Generate 4 dynamic, AI-generated starter questions for a research topic (6.1).
+   * Used when in research mode to show "Try:" suggestions in line with the topic.
+   */
+  static async generateSuggestedStarters(topicId: string, userId: string): Promise<string[]> {
+    const { TopicService } = await import('./topic.service');
+    const topic = await TopicService.getTopic(topicId, userId);
+    if (!topic) {
+      throw new AppError('Topic not found', 404, 'TOPIC_NOT_FOUND');
+    }
+    const name = topic.name;
+    const desc = (topic.description || '').trim();
+    const prompt = `You are a research assistant. Given this research topic:
+
+Name: ${name}
+${desc ? `Description: ${desc}` : ''}
+
+Generate exactly 4 short, specific question starters that would help a user explore this topic. Each must be:
+- A complete question
+- Clearly on-topic and in line with "${name}"
+- Suitable as the first or an early message in a research chat
+- Specific (not generic like "What is X?")
+
+Output only the 4 questions, one per line. No numbering, bullets, or extra text.`;
+    try {
+      const completion = await openai.chat.completions.create({
+        model: this.DEFAULT_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.6,
+        max_tokens: 400,
+      });
+      const text = completion.choices[0]?.message?.content || '';
+      const lines = text.split('\n').map((l) => l.replace(/^\s*[-*•]?\s*\d*\.?\s*/, '').trim()).filter((l) => l.length > 5 && l.length < 200);
+      return lines.slice(0, 4);
+    } catch (err: any) {
+      logger.error('Error generating suggested starters:', err);
+      throw new AppError('Failed to generate suggested starters', 500, 'SUGGESTED_STARTERS_ERROR');
     }
   }
 

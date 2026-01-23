@@ -105,6 +105,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   // 7.1 Research session summary: offer on exit when there is on-topic Q&A
   const [showResearchSummaryModal, setShowResearchSummaryModal] = useState(false);
 
+  // 6.1 Dynamic AI-generated starter questions for research mode (in line with topic)
+  const [dynamicStarters, setDynamicStarters] = useState<string[] | null>(null);
+
+  // Fetch dynamic starters when entering research mode with a topic
+  useEffect(() => {
+    if (!selectedTopic?.id) {
+      setDynamicStarters(null);
+      return;
+    }
+    let cancelled = false;
+    aiApi.suggestedStarters(selectedTopic.id).then((r) => {
+      if (!cancelled && r.success && r.data?.starters?.length) setDynamicStarters(r.data.starters);
+    }).catch(() => { if (!cancelled) setDynamicStarters(null); });
+    return () => { cancelled = true; };
+  }, [selectedTopic?.id]);
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -278,9 +294,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           const cutAt = title.substring(0, 60).lastIndexOf(' ');
           title = cutAt > 20 ? title.substring(0, cutAt) + '...' : title.substring(0, 57) + '...';
         }
-        // Ensure we have a title (fallback if empty)
+        // Ensure we have a title (fallback: topic name in research mode, or default)
         if (!title || title.length === 0) {
-          title = 'New Conversation';
+          title = activeFilters.topic?.name || 'New Conversation';
         }
         const newConversation = await createConversation(title, activeFilters.topicId || undefined);
         conversationId = newConversation.id;
@@ -312,6 +328,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       if (conversationId && isFirstMessage) {
         try {
           let title = content.trim().replace(/[?]+$/, '').trim();
+          if (!title && activeFilters.topic?.name) title = activeFilters.topic.name;
+          if (!title) title = content.trim().slice(0, 50) || 'New Conversation';
           if (title.length > 60) {
             const cutAt = title.substring(0, 60).lastIndexOf(' ');
             title = cutAt > 20 ? title.substring(0, cutAt) + '...' : title.substring(0, 57) + '...';
@@ -688,14 +706,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       {/* Input - Centered layout */}
       <div className="bg-white border-t border-gray-200 shadow-lg relative">
         <div className="max-w-3xl mx-auto pb-4">
-          {/* 6.1 On-topic suggested starters when in research mode */}
+          {/* 6.1 Dynamic AI-generated or on-topic suggested starters when in research mode */}
           {selectedTopic && (
             <div className="px-4 pt-3 pb-1">
               <span className="text-xs text-gray-500 mr-2">Try:</span>
               <div className="flex flex-wrap gap-1.5">
                 {(
-                  (Array.isArray(selectedTopic.scope_config?.suggested_starters) &&
-                    selectedTopic.scope_config.suggested_starters.length > 0
+                  (dynamicStarters && dynamicStarters.length > 0
+                    ? dynamicStarters.slice(0, 4)
+                    : Array.isArray(selectedTopic.scope_config?.suggested_starters) &&
+                      selectedTopic.scope_config.suggested_starters.length > 0
                     ? selectedTopic.scope_config.suggested_starters.slice(0, 4)
                     : [
                         `What are the key concepts in ${selectedTopic.name}?`,

@@ -36,19 +36,21 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
     const webSources = sources.filter(s => s.type === 'web');
     const docSources = sources.filter(s => s.type === 'document');
     
-    // Replace [Web Source N] with better formatted links
+    // Replace [Web Source N] with the actual source website title (not generic "Web Source N")
     webSources.forEach((source, index) => {
       const sourceNumber = index + 1;
       const pattern = new RegExp(`\\[Web Source ${sourceNumber}\\](?:\\([^)]+\\))?`, 'gi');
       const url = source.url || '#';
       const title = source.title || `Web Source ${sourceNumber}`;
-      try {
-        const urlObj = new URL(url);
-        const displayName = urlObj.hostname.replace('www.', '');
-        processed = processed.replace(pattern, `[${displayName}](${url} "${title}")`);
-      } catch {
-        processed = processed.replace(pattern, `[${title}](${url} "${title}")`);
-      }
+      const linkText = (source.title || '').trim() || (() => {
+        try {
+          return new URL(url).hostname.replace('www.', '');
+        } catch {
+          return `Web Source ${sourceNumber}`;
+        }
+      })();
+      const displayTitle = linkText.length > 80 ? linkText.slice(0, 77) + '...' : linkText;
+      processed = processed.replace(pattern, `[${displayTitle}](${url} "${title}")`);
     });
     
     // Replace [Document N] with better formatted links

@@ -525,4 +525,33 @@ router.post(
   })
 );
 
+/**
+ * GET /api/ai/suggested-starters?topicId=:id (6.1)
+ * Generate dynamic, AI-generated starter questions for a research topic.
+ */
+router.get(
+  '/suggested-starters',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const topicId = req.query.topicId as string;
+
+    if (!topicId) {
+      throw new ValidationError('topicId is required');
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const starters = await AIService.generateSuggestedStarters(topicId, userId);
+
+    res.status(200).json({
+      success: true,
+      data: { starters },
+    });
+  })
+);
+
 export default router;
