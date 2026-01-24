@@ -109,6 +109,25 @@ export default function DashboardPage() {
     }
   }, [ragSettings]);
 
+  // Debug: Log user subscription tier and force refresh if missing
+  // IMPORTANT: This hook must be called before any early returns to follow Rules of Hooks
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user) {
+      console.log('[Dashboard] User object:', user);
+      console.log('[Dashboard] User subscription tier:', user.subscriptionTier || 'free (default)');
+      console.log('[Dashboard] Subscription tier type:', typeof user.subscriptionTier);
+      console.log('[Dashboard] Should show analytics:', user.subscriptionTier === 'premium' || user.subscriptionTier === 'pro');
+      
+      if (!user.subscriptionTier || user.subscriptionTier === 'free') {
+        console.warn('[Dashboard] ⚠️ Analytics tab will be hidden. User subscription tier:', user.subscriptionTier || 'free');
+        console.warn('[Dashboard] To show analytics tab, update user subscription to "premium" or "pro" in database.');
+        console.warn('[Dashboard] Then log out and log back in to refresh user data.');
+      } else {
+        console.log('[Dashboard] ✅ Analytics tab should be visible. Subscription tier:', user.subscriptionTier);
+      }
+    }
+  }, [user]);
+
   const handleLogout = async () => {
     await logout();
     router.push('/login');
@@ -128,24 +147,6 @@ export default function DashboardPage() {
   if (!isAuthenticated || !user) {
     return null;
   }
-
-  // Debug: Log user subscription tier and force refresh if missing
-  useEffect(() => {
-    if (typeof window !== 'undefined' && user) {
-      console.log('[Dashboard] User object:', user);
-      console.log('[Dashboard] User subscription tier:', user.subscriptionTier || 'free (default)');
-      console.log('[Dashboard] Subscription tier type:', typeof user.subscriptionTier);
-      console.log('[Dashboard] Should show analytics:', user.subscriptionTier === 'premium' || user.subscriptionTier === 'pro');
-      
-      if (!user.subscriptionTier || user.subscriptionTier === 'free') {
-        console.warn('[Dashboard] ⚠️ Analytics tab will be hidden. User subscription tier:', user.subscriptionTier || 'free');
-        console.warn('[Dashboard] To show analytics tab, update user subscription to "premium" or "pro" in database.');
-        console.warn('[Dashboard] Then log out and log back in to refresh user data.');
-      } else {
-        console.log('[Dashboard] ✅ Analytics tab should be visible. Subscription tier:', user.subscriptionTier);
-      }
-    }
-  }, [user]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
