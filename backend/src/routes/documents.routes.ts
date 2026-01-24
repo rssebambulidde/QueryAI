@@ -116,6 +116,20 @@ router.post(
       size: storedDoc.size,
     });
 
+    // Log document upload for analytics
+    try {
+      const { DatabaseService } = await import('../services/database.service');
+      await DatabaseService.logUsage(userId, 'document_upload', {
+        documentId: document.id,
+        filename: storedDoc.name,
+        fileType: fileType,
+        fileSize: storedDoc.size,
+        topicId: topicId,
+      });
+    } catch (usageError: any) {
+      logger.warn('Failed to log document upload usage', { error: usageError?.message });
+    }
+
     // Check if auto-processing is enabled (default: false - user must manually trigger processing)
     const autoExtract = req.query.autoExtract === 'true';
     const autoEmbed = req.query.autoEmbed === 'true';
