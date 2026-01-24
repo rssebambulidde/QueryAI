@@ -59,11 +59,23 @@ const corsOptions = {
       .map(origin => origin.trim())
       .filter(Boolean);
 
+    // Helper to normalize URL (handle both with and without https://)
+    const normalizeUrl = (url: string): string => {
+      const trimmed = url.trim();
+      if (!trimmed) return '';
+      // If already starts with http:// or https://, return as is
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
+      }
+      // Otherwise, add https://
+      return `https://${trimmed}`;
+    };
+
     const allowedOrigins = [
       ...corsOrigins,
-      // Cloudflare Pages frontend (if set)
+      // Cloudflare Pages frontend (if set) - normalize URL format
       ...(process.env.CLOUDFLARE_PAGES_URL
-        ? [`https://${process.env.CLOUDFLARE_PAGES_URL}`]
+        ? [normalizeUrl(process.env.CLOUDFLARE_PAGES_URL)]
         : []),
       // Local development
       'http://localhost:3000',
