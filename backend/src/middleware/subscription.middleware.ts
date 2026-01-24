@@ -56,7 +56,7 @@ export const enforceQueryLimit = async (
         limit: limitCheck.limit,
       });
 
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: `Query limit exceeded. You have used ${limitCheck.used} of ${limitCheck.limit} queries this month.`,
@@ -66,6 +66,7 @@ export const enforceQueryLimit = async (
           remaining: limitCheck.remaining,
         },
       });
+      return;
     }
 
     // Attach limit info to request for logging
@@ -100,7 +101,7 @@ export const enforceDocumentUploadLimit = async (
         limit: limitCheck.limit,
       });
 
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: `Document upload limit exceeded. You have uploaded ${limitCheck.used} of ${limitCheck.limit} documents this month.`,
@@ -110,6 +111,7 @@ export const enforceDocumentUploadLimit = async (
           remaining: limitCheck.remaining,
         },
       });
+      return;
     }
 
     // Attach limit info to request
@@ -144,7 +146,7 @@ export const enforceTopicLimit = async (
         limit: limitCheck.limit,
       });
 
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: `Topic limit exceeded. You have created ${limitCheck.used} of ${limitCheck.limit} topics.`,
@@ -154,6 +156,7 @@ export const enforceTopicLimit = async (
           remaining: limitCheck.remaining,
         },
       });
+      return;
     }
 
     // Attach limit info to request
@@ -193,7 +196,7 @@ export const requireFeature = (
         const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
         const currentTier = subscriptionData?.subscription.tier || 'free';
 
-        return res.status(403).json({
+        res.status(403).json({
           success: false,
           error: {
             message: `This feature requires a ${getRequiredTierForFeature(feature)} subscription. Your current tier is ${currentTier}.`,
@@ -203,6 +206,7 @@ export const requireFeature = (
             requiredTier: getRequiredTierForFeature(feature),
           },
         });
+        return;
       }
 
       next();
