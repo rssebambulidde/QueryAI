@@ -24,8 +24,8 @@ Edit `.env.local` and set your API URL:
 # For local development (backend running on port 3001)
 NEXT_PUBLIC_API_URL=http://localhost:3001
 
-# For production (your Railway domain)
-# NEXT_PUBLIC_API_URL=https://your-app.railway.app
+# For production (your backend API URL)
+# NEXT_PUBLIC_API_URL=https://your-backend-api.com
 ```
 
 ### Step 3: Start Development Server

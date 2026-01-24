@@ -25,8 +25,8 @@ import debugRoutes from './routes/debug.routes';
 
 const app: Express = express();
 
-// Trust proxy - Required for Railway's reverse proxy
-// Trust only Railway's proxy (more secure than 'true')
+// Trust proxy - Required for reverse proxy environments (Railway, Cloudflare, etc.)
+// Trust only first proxy (more secure than 'true')
 app.set('trust proxy', 1);
 
 // Security middleware
@@ -61,13 +61,9 @@ const corsOptions = {
 
     const allowedOrigins = [
       ...corsOrigins,
-      // Railway development environment (backend)
-      ...(process.env.RAILWAY_PUBLIC_DOMAIN 
-        ? [`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`] 
-        : []),
-      // Railway frontend service (if set)
-      ...(process.env.RAILWAY_FRONTEND_DOMAIN
-        ? [`https://${process.env.RAILWAY_FRONTEND_DOMAIN}`]
+      // Cloudflare Pages frontend (if set)
+      ...(process.env.CLOUDFLARE_PAGES_URL
+        ? [`https://${process.env.CLOUDFLARE_PAGES_URL}`]
         : []),
       // Local development
       'http://localhost:3000',

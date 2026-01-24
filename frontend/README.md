@@ -24,8 +24,8 @@ cp .env.local.example .env.local
 3. Update `.env.local` with your API URL:
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:3001
-# For production:
-# NEXT_PUBLIC_API_URL=https://your-app.railway.app
+# For production (Cloudflare Pages):
+# NEXT_PUBLIC_API_URL=https://your-backend-api.com
 ```
 
 ### Development
@@ -92,7 +92,7 @@ Built with:
 
 The frontend connects to the backend API at:
 - Development: `http://localhost:3001`
-- Production: Your Railway domain
+- Production: Your backend API URL (set via `NEXT_PUBLIC_API_URL` environment variable)
 
 ### Available Endpoints
 
@@ -123,20 +123,52 @@ To test the authentication:
 
 ## 🚢 Deployment
 
-### Vercel (Recommended)
+### Cloudflare Pages (Recommended)
 
-1. Push code to GitHub
-2. Import project in Vercel
-3. Add environment variables
-4. Deploy
+The frontend is configured for Cloudflare Pages deployment using `@cloudflare/next-on-pages`.
 
-### Other Platforms
+#### Prerequisites
 
-The app can be deployed to any platform that supports Next.js:
-- Netlify
-- Railway
-- AWS Amplify
-- Cloudflare Pages
+1. Cloudflare account
+2. GitHub repository connected to Cloudflare Pages
+
+#### Deployment Steps
+
+1. **Push code to GitHub** (ensure `development` branch is up to date)
+
+2. **Connect to Cloudflare Pages:**
+   - Go to [Cloudflare Dashboard](https://dash.cloudflare.com) → Pages
+   - Click "Create a project" → "Connect to Git"
+   - Select your GitHub repository
+   - Choose the `development` branch
+
+3. **Configure Build Settings:**
+   - **Framework preset:** Next.js
+   - **Build command:** `npm run build:cloudflare`
+   - **Build output directory:** `.vercel/output/static`
+   - **Root directory:** `frontend`
+
+4. **Add Environment Variables:**
+   - `NEXT_PUBLIC_API_URL` - Your backend API URL (e.g., `https://your-backend.railway.app`)
+   - Any other required environment variables
+
+5. **Deploy:**
+   - Cloudflare will automatically build and deploy
+   - Your site will be available at `https://your-project.pages.dev`
+
+#### Build Command
+
+The `build:cloudflare` script in `package.json` runs:
+```bash
+next build && npx @cloudflare/next-on-pages@1.13.16
+```
+
+This builds Next.js and adapts it for Cloudflare Pages.
+
+#### Configuration Files
+
+- `wrangler.jsonc` - Cloudflare Pages configuration
+- `next.config.ts` - Next.js configuration (Cloudflare-compatible)
 
 ## 📚 Tech Stack
 

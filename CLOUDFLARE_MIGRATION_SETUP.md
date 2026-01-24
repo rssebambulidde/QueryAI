@@ -75,8 +75,8 @@ This guide walks you through setting up Cloudflare Pages and configuring Railway
 - **Build command:** `cd frontend && npm install && npm run build`
 - **Build output directory:** `frontend/.next`
 
-### 1.4 Environment Variables (Initial Setup)
-Click **"Save and Deploy"** first, then we'll add environment variables.
+### 1.4 Environment Variables (REQUIRED - Do This Now!)
+**⚠️ CRITICAL:** Without this, your app will show "Network Error" when trying to login!
 
 After first deployment, go to **Settings → Environment Variables**:
 
@@ -91,6 +91,7 @@ NEXT_PUBLIC_API_URL = https://your-backend.railway.app
 - Use your **production backend URL** (e.g., `https://queryai-production.up.railway.app`)
 - Do NOT include trailing slash
 - This will be used by your frontend to call the backend API
+- **After adding, you MUST redeploy** (go to Deployments → Retry latest deployment)
 
 ### 1.5 Get Your Cloudflare Pages URL
 After deployment, Cloudflare will provide a URL like:
@@ -120,30 +121,28 @@ From Step 1.5, you should have your Cloudflare Pages URL.
 
 ### 2.3 Update CORS_ORIGIN Value
 
-**⚠️ Important:** Your backend currently supports a **single origin** in `CORS_ORIGIN`. You have two options:
+**⚠️ CRITICAL:** Your backend code already supports **comma-separated origins**! You can add multiple frontend domains.
 
-#### **Option A: Support Multiple Origins (Recommended for Transition)**
+**Update `CORS_ORIGIN` in Railway:**
 
-Update the backend code to support multiple origins (comma-separated). This allows both Railway and Cloudflare to work simultaneously.
+**If you want to support BOTH Railway and Cloudflare frontends:**
+```
+https://old-frontend.railway.app,https://queryai-frontend.pages.dev
+```
 
-**We'll do this in the code changes phase.** For now, document your Cloudflare URL.
-
-#### **Option B: Switch CORS_ORIGIN to Cloudflare (When Ready)**
-
-When you're ready to fully switch to Cloudflare, update `CORS_ORIGIN` to:
-
+**Or if you're only using Cloudflare now:**
 ```
 https://queryai-frontend.pages.dev
 ```
 
-**⚠️ Note:** This will break Railway frontend access. Only do this after Cloudflare is fully working.
+**Steps:**
+1. In Railway backend service → **Variables** tab
+2. Find `CORS_ORIGIN` variable
+3. Update value to include your Cloudflare Pages URL (comma-separated if multiple)
+4. Click **Save** (Railway will auto-redeploy)
 
-**For now (Setup Phase):**
-- Keep current `CORS_ORIGIN` value (Railway frontend URL)
-- Document your Cloudflare URL
-- We'll update backend code in the next phase to support both
-
-**Current CORS_ORIGIN value:** `_________________________________`
+**Current CORS_ORIGIN value:** `_________________________________`  
+**New CORS_ORIGIN value:** `_________________________________`
 
 ### 2.4 Verify Current CORS Configuration
 
