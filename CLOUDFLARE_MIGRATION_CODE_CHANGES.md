@@ -99,9 +99,14 @@ The OpenNext Cloudflare adapter (`@opennextjs/cloudflare`) converts Next.js outp
 1. In the same settings page
 2. Update **Build output directory** to:
    ```
-   .opennext
+   .open-next/assets
    ```
-   (The OpenNext Cloudflare adapter outputs to `.opennext` directory)
+   (OpenNext adapter outputs to `.open-next/assets` for static assets)
+
+   **Note:** 
+   - For OpenNext (`@opennextjs/cloudflare`): Use `.open-next/assets`
+   - For deprecated `@cloudflare/next-on-pages`: Use `.vercel/output/static`
+   - The build logs will show "Worker saved in `.open-next/worker.js`" when using OpenNext
 
 ### 4.3 Save and Redeploy
 
@@ -214,8 +219,9 @@ Before considering migration complete:
 
 **Solution:**
 1. Check build command uses `npm run build:cloudflare` or `npx @opennextjs/cloudflare build`
-2. Verify output directory is `.opennext`
-3. Check build logs to see where files are actually output
+2. For OpenNext, verify output directory is `.open-next/assets` (not `.opennext` or `.vercel/output/static`)
+3. Check build logs - you should see "Worker saved in `.open-next/worker.js`" when OpenNext completes
+4. If using the deprecated `@cloudflare/next-on-pages`, use `.vercel/output/static`
 
 ### Issue: CORS errors from Cloudflare Pages
 
@@ -246,13 +252,15 @@ Before considering migration complete:
 
 ### Build Output Structure
 
-After `build:cloudflare`, the output structure is:
+After `build:cloudflare` with OpenNext, the output structure is:
 ```
-.opennext/
-  static/            # Static files (HTML, CSS, JS)
-  server/            # Server-side code
-  functions/         # Cloudflare Pages Functions (API routes, middleware)
+.open-next/
+  assets/            # Static files (HTML, CSS, JS) - This is what Cloudflare Pages needs
+  worker.js          # Cloudflare Worker (main entry point)
+  server-functions/  # Server-side functions
 ```
+
+**For Cloudflare Pages:** Set output directory to `.open-next/assets`
 
 ### Environment Variables
 
