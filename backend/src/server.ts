@@ -52,8 +52,14 @@ const corsOptions = {
       return callback(null, true);
     }
 
+    // Parse CORS_ORIGIN - support comma-separated origins
+    const corsOrigins = config.CORS_ORIGIN
+      .split(',')
+      .map(origin => origin.trim())
+      .filter(Boolean);
+
     const allowedOrigins = [
-      config.CORS_ORIGIN,
+      ...corsOrigins,
       // Railway development environment (backend)
       ...(process.env.RAILWAY_PUBLIC_DOMAIN 
         ? [`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`] 

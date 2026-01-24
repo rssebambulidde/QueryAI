@@ -80,7 +80,7 @@ const config: EnvConfig = {
   JWT_SECRET: getEnvVar('JWT_SECRET', 'your-secret-key-change-in-production'),
   JWT_EXPIRES_IN: getEnvVar('JWT_EXPIRES_IN', '7d'),
 
-  // CORS - Allow Railway domains in development
+  // CORS - Support comma-separated origins for multiple frontends (Railway + Cloudflare)
   CORS_ORIGIN: getEnvVar('CORS_ORIGIN', 
     process.env.RAILWAY_ENVIRONMENT === 'development' && process.env.RAILWAY_PUBLIC_DOMAIN
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
