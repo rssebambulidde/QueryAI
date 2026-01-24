@@ -48,6 +48,7 @@ export interface User {
   id: string;
   email: string;
   full_name?: string;
+  subscriptionTier?: 'free' | 'premium' | 'pro';
 }
 
 export interface Session {

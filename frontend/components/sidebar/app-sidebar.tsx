@@ -23,6 +23,7 @@ interface AppSidebarProps {
   onRagSettingsChange: (settings: RAGSettings) => void;
   documentCount: number;
   hasProcessedDocuments: boolean;
+  subscriptionTier?: 'free' | 'premium' | 'pro';
 }
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({
@@ -32,6 +33,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   onRagSettingsChange,
   documentCount,
   hasProcessedDocuments,
+  subscriptionTier = 'free',
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showSourceSelection, setShowSourceSelection] = useState(false);
@@ -208,18 +210,20 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Bot className="w-5 h-5" />
           </button>
-          <button
-            onClick={() => onTabChange('analytics')}
-            className={cn(
-              'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
-              activeTab === 'analytics'
-                ? 'bg-orange-50 text-orange-700'
-                : 'text-gray-700 hover:bg-gray-50'
-            )}
-            title="Analytics"
-          >
-            <BarChart3 className="w-5 h-5" />
-          </button>
+          {(subscriptionTier === 'premium' || subscriptionTier === 'pro') && (
+            <button
+              onClick={() => onTabChange('analytics')}
+              className={cn(
+                'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
+                activeTab === 'analytics'
+                  ? 'bg-orange-50 text-orange-700'
+                  : 'text-gray-700 hover:bg-gray-50'
+              )}
+              title="Analytics"
+            >
+              <BarChart3 className="w-5 h-5" />
+            </button>
+          )}
         </nav>
       </div>
     );
@@ -470,18 +474,20 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             <Folder className="w-5 h-5" />
             Collections
           </button>
-          <button
-            onClick={() => onTabChange('analytics')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              activeTab === 'analytics'
-                ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-            )}
-          >
-            <BarChart3 className="w-5 h-5" />
-            Analytics
-          </button>
+          {(subscriptionTier === 'premium' || subscriptionTier === 'pro') && (
+            <button
+              onClick={() => onTabChange('analytics')}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                activeTab === 'analytics'
+                  ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+              )}
+            >
+              <BarChart3 className="w-5 h-5" />
+              Analytics
+            </button>
+          )}
         </nav>
       </div>
 

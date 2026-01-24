@@ -187,6 +187,7 @@ router.get(
     // User is attached by authenticate middleware
     const { DatabaseService } = await import('../services/database.service');
     const profile = await DatabaseService.getUserProfile(req.user!.id);
+    const subscription = await DatabaseService.getUserSubscription(req.user!.id);
 
     res.status(200).json({
       success: true,
@@ -195,6 +196,7 @@ router.get(
           id: req.user!.id,
           email: req.user!.email,
           fullName: profile?.full_name,
+          subscriptionTier: subscription?.tier || 'free',
         },
       },
     });
