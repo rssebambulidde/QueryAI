@@ -20,6 +20,7 @@ export interface AuthResponse {
     id: string;
     email: string;
     fullName?: string;
+    subscriptionTier?: 'free' | 'premium' | 'pro';
   };
   session: {
     accessToken: string;
@@ -107,7 +108,7 @@ export class AuthService {
       }
 
       // Create default subscription
-      await DatabaseService.createDefaultSubscription(authData.user.id);
+      const subscription = await DatabaseService.createDefaultSubscription(authData.user.id);
 
       // Log signup
       await DatabaseService.logUsage(authData.user.id, 'query', {
@@ -129,6 +130,7 @@ export class AuthService {
             id: authData.user.id,
             email: authData.user.email!,
             fullName: data.fullName,
+            subscriptionTier: subscription?.tier || 'free',
           },
           session: {
             accessToken: '',
@@ -143,6 +145,7 @@ export class AuthService {
           id: authData.user.id,
           email: authData.user.email!,
           fullName: profile?.full_name || data.fullName,
+          subscriptionTier: subscription?.tier || 'free',
         },
         session: {
           accessToken: authData.session.access_token,
@@ -192,8 +195,9 @@ export class AuthService {
         throw new AuthenticationError('Login failed: Invalid response from auth service');
       }
 
-      // Get user profile
+      // Get user profile and subscription
       const profile = await DatabaseService.getUserProfile(authData.user.id);
+      const subscription = await DatabaseService.getUserSubscription(authData.user.id);
 
       // Log login
       await DatabaseService.logUsage(authData.user.id, 'query', {
@@ -208,6 +212,7 @@ export class AuthService {
           id: authData.user.id,
           email: authData.user.email!,
           fullName: profile?.full_name,
+          subscriptionTier: subscription?.tier || 'free',
         },
         session: {
           accessToken: authData.session.access_token,

@@ -142,7 +142,7 @@ export default function DashboardPage() {
           onRagSettingsChange={setRagSettings}
           documentCount={documentCount}
           hasProcessedDocuments={hasProcessedDocuments}
-          subscriptionTier={user?.subscriptionTier}
+          subscriptionTier={user?.subscriptionTier || 'free'}
         />
 
         {/* Main Content Area */}
