@@ -222,11 +222,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             <Bot className="w-5 h-5" />
           </button>
           {(() => {
-            // Debug logging (remove in production)
-            if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-              console.log('Analytics tab check (collapsed):', { subscriptionTier, shouldShow: subscriptionTier === 'premium' || subscriptionTier === 'pro' });
+            // Debug logging
+            if (typeof window !== 'undefined') {
+              console.log('[Sidebar Collapsed] Analytics tab check:', { 
+                subscriptionTier, 
+                shouldShow: subscriptionTier === 'premium' || subscriptionTier === 'pro'
+              });
             }
-            return (subscriptionTier === 'premium' || subscriptionTier === 'pro') ? (
+            const shouldShow = subscriptionTier === 'premium' || subscriptionTier === 'pro';
+            return shouldShow ? (
               <button
                 onClick={() => onTabChange('analytics')}
                 className={cn(
@@ -492,11 +496,17 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             Collections
           </button>
           {(() => {
-            // Debug logging (remove in production)
-            if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-              console.log('Analytics tab check:', { subscriptionTier, shouldShow: subscriptionTier === 'premium' || subscriptionTier === 'pro' });
+            // Debug logging
+            if (typeof window !== 'undefined') {
+              console.log('[Sidebar] Analytics tab check:', { 
+                subscriptionTier, 
+                shouldShow: subscriptionTier === 'premium' || subscriptionTier === 'pro',
+                isPremium: subscriptionTier === 'premium',
+                isPro: subscriptionTier === 'pro'
+              });
             }
-            return (subscriptionTier === 'premium' || subscriptionTier === 'pro') ? (
+            const shouldShow = subscriptionTier === 'premium' || subscriptionTier === 'pro';
+            return shouldShow ? (
               <button
                 onClick={() => onTabChange('analytics')}
                 className={cn(

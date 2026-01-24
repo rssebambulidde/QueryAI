@@ -44,14 +44,15 @@ export default function DashboardPage() {
   const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
   const { selectConversation } = useConversationStore();
 
-  // Check auth on mount and refresh user data
+  // Check auth on mount and refresh user data (force refresh to get latest subscriptionTier)
   useEffect(() => {
     if (!hasCheckedAuth) {
+      // Always call checkAuth to get fresh user data including subscriptionTier
       checkAuth()
         .then(() => {
           // After auth check, verify subscription tier is loaded
           if (typeof window !== 'undefined') {
-            console.log('Auth check complete - User subscription tier:', user?.subscriptionTier);
+            console.log('[Dashboard] Auth check complete - User subscription tier:', user?.subscriptionTier);
           }
         })
         .catch(() => {
@@ -61,7 +62,16 @@ export default function DashboardPage() {
           setHasCheckedAuth(true);
         });
     }
-  }, [hasCheckedAuth, checkAuth, user?.subscriptionTier]);
+  }, [hasCheckedAuth, checkAuth]);
+  
+  // Force refresh user data on mount to ensure subscriptionTier is loaded
+  useEffect(() => {
+    if (isAuthenticated && user && (!user.subscriptionTier || user.subscriptionTier === 'free')) {
+      // If subscriptionTier is missing or free, refresh user data
+      console.log('[Dashboard] Refreshing user data to get subscriptionTier...');
+      checkAuth().catch(console.error);
+    }
+  }, [isAuthenticated, user, checkAuth]);
 
   // Redirect if not authenticated (wait for loading and auth check to finish)
   useEffect(() => {
@@ -119,14 +129,20 @@ export default function DashboardPage() {
     return null;
   }
 
-  // Debug: Log user subscription tier
+  // Debug: Log user subscription tier and force refresh if missing
   useEffect(() => {
     if (typeof window !== 'undefined' && user) {
       console.log('[Dashboard] User object:', user);
       console.log('[Dashboard] User subscription tier:', user.subscriptionTier || 'free (default)');
+      console.log('[Dashboard] Subscription tier type:', typeof user.subscriptionTier);
+      console.log('[Dashboard] Should show analytics:', user.subscriptionTier === 'premium' || user.subscriptionTier === 'pro');
+      
       if (!user.subscriptionTier || user.subscriptionTier === 'free') {
-        console.warn('[Dashboard] Analytics tab will be hidden. User subscription tier:', user.subscriptionTier || 'free');
+        console.warn('[Dashboard] ⚠️ Analytics tab will be hidden. User subscription tier:', user.subscriptionTier || 'free');
         console.warn('[Dashboard] To show analytics tab, update user subscription to "premium" or "pro" in database.');
+        console.warn('[Dashboard] Then log out and log back in to refresh user data.');
+      } else {
+        console.log('[Dashboard] ✅ Analytics tab should be visible. Subscription tier:', user.subscriptionTier);
       }
     }
   }, [user]);

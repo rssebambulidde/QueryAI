@@ -51,6 +51,11 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.login({ email, password });
           if (response.success && response.data) {
             const { user, session } = response.data;
+            // Debug: Log subscription tier from login
+            if (typeof window !== 'undefined') {
+              console.log('[AuthStore] Login response - User data:', user);
+              console.log('[AuthStore] Login response - Subscription tier:', user.subscriptionTier || 'not set');
+            }
             set({
               user,
               accessToken: session.accessToken,
@@ -157,8 +162,14 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await authApi.getMe();
           if (response.success && response.data) {
+            const userData = response.data.user;
+            // Debug: Log subscription tier
+            if (typeof window !== 'undefined') {
+              console.log('[AuthStore] User data from /api/auth/me:', userData);
+              console.log('[AuthStore] Subscription tier:', userData.subscriptionTier || 'not set');
+            }
             set({
-              user: response.data.user,
+              user: userData,
               isAuthenticated: true,
               isLoading: false,
             });
