@@ -9,6 +9,11 @@
     "start": "next start",
     "lint": "eslint"
   },
+  "overrides": {
+    "@cloudflare/next-on-pages": {
+      "next": "$next"
+    }
+  },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "axios": "^1.13.2",
