@@ -11,11 +11,12 @@ import { ApiKeyManager } from '@/components/api-keys/api-key-manager';
 import { EmbeddingManager } from '@/components/embeddings/embedding-manager';
 import { CollectionManager } from '@/components/collections/collection-manager';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
+import { AnalyticsDashboard } from '@/components/analytics/analytics-dashboard';
 import { RAGSettings } from '@/components/chat/rag-source-selector';
 import { documentApi } from '@/lib/api';
 import { useConversationStore } from '@/lib/store/conversation-store';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections';
+type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'analytics';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -176,6 +177,10 @@ export default function DashboardPage() {
                  }}
                />
              </div>
+          ) : activeTab === 'analytics' ? (
+            <div className="flex-1 overflow-y-auto">
+              <AnalyticsDashboard />
+            </div>
           ) : null}
         </div>
       </main>

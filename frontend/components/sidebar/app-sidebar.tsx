@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen } from 'lucide-react';
+import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, BarChart3 } from 'lucide-react';
 import { SidebarTopicFilters } from './sidebar-topic-filters';
 import { cn } from '@/lib/utils';
 import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
@@ -14,7 +14,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections';
+type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'analytics';
 
 interface AppSidebarProps {
   activeTab: TabType;
@@ -207,6 +207,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             title="Embeddings"
           >
             <Bot className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => onTabChange('analytics')}
+            className={cn(
+              'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
+              activeTab === 'analytics'
+                ? 'bg-orange-50 text-orange-700'
+                : 'text-gray-700 hover:bg-gray-50'
+            )}
+            title="Analytics"
+          >
+            <BarChart3 className="w-5 h-5" />
           </button>
         </nav>
       </div>
@@ -457,6 +469,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Folder className="w-5 h-5" />
             Collections
+          </button>
+          <button
+            onClick={() => onTabChange('analytics')}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+              activeTab === 'analytics'
+                ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+            )}
+          >
+            <BarChart3 className="w-5 h-5" />
+            Analytics
           </button>
         </nav>
       </div>

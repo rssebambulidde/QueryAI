@@ -19,6 +19,7 @@ import topicsRoutes from './routes/topics.routes';
 import apiKeysRoutes from './routes/api-keys.routes';
 import collectionsRoutes from './routes/collections.routes';
 import customApiRoutes from './routes/custom-api.routes';
+import analyticsRoutes from './routes/analytics.routes';
 import testRoutes from './routes/test.routes';
 import debugRoutes from './routes/debug.routes';
 
@@ -119,6 +120,7 @@ app.use('/api/embeddings', embeddingConfigsRoutes);
 // Mount embed routes separately for public access
 app.use('/api/embed', embedRoutes);
 app.use('/api/v1', customApiRoutes); // Custom API with API key auth
+app.use('/api/analytics', analyticsRoutes);
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }

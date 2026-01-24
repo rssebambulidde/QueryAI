@@ -87,6 +87,19 @@ router.post(
 
     const result = await AIService.answerQuestion(request, userId);
 
+    // Log usage for analytics
+    try {
+      const { DatabaseService } = await import('../services/database.service');
+      await DatabaseService.logUsage(userId, 'query', {
+        question: request.question.substring(0, 200), // Truncate for storage
+        topicId: request.topicId,
+        model: request.model || 'gpt-3.5-turbo',
+        hasSources: result.sources && result.sources.length > 0,
+      });
+    } catch (usageError: any) {
+      logger.warn('Failed to log query usage', { error: usageError?.message });
+    }
+
     res.status(200).json({
       success: true,
       message: 'Question answered successfully',
@@ -413,6 +426,22 @@ router.post(
             conversationId: request.conversationId,
             userId,
           });
+        }
+      }
+
+      // Log usage for analytics
+      if (userId && fullAnswer) {
+        try {
+          const { DatabaseService } = await import('../services/database.service');
+          await DatabaseService.logUsage(userId, 'query', {
+            question: request.question.substring(0, 200), // Truncate for storage
+            topicId: request.topicId,
+            model: request.model || 'gpt-3.5-turbo',
+            hasSources: sources && sources.length > 0,
+            streaming: true,
+          });
+        } catch (usageError: any) {
+          logger.warn('Failed to log query usage (streaming)', { error: usageError?.message });
         }
       }
 
