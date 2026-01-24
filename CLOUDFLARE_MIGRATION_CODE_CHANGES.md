@@ -17,7 +17,7 @@ This guide covers the code changes needed after completing the infrastructure se
 ## 🎯 **Overview of Changes**
 
 1. ✅ **Backend CORS** - Support multiple origins (comma-separated)
-2. ✅ **Frontend Cloudflare Adapter** - Add `@cloudflare/next-on-pages`
+2. ✅ **Frontend Cloudflare Adapter** - Add `@opennextjs/cloudflare` (OpenNext)
 3. ✅ **Next.js Configuration** - Update for Cloudflare compatibility
 4. ⏳ **Cloudflare Pages Build Command** - Update to use adapter
 5. ⏳ **Railway CORS_ORIGIN** - Add Cloudflare URL
@@ -51,15 +51,16 @@ Both origins will be allowed for CORS requests.
 ### Changes Made
 
 **File: `frontend/package.json`**
-- Added `@cloudflare/next-on-pages` to devDependencies
+- Added `@opennextjs/cloudflare` to devDependencies (OpenNext Cloudflare adapter)
 - Added `build:cloudflare` script
 
 ### What This Does
 
-The Cloudflare adapter (`@cloudflare/next-on-pages`) converts Next.js output to Cloudflare Pages-compatible format. It:
+The OpenNext Cloudflare adapter (`@opennextjs/cloudflare`) converts Next.js output to Cloudflare Pages-compatible format. It:
 - Converts Next.js routes to Cloudflare Pages Functions
 - Handles middleware/proxy for Cloudflare Workers
 - Optimizes static assets for Cloudflare CDN
+- **Note:** This replaces the deprecated `@cloudflare/next-on-pages` package
 
 ---
 
@@ -83,9 +84,9 @@ The Cloudflare adapter (`@cloudflare/next-on-pages`) converts Next.js output to 
 2. Click **Settings** → **Builds & deployments**
 3. Update **Build command** to:
    ```
-   npm install && npm run build && npx @cloudflare/next-on-pages
+   npm install && npm run build && npx @opennextjs/cloudflare build
    ```
-   (This builds Next.js first, then runs the Cloudflare adapter)
+   (This builds Next.js first, then runs the OpenNext Cloudflare adapter)
 
    **Alternative:** You can also use the script we added:
    ```
@@ -98,9 +99,9 @@ The Cloudflare adapter (`@cloudflare/next-on-pages`) converts Next.js output to 
 1. In the same settings page
 2. Update **Build output directory** to:
    ```
-   .vercel/output/static
+   .opennext
    ```
-   (The Cloudflare adapter outputs to `.vercel/output/static`)
+   (The OpenNext Cloudflare adapter outputs to `.opennext` directory)
 
 ### 4.3 Save and Redeploy
 
@@ -201,10 +202,10 @@ Before considering migration complete:
 
 ## 🔍 **Troubleshooting**
 
-### Issue: Cloudflare build fails - "Cannot find module @cloudflare/next-on-pages"
+### Issue: Cloudflare build fails - "Cannot find module @opennextjs/cloudflare"
 
 **Solution:**
-1. Make sure `package.json` includes `@cloudflare/next-on-pages` in devDependencies
+1. Make sure `package.json` includes `@opennextjs/cloudflare` in devDependencies
 2. Run `npm install` locally to update `package-lock.json`
 3. Commit and push `package-lock.json`
 4. Redeploy on Cloudflare
@@ -212,8 +213,8 @@ Before considering migration complete:
 ### Issue: Build output directory not found
 
 **Solution:**
-1. Check build command uses `npm run build:cloudflare`
-2. Verify output directory is `.vercel/output/static`
+1. Check build command uses `npm run build:cloudflare` or `npx @opennextjs/cloudflare build`
+2. Verify output directory is `.opennext`
 3. Check build logs to see where files are actually output
 
 ### Issue: CORS errors from Cloudflare Pages
@@ -247,10 +248,10 @@ Before considering migration complete:
 
 After `build:cloudflare`, the output structure is:
 ```
-.vercel/
-  output/
-    static/          # Static files (HTML, CSS, JS)
-    functions/       # Cloudflare Pages Functions (API routes, middleware)
+.opennext/
+  static/            # Static files (HTML, CSS, JS)
+  server/            # Server-side code
+  functions/         # Cloudflare Pages Functions (API routes, middleware)
 ```
 
 ### Environment Variables
@@ -290,7 +291,7 @@ After verifying Cloudflare Pages works perfectly:
 3. **Monitor both** - Keep an eye on both deployments initially
 4. **Backend stays on Railway** - Only frontend moves to Cloudflare
 5. **Environment variables** - Must be set in Cloudflare dashboard
-6. **Build command** - Must use `build:cloudflare` script
+6. **Build command** - Must use `build:cloudflare` script or `@opennextjs/cloudflare build`
 
 ---
 
