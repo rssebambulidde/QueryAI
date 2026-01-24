@@ -209,12 +209,19 @@ All your responses should be focused on this specific topic domain. When searchi
 
 ${modeInstruction}${timeFilterInstruction}${topicScopeInstruction}
 
+CRITICAL SOURCE CITATION REQUIREMENT (MANDATORY - NO EXCEPTIONS):
+EVERY SINGLE PIECE OF INFORMATION in your response MUST have an inline clickable source hyperlink. This is NON-NEGOTIABLE and applies to:
+- Direct question responses
+- All facts, claims, data, statistics, quotes, or any information presented
+- Every sentence that contains factual information must include a source link
+- NO information should be presented without a source citation
+
 Guidelines:
 - Provide clear, concise, and accurate answers
 - Use information from the provided document excerpts and/or web search results based on the mode
 - If you don't know something based on the provided sources, admit it rather than guessing
 - Use proper formatting (bullet points, paragraphs) when appropriate
-- ALWAYS cite sources when referencing information. Use inline citations:
+- MANDATORY INLINE CITATIONS - Every fact must have a clickable source link:
   - For document excerpts: [Document 1], [Document 2], [Document 3], etc. (MANDATORY - cite every fact from documents)
   - For web sources: [Web Source 1](URL), [Web Source 2](URL), etc. - ALWAYS include the URL in parentheses after the citation
 - When you reference information from a document, immediately follow it with the citation like this: "According to [Document 1], the process involves..." or "The policy states [Document 2] that..."
@@ -257,13 +264,16 @@ You MUST format your response as 3-5 short, spaced paragraphs following these ru
    - Be visually separated with blank lines between paragraphs
    - Include exactly ONE inline clickable source hyperlink embedded within the paragraph
 
-2. INLINE SOURCE ATTRIBUTION (CRITICAL - ALWAYS USE CLICKABLE LINKS):
+2. INLINE SOURCE ATTRIBUTION (CRITICAL - ALWAYS USE CLICKABLE LINKS - MANDATORY FOR EVERY PARAGRAPH):
    - Each paragraph MUST contain exactly ONE clickable source link embedded inline. Never use bold or plain text for a source—always use markdown [text](URL).
+   - EVERY sentence containing factual information MUST include a source citation. No exceptions.
    - For web sources: You MUST use [Web Source 1](URL), [Web Source 2](URL), etc. exactly as labeled in the "Web Search Results" context. The URLs are in that context. This makes links work in the app.
    - For documents: Use [Document 1], [Document 2], etc. as in the "Relevant Document Excerpts" context, or [Document Name](document://id) when a URL is shown.
    - The source link should appear naturally within the paragraph text, not at the end
+   - If a paragraph contains multiple facts, each fact should reference the same source or use multiple citations
    - Example: "SQL is a standard language used to manage relational databases, allowing users to query and modify structured data efficiently. [official documentation](https://example.com/docs)"
    - Another example: "Relational systems such as MySQL and PostgreSQL rely on SQL to define schemas and enforce data integrity. [Database Guide](document://doc123)"
+   - REMEMBER: Every piece of information must be traceable to a source. If you cannot cite a source, do not include that information.
 
 3. PARAGRAPH STRUCTURE:
    - NO numbered lists, bullet points, or structured sections
@@ -291,6 +301,15 @@ SQL supports complex operations such as joins and aggregations, enabling advance
 
 IMPORTANT: There is NO separate "Sources:" section. All source attribution is inline within each paragraph.
 
+VALIDATION CHECK: Before finalizing your response, verify that:
+- Every paragraph contains at least one inline source hyperlink
+- Every factual statement has a source citation
+- No information is presented without a source
+- All web sources use the format [text](URL) with clickable links
+- All document sources use [Document N] or [Document Name](document://id) format
+
+If you cannot cite a source for information, DO NOT include that information in your response.
+
 ${this.getFollowUpBlock(topicName)}`;
     }
 
@@ -300,10 +319,14 @@ ${this.getFollowUpBlock(topicName)}`;
 
 No document excerpts were found for this query. You must inform the user that the information is not available in their documents.
 
+REMINDER: Even when stating that information is not available, if you provide any general information or context, it must still include source citations if sources are available.
+
 ${this.getFollowUpBlock(topicName)}`;
     }
 
     return `${basePrompt}
+
+CRITICAL REMINDER: If you provide any information in your response, it MUST include inline source hyperlinks. Every factual statement requires a source citation. No exceptions.
 
 ${this.getFollowUpBlock(topicName)}`;
   }
@@ -313,6 +336,9 @@ ${this.getFollowUpBlock(topicName)}`;
     return `FOLLOW-UP QUESTIONS (MANDATORY - EVERY RESPONSE, RESEARCH MODE OR NOT):
 This is NON-NEGOTIABLE: every response in the conversation thread MUST end with a FOLLOW_UP_QUESTIONS block. Applies to: first answer, every follow-up, multi-turn, and Research Topic Mode. The only exception is off-topic refusals (those use at most one meta follow-up).
 The 4 questions MUST be dynamically generated from the latest user question and your answer in this turn—based on the specific subject and content just discussed, not generic templates or previous follow-ups. If your answer is long, still end with the FOLLOW_UP_QUESTIONS block; do not truncate or omit it.
+
+CRITICAL: When these follow-up questions are asked and answered later, those answers MUST include inline source hyperlinks for every piece of information, as per the mandatory citation requirements.
+
 After your complete answer, add a line break, then "FOLLOW_UP_QUESTIONS:" followed by exactly 4 questions, one per line, each starting with "- "
 These questions should:
 - Be directly related to the user's question and your answer
@@ -332,6 +358,8 @@ FOLLOW_UP_QUESTIONS:
   /**
    * Generate 2–4 follow-up questions from the latest Q&A when the main model omits them.
    * Used as a fallback so every response has follow-ups (research or not).
+   * Note: Follow-up questions themselves are just questions, not answers, so they don't need source citations.
+   * However, when these questions are asked and answered, those answers MUST include source citations.
    */
   static async generateFollowUpQuestions(question: string, answer: string, topicName?: string): Promise<string[]> {
     const ans = answer.length > 1500 ? answer.slice(0, 1500) + '...' : answer;
@@ -341,6 +369,8 @@ User asked: ${question}
 
 Assistant answered: ${ans}
 ${topicName ? `\nKeep all questions clearly within the research topic: "${topicName}".` : ''}
+
+IMPORTANT: These are questions only. When these questions are answered later, those answers MUST include inline source hyperlinks for every piece of information, as per the citation requirements.
 
 Output only the 4 questions, one per line. No numbering or bullets. Each must be a complete question and derived from the specific content above.`;
     try {
@@ -1072,6 +1102,8 @@ Research Session Summary:`;
   /**
    * Generate 4 dynamic, AI-generated starter questions for a research topic (6.1).
    * Used when in research mode to show "Try:" suggestions in line with the topic.
+   * Note: Starter questions themselves are just questions, not answers, so they don't need source citations.
+   * However, when these questions are asked and answered, those answers MUST include source citations.
    */
   static async generateSuggestedStarters(topicId: string, userId: string): Promise<string[]> {
     const { TopicService } = await import('./topic.service');
@@ -1091,6 +1123,8 @@ Generate exactly 4 short, specific question starters that would help a user expl
 - Clearly on-topic and in line with "${name}"
 - Suitable as the first or an early message in a research chat
 - Specific (not generic like "What is X?")
+
+IMPORTANT: These are questions only. When these questions are answered later, those answers MUST include inline source hyperlinks for every piece of information, as per the citation requirements.
 
 Output only the 4 questions, one per line. No numbering, bullets, or extra text.`;
     try {
