@@ -26,13 +26,14 @@ router.get(
     // Check subscription tier (Premium/Pro only)
     const subscription = await DatabaseService.getUserSubscription(userId);
     if (!subscription || (subscription.tier !== 'premium' && subscription.tier !== 'pro')) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: 'Analytics dashboard is only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const days = parseInt(req.query.days as string) || 30;
@@ -68,13 +69,14 @@ router.get(
     // Check subscription tier
     const subscription = await DatabaseService.getUserSubscription(userId);
     if (!subscription || (subscription.tier !== 'premium' && subscription.tier !== 'pro')) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: 'Analytics dashboard is only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
@@ -106,13 +108,14 @@ router.get(
     // Check subscription tier
     const subscription = await DatabaseService.getUserSubscription(userId);
     if (!subscription || (subscription.tier !== 'premium' && subscription.tier !== 'pro')) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: 'Analytics dashboard is only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const limit = parseInt(req.query.limit as string) || 10;
@@ -149,13 +152,14 @@ router.get(
     // Check subscription tier
     const subscription = await DatabaseService.getUserSubscription(userId);
     if (!subscription || (subscription.tier !== 'premium' && subscription.tier !== 'pro')) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: 'Analytics dashboard is only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
@@ -187,13 +191,14 @@ router.get(
     // Check subscription tier
     const subscription = await DatabaseService.getUserSubscription(userId);
     if (!subscription || (subscription.tier !== 'pro')) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: 'Usage charts are only available for Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const days = parseInt(req.query.days as string) || 30;
