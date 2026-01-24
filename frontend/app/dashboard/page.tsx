@@ -44,10 +44,16 @@ export default function DashboardPage() {
   const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
   const { selectConversation } = useConversationStore();
 
-  // Check auth on mount
+  // Check auth on mount and refresh user data
   useEffect(() => {
     if (!hasCheckedAuth) {
       checkAuth()
+        .then(() => {
+          // After auth check, verify subscription tier is loaded
+          if (typeof window !== 'undefined') {
+            console.log('Auth check complete - User subscription tier:', user?.subscriptionTier);
+          }
+        })
         .catch(() => {
           // Auth check failed, will redirect below
         })
@@ -55,7 +61,7 @@ export default function DashboardPage() {
           setHasCheckedAuth(true);
         });
     }
-  }, [hasCheckedAuth, checkAuth]);
+  }, [hasCheckedAuth, checkAuth, user?.subscriptionTier]);
 
   // Redirect if not authenticated (wait for loading and auth check to finish)
   useEffect(() => {
@@ -112,6 +118,18 @@ export default function DashboardPage() {
   if (!isAuthenticated || !user) {
     return null;
   }
+
+  // Debug: Log user subscription tier
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user) {
+      console.log('[Dashboard] User object:', user);
+      console.log('[Dashboard] User subscription tier:', user.subscriptionTier || 'free (default)');
+      if (!user.subscriptionTier || user.subscriptionTier === 'free') {
+        console.warn('[Dashboard] Analytics tab will be hidden. User subscription tier:', user.subscriptionTier || 'free');
+        console.warn('[Dashboard] To show analytics tab, update user subscription to "premium" or "pro" in database.');
+      }
+    }
+  }, [user]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">

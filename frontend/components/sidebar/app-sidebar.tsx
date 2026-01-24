@@ -35,6 +35,17 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   hasProcessedDocuments,
   subscriptionTier = 'free',
 }) => {
+  // Debug: Log subscription tier (only in browser)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      console.log('[AppSidebar] Subscription tier:', subscriptionTier);
+      console.log('[AppSidebar] Should show analytics:', subscriptionTier === 'premium' || subscriptionTier === 'pro');
+      // Also log to help debug Cloudflare deployment
+      if (subscriptionTier === 'free') {
+        console.warn('[AppSidebar] Analytics tab hidden - subscription tier is "free". Update to "premium" or "pro" in database.');
+      }
+    }
+  }, [subscriptionTier]);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showSourceSelection, setShowSourceSelection] = useState(false);
   const [showConversations, setShowConversations] = useState(true);
@@ -210,20 +221,26 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Bot className="w-5 h-5" />
           </button>
-          {(subscriptionTier === 'premium' || subscriptionTier === 'pro') && (
-            <button
-              onClick={() => onTabChange('analytics')}
-              className={cn(
-                'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
-                activeTab === 'analytics'
-                  ? 'bg-orange-50 text-orange-700'
-                  : 'text-gray-700 hover:bg-gray-50'
-              )}
-              title="Analytics"
-            >
-              <BarChart3 className="w-5 h-5" />
-            </button>
-          )}
+          {(() => {
+            // Debug logging (remove in production)
+            if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+              console.log('Analytics tab check (collapsed):', { subscriptionTier, shouldShow: subscriptionTier === 'premium' || subscriptionTier === 'pro' });
+            }
+            return (subscriptionTier === 'premium' || subscriptionTier === 'pro') ? (
+              <button
+                onClick={() => onTabChange('analytics')}
+                className={cn(
+                  'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
+                  activeTab === 'analytics'
+                    ? 'bg-orange-50 text-orange-700'
+                    : 'text-gray-700 hover:bg-gray-50'
+                )}
+                title="Analytics"
+              >
+                <BarChart3 className="w-5 h-5" />
+              </button>
+            ) : null;
+          })()}
         </nav>
       </div>
     );
@@ -474,20 +491,26 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             <Folder className="w-5 h-5" />
             Collections
           </button>
-          {(subscriptionTier === 'premium' || subscriptionTier === 'pro') && (
-            <button
-              onClick={() => onTabChange('analytics')}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                activeTab === 'analytics'
-                  ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-              )}
-            >
-              <BarChart3 className="w-5 h-5" />
-              Analytics
-            </button>
-          )}
+          {(() => {
+            // Debug logging (remove in production)
+            if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+              console.log('Analytics tab check:', { subscriptionTier, shouldShow: subscriptionTier === 'premium' || subscriptionTier === 'pro' });
+            }
+            return (subscriptionTier === 'premium' || subscriptionTier === 'pro') ? (
+              <button
+                onClick={() => onTabChange('analytics')}
+                className={cn(
+                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                  activeTab === 'analytics'
+                    ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                )}
+              >
+                <BarChart3 className="w-5 h-5" />
+                Analytics
+              </button>
+            ) : null;
+          })()}
         </nav>
       </div>
 
