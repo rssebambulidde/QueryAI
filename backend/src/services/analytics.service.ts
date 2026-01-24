@@ -61,56 +61,85 @@ export interface AnalyticsOverview {
 export class AnalyticsService {
   /**
    * Get query statistics for a user
+   * @param days - Number of days to look back (if provided, calculates stats for that period)
    */
   static async getQueryStatistics(
     userId: string,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    days?: number
   ): Promise<QueryStatistics> {
     try {
-      const now = new Date();
-      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-      const thisWeekStart = new Date(now);
-      thisWeekStart.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+      const now = endDate || new Date();
+      const end = new Date(now);
+      end.setHours(23, 59, 59, 999); // End of day
+      
+      // If days is provided, calculate period-based stats
+      let periodStart: Date;
+      let previousPeriodStart: Date;
+      let previousPeriodEnd: Date;
+      
+      if (days) {
+        // Calculate period based on days parameter
+        periodStart = new Date(now);
+        periodStart.setDate(now.getDate() - days);
+        periodStart.setHours(0, 0, 0, 0); // Start of day
+        
+        // Previous period (same length, before current period)
+        previousPeriodEnd = new Date(periodStart);
+        previousPeriodEnd.setMilliseconds(previousPeriodEnd.getMilliseconds() - 1);
+        previousPeriodStart = new Date(previousPeriodEnd);
+        previousPeriodStart.setDate(previousPeriodStart.getDate() - days);
+        previousPeriodStart.setHours(0, 0, 0, 0);
+      } else {
+        // Default: use month-based calculations
+        periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        previousPeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        previousPeriodEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+        previousPeriodEnd.setHours(23, 59, 59, 999);
+      }
 
-      // Total queries
+      // Total queries (all time)
       const totalQueries = await DatabaseService.getUserUsageCount(userId, 'query');
 
-      // This month
-      const queriesThisMonth = await DatabaseService.getUserUsageCount(
+      // Current period (this month or selected days)
+      const queriesThisPeriod = await this.getUsageCountInRange(
         userId,
         'query',
-        thisMonthStart
+        periodStart,
+        end
       );
 
-      // Last month
-      const lastMonthCount = await this.getUsageCountInRange(
+      // Previous period (last month or previous N days)
+      const queriesPreviousPeriod = await this.getUsageCountInRange(
         userId,
         'query',
-        lastMonthStart,
-        lastMonthEnd
+        previousPeriodStart,
+        previousPeriodEnd
       );
 
-      // This week
-      const queriesThisWeek = await DatabaseService.getUserUsageCount(
+      // This week (always last 7 days from today)
+      const thisWeekStart = new Date(now);
+      thisWeekStart.setDate(now.getDate() - 7);
+      thisWeekStart.setHours(0, 0, 0, 0);
+      const queriesThisWeek = await this.getUsageCountInRange(
         userId,
         'query',
-        thisWeekStart
+        thisWeekStart,
+        end
       );
 
-      // Average per day (this month)
-      const daysInMonth = now.getDate();
-      const averagePerDay = daysInMonth > 0 ? queriesThisMonth / daysInMonth : 0;
+      // Average per day (current period)
+      const periodDays = days || now.getDate();
+      const averagePerDay = periodDays > 0 ? queriesThisPeriod / periodDays : 0;
 
-      // Peak day
-      const peakDay = await this.getPeakDay(userId, 'query', thisMonthStart, now);
+      // Peak day (current period)
+      const peakDay = await this.getPeakDay(userId, 'query', periodStart, end);
 
       return {
         totalQueries,
-        queriesThisMonth,
-        queriesLastMonth: lastMonthCount,
+        queriesThisMonth: queriesThisPeriod,
+        queriesLastMonth: queriesPreviousPeriod,
         queriesThisWeek,
         averagePerDay: Math.round(averagePerDay * 100) / 100,
         peakDay,
@@ -222,56 +251,85 @@ export class AnalyticsService {
 
   /**
    * Get API usage metrics
+   * @param days - Number of days to look back (if provided, calculates stats for that period)
    */
   static async getAPIUsageMetrics(
     userId: string,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    days?: number
   ): Promise<APIUsageMetrics> {
     try {
-      const now = new Date();
-      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-      const thisWeekStart = new Date(now);
-      thisWeekStart.setDate(now.getDate() - now.getDay());
+      const now = endDate || new Date();
+      const end = new Date(now);
+      end.setHours(23, 59, 59, 999); // End of day
+      
+      // If days is provided, calculate period-based stats
+      let periodStart: Date;
+      let previousPeriodStart: Date;
+      let previousPeriodEnd: Date;
+      
+      if (days) {
+        // Calculate period based on days parameter
+        periodStart = new Date(now);
+        periodStart.setDate(now.getDate() - days);
+        periodStart.setHours(0, 0, 0, 0); // Start of day
+        
+        // Previous period (same length, before current period)
+        previousPeriodEnd = new Date(periodStart);
+        previousPeriodEnd.setMilliseconds(previousPeriodEnd.getMilliseconds() - 1);
+        previousPeriodStart = new Date(previousPeriodEnd);
+        previousPeriodStart.setDate(previousPeriodStart.getDate() - days);
+        previousPeriodStart.setHours(0, 0, 0, 0);
+      } else {
+        // Default: use month-based calculations
+        periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        previousPeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        previousPeriodEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+        previousPeriodEnd.setHours(23, 59, 59, 999);
+      }
 
-      // Total API calls
+      // Total API calls (all time)
       const totalApiCalls = await DatabaseService.getUserUsageCount(userId, 'api_call');
 
-      // This month
-      const apiCallsThisMonth = await DatabaseService.getUserUsageCount(
+      // Current period (this month or selected days)
+      const apiCallsThisPeriod = await this.getUsageCountInRange(
         userId,
         'api_call',
-        thisMonthStart
+        periodStart,
+        end
       );
 
-      // Last month
-      const apiCallsLastMonth = await this.getUsageCountInRange(
+      // Previous period (last month or previous N days)
+      const apiCallsPreviousPeriod = await this.getUsageCountInRange(
         userId,
         'api_call',
-        lastMonthStart,
-        lastMonthEnd
+        previousPeriodStart,
+        previousPeriodEnd
       );
 
-      // This week
-      const apiCallsThisWeek = await DatabaseService.getUserUsageCount(
+      // This week (always last 7 days from today)
+      const thisWeekStart = new Date(now);
+      thisWeekStart.setDate(now.getDate() - 7);
+      thisWeekStart.setHours(0, 0, 0, 0);
+      const apiCallsThisWeek = await this.getUsageCountInRange(
         userId,
         'api_call',
-        thisWeekStart
+        thisWeekStart,
+        end
       );
 
-      // Average per day
-      const daysInMonth = now.getDate();
-      const averagePerDay = daysInMonth > 0 ? apiCallsThisMonth / daysInMonth : 0;
+      // Average per day (current period)
+      const periodDays = days || now.getDate();
+      const averagePerDay = periodDays > 0 ? apiCallsThisPeriod / periodDays : 0;
 
-      // By endpoint
-      const byEndpoint = await this.getUsageByEndpoint(userId, thisMonthStart, now);
+      // By endpoint (current period)
+      const byEndpoint = await this.getUsageByEndpoint(userId, periodStart, end);
 
       return {
         totalApiCalls,
-        apiCallsThisMonth,
-        apiCallsLastMonth,
+        apiCallsThisMonth: apiCallsThisPeriod,
+        apiCallsLastMonth: apiCallsPreviousPeriod,
         apiCallsThisWeek,
         averagePerDay: Math.round(averagePerDay * 100) / 100,
         byEndpoint,
@@ -293,8 +351,13 @@ export class AnalyticsService {
   ): Promise<UsageByDate[]> {
     try {
       const end = endDate || new Date();
-      const start = startDate || new Date();
-      start.setDate(start.getDate() - days);
+      end.setHours(23, 59, 59, 999); // End of day
+      const start = startDate || (() => {
+        const s = new Date(end);
+        s.setDate(s.getDate() - days);
+        s.setHours(0, 0, 0, 0); // Start of day
+        return s;
+      })();
 
       const { data: usageLogs, error } = await supabaseAdmin
         .from('usage_logs')
@@ -351,19 +414,27 @@ export class AnalyticsService {
 
   /**
    * Get complete analytics overview
+   * @param days - Number of days to look back (affects all statistics)
    */
   static async getAnalyticsOverview(
     userId: string,
     days: number = 30
   ): Promise<AnalyticsOverview> {
     try {
+      const now = new Date();
+      const end = new Date(now);
+      end.setHours(23, 59, 59, 999);
+      const start = new Date(now);
+      start.setDate(start.getDate() - days);
+      start.setHours(0, 0, 0, 0);
+
       const [queryStatistics, topQueries, apiUsageMetrics, usageByDate, documentUploads] =
         await Promise.all([
-          this.getQueryStatistics(userId),
-          this.getTopQueries(userId, 10),
-          this.getAPIUsageMetrics(userId),
-          this.getUsageByDate(userId, days),
-          this.getDocumentUploadStats(userId),
+          this.getQueryStatistics(userId, start, end, days),
+          this.getTopQueries(userId, 10, start, end),
+          this.getAPIUsageMetrics(userId, start, end, days),
+          this.getUsageByDate(userId, days, start, end),
+          this.getDocumentUploadStats(userId, days),
         ]);
 
       return {
@@ -381,35 +452,61 @@ export class AnalyticsService {
 
   /**
    * Get document upload statistics
+   * @param days - Number of days to look back (if provided, calculates stats for that period)
    */
-  private static async getDocumentUploadStats(userId: string): Promise<{
+  private static async getDocumentUploadStats(userId: string, days?: number): Promise<{
     total: number;
     thisMonth: number;
     lastMonth: number;
   }> {
     try {
       const now = new Date();
-      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+      const end = new Date(now);
+      end.setHours(23, 59, 59, 999); // End of day
+      
+      // If days is provided, calculate period-based stats
+      let periodStart: Date;
+      let previousPeriodStart: Date;
+      let previousPeriodEnd: Date;
+      
+      if (days) {
+        // Calculate period based on days parameter
+        periodStart = new Date(now);
+        periodStart.setDate(now.getDate() - days);
+        periodStart.setHours(0, 0, 0, 0); // Start of day
+        
+        // Previous period (same length, before current period)
+        previousPeriodEnd = new Date(periodStart);
+        previousPeriodEnd.setMilliseconds(previousPeriodEnd.getMilliseconds() - 1);
+        previousPeriodStart = new Date(previousPeriodEnd);
+        previousPeriodStart.setDate(previousPeriodStart.getDate() - days);
+        previousPeriodStart.setHours(0, 0, 0, 0);
+      } else {
+        // Default: use month-based calculations
+        periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        previousPeriodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        previousPeriodEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+        previousPeriodEnd.setHours(23, 59, 59, 999);
+      }
 
       const total = await DatabaseService.getUserUsageCount(userId, 'document_upload');
-      const thisMonth = await DatabaseService.getUserUsageCount(
+      const thisPeriod = await this.getUsageCountInRange(
         userId,
         'document_upload',
-        thisMonthStart
+        periodStart,
+        end
       );
-      const lastMonth = await this.getUsageCountInRange(
+      const previousPeriod = await this.getUsageCountInRange(
         userId,
         'document_upload',
-        lastMonthStart,
-        lastMonthEnd
+        previousPeriodStart,
+        previousPeriodEnd
       );
 
       return {
         total,
-        thisMonth,
-        lastMonth,
+        thisMonth: thisPeriod,
+        lastMonth: previousPeriod,
       };
     } catch (error) {
       logger.error('Error getting document upload stats:', error);

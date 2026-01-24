@@ -191,7 +191,8 @@ export class DatabaseService {
   static async getUserUsageCount(
     userId: string,
     type: 'query' | 'api_call' | 'document_upload',
-    startDate?: Date
+    startDate?: Date,
+    endDate?: Date
   ): Promise<number> {
     try {
       const query = supabaseAdmin
@@ -202,6 +203,10 @@ export class DatabaseService {
 
       if (startDate) {
         query.gte('created_at', startDate.toISOString());
+      }
+      
+      if (endDate) {
+        query.lte('created_at', endDate.toISOString());
       }
 
       const { count, error } = await query;
