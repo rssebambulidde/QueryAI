@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, BarChart3 } from 'lucide-react';
+import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, BarChart3, CreditCard } from 'lucide-react';
 import { SidebarTopicFilters } from './sidebar-topic-filters';
 import { cn } from '@/lib/utils';
 import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
@@ -14,7 +14,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'analytics';
+type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'analytics' | 'subscription';
 
 interface AppSidebarProps {
   activeTab: TabType;
@@ -245,6 +245,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </button>
             ) : null;
           })()}
+          <button
+            onClick={() => onTabChange('subscription')}
+            className={cn(
+              'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
+              activeTab === 'subscription'
+                ? 'bg-orange-50 text-orange-700'
+                : 'text-gray-700 hover:bg-gray-50'
+            )}
+            title="Subscription"
+          >
+            <CreditCard className="w-5 h-5" />
+          </button>
         </nav>
       </div>
     );

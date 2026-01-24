@@ -3,6 +3,7 @@ import { AIService, QuestionRequest } from '../services/ai.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
 import { apiLimiter } from '../middleware/rateLimiter';
+import { enforceQueryLimit } from '../middleware/subscription.middleware';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
 
@@ -16,6 +17,7 @@ const router = Router();
 router.post(
   '/ask',
   authenticate,
+  enforceQueryLimit,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { 
@@ -116,6 +118,7 @@ router.post(
 router.post(
   '/ask/stream',
   authenticate,
+  enforceQueryLimit,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { 

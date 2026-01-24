@@ -11,6 +11,7 @@ import { PineconeService } from '../services/pinecone.service';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
 import { apiLimiter } from '../middleware/rateLimiter';
+import { enforceDocumentUploadLimit, requireFeature } from '../middleware/subscription.middleware';
 
 const router = Router();
 
@@ -68,6 +69,8 @@ const getFileType = (fileName: string, mimeType: string): 'pdf' | 'docx' | 'txt'
 router.post(
   '/upload',
   authenticate,
+  requireFeature('documentUpload'),
+  enforceDocumentUploadLimit,
   handleUpload,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;

@@ -3,6 +3,7 @@ import { TopicService, CreateTopicInput, UpdateTopicInput } from '../services/to
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { AppError, ValidationError } from '../types/error';
+import { enforceTopicLimit } from '../middleware/subscription.middleware';
 
 const router = Router();
 
@@ -56,6 +57,7 @@ router.get(
 router.post(
   '/',
   authenticate,
+  enforceTopicLimit,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { name, description, scopeConfig } = req.body;

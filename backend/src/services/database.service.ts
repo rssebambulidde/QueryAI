@@ -186,6 +186,34 @@ export class DatabaseService {
   }
 
   /**
+   * Update user subscription
+   */
+  static async updateSubscription(
+    userId: string,
+    updates: Partial<Database.Subscription>
+  ): Promise<Database.Subscription | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('subscriptions')
+        .update(updates)
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Error updating subscription:', error);
+        throw error;
+      }
+
+      logger.info(`Subscription updated for user: ${userId}`);
+      return data;
+    } catch (error) {
+      logger.error('Failed to update subscription:', error);
+      return null;
+    }
+  }
+
+  /**
    * Get usage count for a user in current period
    */
   static async getUserUsageCount(

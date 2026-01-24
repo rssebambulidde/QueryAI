@@ -739,3 +739,77 @@ export const analyticsApi = {
     return response.data;
   },
 };
+
+// Subscription API Types
+export interface Subscription {
+  id: string;
+  user_id: string;
+  tier: 'free' | 'premium' | 'pro';
+  status: 'active' | 'cancelled' | 'expired';
+  current_period_start?: string;
+  current_period_end?: string;
+  cancel_at_period_end: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TierLimits {
+  queriesPerMonth: number | null;
+  documentUploads: number | null;
+  maxTopics: number | null;
+  features: {
+    documentUpload: boolean;
+    embedding: boolean;
+    analytics: boolean;
+    apiAccess: boolean;
+    whiteLabel: boolean;
+  };
+}
+
+export interface UsageLimit {
+  allowed: boolean;
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+}
+
+export interface SubscriptionData {
+  subscription: Subscription;
+  limits: TierLimits;
+  usage: {
+    queries: UsageLimit;
+    documentUploads: UsageLimit;
+    topics: UsageLimit;
+  };
+}
+
+export const subscriptionApi = {
+  get: async (): Promise<ApiResponse<SubscriptionData>> => {
+    const response = await apiClient.get('/api/subscription');
+    return response.data;
+  },
+
+  getLimits: async (): Promise<ApiResponse<{
+    queries: UsageLimit;
+    documentUploads: UsageLimit;
+    topics: UsageLimit;
+  }>> => {
+    const response = await apiClient.get('/api/subscription/limits');
+    return response.data;
+  },
+
+  upgrade: async (tier: 'free' | 'premium' | 'pro'): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.put('/api/subscription/upgrade', { tier });
+    return response.data;
+  },
+
+  cancel: async (): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.post('/api/subscription/cancel');
+    return response.data;
+  },
+
+  reactivate: async (): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.post('/api/subscription/reactivate');
+    return response.data;
+  },
+};

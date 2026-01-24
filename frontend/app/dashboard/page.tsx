@@ -12,11 +12,12 @@ import { EmbeddingManager } from '@/components/embeddings/embedding-manager';
 import { CollectionManager } from '@/components/collections/collection-manager';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { AnalyticsDashboard } from '@/components/analytics/analytics-dashboard';
+import { SubscriptionManager } from '@/components/subscription/subscription-manager';
 import { RAGSettings } from '@/components/chat/rag-source-selector';
 import { documentApi } from '@/lib/api';
 import { useConversationStore } from '@/lib/store/conversation-store';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'analytics';
+type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'analytics' | 'subscription';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -216,6 +217,10 @@ export default function DashboardPage() {
           ) : activeTab === 'analytics' ? (
             <div className="flex-1 overflow-y-auto">
               <AnalyticsDashboard />
+            </div>
+          ) : activeTab === 'subscription' ? (
+            <div className="flex-1 overflow-y-auto p-6">
+              <SubscriptionManager />
             </div>
           ) : null}
         </div>
