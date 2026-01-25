@@ -132,16 +132,19 @@ export class PesapalService {
       // Generate unique merchant reference
       const merchantReference = `QUERYAI-${params.userId}-${Date.now()}`;
 
-      // Calculate amount based on tier
-      const tierPricing: Record<'premium' | 'pro', number> = {
-        premium: 5000, // 5000 KES for premium
-        pro: 15000, // 15000 KES for pro
-      };
-      const amount = params.amount || tierPricing[params.tier];
+      // Amount should be provided, but validate currency
+      const currency = params.currency || 'UGX';
+      if (!['UGX', 'USD'].includes(currency)) {
+        throw new Error('Invalid currency. Must be UGX or USD');
+      }
+      const amount = params.amount;
+
+      // Determine country code based on currency
+      const countryCode = currency === 'UGX' ? 'UG' : 'KE'; // Use KE for USD as default
 
       const orderData = {
         id: merchantReference,
-        currency: params.currency || 'KES',
+        currency: currency,
         amount: amount,
         description: params.description || `QueryAI ${params.tier} subscription`,
         callback_url: params.callbackUrl,
@@ -213,7 +216,7 @@ export class PesapalService {
           payment_status: response.data.payment_status_description || response.data.payment_status || 'UNKNOWN',
           payment_method: response.data.payment_method || '',
           amount: parseFloat(response.data.amount || '0'),
-          currency: response.data.currency || 'KES',
+          currency: response.data.currency || 'UGX',
         };
       }
 

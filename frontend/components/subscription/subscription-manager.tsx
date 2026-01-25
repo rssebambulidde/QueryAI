@@ -286,13 +286,15 @@ export function SubscriptionManager() {
                 <p className="text-gray-600 text-sm mb-4">
                   500 queries/month, 10 documents, 3 topics, analytics
                 </p>
-                <Button
-                  onClick={() => handleUpgrade('premium')}
-                  disabled={upgrading}
-                  className="w-full"
-                >
-                  Upgrade to Premium - KES 5,000
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    onClick={() => handleUpgrade('premium')}
+                    disabled={upgrading}
+                    className="w-full"
+                  >
+                    Upgrade to Premium - UGX 50,000 / USD 15
+                  </Button>
+                </div>
               </div>
             )}
             <div className={`border-2 ${tier === 'premium' ? 'border-purple-500' : 'border-gray-300'} rounded-lg p-4`}>
@@ -306,7 +308,7 @@ export function SubscriptionManager() {
                 variant={tier === 'premium' ? 'default' : 'outline'}
                 className="w-full"
               >
-                Upgrade to Pro - KES 15,000
+                Upgrade to Pro - UGX 150,000 / USD 45
               </Button>
             </div>
           </div>

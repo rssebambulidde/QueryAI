@@ -16,6 +16,7 @@ interface PaymentDialogProps {
 export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currency, setCurrency] = useState<'UGX' | 'USD'>('UGX');
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -23,9 +24,9 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
     phoneNumber: '',
   });
 
-  const tierPricing: Record<'premium' | 'pro', number> = {
-    premium: 5000,
-    pro: 15000,
+  const tierPricing: Record<'premium' | 'pro', Record<'UGX' | 'USD', number>> = {
+    premium: { UGX: 50000, USD: 15 },
+    pro: { UGX: 150000, USD: 45 },
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,6 +42,7 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
       setLoading(true);
       const response = await paymentApi.initiate({
         tier,
+        currency,
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
@@ -68,8 +70,41 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
         </h2>
         <p className="text-gray-600 mb-4">
           You will be redirected to Pesapal to complete your payment of{' '}
-          <span className="font-semibold">KES {tierPricing[tier].toLocaleString()}</span>
+          <span className="font-semibold">{currency} {tierPricing[tier][currency].toLocaleString()}</span>
         </p>
+
+        {/* Currency Selection */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Select Currency <span className="text-red-500">*</span>
+          </label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setCurrency('UGX')}
+              className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+                currency === 'UGX'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+              }`}
+              disabled={loading}
+            >
+              UGX (Ugandan Shilling)
+            </button>
+            <button
+              type="button"
+              onClick={() => setCurrency('USD')}
+              className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+                currency === 'USD'
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+              }`}
+              disabled={loading}
+            >
+              USD (US Dollar)
+            </button>
+          </div>
+        </div>
 
         {error && (
           <Alert variant="error" className="mb-4">
@@ -126,7 +161,7 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
               value={formData.phoneNumber}
               onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
               disabled={loading}
-              placeholder="+254712345678"
+              placeholder={currency === 'UGX' ? '+256712345678' : '+12125551234'}
             />
           </div>
 
@@ -151,7 +186,7 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
                   Processing...
                 </>
               ) : (
-                `Pay KES ${tierPricing[tier].toLocaleString()}`
+                `Pay ${currency} ${tierPricing[tier][currency].toLocaleString()}`
               )}
             </Button>
           </div>

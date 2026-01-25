@@ -846,6 +846,7 @@ export interface Payment {
 
 export interface PaymentInitiateRequest {
   tier: 'premium' | 'pro';
+  currency: 'UGX' | 'USD';
   firstName: string;
   lastName: string;
   email: string;

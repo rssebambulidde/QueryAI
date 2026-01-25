@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS payments (
     pesapal_merchant_reference TEXT UNIQUE,
     tier TEXT NOT NULL CHECK (tier IN ('free', 'premium', 'pro')),
     amount DECIMAL(10, 2) NOT NULL,
-    currency TEXT DEFAULT 'KES',
+    currency TEXT DEFAULT 'UGX',
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'cancelled')),
     payment_method TEXT,
     payment_description TEXT,

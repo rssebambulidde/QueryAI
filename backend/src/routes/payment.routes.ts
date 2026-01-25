@@ -41,12 +41,18 @@ router.post(
     // Get subscription to link payment
     const subscription = await DatabaseService.getUserSubscription(userId);
 
-    // Tier pricing (in KES)
-    const tierPricing: Record<'premium' | 'pro', number> = {
-      premium: 5000,
-      pro: 15000,
+    // Get currency from request (default to UGX)
+    const currency = req.body.currency || 'UGX';
+    if (!['UGX', 'USD'].includes(currency)) {
+      throw new ValidationError('Invalid currency. Must be "UGX" or "USD"');
+    }
+
+    // Tier pricing in UGX and USD
+    const tierPricing: Record<'premium' | 'pro', Record<'UGX' | 'USD', number>> = {
+      premium: { UGX: 50000, USD: 15 },
+      pro: { UGX: 150000, USD: 45 },
     };
-    const amount = tierPricing[tier as 'premium' | 'pro'];
+    const amount = tierPricing[tier as 'premium' | 'pro'][currency as 'UGX' | 'USD'];
 
     // Build callback URLs
     const baseUrl = config.API_BASE_URL || 'http://localhost:3001';
@@ -59,7 +65,7 @@ router.post(
         userId,
         tier,
         amount,
-        currency: 'KES',
+        currency: currency as 'UGX' | 'USD',
         description: `QueryAI ${tier} subscription`,
         callbackUrl,
         cancellationUrl,
@@ -77,7 +83,7 @@ router.post(
         pesapal_merchant_reference: orderResponse.merchant_reference,
         tier,
         amount,
-        currency: 'KES',
+        currency: currency as 'UGX' | 'USD',
         status: 'pending',
         payment_description: `QueryAI ${tier} subscription`,
       });
