@@ -206,15 +206,30 @@ router.get(
     });
 
     // Always use production frontend URL in production, never localhost
+    // Check multiple indicators of production environment
+    // Railway provides RAILWAY_PUBLIC_DOMAIN automatically in production
+    const isProduction = config.NODE_ENV === 'production' || 
+                        process.env.RAILWAY_ENVIRONMENT === 'production' ||
+                        !!process.env.RAILWAY_PUBLIC_DOMAIN; // Railway sets this automatically
+    
     let frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL;
-    if (!frontendUrl || frontendUrl.includes('localhost')) {
-      if (config.NODE_ENV === 'production') {
+    if (!frontendUrl || frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1')) {
+      if (isProduction) {
         frontendUrl = 'https://queryai-frontend.pages.dev';
       } else {
         frontendUrl = 'http://localhost:3000';
       }
     }
-    logger.info('Frontend URL for redirect', { frontendUrl, nodeEnv: config.NODE_ENV });
+    
+    logger.info('Frontend URL for redirect', { 
+      frontendUrl, 
+      nodeEnv: config.NODE_ENV,
+      railwayEnv: process.env.RAILWAY_ENVIRONMENT,
+      hasRailwayDomain: !!process.env.RAILWAY_PUBLIC_DOMAIN,
+      isProduction,
+      configFrontendUrl: config.FRONTEND_URL,
+      envFrontendUrl: process.env.FRONTEND_URL,
+    });
 
     if (!orderTrackingId && !merchantReference) {
       logger.warn('Payment callback missing tracking ID and merchant reference');
@@ -371,18 +386,30 @@ router.get(
   '/cancel',
   asyncHandler(async (req: Request, res: Response) => {
     // Always use production frontend URL in production, never localhost
+    // Check multiple indicators of production environment
+    // Railway provides RAILWAY_PUBLIC_DOMAIN automatically in production
+    const isProduction = config.NODE_ENV === 'production' || 
+                        process.env.RAILWAY_ENVIRONMENT === 'production' ||
+                        !!process.env.RAILWAY_PUBLIC_DOMAIN; // Railway sets this automatically
+    
     let frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL;
-    if (!frontendUrl || frontendUrl.includes('localhost')) {
-      if (config.NODE_ENV === 'production') {
+    if (!frontendUrl || frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1')) {
+      if (isProduction) {
         frontendUrl = 'https://queryai-frontend.pages.dev';
       } else {
         frontendUrl = 'http://localhost:3000';
       }
     }
+    
     logger.info('Payment cancellation route called', {
       queryParams: req.query,
       frontendUrl,
       nodeEnv: config.NODE_ENV,
+      railwayEnv: process.env.RAILWAY_ENVIRONMENT,
+      hasRailwayDomain: !!process.env.RAILWAY_PUBLIC_DOMAIN,
+      isProduction,
+      configFrontendUrl: config.FRONTEND_URL,
+      envFrontendUrl: process.env.FRONTEND_URL,
     });
     
     // Try to get payment info from query params if available
