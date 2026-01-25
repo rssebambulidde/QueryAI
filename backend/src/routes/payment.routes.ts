@@ -224,28 +224,48 @@ router.get(
 router.get(
   '/cancel',
   asyncHandler(async (req: Request, res: Response) => {
-      const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
-        (config.NODE_ENV === 'production' 
-          ? 'https://queryai-frontend.pages.dev'
-          : 'http://localhost:3000');
-      
-      // Send payment cancellation email notification
+    const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
+      (config.NODE_ENV === 'production' 
+        ? 'https://queryai-frontend.pages.dev'
+        : 'http://localhost:3000');
+    
+    // Try to get payment info from query params if available
+    const { OrderTrackingId, OrderMerchantReference } = req.query;
+    
+    // Send payment cancellation email notification if we have payment info
+    if (OrderMerchantReference || OrderTrackingId) {
       try {
-        const { EmailService } = await import('../services/email.service');
-        const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-        if (userProfile && payment) {
-          await EmailService.sendPaymentCancellationEmail(
-            userProfile.email,
-            userProfile.full_name || userProfile.email,
-            payment
-          );
+        let payment = null;
+        if (OrderMerchantReference) {
+          payment = await DatabaseService.getPaymentByMerchantReference(OrderMerchantReference as string);
+        } else if (OrderTrackingId) {
+          payment = await DatabaseService.getPaymentByOrderTrackingId(OrderTrackingId as string);
+        }
+        
+        if (payment && payment.user_id) {
+          // Update payment status to cancelled
+          await DatabaseService.updatePayment(payment.id, {
+            status: 'cancelled',
+          });
+          
+          // Send cancellation email
+          const { EmailService } = await import('../services/email.service');
+          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+          if (userProfile) {
+            await EmailService.sendPaymentCancellationEmail(
+              userProfile.email,
+              userProfile.full_name || userProfile.email,
+              payment
+            );
+          }
         }
       } catch (emailError) {
         logger.error('Failed to send payment cancellation email:', emailError);
         // Don't fail the redirect if email fails
       }
-      
-      return res.redirect(`${frontendUrl}/dashboard?payment=cancelled`);
+    }
+    
+    return res.redirect(`${frontendUrl}/dashboard?payment=cancelled`);
   })
 );
 
