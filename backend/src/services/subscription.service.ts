@@ -99,16 +99,16 @@ export class SubscriptionService {
       // Check if trial period has ended
       if (subscription.trial_end && new Date(subscription.trial_end) < new Date()) {
         // Trial ended - check if payment was made, otherwise downgrade to free
-          const { supabaseAdmin } = await import('../config/database');
-          const recentPayment = await supabaseAdmin
-            .from('payments')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('tier', subscription.tier)
-            .eq('status', 'completed')
-            .gte('completed_at', subscription.trial_end)
-            .limit(1)
-            .single();
+        const { supabaseAdmin } = await import('../config/database');
+        const recentPayment = await supabaseAdmin
+          .from('payments')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('tier', subscription.tier)
+          .eq('status', 'completed')
+          .gte('completed_at', subscription.trial_end)
+          .limit(1)
+          .single();
 
         if (!recentPayment.data) {
           // No payment after trial, downgrade to free
@@ -117,7 +117,6 @@ export class SubscriptionService {
             tier: subscription.tier,
             trialEnd: subscription.trial_end,
           });
-          const { supabaseAdmin } = await import('../config/database');
           const downgraded = await DatabaseService.updateSubscription(userId, {
             tier: 'free',
             status: 'active',
