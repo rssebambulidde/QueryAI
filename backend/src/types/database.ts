@@ -147,4 +147,23 @@ export namespace Database {
     conversation_id: string;
     added_at: string;
   }
+
+  export interface Payment {
+    id: string;
+    user_id: string;
+    subscription_id?: string;
+    pesapal_order_tracking_id?: string;
+    pesapal_merchant_reference?: string;
+    tier: 'free' | 'premium' | 'pro';
+    amount: number;
+    currency: string;
+    status: 'pending' | 'completed' | 'failed' | 'cancelled';
+    payment_method?: string;
+    payment_description?: string;
+    callback_data?: Record<string, any>;
+    webhook_data?: Record<string, any>;
+    created_at: string;
+    updated_at: string;
+    completed_at?: string;
+  }
 }

@@ -813,3 +813,58 @@ export const subscriptionApi = {
     return response.data;
   },
 };
+
+// Payment API
+export interface Payment {
+  id: string;
+  user_id: string;
+  subscription_id?: string;
+  pesapal_order_tracking_id?: string;
+  pesapal_merchant_reference?: string;
+  tier: 'free' | 'premium' | 'pro';
+  amount: number;
+  currency: string;
+  status: 'pending' | 'completed' | 'failed' | 'cancelled';
+  payment_method?: string;
+  payment_description?: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
+export interface PaymentInitiateRequest {
+  tier: 'premium' | 'pro';
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber?: string;
+}
+
+export interface PaymentInitiateResponse {
+  payment: {
+    id: string;
+    tier: 'premium' | 'pro';
+    amount: number;
+    currency: string;
+    status: string;
+  };
+  redirect_url: string;
+  order_tracking_id: string;
+}
+
+export const paymentApi = {
+  initiate: async (data: PaymentInitiateRequest): Promise<ApiResponse<PaymentInitiateResponse>> => {
+    const response = await apiClient.post('/api/payment/initiate', data);
+    return response.data;
+  },
+
+  getStatus: async (orderTrackingId: string): Promise<ApiResponse<{ payment: Payment }>> => {
+    const response = await apiClient.get(`/api/payment/status/${orderTrackingId}`);
+    return response.data;
+  },
+
+  getHistory: async (): Promise<ApiResponse<{ payments: Payment[] }>> => {
+    const response = await apiClient.get('/api/payment/history');
+    return response.data;
+  },
+};

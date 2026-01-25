@@ -5,12 +5,15 @@ import { subscriptionApi, SubscriptionData, UsageLimit } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { Check, X, Zap, FileText, Folder, BarChart3, Key, Sparkles } from 'lucide-react';
+import { PaymentDialog } from '@/components/payment/payment-dialog';
 
 export function SubscriptionManager() {
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [selectedTier, setSelectedTier] = useState<'premium' | 'pro' | null>(null);
 
   useEffect(() => {
     loadSubscriptionData();
@@ -33,20 +36,18 @@ export function SubscriptionManager() {
     }
   };
 
-  const handleUpgrade = async (tier: 'premium' | 'pro') => {
-    try {
-      setUpgrading(true);
-      setError(null);
-      const response = await subscriptionApi.upgrade(tier);
-      if (response.success) {
-        await loadSubscriptionData();
-      } else {
-        setError(response.error?.message || 'Failed to upgrade subscription');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to upgrade subscription');
-    } finally {
-      setUpgrading(false);
+  const handleUpgrade = (tier: 'premium' | 'pro') => {
+    setSelectedTier(tier);
+    setShowPaymentDialog(true);
+  };
+
+  const handlePaymentSuccess = async () => {
+    setShowPaymentDialog(false);
+    setSelectedTier(null);
+    // Reload subscription data after payment
+    await loadSubscriptionData();
+    if (onSuccess) {
+      onSuccess();
     }
   };
 
@@ -293,7 +294,7 @@ export function SubscriptionManager() {
                   disabled={upgrading}
                   className="w-full"
                 >
-                  {upgrading ? 'Upgrading...' : 'Upgrade to Premium'}
+                  Upgrade to Premium - KES 5,000
                 </Button>
               </div>
             )}
@@ -308,7 +309,7 @@ export function SubscriptionManager() {
                 variant={tier === 'premium' ? 'default' : 'outline'}
                 className="w-full"
               >
-                {upgrading ? 'Upgrading...' : tier === 'premium' ? 'Upgrade to Pro' : 'Upgrade to Pro'}
+                Upgrade to Pro - KES 15,000
               </Button>
             </div>
           </div>
@@ -327,6 +328,18 @@ export function SubscriptionManager() {
             Cancel Subscription
           </Button>
         </div>
+      )}
+
+      {/* Payment Dialog */}
+      {showPaymentDialog && selectedTier && (
+        <PaymentDialog
+          tier={selectedTier}
+          onClose={() => {
+            setShowPaymentDialog(false);
+            setSelectedTier(null);
+          }}
+          onSuccess={handlePaymentSuccess}
+        />
       )}
     </div>
   );

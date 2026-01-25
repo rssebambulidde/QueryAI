@@ -250,4 +250,163 @@ export class DatabaseService {
       return 0;
     }
   }
+
+  /**
+   * Create a payment record
+   */
+  static async createPayment(payment: Omit<Database.Payment, 'id' | 'created_at' | 'updated_at'>): Promise<Database.Payment> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('payments')
+        .insert({
+          ...payment,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Error creating payment:', error);
+        throw error;
+      }
+
+      return data as Database.Payment;
+    } catch (error) {
+      logger.error('Failed to create payment:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get payment by ID
+   */
+  static async getPaymentById(paymentId: string): Promise<Database.Payment | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('payments')
+        .select('*')
+        .eq('id', paymentId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Not found
+        }
+        logger.error('Error getting payment:', error);
+        throw error;
+      }
+
+      return data as Database.Payment;
+    } catch (error) {
+      logger.error('Failed to get payment:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get payment by merchant reference
+   */
+  static async getPaymentByMerchantReference(merchantReference: string): Promise<Database.Payment | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('payments')
+        .select('*')
+        .eq('pesapal_merchant_reference', merchantReference)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Not found
+        }
+        logger.error('Error getting payment by merchant reference:', error);
+        throw error;
+      }
+
+      return data as Database.Payment;
+    } catch (error) {
+      logger.error('Failed to get payment by merchant reference:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get payment by order tracking ID
+   */
+  static async getPaymentByOrderTrackingId(orderTrackingId: string): Promise<Database.Payment | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('payments')
+        .select('*')
+        .eq('pesapal_order_tracking_id', orderTrackingId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Not found
+        }
+        logger.error('Error getting payment by order tracking ID:', error);
+        throw error;
+      }
+
+      return data as Database.Payment;
+    } catch (error) {
+      logger.error('Failed to get payment by order tracking ID:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get user payments
+   */
+  static async getUserPayments(userId: string, limit = 50): Promise<Database.Payment[]> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('payments')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        logger.error('Error getting user payments:', error);
+        throw error;
+      }
+
+      return (data || []) as Database.Payment[];
+    } catch (error) {
+      logger.error('Failed to get user payments:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Update payment
+   */
+  static async updatePayment(
+    paymentId: string,
+    updates: Partial<Database.Payment>
+  ): Promise<Database.Payment | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('payments')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', paymentId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Error updating payment:', error);
+        throw error;
+      }
+
+      return data as Database.Payment;
+    } catch (error) {
+      logger.error('Failed to update payment:', error);
+      return null;
+    }
+  }
 }

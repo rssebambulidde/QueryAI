@@ -37,6 +37,12 @@ interface EnvConfig {
 
   // Logging
   LOG_LEVEL: string;
+
+  // Payment Processing (Pesapal)
+  PESAPAL_CONSUMER_KEY?: string;
+  PESAPAL_CONSUMER_SECRET?: string;
+  PESAPAL_ENVIRONMENT?: 'sandbox' | 'production';
+  PESAPAL_WEBHOOK_URL?: string;
 }
 
 const getEnvVar = (key: string, defaultValue?: string): string => {
@@ -86,6 +92,12 @@ const config: EnvConfig = {
 
   // Logging
   LOG_LEVEL: getEnvVar('LOG_LEVEL', 'info'),
+
+  // Payment Processing (Pesapal)
+  PESAPAL_CONSUMER_KEY: getEnvVar('PESAPAL_CONSUMER_KEY'),
+  PESAPAL_CONSUMER_SECRET: getEnvVar('PESAPAL_CONSUMER_SECRET'),
+  PESAPAL_ENVIRONMENT: (getEnvVar('PESAPAL_ENVIRONMENT', 'sandbox') as 'sandbox' | 'production') || 'sandbox',
+  PESAPAL_WEBHOOK_URL: getEnvVar('PESAPAL_WEBHOOK_URL'),
 };
 
 export default config;
