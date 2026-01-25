@@ -424,14 +424,34 @@ router.get(
     // Send payment cancellation email notification if we have payment info
     if (merchantReference || orderTrackingId) {
       try {
+        logger.info('Looking up payment', {
+          orderTrackingId,
+          merchantReference,
+        });
+        
         let payment = null;
         if (merchantReference) {
           payment = await DatabaseService.getPaymentByMerchantReference(merchantReference);
+          logger.info('Payment lookup by merchant reference', {
+            merchantReference,
+            found: !!payment,
+            paymentId: payment?.id,
+          });
         } else if (orderTrackingId) {
           payment = await DatabaseService.getPaymentByOrderTrackingId(orderTrackingId);
+          logger.info('Payment lookup by order tracking ID', {
+            orderTrackingId,
+            found: !!payment,
+            paymentId: payment?.id,
+          });
         }
         
-        if (payment) {
+        if (!payment) {
+          logger.warn('Payment not found for cancellation', {
+            orderTrackingId,
+            merchantReference,
+          });
+        } else if (payment) {
           // Check actual status from Pesapal if we have tracking ID
           let actualStatus: 'pending' | 'completed' | 'failed' | 'cancelled' = 'cancelled';
           if (orderTrackingId) {
@@ -462,22 +482,46 @@ router.get(
           
           // Send cancellation email
           if (payment.user_id) {
-            const { EmailService } = await import('../services/email.service');
-            const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-            if (userProfile) {
-              const updatedPayment = await DatabaseService.getPaymentById(payment.id);
-              if (updatedPayment) {
-                await EmailService.sendPaymentCancellationEmail(
-                  userProfile.email,
-                  userProfile.full_name || userProfile.email,
-                  updatedPayment
-                );
-                logger.info('Payment cancellation email sent', {
+            try {
+              const { EmailService } = await import('../services/email.service');
+              const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+              if (userProfile) {
+                const updatedPayment = await DatabaseService.getPaymentById(payment.id);
+                if (updatedPayment) {
+                  const emailSent = await EmailService.sendPaymentCancellationEmail(
+                    userProfile.email,
+                    userProfile.full_name || userProfile.email,
+                    updatedPayment
+                  );
+                  logger.info('Payment cancellation email sent', {
+                    paymentId: payment.id,
+                    userEmail: userProfile.email,
+                    emailSent,
+                  });
+                } else {
+                  logger.warn('Updated payment not found after status update', {
+                    paymentId: payment.id,
+                  });
+                }
+              } else {
+                logger.warn('User profile not found for payment cancellation email', {
                   paymentId: payment.id,
-                  userEmail: userProfile.email,
+                  userId: payment.user_id,
                 });
               }
+            } catch (emailError: any) {
+              logger.error('Failed to send payment cancellation email', {
+                paymentId: payment.id,
+                userId: payment.user_id,
+                error: emailError.message,
+                stack: emailError.stack,
+              });
+              // Don't fail the redirect if email fails
             }
+          } else {
+            logger.warn('Payment has no user_id, cannot send cancellation email', {
+              paymentId: payment.id,
+            });
           }
         } else {
           logger.warn('Payment not found for cancellation', {
@@ -498,6 +542,24 @@ router.get(
 );
 
 /**
+ * GET /api/payment/webhook
+ * Reject GET requests - webhooks must be POST
+ */
+router.get(
+  '/webhook',
+  asyncHandler(async (req: Request, res: Response) => {
+    logger.warn('Webhook called with GET method - webhooks must use POST', {
+      query: req.query,
+      url: req.url,
+    });
+    res.status(405).json({ 
+      success: false, 
+      message: 'Webhook endpoint only accepts POST requests' 
+    });
+  })
+);
+
+/**
  * POST /api/payment/webhook
  * Handle Pesapal webhook (IPN - Instant Payment Notification)
  */
@@ -511,6 +573,8 @@ router.post(
         orderTrackingId: webhookData.OrderTrackingId,
         merchantReference: webhookData.OrderMerchantReference,
         notificationType: webhookData.OrderNotificationType,
+        paymentStatus: webhookData.PaymentStatusDescription,
+        body: req.body,
       });
 
       // Verify webhook authenticity
