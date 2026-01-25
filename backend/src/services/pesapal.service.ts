@@ -213,14 +213,19 @@ export class PesapalService {
       // UGX = Uganda, USD can be used from multiple countries, default to UG for Uganda
       const countryCode = currency === 'UGX' ? 'UG' : 'UG';
 
-      const orderData = {
+      // Validate required fields
+      if (!params.email || !params.firstName || !params.lastName) {
+        throw new Error('Missing required billing information: email, firstName, and lastName are required');
+      }
+
+      // Build order data according to Pesapal API v3 specification
+      const orderData: any = {
         id: merchantReference,
         currency: currency,
         amount: amount,
         description: params.description || `QueryAI ${params.tier} subscription`,
         callback_url: params.callbackUrl,
         cancellation_url: params.cancellationUrl,
-        notification_id: '', // Will be set after IPN registration
         billing_address: {
           email_address: params.email,
           phone_number: params.phoneNumber || '',
@@ -235,9 +240,21 @@ export class PesapalService {
           postal_code: '',
           zip_code: '',
         },
-        // Optional: Add IPN notification ID if registered
-        // notification_id: '', // Can be set if IPN is registered
       };
+
+      // Only include notification_id if we have a webhook URL configured
+      // Empty notification_id might cause validation errors in some Pesapal environments
+      if (config.PESAPAL_WEBHOOK_URL) {
+        try {
+          const ipnId = await this.registerIPN(config.PESAPAL_WEBHOOK_URL);
+          if (ipnId) {
+            orderData.notification_id = ipnId;
+          }
+        } catch (ipnError) {
+          logger.warn('Failed to register IPN, proceeding without notification_id', ipnError);
+          // Continue without notification_id - it's optional
+        }
+      }
 
       logger.info('Submitting order to Pesapal', {
         merchantReference,
