@@ -1,7 +1,18 @@
 import axios, { AxiosInstance } from 'axios';
 
 // API Base URL
+// Note: NEXT_PUBLIC_ variables are embedded at BUILD TIME in Next.js
+// If you change this variable, you must rebuild/redeploy
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+// Debug: Log API URL in development (will be undefined in production if not set)
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log('[API Client] Using API URL:', API_URL);
+  if (API_URL.includes('localhost') && window.location.hostname !== 'localhost') {
+    console.warn('[API Client] ⚠️ WARNING: API URL is localhost but not running locally!');
+    console.warn('[API Client] Set NEXT_PUBLIC_API_URL in Cloudflare Pages environment variables.');
+  }
+}
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
