@@ -78,7 +78,7 @@ export const useAuthStore = create<AuthState>()(
                              error.response?.data?.error?.message?.toLowerCase().includes('too many');
           
           const errorMessage = isRateLimit
-            ? 'Too many requests, please try again later.'
+            ? (error.response?.data?.error?.message || 'Too many requests. Please wait 15 minutes before trying again.')
             : (error.response?.data?.error?.message ||
                error.message ||
                'Login failed');
@@ -213,15 +213,17 @@ export const useAuthStore = create<AuthState>()(
                              error.response?.data?.error?.message?.toLowerCase().includes('too many');
           
           // Clear auth state on failure
+          const errorMessage = isRateLimit 
+            ? (error.response?.data?.error?.message || 'Too many requests. Please wait 15 minutes before trying again.')
+            : (error.response?.data?.error?.message || error.message || 'Authentication failed');
+          
           set({
             isAuthenticated: false,
             user: null,
             accessToken: null,
             refreshToken: null,
             isLoading: false,
-            error: isRateLimit 
-              ? 'Too many requests, please try again later.'
-              : (error.response?.data?.error?.message || error.message || 'Authentication failed'),
+            error: errorMessage,
           });
           if (typeof window !== 'undefined') {
             localStorage.removeItem('accessToken');

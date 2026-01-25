@@ -66,13 +66,20 @@ export default function DashboardPage() {
   }, [hasCheckedAuth, checkAuth]);
   
   // Force refresh user data on mount to ensure subscriptionTier is loaded
+  // Only refresh once, not on every render
   useEffect(() => {
-    if (isAuthenticated && user && (!user.subscriptionTier || user.subscriptionTier === 'free')) {
-      // If subscriptionTier is missing or free, refresh user data
+    if (isAuthenticated && user && (!user.subscriptionTier || user.subscriptionTier === 'free') && hasCheckedAuth) {
+      // If subscriptionTier is missing or free after initial auth check, refresh user data
+      // Only do this once after initial auth check to prevent loops
       console.log('[Dashboard] Refreshing user data to get subscriptionTier...');
-      checkAuth().catch(console.error);
+      checkAuth().catch((err) => {
+        // Don't log rate limit errors to prevent spam
+        if (err.response?.status !== 429) {
+          console.error('[Dashboard] Failed to refresh user data:', err);
+        }
+      });
     }
-  }, [isAuthenticated, user, checkAuth]);
+  }, [isAuthenticated, user, checkAuth, hasCheckedAuth]);
 
   // Redirect if not authenticated (wait for loading and auth check to finish)
   useEffect(() => {

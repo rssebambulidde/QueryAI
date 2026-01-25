@@ -19,7 +19,7 @@ export const apiLimiter = rateLimit({
   },
   handler: (req: Request, res: Response) => {
     logger.warn(`Rate limit exceeded for IP: ${req.ip}`, { path: req.path });
-    const error = new RateLimitError('Too many requests, please try again later.');
+    const error = new RateLimitError('Too many requests. Please wait 15 minutes before trying again.');
     res.status(error.statusCode).json({
       success: false,
       error: {
@@ -43,7 +43,7 @@ export const authLimiter = rateLimit({
   skipSuccessfulRequests: true, // Don't count successful logins against rate limit
   handler: (req: Request, res: Response) => {
     logger.warn(`Auth rate limit exceeded for IP: ${req.ip}`);
-    const error = new RateLimitError('Too many authentication attempts, please try again later.');
+    const error = new RateLimitError('Too many authentication attempts. Please wait 15 minutes before trying again.');
     res.status(error.statusCode).json({
       success: false,
       error: {
