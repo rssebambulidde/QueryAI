@@ -164,7 +164,7 @@ export function UsageDisplay({ compact = false, showWarnings = true }: UsageDisp
   return (
     <div className="space-y-4">
       {showWarnings && warnings?.approaching && (
-        <Alert variant="default" className="border-yellow-500 bg-yellow-50">
+        <Alert variant="warning" className="border-yellow-500 bg-yellow-50">
           <AlertCircle className="h-4 w-4 text-yellow-600" />
           <div className="ml-2">
             <div className="font-medium text-yellow-800">Approaching Usage Limits</div>
