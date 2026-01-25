@@ -3,6 +3,24 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  
+  /* Brand Colors - Primary Blue */
+  --primary-blue: #2563EB;
+  --primary-blue-dark: #1E40AF;
+  --primary-blue-light: #3B82F6;
+  
+  /* Accent Colors */
+  --accent-orange: #F97316;
+  --accent-orange-light: #FB923C;
+  --success-green: #10B981;
+  --warning-amber: #F59E0B;
+  
+  /* Neutral Colors */
+  --gray-900: #0F172A;
+  --gray-800: #1E293B;
+  --gray-600: #475569;
+  --gray-400: #94A3B8;
+  --gray-100: #F1F5F9;
 }
 
 @theme inline {
