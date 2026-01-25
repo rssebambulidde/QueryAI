@@ -205,10 +205,16 @@ router.get(
       allQueryParams: req.query,
     });
 
-    const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
-      (config.NODE_ENV === 'production' 
-        ? 'https://queryai-frontend.pages.dev'
-        : 'http://localhost:3000');
+    // Always use production frontend URL in production, never localhost
+    let frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL;
+    if (!frontendUrl || frontendUrl.includes('localhost')) {
+      if (config.NODE_ENV === 'production') {
+        frontendUrl = 'https://queryai-frontend.pages.dev';
+      } else {
+        frontendUrl = 'http://localhost:3000';
+      }
+    }
+    logger.info('Frontend URL for redirect', { frontendUrl, nodeEnv: config.NODE_ENV });
 
     if (!orderTrackingId && !merchantReference) {
       logger.warn('Payment callback missing tracking ID and merchant reference');
@@ -364,45 +370,100 @@ router.get(
 router.get(
   '/cancel',
   asyncHandler(async (req: Request, res: Response) => {
-    const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
-      (config.NODE_ENV === 'production' 
-        ? 'https://queryai-frontend.pages.dev'
-        : 'http://localhost:3000');
+    // Always use production frontend URL in production, never localhost
+    let frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL;
+    if (!frontendUrl || frontendUrl.includes('localhost')) {
+      if (config.NODE_ENV === 'production') {
+        frontendUrl = 'https://queryai-frontend.pages.dev';
+      } else {
+        frontendUrl = 'http://localhost:3000';
+      }
+    }
+    logger.info('Payment cancellation route called', {
+      queryParams: req.query,
+      frontendUrl,
+      nodeEnv: config.NODE_ENV,
+    });
     
     // Try to get payment info from query params if available
-    const { OrderTrackingId, OrderMerchantReference } = req.query;
+    // Pesapal may send different parameter formats
+    const orderTrackingId = (req.query.OrderTrackingId || 
+                             req.query.pesapal_transaction_tracking_id || 
+                             req.query.orderTrackingId) as string;
+    const merchantReference = (req.query.OrderMerchantReference || 
+                              req.query.pesapal_merchant_reference || 
+                              req.query.orderMerchantReference) as string;
     
     // Send payment cancellation email notification if we have payment info
-    if (OrderMerchantReference || OrderTrackingId) {
+    if (merchantReference || orderTrackingId) {
       try {
         let payment = null;
-        if (OrderMerchantReference) {
-          payment = await DatabaseService.getPaymentByMerchantReference(OrderMerchantReference as string);
-        } else if (OrderTrackingId) {
-          payment = await DatabaseService.getPaymentByOrderTrackingId(OrderTrackingId as string);
+        if (merchantReference) {
+          payment = await DatabaseService.getPaymentByMerchantReference(merchantReference);
+        } else if (orderTrackingId) {
+          payment = await DatabaseService.getPaymentByOrderTrackingId(orderTrackingId);
         }
         
-        if (payment && payment.user_id) {
-          // Update payment status to cancelled
+        if (payment) {
+          // Check actual status from Pesapal if we have tracking ID
+          let actualStatus: 'pending' | 'completed' | 'failed' | 'cancelled' = 'cancelled';
+          if (orderTrackingId) {
+            try {
+              const status = await PesapalService.getTransactionStatus(orderTrackingId);
+              actualStatus = PesapalService['mapPesapalStatusToPaymentStatus'](status.payment_status);
+              logger.info('Payment status from Pesapal on cancel', {
+                paymentId: payment.id,
+                pesapalStatus: status.payment_status,
+                mappedStatus: actualStatus,
+              });
+            } catch (statusError) {
+              logger.warn('Failed to get payment status from Pesapal on cancel:', statusError);
+              // Default to cancelled if we can't check
+            }
+          }
+          
+          // Update payment status
           await DatabaseService.updatePayment(payment.id, {
-            status: 'cancelled',
+            status: actualStatus,
+          });
+          
+          logger.info('Payment status updated', {
+            paymentId: payment.id,
+            userId: payment.user_id,
+            status: actualStatus,
           });
           
           // Send cancellation email
-          const { EmailService } = await import('../services/email.service');
-          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-          if (userProfile) {
-            await EmailService.sendPaymentCancellationEmail(
-              userProfile.email,
-              userProfile.full_name || userProfile.email,
-              payment
-            );
+          if (payment.user_id) {
+            const { EmailService } = await import('../services/email.service');
+            const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+            if (userProfile) {
+              const updatedPayment = await DatabaseService.getPaymentById(payment.id);
+              if (updatedPayment) {
+                await EmailService.sendPaymentCancellationEmail(
+                  userProfile.email,
+                  userProfile.full_name || userProfile.email,
+                  updatedPayment
+                );
+                logger.info('Payment cancellation email sent', {
+                  paymentId: payment.id,
+                  userEmail: userProfile.email,
+                });
+              }
+            }
           }
+        } else {
+          logger.warn('Payment not found for cancellation', {
+            orderTrackingId,
+            merchantReference,
+          });
         }
-      } catch (emailError) {
-        logger.error('Failed to send payment cancellation email:', emailError);
-        // Don't fail the redirect if email fails
+      } catch (error) {
+        logger.error('Failed to process payment cancellation:', error);
+        // Don't fail the redirect if processing fails
       }
+    } else {
+      logger.warn('Payment cancellation route called without tracking ID or merchant reference');
     }
     
     return res.redirect(`${frontendUrl}/dashboard?payment=cancelled`);
