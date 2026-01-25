@@ -56,14 +56,37 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
 
     try {
       setLoading(true);
-      const response = await paymentApi.initiate({
+      setError(null);
+      
+      // Validate form data before sending
+      if (!formData.firstName.trim()) {
+        setError('First name is required');
+        setLoading(false);
+        return;
+      }
+      if (!formData.lastName.trim()) {
+        setError('Last name is required');
+        setLoading(false);
+        return;
+      }
+      if (!formData.email.trim() || !formData.email.includes('@')) {
+        setError('Valid email is required');
+        setLoading(false);
+        return;
+      }
+      
+      const requestData: PaymentInitiateRequest = {
         tier,
         currency,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        phoneNumber: formData.phoneNumber || undefined,
-      });
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim(),
+        phoneNumber: formData.phoneNumber?.trim() || undefined,
+      };
+      
+      console.log('[PaymentDialog] Sending payment request:', { ...requestData, phoneNumber: requestData.phoneNumber ? '***' : undefined });
+      
+      const response = await paymentApi.initiate(requestData);
 
       if (response.success && response.data) {
         // Redirect to Pesapal payment page
