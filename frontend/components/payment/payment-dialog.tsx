@@ -106,6 +106,16 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
         } else {
           errorMessage = 'Invalid payment information. Please check all fields and try again.';
         }
+      } else if (err.response?.status === 500 || err.message?.includes('Pesapal authentication')) {
+        // Server error or Pesapal authentication issue
+        const errorData = err.response?.data?.error;
+        if (errorData?.message) {
+          errorMessage = errorData.message;
+        } else if (err.message?.includes('Pesapal authentication')) {
+          errorMessage = 'Payment service authentication failed. Please contact support or try again later. If this persists, check that Pesapal credentials are configured correctly.';
+        } else {
+          errorMessage = 'Payment service error. Please try again later or contact support.';
+        }
       } else if (err.response?.data?.error?.message) {
         errorMessage = err.response.data.error.message;
       } else if (err.message) {
