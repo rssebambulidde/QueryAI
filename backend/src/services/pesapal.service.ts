@@ -140,7 +140,8 @@ export class PesapalService {
       const amount = params.amount;
 
       // Determine country code based on currency
-      const countryCode = currency === 'UGX' ? 'UG' : 'KE'; // Use KE for USD as default
+      // UGX = Uganda, USD can be used from multiple countries, default to UG for Uganda
+      const countryCode = currency === 'UGX' ? 'UG' : 'UG';
 
       const orderData = {
         id: merchantReference,
