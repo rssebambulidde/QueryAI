@@ -46,7 +46,7 @@ router.post(
       premium: 5000,
       pro: 15000,
     };
-    const amount = tierPricing[tier];
+    const amount = tierPricing[tier as 'premium' | 'pro'];
 
     // Build callback URLs
     const baseUrl = config.API_BASE_URL || 'http://localhost:3001';
@@ -215,9 +215,14 @@ router.get(
     }
 
     const { orderTrackingId } = req.params;
+    const trackingId = Array.isArray(orderTrackingId) ? orderTrackingId[0] : orderTrackingId;
+
+    if (!trackingId) {
+      throw new ValidationError('Order tracking ID is required');
+    }
 
     // Get payment from database
-    const payment = await DatabaseService.getPaymentByOrderTrackingId(orderTrackingId);
+    const payment = await DatabaseService.getPaymentByOrderTrackingId(trackingId);
 
     if (!payment) {
       throw new ValidationError('Payment not found');
@@ -230,7 +235,7 @@ router.get(
 
     // Get latest status from Pesapal
     try {
-      const pesapalStatus = await PesapalService.getTransactionStatus(orderTrackingId);
+      const pesapalStatus = await PesapalService.getTransactionStatus(trackingId);
       
       // Update payment if status changed
       const paymentStatus = PesapalService['mapPesapalStatusToPaymentStatus'](pesapalStatus.payment_status);

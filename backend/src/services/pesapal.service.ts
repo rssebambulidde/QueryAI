@@ -62,7 +62,7 @@ export class PesapalService {
         // Set expiry to 55 minutes (tokens typically last 1 hour)
         this.tokenExpiry = new Date(Date.now() + 55 * 60 * 1000);
         logger.info('Pesapal authentication successful');
-        return this.accessToken;
+        return this.accessToken as string;
       }
 
       throw new Error('Invalid authentication response from Pesapal');
