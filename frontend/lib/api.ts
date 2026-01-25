@@ -31,6 +31,12 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Handle rate limit errors (429) - don't retry, just show error
+    if (error.response?.status === 429) {
+      // Rate limit exceeded - return error immediately without retry
+      return Promise.reject(error);
+    }
+    
     if (error.response?.status === 401) {
       // Token expired or invalid
       // Only redirect if not already on login/signup page to prevent loops

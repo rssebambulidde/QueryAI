@@ -43,11 +43,17 @@ export default function LoginPage() {
   useEffect(() => {
     if (error) {
       setShowAlert(true);
+      // For rate limit errors, show longer and don't auto-clear
+      const isRateLimit = error.toLowerCase().includes('too many');
+      const timeout = isRateLimit ? 30000 : 5000; // 30 seconds for rate limit, 5 seconds for others
+      
       const timer = setTimeout(() => {
         setShowAlert(false);
         clearError();
-      }, 5000);
+      }, timeout);
       return () => clearTimeout(timer);
+    } else {
+      setShowAlert(false);
     }
   }, [error, clearError]);
 

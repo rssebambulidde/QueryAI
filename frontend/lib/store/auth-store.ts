@@ -62,6 +62,7 @@ export const useAuthStore = create<AuthState>()(
               refreshToken: session.refreshToken,
               isAuthenticated: true,
               isLoading: false,
+              error: null, // Clear any previous errors
             });
             // Store tokens in localStorage for API client
             if (typeof window !== 'undefined') {
@@ -72,11 +73,26 @@ export const useAuthStore = create<AuthState>()(
             throw new Error(response.error?.message || 'Login failed');
           }
         } catch (error: any) {
-          const errorMessage =
-            error.response?.data?.error?.message ||
-            error.message ||
-            'Login failed';
-          set({ error: errorMessage, isLoading: false });
+          // Check if it's a rate limit error
+          const isRateLimit = error.response?.status === 429 || 
+                             error.response?.data?.error?.message?.toLowerCase().includes('too many');
+          
+          const errorMessage = isRateLimit
+            ? 'Too many requests, please try again later.'
+            : (error.response?.data?.error?.message ||
+               error.message ||
+               'Login failed');
+          
+          set({ 
+            error: errorMessage, 
+            isLoading: false 
+          });
+          
+          // Don't throw rate limit errors to prevent retry loops
+          if (isRateLimit) {
+            return; // Exit without throwing to stop any retry logic
+          }
+          
           throw error;
         }
       },
