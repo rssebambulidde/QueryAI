@@ -374,9 +374,9 @@ export const DocumentManager = () => {
         className={cn(
           'border-2 border-dashed rounded-lg p-6 mb-4 transition-colors',
           isDragging
-            ? 'border-blue-500 bg-blue-50'
+            ? 'border-orange-500 bg-orange-50'
             : 'border-gray-300 hover:border-gray-400 bg-gray-50',
-          selectedFile && 'border-blue-400 bg-blue-50'
+          selectedFile && 'border-orange-400 bg-orange-50'
         )}
       >
         <div className="flex flex-col items-center text-center">

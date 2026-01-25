@@ -663,9 +663,9 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
                     onClick={() => handleTopicSelect(topic)}
                     className="w-full text-left px-2 py-1.5 text-xs bg-orange-50 border border-orange-200 rounded hover:bg-orange-100 transition-colors"
                   >
-                    <div className="font-medium text-blue-900">{topic.name}</div>
+                    <div className="font-medium text-orange-900">{topic.name}</div>
                     {topic.description && (
-                      <div className="text-blue-700 mt-0.5">{topic.description}</div>
+                      <div className="text-orange-700 mt-0.5">{topic.description}</div>
                     )}
                   </button>
                 ))}
