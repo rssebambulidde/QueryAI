@@ -278,12 +278,13 @@ if (process.env.RAILWAY_CRON === 'true') {
   });
 
   process.on('SIGINT', () => {
-  logger.info('SIGINT signal received: closing HTTP server');
-  server.close(() => {
-    logger.info('HTTP server closed');
-    process.exit(0);
+    logger.info('SIGINT signal received: closing HTTP server');
+    server.close(() => {
+      logger.info('HTTP server closed');
+      process.exit(0);
+    });
   });
-});
+}
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error: Error) => {
