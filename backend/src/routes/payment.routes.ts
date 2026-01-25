@@ -200,12 +200,18 @@ router.get(
       }
 
       // Redirect to frontend with success status
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
+        (config.NODE_ENV === 'production' 
+          ? 'https://queryai-frontend.pages.dev'
+          : 'http://localhost:3000');
       const status = OrderTrackingId ? 'success' : 'pending';
       return res.redirect(`${frontendUrl}/dashboard?payment=${status}`);
     } catch (error: any) {
       logger.error('Payment callback error:', error);
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
+        (config.NODE_ENV === 'production' 
+          ? 'https://queryai-frontend.pages.dev'
+          : 'http://localhost:3000');
       return res.redirect(`${frontendUrl}/dashboard?payment=error`);
     }
   })
