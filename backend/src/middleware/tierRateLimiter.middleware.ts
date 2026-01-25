@@ -131,7 +131,6 @@ export const tierRateLimiter = async (
       const windowMsValue: number = limits.windowMs;
       
       // Send error response and return early (matching pattern from subscription.middleware.ts)
-      // @ts-expect-error - TypeScript inference issue with error object literal
       res.status(rateLimitError.statusCode).json({
         success: false,
         error: {
