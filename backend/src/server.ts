@@ -22,6 +22,7 @@ import customApiRoutes from './routes/custom-api.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import subscriptionRoutes from './routes/subscription.routes';
 import paymentRoutes from './routes/payment.routes';
+import usageRoutes from './routes/usage.routes';
 import testRoutes from './routes/test.routes';
 import debugRoutes from './routes/debug.routes';
 
@@ -133,6 +134,7 @@ app.use('/api/v1', customApiRoutes); // Custom API with API key auth
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/usage', usageRoutes);
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }

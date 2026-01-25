@@ -13,6 +13,7 @@ import { CollectionConversationsList } from './collection-conversations-list';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { UsageDisplay } from '@/components/usage/usage-display';
 
 type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'analytics' | 'subscription';
 
@@ -57,6 +58,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [isLoadingCollections, setIsLoadingCollections] = useState(false);
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const [showTopicsFilters, setShowTopicsFilters] = useState(false);
+  const [showUsage, setShowUsage] = useState(true);
   const { toast } = useToast();
   
   const {
@@ -546,6 +548,30 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             Subscription
           </button>
         </nav>
+
+        {/* Usage Display Section */}
+        <div className="px-2 py-4 border-t border-gray-200">
+          <button
+            onClick={() => setShowUsage(!showUsage)}
+            className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              <span>Usage</span>
+            </div>
+            {showUsage ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </button>
+
+          {showUsage && (
+            <div className="mt-2 px-3">
+              <UsageDisplay compact={true} showWarnings={true} />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Save to Collection Dialog */}

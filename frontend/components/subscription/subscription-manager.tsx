@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { subscriptionApi, SubscriptionData, UsageLimit, Payment, BillingHistory } from '@/lib/api';
+import { subscriptionApi, usageApi, SubscriptionData, UsageLimit, Payment, BillingHistory, UsageStats, UsageWarnings } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { Check, X, Zap, FileText, Folder, BarChart3, Key, Sparkles, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, X, Zap, FileText, Folder, BarChart3, Key, Sparkles, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
+import { UsageDisplay } from '@/components/usage/usage-display';
 
 export function SubscriptionManager() {
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
@@ -18,10 +19,14 @@ export function SubscriptionManager() {
   const [showBillingHistory, setShowBillingHistory] = useState(false);
   const [showCancelOptions, setShowCancelOptions] = useState(false);
   const [showDowngradeOptions, setShowDowngradeOptions] = useState(false);
+  const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
+  const [usageWarnings, setUsageWarnings] = useState<UsageWarnings | null>(null);
 
   useEffect(() => {
     loadSubscriptionData();
     loadBillingHistory();
+    loadUsageStats();
+    loadUsageWarnings();
   }, []);
 
   const loadSubscriptionData = async () => {
@@ -49,6 +54,28 @@ export function SubscriptionManager() {
       }
     } catch (err: any) {
       console.error('Failed to load billing history:', err);
+    }
+  };
+
+  const loadUsageStats = async () => {
+    try {
+      const response = await usageApi.getCurrent();
+      if (response.success && response.data) {
+        setUsageStats(response.data.usage);
+      }
+    } catch (err: any) {
+      console.error('Failed to load usage stats:', err);
+    }
+  };
+
+  const loadUsageWarnings = async () => {
+    try {
+      const response = await usageApi.getWarnings();
+      if (response.success && response.data) {
+        setUsageWarnings(response.data);
+      }
+    } catch (err: any) {
+      console.error('Failed to load usage warnings:', err);
     }
   };
 
@@ -241,71 +268,121 @@ export function SubscriptionManager() {
       {/* Usage Statistics */}
       <div className="bg-white rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold mb-4">Usage This Month</h3>
-        <div className="space-y-4">
-          {/* Queries */}
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-orange-600" />
-                <span className="font-medium">Queries</span>
+        {usageStats ? (
+          <UsageDisplay compact={false} showWarnings={true} />
+        ) : (
+          <div className="space-y-4">
+            {/* Fallback to old usage display if new API not available */}
+            {/* Queries */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-orange-600" />
+                  <span className="font-medium">Queries</span>
+                </div>
+                <span className="text-sm text-gray-600">{formatLimit(usage.queries)}</span>
               </div>
-              <span className="text-sm text-gray-600">{formatLimit(usage.queries)}</span>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className={`h-2 rounded-full ${
+                    usage.queries.remaining === 0 ? 'bg-red-500' : usage.queries.remaining! < usage.queries.limit! * 0.2 ? 'bg-yellow-500' : 'bg-blue-500'
+                  }`}
+                  style={{ width: `${getProgressPercentage(usage.queries)}%` }}
+                />
+              </div>
+              {usage.queries.remaining === 0 && (
+                <div className="mt-2">
+                  <Alert variant="destructive" className="py-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="ml-2">Query limit reached. Upgrade to continue using QueryAI.</span>
+                  </Alert>
+                  <Button
+                    size="sm"
+                    onClick={() => handleUpgrade('premium')}
+                    className="mt-2 w-full"
+                  >
+                    <ArrowUp className="h-3 w-3 mr-1" />
+                    Upgrade Now
+                  </Button>
+                </div>
+              )}
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className={`h-2 rounded-full ${
-                  usage.queries.remaining === 0 ? 'bg-red-500' : usage.queries.remaining! < usage.queries.limit! * 0.2 ? 'bg-yellow-500' : 'bg-blue-500'
-                }`}
-                style={{ width: `${getProgressPercentage(usage.queries)}%` }}
-              />
-            </div>
-            {usage.queries.remaining === 0 && (
-              <p className="text-sm text-red-600 mt-1">Limit reached. Upgrade to continue.</p>
+
+            {/* Document Uploads */}
+            {limits.features.documentUpload && (
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-green-600" />
+                    <span className="font-medium">Document Uploads</span>
+                  </div>
+                  <span className="text-sm text-gray-600">{formatLimit(usage.documentUploads)}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full ${
+                      usage.documentUploads.remaining === 0 ? 'bg-red-500' : usage.documentUploads.remaining! < usage.documentUploads.limit! * 0.2 ? 'bg-yellow-500' : 'bg-green-500'
+                    }`}
+                    style={{ width: `${getProgressPercentage(usage.documentUploads)}%` }}
+                  />
+                </div>
+                {usage.documentUploads.remaining === 0 && (
+                  <div className="mt-2">
+                    <Alert variant="destructive" className="py-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="ml-2">Document upload limit reached. Upgrade for more uploads.</span>
+                    </Alert>
+                    <Button
+                      size="sm"
+                      onClick={() => handleUpgrade('premium')}
+                      className="mt-2 w-full"
+                    >
+                      <ArrowUp className="h-3 w-3 mr-1" />
+                      Upgrade Now
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Topics */}
+            {limits.features.documentUpload && (
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <div className="flex items-center gap-2">
+                    <Folder className="w-4 h-4 text-purple-600" />
+                    <span className="font-medium">Topics</span>
+                  </div>
+                  <span className="text-sm text-gray-600">{formatLimit(usage.topics)}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full ${
+                      usage.topics.remaining === 0 ? 'bg-red-500' : usage.topics.remaining! < usage.topics.limit! * 0.2 ? 'bg-yellow-500' : 'bg-purple-500'
+                    }`}
+                    style={{ width: `${getProgressPercentage(usage.topics)}%` }}
+                  />
+                </div>
+                {usage.topics.remaining === 0 && (
+                  <div className="mt-2">
+                    <Alert variant="destructive" className="py-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="ml-2">Topic limit reached. Upgrade to create more topics.</span>
+                    </Alert>
+                    <Button
+                      size="sm"
+                      onClick={() => handleUpgrade('premium')}
+                      className="mt-2 w-full"
+                    >
+                      <ArrowUp className="h-3 w-3 mr-1" />
+                      Upgrade Now
+                    </Button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
-
-          {/* Document Uploads */}
-          {limits.features.documentUpload && (
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-green-600" />
-                  <span className="font-medium">Document Uploads</span>
-                </div>
-                <span className="text-sm text-gray-600">{formatLimit(usage.documentUploads)}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full ${
-                    usage.documentUploads.remaining === 0 ? 'bg-red-500' : usage.documentUploads.remaining! < usage.documentUploads.limit! * 0.2 ? 'bg-yellow-500' : 'bg-green-500'
-                  }`}
-                  style={{ width: `${getProgressPercentage(usage.documentUploads)}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Topics */}
-          {limits.features.documentUpload && (
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-2">
-                  <Folder className="w-4 h-4 text-purple-600" />
-                  <span className="font-medium">Topics</span>
-                </div>
-                <span className="text-sm text-gray-600">{formatLimit(usage.topics)}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full ${
-                    usage.topics.remaining === 0 ? 'bg-red-500' : usage.topics.remaining! < usage.topics.limit! * 0.2 ? 'bg-yellow-500' : 'bg-purple-500'
-                  }`}
-                  style={{ width: `${getProgressPercentage(usage.topics)}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Features */}

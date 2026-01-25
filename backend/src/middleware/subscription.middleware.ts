@@ -264,6 +264,11 @@ declare global {
         limit: number | null;
         remaining: number | null;
       };
+      apiKey?: {
+        id: string;
+        user_id: string;
+        topic_id?: string;
+      };
     }
   }
 }

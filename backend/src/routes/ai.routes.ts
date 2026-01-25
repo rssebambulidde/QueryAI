@@ -4,6 +4,8 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
 import { apiLimiter } from '../middleware/rateLimiter';
 import { enforceQueryLimit } from '../middleware/subscription.middleware';
+import { logQueryUsage } from '../middleware/usageCounter.middleware';
+import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
 
@@ -17,8 +19,10 @@ const router = Router();
 router.post(
   '/ask',
   authenticate,
+  tierRateLimiter,
   enforceQueryLimit,
   apiLimiter,
+  logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
     const { 
       question, 
@@ -118,8 +122,10 @@ router.post(
 router.post(
   '/ask/stream',
   authenticate,
+  tierRateLimiter,
   enforceQueryLimit,
   apiLimiter,
+  logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
     const { 
       question, 

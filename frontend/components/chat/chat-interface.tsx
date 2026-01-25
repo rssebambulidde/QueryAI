@@ -548,7 +548,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       let showUpgradeLink = false;
       let errorCode = '';
       
-      if (err.response?.status === 403) {
+      // Handle rate limit errors (429)
+      if (err.response?.status === 429) {
+        const errorData = err.response?.data?.error;
+        errorCode = errorData?.code || 'RATE_LIMIT_EXCEEDED';
+        const tier = errorData?.tier || 'free';
+        const limit = errorData?.limit || 0;
+        const retryAfter = errorData?.retryAfter;
+        
+        errorMessage = `Rate limit exceeded. Your ${tier} tier allows ${limit} requests per 15 minutes.`;
+        if (retryAfter) {
+          errorMessage += ` Please try again in ${Math.ceil(retryAfter / 60)} minutes.`;
+        }
+        if (tier === 'free') {
+          errorMessage += ' Upgrade to premium for higher limits.';
+        }
+        showUpgradeLink = true;
+      } else if (err.response?.status === 403) {
         // Handle 403 Forbidden - subscription limit reached
         const errorData = err.response?.data?.error;
         errorCode = errorData?.code || 'FORBIDDEN';
@@ -557,6 +573,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           const used = errorData?.used || 0;
           const limit = errorData?.limit || 0;
           errorMessage = `You have reached your query limit for your current plan. You've used ${used} of ${limit} queries this month.`;
+          showUpgradeLink = true;
+        } else if (errorCode === 'DOCUMENT_UPLOAD_LIMIT_EXCEEDED') {
+          const used = errorData?.used || 0;
+          const limit = errorData?.limit || 0;
+          errorMessage = `Document upload limit reached. You've uploaded ${used} of ${limit} documents this month.`;
+          showUpgradeLink = true;
+        } else if (errorCode === 'TOPIC_LIMIT_EXCEEDED') {
+          const used = errorData?.used || 0;
+          const limit = errorData?.limit || 0;
+          errorMessage = `Topic limit reached. You've created ${used} of ${limit} topics.`;
           showUpgradeLink = true;
         } else if (errorCode === 'FEATURE_NOT_AVAILABLE') {
           const currentTier = errorData?.currentTier || 'free';
@@ -578,6 +604,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
 
       // Remove the empty assistant message on error
       setMessages((prev) => prev.slice(0, -1));
+      
+      // Navigate to subscription tab if upgrade link should be shown
+      if (showUpgradeLink && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('navigateToSubscription'));
+      }
     }
   };
 

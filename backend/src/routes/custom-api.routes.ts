@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { AIService, QuestionRequest } from '../services/ai.service';
 import { apiKeyAuth, logApiKeyUsage } from '../middleware/apiKeyAuth.middleware';
+import { logApiCallUsage } from '../middleware/usageCounter.middleware';
+import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
@@ -21,7 +23,9 @@ const router = Router();
 router.post(
   '/ask',
   apiKeyAuth,
+  tierRateLimiter,
   logApiKeyUsage,
+  logApiCallUsage,
   asyncHandler(async (req: Request, res: Response) => {
     const { question, conversationHistory, model, temperature, maxTokens } = req.body;
     const apiKey = (req as any).apiKey;

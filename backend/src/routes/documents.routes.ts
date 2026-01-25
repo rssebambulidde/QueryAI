@@ -12,6 +12,8 @@ import { ValidationError } from '../types/error';
 import logger from '../config/logger';
 import { apiLimiter } from '../middleware/rateLimiter';
 import { enforceDocumentUploadLimit, requireFeature } from '../middleware/subscription.middleware';
+import { logDocumentUploadUsage } from '../middleware/usageCounter.middleware';
+import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
 
 const router = Router();
 
@@ -69,9 +71,11 @@ const getFileType = (fileName: string, mimeType: string): 'pdf' | 'docx' | 'txt'
 router.post(
   '/upload',
   authenticate,
+  tierRateLimiter,
   requireFeature('documentUpload'),
   enforceDocumentUploadLimit,
   handleUpload,
+  logDocumentUploadUsage,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {

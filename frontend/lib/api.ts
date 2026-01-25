@@ -827,6 +827,69 @@ export interface BillingHistory {
   total: number;
 }
 
+// Usage API Types
+export interface UsageStats {
+  queries: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number; // 0-100, or -1 for unlimited
+  };
+  documentUploads: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
+  topics: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
+  apiCalls?: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
+  periodStart: string;
+  periodEnd: string;
+  tier: 'free' | 'premium' | 'pro';
+}
+
+export interface UsageHistory {
+  date: string;
+  queries: number;
+  documentUploads: number;
+  apiCalls: number;
+}
+
+export interface UsageWarnings {
+  approaching: boolean;
+  warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics'; percentage: number }>;
+}
+
+// Usage API
+export const usageApi = {
+  getCurrent: async (): Promise<ApiResponse<{ usage: UsageStats }>> => {
+    const response = await apiClient.get('/api/usage/current');
+    return response.data;
+  },
+
+  getHistory: async (days?: number): Promise<ApiResponse<{ history: UsageHistory[]; days: number }>> => {
+    const response = await apiClient.get('/api/usage/history', {
+      params: days ? { days } : {},
+    });
+    return response.data;
+  },
+
+  getWarnings: async (): Promise<ApiResponse<UsageWarnings>> => {
+    const response = await apiClient.get('/api/usage/warnings');
+    return response.data;
+  },
+};
+
 export const subscriptionApi = {
   get: async (): Promise<ApiResponse<SubscriptionData>> => {
     const response = await apiClient.get('/api/subscription');
