@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { subscriptionApi, usageApi, SubscriptionData, UsageLimit, Payment, BillingHistory, UsageStats, UsageWarnings } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { Check, X, Zap, FileText, Folder, BarChart3, Key, Sparkles, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp } from 'lucide-react';
+import { Check, X, Zap, FileText, Folder, Key, Sparkles, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
 
@@ -402,11 +402,6 @@ export function SubscriptionManager() {
             enabled={limits.features.embedding}
           />
           <FeatureItem
-            icon={<BarChart3 className="w-5 h-5" />}
-            name="Analytics Dashboard"
-            enabled={limits.features.analytics}
-          />
-          <FeatureItem
             icon={<Key className="w-5 h-5" />}
             name="API Access"
             enabled={limits.features.apiAccess}
@@ -423,7 +418,7 @@ export function SubscriptionManager() {
               <div className="border-2 border-orange-500 rounded-lg p-4">
                 <h4 className="font-semibold text-lg mb-2">Premium</h4>
                 <p className="text-gray-600 text-sm mb-4">
-                  500 queries/month, 10 documents, 3 topics, analytics
+                  500 queries/month, 10 documents, 3 topics
                 </p>
                 <div className="space-y-2">
                   <Button
