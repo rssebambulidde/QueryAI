@@ -45,41 +45,37 @@ export default function DashboardPage() {
   const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
   const { selectConversation } = useConversationStore();
 
-  // Check auth on mount and refresh user data (force refresh to get latest subscriptionTier)
+  // Check auth on mount - only once to get fresh user data including subscriptionTier
+  // Skip if we already have user data from login (to avoid redundant API calls)
   useEffect(() => {
     if (!hasCheckedAuth) {
-      // Always call checkAuth to get fresh user data including subscriptionTier
-      checkAuth()
-        .then(() => {
-          // After auth check, verify subscription tier is loaded
-          if (typeof window !== 'undefined') {
-            console.log('[Dashboard] Auth check complete - User subscription tier:', user?.subscriptionTier);
-          }
-        })
-        .catch(() => {
-          // Auth check failed, will redirect below
-        })
-        .finally(() => {
-          setHasCheckedAuth(true);
-        });
+      // If we already have user data and are authenticated, skip checkAuth
+      // Login already provides fresh user data, so we don't need to call checkAuth immediately
+      // Only call checkAuth if we don't have user data yet
+      if (isAuthenticated && user) {
+        // We have user data from login, just mark as checked
+        console.log('[Dashboard] User data already available from login, skipping checkAuth');
+        setHasCheckedAuth(true);
+      } else {
+        // No user data yet, call checkAuth to get it
+        checkAuth()
+          .then(() => {
+            // After auth check, verify subscription tier is loaded
+            if (typeof window !== 'undefined') {
+              console.log('[Dashboard] Auth check complete - User subscription tier:', user?.subscriptionTier);
+            }
+          })
+          .catch(() => {
+            // Auth check failed, will redirect below
+          })
+          .finally(() => {
+            setHasCheckedAuth(true);
+          });
+      }
     }
-  }, [hasCheckedAuth, checkAuth]);
-  
-  // Force refresh user data on mount to ensure subscriptionTier is loaded
-  // Only refresh once, not on every render
-  useEffect(() => {
-    if (isAuthenticated && user && (!user.subscriptionTier || user.subscriptionTier === 'free') && hasCheckedAuth) {
-      // If subscriptionTier is missing or free after initial auth check, refresh user data
-      // Only do this once after initial auth check to prevent loops
-      console.log('[Dashboard] Refreshing user data to get subscriptionTier...');
-      checkAuth().catch((err) => {
-        // Don't log rate limit errors to prevent spam
-        if (err.response?.status !== 429) {
-          console.error('[Dashboard] Failed to refresh user data:', err);
-        }
-      });
-    }
-  }, [isAuthenticated, user, checkAuth, hasCheckedAuth]);
+    // Only run once on mount - don't add dependencies that would cause re-runs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run once on mount
 
   // Redirect if not authenticated (wait for loading and auth check to finish)
   useEffect(() => {

@@ -180,10 +180,31 @@ export const useAuthStore = create<AuthState>()(
       },
 
       checkAuth: async () => {
-        const { accessToken } = get();
+        const { accessToken, isLoading } = get();
+        
+        // Prevent multiple simultaneous checkAuth calls
+        if (isLoading) {
+          console.log('[AuthStore] checkAuth already in progress, skipping...');
+          return;
+        }
+        
         if (!accessToken) {
           set({ isAuthenticated: false, user: null, isLoading: false });
           return;
+        }
+
+        // Check if we recently called checkAuth (within last 2 seconds) to prevent rapid calls
+        const lastCheckKey = 'lastCheckAuthTime';
+        if (typeof window !== 'undefined') {
+          const lastCheck = localStorage.getItem(lastCheckKey);
+          if (lastCheck) {
+            const timeSinceLastCheck = Date.now() - parseInt(lastCheck, 10);
+            if (timeSinceLastCheck < 2000) {
+              console.log('[AuthStore] checkAuth called too soon after last call, skipping...');
+              return;
+            }
+          }
+          localStorage.setItem(lastCheckKey, Date.now().toString());
         }
 
         set({ isLoading: true, error: null });
