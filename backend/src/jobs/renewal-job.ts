@@ -6,10 +6,15 @@
  * Example: Run daily at midnight UTC
  * 
  * Setup options:
- * 1. Railway Cron Jobs
+ * 1. Railway Cron Jobs (using Cron Schedule field)
  * 2. GitHub Actions Scheduled Workflows
  * 3. External cron service (cron-job.org, etc.)
  * 4. Node-cron library (for single-instance deployments)
+ * 
+ * For Railway cron jobs:
+ * - Set RAILWAY_CRON=true environment variable
+ * - Set Cron Schedule in Railway service settings
+ * - Service will run job and exit
  */
 
 import { SubscriptionService } from '../services/subscription.service';
@@ -36,6 +41,21 @@ export async function runRenewalJob(): Promise<void> {
   } catch (error) {
     logger.error('Renewal job failed:', error);
     throw error;
+  }
+}
+
+/**
+ * Entry point for Railway cron jobs
+ * This function exits the process after completion
+ */
+export async function runRenewalJobAndExit(): Promise<void> {
+  try {
+    await runRenewalJob();
+    logger.info('Renewal job completed, exiting...');
+    process.exit(0);
+  } catch (error) {
+    logger.error('Renewal job failed, exiting with error:', error);
+    process.exit(1);
   }
 }
 

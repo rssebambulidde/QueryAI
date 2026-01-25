@@ -250,23 +250,34 @@ app.use(errorHandler);
 // Start server
 const PORT = config.PORT;
 
-const server = app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`, {
-    environment: config.NODE_ENV,
-    port: PORT,
+// Check if running as Railway cron job
+if (process.env.RAILWAY_CRON === 'true') {
+  logger.info('Running as Railway cron job...');
+  import('./jobs/renewal-job').then(({ runRenewalJobAndExit }) => {
+    runRenewalJobAndExit();
+  }).catch((error) => {
+    logger.error('Failed to run renewal job:', error);
+    process.exit(1);
   });
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM signal received: closing HTTP server');
-  server.close(() => {
-    logger.info('HTTP server closed');
-    process.exit(0);
+} else {
+  // Normal server startup
+  const server = app.listen(PORT, () => {
+    logger.info(`Server running on port ${PORT}`, {
+      environment: config.NODE_ENV,
+      port: PORT,
+    });
   });
-});
 
-process.on('SIGINT', () => {
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    logger.info('SIGTERM signal received: closing HTTP server');
+    server.close(() => {
+      logger.info('HTTP server closed');
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGINT', () => {
   logger.info('SIGINT signal received: closing HTTP server');
   server.close(() => {
     logger.info('HTTP server closed');
