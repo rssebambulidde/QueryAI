@@ -374,7 +374,7 @@ router.post(
         'tier_change',
         { tier: subscription.tier },
         { tier, trial_end: trialEnd.toISOString() },
-        `Started ${tierDays}-day trial for ${tier} tier`
+        `Started ${trialDays}-day trial for ${tier} tier`
       );
     }
 

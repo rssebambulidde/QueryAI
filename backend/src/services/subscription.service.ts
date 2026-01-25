@@ -120,7 +120,7 @@ export class SubscriptionService {
           const downgraded = await DatabaseService.updateSubscription(userId, {
             tier: 'free',
             status: 'active',
-            trial_end: null,
+            trial_end: undefined,
           });
           return {
             subscription: downgraded || {
@@ -411,7 +411,7 @@ export class SubscriptionService {
       let periodStart: Date;
       let periodEnd: Date;
 
-      if (prorate && subscription.current_period_start && subscription.current_period_end) {
+      if (shouldProrate && subscription.current_period_start && subscription.current_period_end) {
         // Prorate: keep existing period but adjust end date if needed
         periodStart = new Date(subscription.current_period_start);
         periodEnd = new Date(subscription.current_period_end);
@@ -567,7 +567,7 @@ export class SubscriptionService {
           tier: targetTier,
           status: 'active',
           cancel_at_period_end: false,
-          pending_tier: null,
+          pending_tier: undefined,
           current_period_start: new Date().toISOString(),
           current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         });

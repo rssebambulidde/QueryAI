@@ -240,7 +240,8 @@ router.post(
           merchantReference: webhookData.OrderMerchantReference,
         });
         // Still return 200 to prevent Pesapal from retrying invalid webhooks
-        return res.status(200).json({ success: false, message: 'Webhook verification failed' });
+        res.status(200).json({ success: false, message: 'Webhook verification failed' });
+        return;
       }
 
       // Process webhook

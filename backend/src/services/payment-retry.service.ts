@@ -163,7 +163,7 @@ export class PaymentRetryService {
 
       // Clear grace period
       await DatabaseService.updateSubscription(payment.user_id, {
-        grace_period_end: null,
+        grace_period_end: undefined,
       });
     } else {
       logger.info('Subscription in grace period', {

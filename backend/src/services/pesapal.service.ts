@@ -492,13 +492,13 @@ export class PesapalService {
       const updatedPayment = await DatabaseService.updatePayment(payment.id, updateData);
 
       // If payment completed, update subscription
-      if (status === 'completed' && payment.user_id) {
+      if (status === 'completed' && payment.user_id && updatedPayment) {
         await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
         
         // Send email notification
         const { EmailService } = await import('./email.service');
         const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-        if (userProfile) {
+        if (userProfile && updatedPayment) {
           await EmailService.sendPaymentSuccessEmail(
             userProfile.email,
             userProfile.full_name || userProfile.email,
@@ -511,11 +511,11 @@ export class PesapalService {
           tier: payment.tier,
           paymentId: payment.id,
         });
-      } else if (status === 'failed' && payment.user_id) {
+      } else if (status === 'failed' && payment.user_id && updatedPayment) {
         // Send failure notification
         const { EmailService } = await import('./email.service');
         const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-        if (userProfile) {
+        if (userProfile && updatedPayment) {
           await EmailService.sendPaymentFailureEmail(
             userProfile.email,
             userProfile.full_name || userProfile.email,
