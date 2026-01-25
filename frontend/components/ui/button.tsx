@@ -25,10 +25,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants = {
       default:
-        'bg-orange-600 text-white hover:bg-orange-700 focus:ring-orange-500',
+        'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl focus:ring-blue-500 transition-all duration-200',
       outline:
-        'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:ring-orange-500',
-      ghost: 'text-gray-700 hover:bg-gray-100 focus:ring-orange-500',
+        'border-2 border-blue-600 bg-white text-blue-600 hover:bg-blue-50 focus:ring-blue-500 transition-colors duration-200',
+      ghost: 'text-gray-700 hover:bg-gray-100 focus:ring-blue-500 transition-colors duration-200',
       danger:
         'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
     };

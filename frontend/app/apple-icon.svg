@@ -1,0 +1,19 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with gradient -->
+  <rect width="180" height="180" rx="40" fill="url(#gradient)"/>
+  <defs>
+    <linearGradient id="gradient" x1="0" y1="0" x2="180" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#1E40AF"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Letter Q - larger and cleaner -->
+  <circle cx="90" cy="90" r="40" stroke="white" stroke-width="12" fill="none"/>
+  
+  <!-- Q tail -->
+  <path d="M112 112L135 135" stroke="white" stroke-width="12" stroke-linecap="round"/>
+  
+  <!-- Accent dot (research indicator) -->
+  <circle cx="135" cy="45" r="14" fill="#F97316"/>
+</svg>
