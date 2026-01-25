@@ -545,7 +545,29 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       
       // Extract error message
       let errorMessage = 'Failed to get AI response';
-      if (err.message) {
+      let showUpgradeLink = false;
+      let errorCode = '';
+      
+      if (err.response?.status === 403) {
+        // Handle 403 Forbidden - subscription limit reached
+        const errorData = err.response?.data?.error;
+        errorCode = errorData?.code || 'FORBIDDEN';
+        
+        if (errorCode === 'QUERY_LIMIT_EXCEEDED') {
+          const used = errorData?.used || 0;
+          const limit = errorData?.limit || 0;
+          errorMessage = `You have reached your query limit for your current plan. You've used ${used} of ${limit} queries this month.`;
+          showUpgradeLink = true;
+        } else if (errorCode === 'FEATURE_NOT_AVAILABLE') {
+          const currentTier = errorData?.currentTier || 'free';
+          const requiredTier = errorData?.requiredTier || 'premium';
+          errorMessage = `This feature requires a ${requiredTier} subscription. Your current tier is ${currentTier}.`;
+          showUpgradeLink = true;
+        } else {
+          errorMessage = errorData?.message || 'Access denied. This feature may require a premium subscription.';
+          showUpgradeLink = true;
+        }
+      } else if (err.message) {
         errorMessage = err.message;
       } else if (err.response?.data?.error?.message) {
         errorMessage = err.response.data.error.message;
@@ -684,7 +706,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
 
           {error && (
             <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800">{error}</p>
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-red-800">{error}</p>
+                {(error.includes('limit') || error.includes('subscription') || error.includes('tier') || error.includes('plan')) ? (
+                  <button
+                    onClick={() => {
+                      // Dispatch custom event to navigate to subscription tab
+                      if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('navigateToSubscription'));
+                        toast.info('Opening Subscription tab...');
+                      }
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-800 underline font-medium self-start mt-1"
+                  >
+                    Upgrade your plan →
+                  </button>
+                ) : null}
+              </div>
             </div>
           )}
 

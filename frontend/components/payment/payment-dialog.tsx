@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { paymentApi, PaymentInitiateRequest } from '@/lib/api';
+import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
@@ -14,6 +15,7 @@ interface PaymentDialogProps {
 }
 
 export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) {
+  const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<'UGX' | 'USD'>('UGX');
@@ -23,6 +25,20 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
     email: '',
     phoneNumber: '',
   });
+
+  // Pre-populate form with user data
+  useEffect(() => {
+    if (user) {
+      const fullName = user.full_name || '';
+      const nameParts = fullName.split(' ');
+      setFormData({
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        email: user.email || '',
+        phoneNumber: '',
+      });
+    }
+  }, [user]);
 
   const tierPricing: Record<'premium' | 'pro', Record<'UGX' | 'USD', number>> = {
     premium: { UGX: 50000, USD: 15 },
@@ -56,7 +72,24 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
         setError(response.error?.message || 'Failed to initiate payment');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to initiate payment');
+      // Extract detailed error message
+      let errorMessage = 'Failed to initiate payment';
+      
+      if (err.response?.status === 400) {
+        // Bad request - validation error
+        const errorData = err.response?.data?.error;
+        if (errorData?.message) {
+          errorMessage = errorData.message;
+        } else {
+          errorMessage = 'Invalid payment information. Please check all fields and try again.';
+        }
+      } else if (err.response?.data?.error?.message) {
+        errorMessage = err.response.data.error.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

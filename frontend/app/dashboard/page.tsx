@@ -45,6 +45,18 @@ export default function DashboardPage() {
   const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
   const { selectConversation } = useConversationStore();
 
+  // Listen for navigation to subscription tab from chat errors
+  useEffect(() => {
+    const handleNavigateToSubscription = () => {
+      setActiveTab('subscription');
+    };
+    
+    window.addEventListener('navigateToSubscription', handleNavigateToSubscription);
+    return () => {
+      window.removeEventListener('navigateToSubscription', handleNavigateToSubscription);
+    };
+  }, []);
+
   // Check auth on mount - only once to get fresh user data including subscriptionTier
   // Skip if we already have user data from login (to avoid redundant API calls)
   useEffect(() => {
