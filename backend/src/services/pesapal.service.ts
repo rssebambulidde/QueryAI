@@ -235,7 +235,16 @@ export class PesapalService {
           postal_code: '',
           zip_code: '',
         },
+        // Optional: Add IPN notification ID if registered
+        // notification_id: '', // Can be set if IPN is registered
       };
+
+      logger.info('Submitting order to Pesapal', {
+        merchantReference,
+        amount,
+        currency,
+        tier: params.tier,
+      });
 
       const response = await client.post('/Transactions/SubmitOrderRequest', orderData, {
         headers: {
@@ -243,23 +252,90 @@ export class PesapalService {
         },
       });
 
-      if (response.data && response.data.order_tracking_id) {
-        logger.info('Order submitted to Pesapal', {
-          order_tracking_id: response.data.order_tracking_id,
+      logger.info('Pesapal order submission response received', {
+        status: response.status,
+        statusText: response.statusText,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : [],
+        responseData: response.data,
+      });
+
+      // Pesapal may return data in different formats
+      // Try multiple possible response structures
+      let orderTrackingId: string | null = null;
+      let redirectUrl: string | null = null;
+
+      if (response.data) {
+        // Try direct properties first
+        orderTrackingId = response.data.order_tracking_id || 
+                         response.data.orderTrackingId ||
+                         response.data.OrderTrackingId ||
+                         response.data.data?.order_tracking_id ||
+                         response.data.data?.orderTrackingId;
+        
+        redirectUrl = response.data.redirect_url ||
+                     response.data.redirectUrl ||
+                     response.data.RedirectUrl ||
+                     response.data.data?.redirect_url ||
+                     response.data.data?.redirectUrl;
+      }
+
+      if (orderTrackingId) {
+        logger.info('Order submitted to Pesapal successfully', {
+          order_tracking_id: orderTrackingId,
           merchant_reference: merchantReference,
+          hasRedirectUrl: !!redirectUrl,
         });
 
         return {
-          order_tracking_id: response.data.order_tracking_id,
+          order_tracking_id: orderTrackingId,
           merchant_reference: merchantReference,
-          redirect_url: response.data.redirect_url || '',
+          redirect_url: redirectUrl || '',
         };
       }
 
-      throw new Error('Invalid response from Pesapal');
+      // Log the full response for debugging
+      logger.error('Invalid Pesapal order submission response format', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data: response.data,
+        dataType: typeof response.data,
+        expectedFields: ['order_tracking_id', 'redirect_url'],
+      });
+
+      throw new Error('Invalid response from Pesapal: Order tracking ID not found in response');
     } catch (error: any) {
-      logger.error('Failed to submit order to Pesapal:', error.response?.data || error.message);
-      throw new Error(`Failed to submit order: ${error.message}`);
+      const errorDetails = {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          baseURL: error.config?.baseURL,
+        },
+      };
+      
+      logger.error('Failed to submit order to Pesapal:', errorDetails);
+      
+      // Provide more helpful error messages
+      if (error.response?.status === 400) {
+        const errorMessage = error.response?.data?.message || 
+                           error.response?.data?.error?.message ||
+                           JSON.stringify(error.response?.data);
+        throw new Error(`Failed to submit order: Bad request. ${errorMessage}`);
+      } else if (error.response?.status === 401) {
+        throw new Error('Failed to submit order: Authentication failed. Please check Pesapal credentials.');
+      } else if (error.response?.status === 422) {
+        const errorMessage = error.response?.data?.message || 
+                           error.response?.data?.error?.message ||
+                           'Validation error';
+        throw new Error(`Failed to submit order: Invalid order data. ${errorMessage}`);
+      } else {
+        throw new Error(`Failed to submit order: ${error.response?.data?.message || error.message || 'Unknown error'}`);
+      }
     }
   }
 
