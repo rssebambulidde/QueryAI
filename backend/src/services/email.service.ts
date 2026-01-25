@@ -265,6 +265,60 @@ export class EmailService {
   }
 
   /**
+   * Send payment cancellation email (when payment is cancelled on Pesapal)
+   */
+  static async sendPaymentCancellationEmail(
+    userEmail: string,
+    userName: string,
+    payment: Database.Payment
+  ): Promise<boolean> {
+    try {
+      const subject = 'Payment Cancelled - QueryAI';
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #6c757d; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background-color: #f9f9f9; }
+            .button { display: inline-block; padding: 12px 24px; background-color: #ff6b35; color: white; text-decoration: none; border-radius: 4px; margin-top: 20px; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Payment Cancelled</h1>
+            </div>
+            <div class="content">
+              <p>Hello ${userName},</p>
+              <p>Your payment of <strong>${payment.amount} ${payment.currency}</strong> for <strong>${payment.tier}</strong> subscription has been cancelled.</p>
+              <p>No charges were made to your account. Your subscription remains unchanged.</p>
+              <p>If you'd like to try again, you can upgrade your subscription anytime:</p>
+              <a href="${config.API_BASE_URL}/dashboard?tab=subscription" class="button">Try Again</a>
+              <p>If you have any questions, please contact our support team.</p>
+              <p>Best regards,<br>The QueryAI Team</p>
+            </div>
+            <div class="footer">
+              <p>This is an automated message from QueryAI. Please do not reply to this email.</p>
+              <p>&copy; ${new Date().getFullYear()} QueryAI. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      return await this.sendEmail(userEmail, userName, subject, htmlContent);
+    } catch (error) {
+      logger.error('Failed to send payment cancellation email:', error);
+      return false;
+    }
+  }
+
+  /**
    * Send subscription cancelled email
    */
   static async sendCancellationEmail(

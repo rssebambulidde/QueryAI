@@ -54,8 +54,11 @@ router.post(
     };
     const amount = tierPricing[tier as 'premium' | 'pro'][currency as 'UGX' | 'USD'];
 
-    // Build callback URLs
-    const baseUrl = config.API_BASE_URL || 'http://localhost:3001';
+    // Build callback URLs - use production URL, not localhost
+    // In production, API_BASE_URL should be set to Railway URL
+    const baseUrl = config.API_BASE_URL || (config.NODE_ENV === 'production' 
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN || 'queryai-production.up.railway.app'}`
+      : 'http://localhost:3001');
     const callbackUrl = `${baseUrl}/api/payment/callback`;
     const cancellationUrl = `${baseUrl}/api/payment/cancel`;
 
@@ -167,7 +170,11 @@ router.get(
     const { OrderTrackingId, OrderMerchantReference } = req.query;
 
     if (!OrderTrackingId && !OrderMerchantReference) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard?payment=error`);
+      const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
+        (config.NODE_ENV === 'production' 
+          ? 'https://queryai-frontend.pages.dev'
+          : 'http://localhost:3000');
+      return res.redirect(`${frontendUrl}/dashboard?payment=error`);
     }
 
     try {
@@ -211,8 +218,28 @@ router.get(
 router.get(
   '/cancel',
   asyncHandler(async (req: Request, res: Response) => {
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    return res.redirect(`${frontendUrl}/dashboard?payment=cancelled`);
+      const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
+        (config.NODE_ENV === 'production' 
+          ? 'https://queryai-frontend.pages.dev'
+          : 'http://localhost:3000');
+      
+      // Send payment cancellation email notification
+      try {
+        const { EmailService } = await import('../services/email.service');
+        const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+        if (userProfile && payment) {
+          await EmailService.sendPaymentCancellationEmail(
+            userProfile.email,
+            userProfile.full_name || userProfile.email,
+            payment
+          );
+        }
+      } catch (emailError) {
+        logger.error('Failed to send payment cancellation email:', emailError);
+        // Don't fail the redirect if email fails
+      }
+      
+      return res.redirect(`${frontendUrl}/dashboard?payment=cancelled`);
   })
 );
 
