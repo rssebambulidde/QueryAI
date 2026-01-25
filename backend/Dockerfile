@@ -6,8 +6,8 @@ FROM node:20
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files (explicitly copy both)
+COPY package.json package-lock.json ./
 
 # Install dependencies
 RUN npm ci
