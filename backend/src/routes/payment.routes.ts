@@ -238,7 +238,7 @@ router.get(
       if (orderTrackingId) {
         try {
           const status = await PesapalService.getTransactionStatus(orderTrackingId);
-          paymentStatusDescription = status.payment_status || status.status || '';
+          paymentStatusDescription = status.payment_status || '';
           paymentStatus = PesapalService['mapPesapalStatusToPaymentStatus'](paymentStatusDescription);
           
           // Update payment with latest status
