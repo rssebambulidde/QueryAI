@@ -83,15 +83,27 @@ export const useAuthStore = create<AuthState>()(
                error.message ||
                'Login failed');
           
+          // Clear any stale tokens on rate limit to prevent loops
+          if (isRateLimit) {
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('refreshToken');
+            }
+            set({ 
+              error: errorMessage, 
+              isLoading: false,
+              accessToken: null,
+              refreshToken: null,
+              isAuthenticated: false,
+              user: null,
+            });
+            return; // Exit without throwing to stop any retry logic
+          }
+          
           set({ 
             error: errorMessage, 
             isLoading: false 
           });
-          
-          // Don't throw rate limit errors to prevent retry loops
-          if (isRateLimit) {
-            return; // Exit without throwing to stop any retry logic
-          }
           
           throw error;
         }
@@ -188,12 +200,18 @@ export const useAuthStore = create<AuthState>()(
               user: userData,
               isAuthenticated: true,
               isLoading: false,
+              error: null, // Clear any previous errors
             });
           } else {
             throw new Error(response.error?.message || 'Authentication failed');
           }
         } catch (error: any) {
           console.error('Auth check error:', error);
+          
+          // Check if it's a rate limit error
+          const isRateLimit = error.response?.status === 429 || 
+                             error.response?.data?.error?.message?.toLowerCase().includes('too many');
+          
           // Clear auth state on failure
           set({
             isAuthenticated: false,
@@ -201,13 +219,21 @@ export const useAuthStore = create<AuthState>()(
             accessToken: null,
             refreshToken: null,
             isLoading: false,
-            error: error.response?.data?.error?.message || error.message || 'Authentication failed',
+            error: isRateLimit 
+              ? 'Too many requests, please try again later.'
+              : (error.response?.data?.error?.message || error.message || 'Authentication failed'),
           });
           if (typeof window !== 'undefined') {
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
           }
-          // Re-throw so caller knows it failed
+          
+          // Don't throw rate limit errors to prevent loops
+          if (isRateLimit) {
+            return; // Exit without throwing
+          }
+          
+          // Re-throw other errors so caller knows it failed
           throw error;
         }
       },

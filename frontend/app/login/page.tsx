@@ -33,12 +33,12 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    // Only redirect if authenticated and not loading
-    // This prevents redirect loops when login fails
-    if (isAuthenticated && !isLoading) {
+    // Only redirect if authenticated, not loading, and no error
+    // This prevents redirect loops when login fails or is rate limited
+    if (isAuthenticated && !isLoading && !error) {
       router.push('/dashboard');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, error, router]);
 
   useEffect(() => {
     if (error) {
