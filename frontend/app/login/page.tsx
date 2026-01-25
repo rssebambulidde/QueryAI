@@ -33,10 +33,12 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (isAuthenticated) {
+    // Only redirect if authenticated and not loading
+    // This prevents redirect loops when login fails
+    if (isAuthenticated && !isLoading) {
       router.push('/dashboard');
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, isLoading, router]);
 
   useEffect(() => {
     if (error) {
@@ -52,9 +54,11 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormData) => {
     try {
       await login(data.email, data.password);
-      router.push('/dashboard');
+      // Don't manually redirect - let the useEffect handle it
+      // This prevents double redirects and loops
     } catch (err) {
       // Error is handled by the store
+      // Don't redirect on error - let user see the error message
     }
   };
 
