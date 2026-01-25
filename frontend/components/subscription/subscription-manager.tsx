@@ -292,7 +292,7 @@ export function SubscriptionManager() {
               </div>
               {usage.queries.remaining === 0 && (
                 <div className="mt-2">
-                  <Alert variant="destructive" className="py-2">
+                  <Alert variant="error" className="py-2">
                     <AlertCircle className="h-4 w-4" />
                     <span className="ml-2">Query limit reached. Upgrade to continue using QueryAI.</span>
                   </Alert>
@@ -328,7 +328,7 @@ export function SubscriptionManager() {
                 </div>
                 {usage.documentUploads.remaining === 0 && (
                   <div className="mt-2">
-                    <Alert variant="destructive" className="py-2">
+                    <Alert variant="error" className="py-2">
                       <AlertCircle className="h-4 w-4" />
                       <span className="ml-2">Document upload limit reached. Upgrade for more uploads.</span>
                     </Alert>
@@ -365,7 +365,7 @@ export function SubscriptionManager() {
                 </div>
                 {usage.topics.remaining === 0 && (
                   <div className="mt-2">
-                    <Alert variant="destructive" className="py-2">
+                    <Alert variant="error" className="py-2">
                       <AlertCircle className="h-4 w-4" />
                       <span className="ml-2">Topic limit reached. Upgrade to create more topics.</span>
                     </Alert>
