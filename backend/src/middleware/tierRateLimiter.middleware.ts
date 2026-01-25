@@ -19,15 +19,15 @@ interface TierRateLimit {
 const TIER_RATE_LIMITS: Record<'free' | 'premium' | 'pro', TierRateLimit> = {
   free: {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 30, // 30 requests per 15 minutes
+    max: 100, // 100 requests per 15 minutes (increased from 30)
   },
   premium: {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 200, // 200 requests per 15 minutes
+    max: 500, // 500 requests per 15 minutes (increased from 200)
   },
   pro: {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 1000, // 1000 requests per 15 minutes (effectively unlimited)
+    max: 2000, // 2000 requests per 15 minutes (increased from 1000)
   },
 };
 
@@ -104,16 +104,8 @@ export const tierRateLimiter = async (
       rateLimitStore.set(key, entry);
     }
 
-    // Increment count
-    entry.count++;
-
-    // Set rate limit headers
-    res.setHeader('X-RateLimit-Limit', limits.max.toString());
-    res.setHeader('X-RateLimit-Remaining', Math.max(0, limits.max - entry.count).toString());
-    res.setHeader('X-RateLimit-Reset', new Date(entry.resetTime).toISOString());
-
-    // Check if limit exceeded
-    if (entry.count > limits.max) {
+    // Check if limit would be exceeded BEFORE incrementing
+    if (entry.count >= limits.max) {
       logger.warn('Tier-based rate limit exceeded', {
         userId,
         tier,
@@ -130,6 +122,11 @@ export const tierRateLimiter = async (
       const limitValue: number = limits.max;
       const windowMsValue: number = limits.windowMs;
       
+      // Set rate limit headers before error response
+      res.setHeader('X-RateLimit-Limit', limits.max.toString());
+      res.setHeader('X-RateLimit-Remaining', '0');
+      res.setHeader('X-RateLimit-Reset', new Date(entry.resetTime).toISOString());
+      
       // Send error response and return early (matching pattern from subscription.middleware.ts)
       res.status(rateLimitError.statusCode).json({
         success: false,
@@ -144,6 +141,14 @@ export const tierRateLimiter = async (
       });
       return;
     }
+
+    // Increment count only if limit not exceeded
+    entry.count++;
+
+    // Set rate limit headers
+    res.setHeader('X-RateLimit-Limit', limits.max.toString());
+    res.setHeader('X-RateLimit-Remaining', Math.max(0, limits.max - entry.count).toString());
+    res.setHeader('X-RateLimit-Reset', new Date(entry.resetTime).toISOString());
 
     next();
   } catch (err: any) {
