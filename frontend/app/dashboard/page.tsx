@@ -22,7 +22,6 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading, logout, checkAuth } = useAuthStore();
-  const accessToken = useAuthStore((state) => state.accessToken);
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
@@ -79,8 +78,8 @@ function DashboardContent() {
         // We have user data from login, just mark as checked
         console.log('[Dashboard] User data already available from login, skipping checkAuth');
         setHasCheckedAuth(true);
-      } else if (accessToken) {
-        // We have a token but no user data, call checkAuth to get it
+      } else {
+        // No user data yet, call checkAuth to get it
         checkAuth()
           .then(() => {
             // After auth check, verify subscription tier is loaded
@@ -94,9 +93,6 @@ function DashboardContent() {
           .finally(() => {
             setHasCheckedAuth(true);
           });
-      } else {
-        // No token, mark as checked and will redirect
-        setHasCheckedAuth(true);
       }
     }
     // Only run once on mount - don't add dependencies that would cause re-runs
@@ -104,16 +100,12 @@ function DashboardContent() {
   }, []); // Empty deps - only run once on mount
 
   // Redirect if not authenticated (wait for loading and auth check to finish)
-  // Only redirect once to prevent loops
-  const [hasRedirected, setHasRedirected] = useState(false);
   useEffect(() => {
-    if (hasCheckedAuth && !isLoading && !isAuthenticated && !hasRedirected) {
-      setHasRedirected(true);
-      // Use replace instead of push to prevent back button issues and loops
-      router.replace('/login');
+    if (hasCheckedAuth && !isLoading && !isAuthenticated) {
+      router.push('/login');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isLoading, hasCheckedAuth, hasRedirected]); // router is stable, no need to include
+  }, [isAuthenticated, isLoading, hasCheckedAuth]); // router is stable, no need to include
 
   // Load document count when chat tab is active
   useEffect(() => {
