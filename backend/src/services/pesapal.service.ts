@@ -511,6 +511,21 @@ export class PesapalService {
           tier: payment.tier,
           paymentId: payment.id,
         });
+      } else if (status === 'cancelled' && payment.user_id && updatedPayment) {
+        // Send cancellation notification
+        const { EmailService } = await import('./email.service');
+        const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+        if (userProfile && updatedPayment) {
+          await EmailService.sendPaymentCancellationEmail(
+            userProfile.email,
+            userProfile.full_name || userProfile.email,
+            updatedPayment
+          );
+          logger.info('Payment cancellation email sent via webhook', {
+            paymentId: payment.id,
+            userId: payment.user_id,
+          });
+        }
       } else if (status === 'failed' && payment.user_id && updatedPayment) {
         // Send failure notification
         const { EmailService } = await import('./email.service');
@@ -522,6 +537,10 @@ export class PesapalService {
             updatedPayment,
             payment.retry_count || 0
           );
+          logger.info('Payment failure email sent via webhook', {
+            paymentId: payment.id,
+            userId: payment.user_id,
+          });
         }
       }
 
