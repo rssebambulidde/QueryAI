@@ -154,7 +154,7 @@ export class PesapalService {
         billing_address: {
           email_address: params.email,
           phone_number: params.phoneNumber || '',
-          country_code: 'KE',
+          country_code: countryCode,
           first_name: params.firstName,
           middle_name: '',
           last_name: params.lastName,
