@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, BarChart3, CreditCard } from 'lucide-react';
+import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, CreditCard } from 'lucide-react';
 import { SidebarTopicFilters } from './sidebar-topic-filters';
 import { cn } from '@/lib/utils';
 import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
@@ -13,9 +13,8 @@ import { CollectionConversationsList } from './collection-conversations-list';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { UsageDisplay } from '@/components/usage/usage-display';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'analytics' | 'subscription';
+type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'subscription';
 
 interface AppSidebarProps {
   activeTab: TabType;
@@ -36,17 +35,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   hasProcessedDocuments,
   subscriptionTier = 'free',
 }) => {
-  // Debug: Log subscription tier (only in browser)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      console.log('[AppSidebar] Subscription tier:', subscriptionTier);
-      console.log('[AppSidebar] Should show analytics:', subscriptionTier === 'premium' || subscriptionTier === 'pro');
-      // Also log to help debug Cloudflare deployment
-      if (subscriptionTier === 'free') {
-        console.warn('[AppSidebar] Analytics tab hidden - subscription tier is "free". Update to "premium" or "pro" in database.');
-      }
-    }
-  }, [subscriptionTier]);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showSourceSelection, setShowSourceSelection] = useState(false);
   const [showConversations, setShowConversations] = useState(true);
@@ -58,7 +46,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [isLoadingCollections, setIsLoadingCollections] = useState(false);
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const [showTopicsFilters, setShowTopicsFilters] = useState(false);
-  const [showUsage, setShowUsage] = useState(true);
   const { toast } = useToast();
   
   const {
@@ -223,30 +210,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Bot className="w-5 h-5" />
           </button>
-          {(() => {
-            // Debug logging
-            if (typeof window !== 'undefined') {
-              console.log('[Sidebar Collapsed] Analytics tab check:', { 
-                subscriptionTier, 
-                shouldShow: subscriptionTier === 'premium' || subscriptionTier === 'pro'
-              });
-            }
-            const shouldShow = subscriptionTier === 'premium' || subscriptionTier === 'pro';
-            return shouldShow ? (
-              <button
-                onClick={() => onTabChange('analytics')}
-                className={cn(
-                  'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
-                  activeTab === 'analytics'
-                    ? 'bg-orange-50 text-orange-700'
-                    : 'text-gray-700 hover:bg-gray-50'
-                )}
-                title="Analytics"
-              >
-                <BarChart3 className="w-5 h-5" />
-              </button>
-            ) : null;
-          })()}
           <button
             onClick={() => onTabChange('subscription')}
             className={cn(
@@ -509,32 +472,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             <Folder className="w-5 h-5" />
             Collections
           </button>
-          {(() => {
-            // Debug logging
-            if (typeof window !== 'undefined') {
-              console.log('[Sidebar] Analytics tab check:', { 
-                subscriptionTier, 
-                shouldShow: subscriptionTier === 'premium' || subscriptionTier === 'pro',
-                isPremium: subscriptionTier === 'premium',
-                isPro: subscriptionTier === 'pro'
-              });
-            }
-            const shouldShow = subscriptionTier === 'premium' || subscriptionTier === 'pro';
-            return shouldShow ? (
-              <button
-                onClick={() => onTabChange('analytics')}
-                className={cn(
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  activeTab === 'analytics'
-                    ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                )}
-              >
-                <BarChart3 className="w-5 h-5" />
-                Analytics
-              </button>
-            ) : null;
-          })()}
           <button
             onClick={() => onTabChange('subscription')}
             className={cn(
@@ -549,29 +486,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           </button>
         </nav>
 
-        {/* Usage Display Section */}
-        <div className="px-2 py-4 border-t border-gray-200">
-          <button
-            onClick={() => setShowUsage(!showUsage)}
-            className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4" />
-              <span>Usage</span>
-            </div>
-            {showUsage ? (
-              <ChevronUp className="w-4 h-4" />
-            ) : (
-              <ChevronDown className="w-4 h-4" />
-            )}
-          </button>
-
-          {showUsage && (
-            <div className="mt-2 px-3">
-              <UsageDisplay compact={true} showWarnings={true} />
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Save to Collection Dialog */}
