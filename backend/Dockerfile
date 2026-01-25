@@ -9,11 +9,13 @@ WORKDIR /app
 # Copy package files (explicitly copy both)
 COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (skip postinstall to avoid build before source is copied)
+RUN npm ci --ignore-scripts
 
-# Copy source
-COPY . .
+# Copy source and config files needed for build
+COPY tsconfig.json ./
+COPY src ./src
+COPY public ./public
 
 # Build
 RUN npm run build
