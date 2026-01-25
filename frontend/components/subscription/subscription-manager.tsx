@@ -80,8 +80,10 @@ export function SubscriptionManager() {
   };
 
   const handleUpgrade = (tier: 'premium' | 'pro') => {
+    console.log('[SubscriptionManager] handleUpgrade called with tier:', tier);
     setSelectedTier(tier);
     setShowPaymentDialog(true);
+    console.log('[SubscriptionManager] Payment dialog should now be visible');
   };
 
   const handlePaymentSuccess = async () => {
@@ -425,7 +427,11 @@ export function SubscriptionManager() {
                 </p>
                 <div className="space-y-2">
                   <Button
-                    onClick={() => handleUpgrade('premium')}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUpgrade('premium');
+                    }}
                     disabled={upgrading}
                     className="w-full"
                   >
@@ -440,7 +446,11 @@ export function SubscriptionManager() {
                 Unlimited queries, unlimited documents, unlimited topics, API access
               </p>
               <Button
-                onClick={() => handleUpgrade('pro')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleUpgrade('pro');
+                }}
                 disabled={upgrading}
                 variant={tier === 'premium' ? 'default' : 'outline'}
                 className="w-full"

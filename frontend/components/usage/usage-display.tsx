@@ -182,7 +182,11 @@ export function UsageDisplay({ compact = false, showWarnings = true }: UsageDisp
               size="sm"
               variant="outline"
               className="mt-2"
-              onClick={() => router.push('/dashboard?tab=subscription')}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                router.push('/dashboard?tab=subscription');
+              }}
             >
               Upgrade Plan
             </Button>
@@ -200,7 +204,9 @@ export function UsageDisplay({ compact = false, showWarnings = true }: UsageDisp
           percentage={usage.queries.percentage}
           onUpgrade={
             usage.queries.percentage >= 100
-              ? () => router.push('/dashboard?tab=subscription')
+              ? () => {
+                  router.push('/dashboard?tab=subscription');
+                }
               : undefined
           }
         />
