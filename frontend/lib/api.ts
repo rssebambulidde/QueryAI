@@ -846,6 +846,23 @@ export const subscriptionApi = {
     });
     return response.data;
   },
+
+  getHistory: async (): Promise<ApiResponse<{ history: any[]; total: number }>> => {
+    const response = await apiClient.get('/api/subscription/history');
+    return response.data;
+  },
+
+  getProratedPricing: async (toTier: 'free' | 'premium' | 'pro', currency: 'UGX' | 'USD' = 'UGX'): Promise<ApiResponse<{ proratedPricing: any }>> => {
+    const response = await apiClient.get('/api/subscription/prorated-pricing', {
+      params: { toTier, currency },
+    });
+    return response.data;
+  },
+
+  startTrial: async (tier: 'premium' | 'pro', trialDays: number = 7): Promise<ApiResponse<{ subscription: Subscription; trial_end: string }>> => {
+    const response = await apiClient.post('/api/subscription/start-trial', { tier, trialDays });
+    return response.data;
+  },
 };
 
 // Payment API
@@ -900,6 +917,11 @@ export const paymentApi = {
 
   getHistory: async (): Promise<ApiResponse<{ payments: Payment[] }>> => {
     const response = await apiClient.get('/api/payment/history');
+    return response.data;
+  },
+
+  refund: async (data: RefundRequest): Promise<ApiResponse<RefundResponse>> => {
+    const response = await apiClient.post('/api/payment/refund', data);
     return response.data;
   },
 };

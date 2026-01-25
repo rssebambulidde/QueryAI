@@ -137,6 +137,27 @@ if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }
 
+// Renewal job endpoint (can be called by cron)
+app.post('/api/jobs/renewals', async (_req: Request, res: Response) => {
+  try {
+    // Optional: Add authentication/authorization for this endpoint
+    // For now, you can protect it with an API key or secret
+    const { runRenewalJob } = await import('./jobs/renewal-job');
+    await runRenewalJob();
+    res.status(200).json({
+      success: true,
+      message: 'Renewal job completed successfully',
+    });
+  } catch (error: any) {
+    logger.error('Renewal job endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Renewal job failed',
+      error: error.message,
+    });
+  }
+});
+
 // Root endpoint
 app.get('/', (_req: Request, res: Response) => {
   res.status(200).json({

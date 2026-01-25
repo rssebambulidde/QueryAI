@@ -75,6 +75,9 @@ router.post(
         phoneNumber: phoneNumber || undefined,
       });
 
+      // Check if user wants recurring payment
+      const { recurring = false } = req.body;
+
       // Create payment record
       const payment = await DatabaseService.createPayment({
         user_id: userId,
@@ -85,8 +88,46 @@ router.post(
         amount,
         currency: currency as 'UGX' | 'USD',
         status: 'pending',
-        payment_description: `QueryAI ${tier} subscription`,
+        payment_description: `QueryAI ${tier} subscription${recurring ? ' (recurring)' : ''}`,
       });
+
+      // If recurring payment requested, create recurring payment authorization
+      if (recurring && orderResponse.order_tracking_id) {
+        try {
+          const { EmailService } = await import('../services/email.service');
+          const recurringResult = await PesapalService.createRecurringPayment({
+            userId,
+            tier,
+            amount,
+            currency: currency as 'UGX' | 'USD',
+            firstName,
+            lastName,
+            email: email || userProfile.email,
+            phoneNumber: phoneNumber || undefined,
+            callbackUrl: `${baseUrl}/api/payment/callback`,
+          });
+
+          // Update payment with recurring payment ID
+          await DatabaseService.updatePayment(payment.id, {
+            recurring_payment_id: recurringResult.recurring_payment_id,
+          });
+
+          // Update subscription to enable auto-renew
+          if (subscription) {
+            await DatabaseService.updateSubscription(userId, {
+              auto_renew: true,
+            });
+          }
+
+          logger.info('Recurring payment authorization created', {
+            paymentId: payment.id,
+            recurringPaymentId: recurringResult.recurring_payment_id,
+          });
+        } catch (recurringError: any) {
+          logger.warn('Failed to create recurring payment, proceeding with one-time payment', recurringError);
+          // Continue with one-time payment if recurring fails
+        }
+      }
 
       logger.info('Payment initiated', {
         userId,
@@ -185,7 +226,22 @@ router.post(
     try {
       const webhookData = req.body;
 
-      logger.info('Received Pesapal webhook', webhookData);
+      logger.info('Received Pesapal webhook', {
+        orderTrackingId: webhookData.OrderTrackingId,
+        merchantReference: webhookData.OrderMerchantReference,
+        notificationType: webhookData.OrderNotificationType,
+      });
+
+      // Verify webhook authenticity
+      const isValid = await PesapalService.verifyWebhookSignature(webhookData);
+      if (!isValid) {
+        logger.warn('Webhook verification failed, rejecting webhook', {
+          orderTrackingId: webhookData.OrderTrackingId,
+          merchantReference: webhookData.OrderMerchantReference,
+        });
+        // Still return 200 to prevent Pesapal from retrying invalid webhooks
+        return res.status(200).json({ success: false, message: 'Webhook verification failed' });
+      }
 
       // Process webhook
       const payment = await PesapalService.processWebhook(webhookData);
@@ -302,6 +358,179 @@ router.get(
         payments,
       },
     });
+  })
+);
+
+/**
+ * POST /api/payment/refund
+ * Process refund for a payment
+ */
+router.post(
+  '/refund',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { paymentId, amount, reason } = req.body;
+
+    if (!paymentId) {
+      throw new ValidationError('Payment ID is required');
+    }
+
+    // Get payment
+    const payment = await DatabaseService.getPaymentById(paymentId);
+    if (!payment) {
+      throw new ValidationError('Payment not found');
+    }
+
+    // Verify payment belongs to user
+    if (payment.user_id !== userId) {
+      throw new ValidationError('Unauthorized');
+    }
+
+    // Only allow refunds for completed payments
+    if (payment.status !== 'completed') {
+      throw new ValidationError('Only completed payments can be refunded');
+    }
+
+    // Calculate refund amount (default to full amount)
+    const refundAmount = amount || payment.amount;
+
+    // Validate refund amount
+    if (refundAmount > payment.amount) {
+      throw new ValidationError('Refund amount cannot exceed payment amount');
+    }
+
+    if (payment.refund_amount && (refundAmount + (payment.refund_amount || 0)) > payment.amount) {
+      throw new ValidationError('Total refund amount cannot exceed payment amount');
+    }
+
+    try {
+      // Process refund through Pesapal
+      if (!payment.pesapal_order_tracking_id) {
+        throw new ValidationError('Payment tracking ID not found');
+      }
+
+      const refundResult = await PesapalService.processRefund({
+        orderTrackingId: payment.pesapal_order_tracking_id,
+        amount: refundAmount,
+        currency: payment.currency,
+        reason: reason || 'Customer request',
+      });
+
+      // Create refund record
+      const refund = await DatabaseService.createRefund({
+        payment_id: paymentId,
+        user_id: userId,
+        amount: refundAmount,
+        currency: payment.currency,
+        reason: reason,
+        pesapal_refund_id: refundResult.refund_id,
+        status: refundResult.status === 'completed' ? 'completed' : 'pending',
+      });
+
+      // Update payment with refund information
+      const totalRefunded = (payment.refund_amount || 0) + refundAmount;
+      await DatabaseService.updatePayment(paymentId, {
+        refund_amount: totalRefunded,
+        refund_reason: reason,
+        refunded_at: refundResult.status === 'completed' ? new Date().toISOString() : undefined,
+      });
+
+      logger.info('Refund processed', {
+        paymentId,
+        refundId: refund?.id,
+        amount: refundAmount,
+        status: refundResult.status,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Refund processed successfully',
+        data: {
+          refund: refund,
+          refund_status: refundResult.status,
+        },
+      });
+    } catch (error: any) {
+      logger.error('Failed to process refund:', error);
+      throw new ValidationError(`Failed to process refund: ${error.message}`);
+    }
+  })
+);
+
+/**
+ * GET /api/payment/ipn-list
+ * Get list of registered IPN URLs
+ */
+router.get(
+  '/ipn-list',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    // Only allow admin users (for now, you can add admin check)
+    // For production, add proper admin role checking
+
+    try {
+      const ipnList = await PesapalService.getIPNList();
+
+      res.status(200).json({
+        success: true,
+        data: {
+          ipn_list: ipnList,
+        },
+      });
+    } catch (error: any) {
+      logger.error('Failed to get IPN list:', error);
+      throw new ValidationError(`Failed to get IPN list: ${error.message}`);
+    }
+  })
+);
+
+/**
+ * DELETE /api/payment/ipn/:ipnId
+ * Delete an IPN URL
+ */
+router.delete(
+  '/ipn/:ipnId',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    // Only allow admin users (for now, you can add admin check)
+
+    const { ipnId } = req.params;
+    const id = Array.isArray(ipnId) ? ipnId[0] : ipnId;
+
+    if (!id) {
+      throw new ValidationError('IPN ID is required');
+    }
+
+    try {
+      const deleted = await PesapalService.deleteIPN(id);
+
+      if (deleted) {
+        res.status(200).json({
+          success: true,
+          message: 'IPN URL deleted successfully',
+        });
+      } else {
+        throw new ValidationError('Failed to delete IPN URL');
+      }
+    } catch (error: any) {
+      logger.error('Failed to delete IPN:', error);
+      throw new ValidationError(`Failed to delete IPN: ${error.message}`);
+    }
   })
 );
 

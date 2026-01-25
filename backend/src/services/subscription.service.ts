@@ -96,6 +96,44 @@ export class SubscriptionService {
         };
       }
 
+      // Check if trial period has ended
+      if (subscription.trial_end && new Date(subscription.trial_end) < new Date()) {
+        // Trial ended - check if payment was made, otherwise downgrade to free
+          const { supabaseAdmin } = await import('../config/database');
+          const recentPayment = await supabaseAdmin
+            .from('payments')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('tier', subscription.tier)
+            .eq('status', 'completed')
+            .gte('completed_at', subscription.trial_end)
+            .limit(1)
+            .single();
+
+        if (!recentPayment.data) {
+          // No payment after trial, downgrade to free
+          logger.info('Trial period ended without payment, downgrading to free', {
+            userId,
+            tier: subscription.tier,
+            trialEnd: subscription.trial_end,
+          });
+          const { supabaseAdmin } = await import('../config/database');
+          const downgraded = await DatabaseService.updateSubscription(userId, {
+            tier: 'free',
+            status: 'active',
+            trial_end: null,
+          });
+          return {
+            subscription: downgraded || {
+              ...subscription,
+              tier: 'free',
+              status: 'active',
+            },
+            limits: TIER_LIMITS.free,
+          };
+        }
+      }
+
       // Check if subscription period has ended
       if (
         subscription.status === 'active' &&
@@ -363,17 +401,51 @@ export class SubscriptionService {
     tier: 'free' | 'premium' | 'pro'
   ): Promise<Database.Subscription | null> {
     try {
-      const now = new Date();
-      const periodEnd = new Date(now);
-      periodEnd.setDate(periodEnd.getDate() + 30); // 30 days from now
+      const subscription = await DatabaseService.getUserSubscription(userId);
+      if (!subscription) {
+        return null;
+      }
 
-      return await DatabaseService.updateSubscription(userId, {
+      const oldTier = subscription.tier;
+      const now = new Date();
+      
+      let periodStart: Date;
+      let periodEnd: Date;
+
+      if (prorate && subscription.current_period_start && subscription.current_period_end) {
+        // Prorate: keep existing period but adjust end date if needed
+        periodStart = new Date(subscription.current_period_start);
+        periodEnd = new Date(subscription.current_period_end);
+        // Keep same period end for prorated changes
+      } else {
+        // Full period reset
+        periodStart = now;
+        periodEnd = new Date(now);
+        periodEnd.setDate(periodEnd.getDate() + 30); // 30 days from now
+      }
+
+      const updated = await DatabaseService.updateSubscription(userId, {
         tier,
         status: 'active',
-        current_period_start: now.toISOString(),
+        current_period_start: periodStart.toISOString(),
         current_period_end: periodEnd.toISOString(),
         cancel_at_period_end: false,
+        pending_tier: null, // Clear any pending tier
       });
+
+      // Log subscription history
+      if (updated && oldTier !== tier) {
+        await DatabaseService.logSubscriptionHistory(
+          subscription.id,
+          userId,
+          'tier_change',
+          { tier: oldTier },
+          { tier },
+          `Upgraded from ${oldTier} to ${tier}`
+        );
+      }
+
+      return updated;
     } catch (error) {
       logger.error('Failed to update subscription tier:', error);
       return null;
@@ -433,13 +505,25 @@ export class SubscriptionService {
           current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         });
       } else {
-        // Schedule downgrade at period end
-        // Store target tier in metadata or use a separate field
-        // For now, we'll use cancel_at_period_end and handle it in renewal logic
-        return await DatabaseService.updateSubscription(userId, {
+        // Schedule downgrade at period end - store pending tier
+        const updated = await DatabaseService.updateSubscription(userId, {
           cancel_at_period_end: true,
-          // We'll need to add a pending_tier field or handle this differently
+          pending_tier: targetTier,
         });
+
+        // Log subscription history
+        if (updated) {
+          await DatabaseService.logSubscriptionHistory(
+            subscription.id,
+            userId,
+            'tier_change',
+            { tier: subscription.tier },
+            { tier: targetTier, scheduled: true },
+            `Scheduled downgrade from ${subscription.tier} to ${targetTier} at period end`
+          );
+        }
+
+        return updated;
       }
     } catch (error) {
       logger.error('Failed to downgrade subscription:', error);
@@ -476,27 +560,56 @@ export class SubscriptionService {
       for (const subscription of subscriptions) {
         try {
           if (subscription.cancel_at_period_end) {
-            // Subscription was cancelled - downgrade to free
-            await DatabaseService.updateSubscription(subscription.user_id, {
-              tier: 'free',
-              status: 'active',
-              cancel_at_period_end: false,
-              current_period_start: new Date().toISOString(),
-              current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            });
-            logger.info('Subscription cancelled and downgraded to free', {
-              userId: subscription.user_id,
-            });
-          } else if (subscription.tier !== 'free') {
-            // Auto-renew paid subscriptions
+        // Subscription was cancelled - check if there's a pending tier
+        const targetTier = subscription.pending_tier || 'free';
+        const oldTier = subscription.tier;
+        
+        await DatabaseService.updateSubscription(subscription.user_id, {
+          tier: targetTier,
+          status: 'active',
+          cancel_at_period_end: false,
+          pending_tier: null,
+          current_period_start: new Date().toISOString(),
+          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+
+        // Log subscription history
+        await DatabaseService.logSubscriptionHistory(
+          subscription.id,
+          subscription.user_id,
+          oldTier !== targetTier ? 'tier_change' : 'cancellation',
+          { tier: oldTier, cancel_at_period_end: true },
+          { tier: targetTier, cancel_at_period_end: false },
+          `Cancelled and ${oldTier !== targetTier ? `downgraded to ${targetTier}` : 'cancelled'} at period end`
+        );
+
+        logger.info('Subscription cancelled and downgraded', {
+          userId: subscription.user_id,
+          fromTier: oldTier,
+          toTier: targetTier,
+        });
+          } else if (subscription.tier !== 'free' && subscription.auto_renew !== false) {
+            // Auto-renew paid subscriptions (if auto_renew is enabled)
             const now = new Date();
             const periodEnd = new Date(now);
             periodEnd.setDate(periodEnd.getDate() + 30); // 30 days from now
 
+            const oldPeriodEnd = subscription.current_period_end;
             await DatabaseService.updateSubscription(subscription.user_id, {
               current_period_start: now.toISOString(),
               current_period_end: periodEnd.toISOString(),
             });
+
+            // Log subscription history
+            await DatabaseService.logSubscriptionHistory(
+              subscription.id,
+              subscription.user_id,
+              'renewal',
+              { current_period_end: oldPeriodEnd },
+              { current_period_start: now.toISOString(), current_period_end: periodEnd.toISOString() },
+              'Subscription auto-renewed'
+            );
+
             logger.info('Subscription renewed', {
               userId: subscription.user_id,
               tier: subscription.tier,

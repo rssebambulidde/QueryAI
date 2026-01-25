@@ -248,6 +248,155 @@ router.get(
 );
 
 /**
+ * GET /api/subscription/history
+ * Get subscription change history
+ */
+router.get(
+  '/history',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const history = await DatabaseService.getSubscriptionHistory(userId);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        history,
+        total: history.length,
+      },
+    });
+  })
+);
+
+/**
+ * GET /api/subscription/prorated-pricing
+ * Get prorated pricing for tier change
+ */
+router.get(
+  '/prorated-pricing',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { toTier, currency = 'UGX' } = req.query;
+
+    if (!toTier || !['free', 'premium', 'pro'].includes(toTier as string)) {
+      throw new ValidationError('Invalid target tier');
+    }
+
+    const subscription = await DatabaseService.getUserSubscription(userId);
+    if (!subscription) {
+      throw new ValidationError('Subscription not found');
+    }
+
+    const { ProratingService } = await import('../services/prorating.service');
+    const proratedPricing = ProratingService.getProratedPricing(
+      subscription.tier,
+      toTier as 'free' | 'premium' | 'pro',
+      subscription,
+      currency as 'UGX' | 'USD'
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        proratedPricing,
+      },
+    });
+  })
+);
+
+/**
+ * POST /api/subscription/start-trial
+ * Start a trial period for a tier
+ */
+router.post(
+  '/start-trial',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { tier, trialDays = 7 } = req.body;
+
+    if (!tier || !['premium', 'pro'].includes(tier)) {
+      throw new ValidationError('Invalid tier. Must be "premium" or "pro"');
+    }
+
+    const subscription = await DatabaseService.getUserSubscription(userId);
+    if (!subscription) {
+      throw new ValidationError('Subscription not found');
+    }
+
+    // Check if user already had a trial
+    if (subscription.trial_end && new Date(subscription.trial_end) > new Date()) {
+      throw new ValidationError('Trial period already active');
+    }
+
+    const now = new Date();
+    const trialEnd = new Date(now);
+    trialEnd.setDate(trialEnd.getDate() + (trialDays as number));
+
+      const updated = await DatabaseService.updateSubscription(userId, {
+        tier: tier as 'premium' | 'pro',
+        status: 'active',
+        trial_end: trialEnd.toISOString(),
+        current_period_start: now.toISOString(),
+        current_period_end: trialEnd.toISOString(),
+      });
+
+      // Log subscription history
+      if (updated) {
+        await DatabaseService.logSubscriptionHistory(
+          subscription.id,
+          userId,
+          'tier_change',
+          { tier: subscription.tier },
+          { tier, trial_end: trialEnd.toISOString() },
+          `Started ${trialDays}-day trial for ${tier} tier`
+        );
+      }
+
+    // Log subscription history
+    if (updated) {
+      await DatabaseService.logSubscriptionHistory(
+        subscription.id,
+        userId,
+        'tier_change',
+        { tier: subscription.tier },
+        { tier, trial_end: trialEnd.toISOString() },
+        `Started ${tierDays}-day trial for ${tier} tier`
+      );
+    }
+
+    logger.info('Trial period started', {
+      userId,
+      tier,
+      trialDays,
+      trialEnd,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Trial period started for ${tier} tier`,
+      data: {
+        subscription: updated,
+        trial_end: trialEnd.toISOString(),
+      },
+    });
+  })
+);
+
+/**
  * GET /api/subscription/invoice/:paymentId
  * Generate invoice PDF for a payment
  */

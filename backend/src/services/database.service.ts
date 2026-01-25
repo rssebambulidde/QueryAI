@@ -383,6 +383,147 @@ export class DatabaseService {
   /**
    * Update payment
    */
+  /**
+   * Log subscription history change
+   */
+  static async logSubscriptionHistory(
+    subscriptionId: string,
+    userId: string,
+    changeType: 'tier_change' | 'status_change' | 'period_change' | 'cancellation' | 'reactivation' | 'renewal',
+    oldValue?: Record<string, any>,
+    newValue?: Record<string, any>,
+    reason?: string
+  ): Promise<boolean> {
+    try {
+      const { error } = await supabaseAdmin.from('subscription_history').insert({
+        subscription_id: subscriptionId,
+        user_id: userId,
+        change_type: changeType,
+        old_value: oldValue || null,
+        new_value: newValue || null,
+        reason: reason || null,
+      });
+
+      if (error) {
+        logger.error('Error logging subscription history:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      logger.error('Failed to log subscription history:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get subscription history for a user
+   */
+  static async getSubscriptionHistory(userId: string): Promise<Database.SubscriptionHistory[]> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('subscription_history')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        logger.error('Error fetching subscription history:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      logger.error('Failed to get subscription history:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Create refund record
+   */
+  static async createRefund(refundData: {
+    payment_id: string;
+    user_id: string;
+    amount: number;
+    currency: string;
+    reason?: string;
+    pesapal_refund_id?: string;
+    status?: 'pending' | 'completed' | 'failed';
+    refund_data?: Record<string, any>;
+  }): Promise<Database.Refund | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('refunds')
+        .insert({
+          ...refundData,
+          status: refundData.status || 'pending',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Error creating refund:', error);
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      logger.error('Failed to create refund:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get refunds for a user
+   */
+  static async getUserRefunds(userId: string): Promise<Database.Refund[]> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('refunds')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        logger.error('Error fetching refunds:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      logger.error('Failed to get refunds:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Update refund status
+   */
+  static async updateRefund(
+    refundId: string,
+    updates: Partial<Database.Refund>
+  ): Promise<Database.Refund | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('refunds')
+        .update(updates)
+        .eq('id', refundId)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Error updating refund:', error);
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      logger.error('Failed to update refund:', error);
+      return null;
+    }
+  }
+
   static async updatePayment(
     paymentId: string,
     updates: Partial<Database.Payment>

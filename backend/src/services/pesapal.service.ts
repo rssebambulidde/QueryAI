@@ -392,13 +392,60 @@ export class PesapalService {
   }
 
   /**
-   * Verify webhook signature (if Pesapal provides one)
+   * Verify webhook signature and validate webhook data
+   * Since Pesapal API v3 doesn't provide explicit signature verification,
+   * we verify by:
+   * 1. Checking that the order tracking ID exists in our database
+   * 2. Validating the merchant reference matches
+   * 3. Ensuring required fields are present
    */
-  static verifyWebhookSignature(data: any, signature: string): boolean {
-    // Pesapal may provide webhook verification
-    // For now, we'll verify by checking the order tracking ID exists in our database
-    // In production, implement proper signature verification if Pesapal provides it
-    return true; // Placeholder - implement actual verification
+  static async verifyWebhookSignature(webhookData: {
+    OrderTrackingId: string;
+    OrderMerchantReference: string;
+    OrderNotificationType?: string;
+  }): Promise<boolean> {
+    try {
+      // Verify required fields are present
+      if (!webhookData.OrderTrackingId && !webhookData.OrderMerchantReference) {
+        logger.warn('Webhook verification failed: Missing tracking ID and merchant reference');
+        return false;
+      }
+
+      // Verify payment exists in our database
+      let payment = null;
+      if (webhookData.OrderMerchantReference) {
+        payment = await DatabaseService.getPaymentByMerchantReference(webhookData.OrderMerchantReference);
+      }
+      if (!payment && webhookData.OrderTrackingId) {
+        payment = await DatabaseService.getPaymentByOrderTrackingId(webhookData.OrderTrackingId);
+      }
+
+      if (!payment) {
+        logger.warn('Webhook verification failed: Payment not found in database', {
+          orderTrackingId: webhookData.OrderTrackingId,
+          merchantReference: webhookData.OrderMerchantReference,
+        });
+        return false;
+      }
+
+      // Additional validation: Check merchant reference format matches our pattern
+      if (webhookData.OrderMerchantReference && !webhookData.OrderMerchantReference.startsWith('QUERYAI-')) {
+        logger.warn('Webhook verification failed: Invalid merchant reference format', {
+          merchantReference: webhookData.OrderMerchantReference,
+        });
+        return false;
+      }
+
+      logger.info('Webhook verified successfully', {
+        paymentId: payment.id,
+        orderTrackingId: webhookData.OrderTrackingId,
+      });
+
+      return true;
+    } catch (error) {
+      logger.error('Webhook verification error:', error);
+      return false;
+    }
   }
 
   /**
@@ -447,11 +494,35 @@ export class PesapalService {
       // If payment completed, update subscription
       if (status === 'completed' && payment.user_id) {
         await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+        
+        // Send email notification
+        const { EmailService } = await import('./email.service');
+        const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+        if (userProfile) {
+          await EmailService.sendPaymentSuccessEmail(
+            userProfile.email,
+            userProfile.full_name || userProfile.email,
+            updatedPayment
+          );
+        }
+
         logger.info('Subscription updated after successful payment', {
           userId: payment.user_id,
           tier: payment.tier,
           paymentId: payment.id,
         });
+      } else if (status === 'failed' && payment.user_id) {
+        // Send failure notification
+        const { EmailService } = await import('./email.service');
+        const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+        if (userProfile) {
+          await EmailService.sendPaymentFailureEmail(
+            userProfile.email,
+            userProfile.full_name || userProfile.email,
+            updatedPayment,
+            payment.retry_count || 0
+          );
+        }
       }
 
       return updatedPayment;
@@ -477,5 +548,214 @@ export class PesapalService {
       return 'cancelled';
     }
     return 'pending';
+  }
+
+  /**
+   * Create recurring payment authorization
+   * Pesapal RecurringPayments API
+   */
+  static async createRecurringPayment(params: {
+    userId: string;
+    tier: 'premium' | 'pro';
+    amount: number;
+    currency: 'UGX' | 'USD';
+    firstName: string;
+    lastName: string;
+    email: string;
+    phoneNumber?: string;
+    callbackUrl: string;
+  }): Promise<{
+    recurring_payment_id: string;
+    redirect_url: string;
+  }> {
+    try {
+      const token = await this.authenticate();
+      const client = this.getApiClient();
+
+      const merchantReference = `QUERYAI-RECURRING-${params.userId}-${Date.now()}`;
+
+      const recurringPaymentData = {
+        id: merchantReference,
+        currency: params.currency,
+        amount: params.amount,
+        description: `QueryAI ${params.tier} subscription (recurring)`,
+        callback_url: params.callbackUrl,
+        billing_address: {
+          email_address: params.email,
+          phone_number: params.phoneNumber || '',
+          country_code: params.currency === 'UGX' ? 'UG' : 'UG',
+          first_name: params.firstName,
+          last_name: params.lastName,
+        },
+        // Recurring payment specific fields
+        recurring_payment: {
+          frequency: 'MONTHLY', // Monthly subscription
+          start_date: new Date().toISOString().split('T')[0], // Today
+        },
+      };
+
+      logger.info('Creating recurring payment authorization', {
+        merchantReference,
+        tier: params.tier,
+        amount: params.amount,
+        currency: params.currency,
+      });
+
+      const response = await client.post('/RecurringPayments', recurringPaymentData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      logger.info('Recurring payment response received', {
+        status: response.status,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : [],
+      });
+
+      // Extract recurring payment ID and redirect URL
+      let recurringPaymentId: string | null = null;
+      let redirectUrl: string | null = null;
+
+      if (response.data) {
+        recurringPaymentId = response.data.recurring_payment_id ||
+                            response.data.recurringPaymentId ||
+                            response.data.RecurringPaymentId ||
+                            response.data.data?.recurring_payment_id;
+        
+        redirectUrl = response.data.redirect_url ||
+                     response.data.redirectUrl ||
+                     response.data.RedirectUrl ||
+                     response.data.data?.redirect_url;
+      }
+
+      if (recurringPaymentId) {
+        logger.info('Recurring payment created successfully', {
+          recurring_payment_id: recurringPaymentId,
+          merchant_reference: merchantReference,
+        });
+
+        return {
+          recurring_payment_id: recurringPaymentId,
+          redirect_url: redirectUrl || '',
+        };
+      }
+
+      throw new Error('Invalid response from Pesapal: Recurring payment ID not found');
+    } catch (error: any) {
+      logger.error('Failed to create recurring payment:', error.response?.data || error.message);
+      throw new Error(`Failed to create recurring payment: ${error.response?.data?.message || error.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Process refund request
+   * Pesapal RefundRequest API
+   */
+  static async processRefund(params: {
+    orderTrackingId: string;
+    amount: number;
+    currency: string;
+    reason?: string;
+  }): Promise<{
+    refund_id: string;
+    status: string;
+  }> {
+    try {
+      const token = await this.authenticate();
+      const client = this.getApiClient();
+
+      const refundData = {
+        order_tracking_id: params.orderTrackingId,
+        amount: params.amount,
+        currency: params.currency,
+        reason: params.reason || 'Customer request',
+      };
+
+      logger.info('Processing refund request', {
+        orderTrackingId: params.orderTrackingId,
+        amount: params.amount,
+        currency: params.currency,
+      });
+
+      const response = await client.post('/Transactions/RefundRequest', refundData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      logger.info('Refund response received', {
+        status: response.status,
+        hasData: !!response.data,
+      });
+
+      if (response.data) {
+        const refundId = response.data.refund_id ||
+                        response.data.refundId ||
+                        response.data.RefundId ||
+                        response.data.data?.refund_id;
+
+        if (refundId) {
+          return {
+            refund_id: refundId,
+            status: response.data.status || 'pending',
+          };
+        }
+      }
+
+      throw new Error('Invalid response from Pesapal: Refund ID not found');
+    } catch (error: any) {
+      logger.error('Failed to process refund:', error.response?.data || error.message);
+      throw new Error(`Failed to process refund: ${error.response?.data?.message || error.message || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get list of registered IPN URLs
+   */
+  static async getIPNList(): Promise<Array<{ ipn_id: string; url: string }>> {
+    try {
+      const token = await this.authenticate();
+      const client = this.getApiClient();
+
+      const response = await client.get('/URLSetup/GetIPNList', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.data && Array.isArray(response.data)) {
+        return response.data.map((ipn: any) => ({
+          ipn_id: ipn.ipn_id || ipn.ipnId || ipn.IpnId || '',
+          url: ipn.url || ipn.Url || '',
+        }));
+      }
+
+      return [];
+    } catch (error: any) {
+      logger.error('Failed to get IPN list:', error.response?.data || error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Delete IPN URL
+   */
+  static async deleteIPN(ipnId: string): Promise<boolean> {
+    try {
+      const token = await this.authenticate();
+      const client = this.getApiClient();
+
+      const response = await client.delete(`/URLSetup/DeleteIPN?ipn_id=${ipnId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      return response.status === 200;
+    } catch (error: any) {
+      logger.error('Failed to delete IPN:', error.response?.data || error.message);
+      return false;
+    }
   }
 }

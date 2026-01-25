@@ -49,6 +49,10 @@ export namespace Database {
     current_period_start?: string;
     current_period_end?: string;
     cancel_at_period_end: boolean;
+    pending_tier?: 'free' | 'premium' | 'pro';
+    trial_end?: string;
+    grace_period_end?: string;
+    auto_renew: boolean;
     created_at: string;
     updated_at: string;
   }
@@ -162,6 +166,38 @@ export namespace Database {
     payment_description?: string;
     callback_data?: Record<string, any>;
     webhook_data?: Record<string, any>;
+    refund_amount?: number;
+    refund_reason?: string;
+    refunded_at?: string;
+    retry_count?: number;
+    last_retry_at?: string;
+    recurring_payment_id?: string;
+    created_at: string;
+    updated_at: string;
+    completed_at?: string;
+  }
+
+  export interface SubscriptionHistory {
+    id: string;
+    subscription_id: string;
+    user_id: string;
+    change_type: 'tier_change' | 'status_change' | 'period_change' | 'cancellation' | 'reactivation' | 'renewal';
+    old_value?: Record<string, any>;
+    new_value?: Record<string, any>;
+    reason?: string;
+    created_at: string;
+  }
+
+  export interface Refund {
+    id: string;
+    payment_id: string;
+    user_id: string;
+    amount: number;
+    currency: string;
+    reason?: string;
+    pesapal_refund_id?: string;
+    status: 'pending' | 'completed' | 'failed';
+    refund_data?: Record<string, any>;
     created_at: string;
     updated_at: string;
     completed_at?: string;
