@@ -66,7 +66,8 @@ apiClient.interceptors.response.use(
     
     if (error.response?.status === 401) {
       // Token expired or invalid
-      // Only redirect if not already on login/signup page to prevent loops
+      // Clear tokens but don't redirect here - let the page components handle it
+      // This prevents infinite redirect loops
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname;
         const isAuthPage = currentPath === '/login' || currentPath === '/signup' || currentPath === '/forgot-password';
@@ -74,7 +75,8 @@ apiClient.interceptors.response.use(
         if (!isAuthPage) {
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
-          window.location.href = '/login';
+          // Dispatch event to notify auth store instead of redirecting directly
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
         }
       }
     }

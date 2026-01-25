@@ -274,3 +274,12 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+// Listen for unauthorized events from API interceptor
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:unauthorized', () => {
+    const store = useAuthStore.getState();
+    store.setUser(null);
+    store.setTokens(null, null);
+  });
+}
