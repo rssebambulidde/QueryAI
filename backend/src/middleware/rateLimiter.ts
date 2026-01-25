@@ -11,7 +11,7 @@ export const apiLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   validate: {
-    trustProxy: false, // Disable trust proxy validation to avoid warnings
+    trustProxy: true, // Enable trust proxy for Railway/Cloudflare deployments
   },
   skip: (req: Request) => {
     // Skip rate limiting for document uploads (they're handled by multer)
@@ -33,13 +33,14 @@ export const apiLimiter = rateLimit({
 // Strict rate limiter for authentication endpoints
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
+  max: 15, // Limit each IP to 15 requests per windowMs (increased from 5 for better UX)
   message: 'Too many authentication attempts, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
   validate: {
-    trustProxy: false, // Disable trust proxy validation to avoid warnings
+    trustProxy: true, // Enable trust proxy for Railway/Cloudflare deployments
   },
+  skipSuccessfulRequests: true, // Don't count successful logins against rate limit
   handler: (req: Request, res: Response) => {
     logger.warn(`Auth rate limit exceeded for IP: ${req.ip}`);
     const error = new RateLimitError('Too many authentication attempts, please try again later.');
