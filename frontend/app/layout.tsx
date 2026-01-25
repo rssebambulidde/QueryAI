@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toast";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -57,7 +58,7 @@ export default function RootLayout({
     "name": "QueryAI",
     "description": "Fact Research Assistant - Find accurate, verified information quickly",
     "url": baseUrl,
-    "logo": `${baseUrl}/favicon.ico`,
+    "logo": `${baseUrl}/icon.svg`,
   };
 
   const softwareApplicationSchema = {
@@ -100,24 +101,28 @@ export default function RootLayout({
 
   return (
     <html lang="en">
-      <head>
-        {/* Structured Data */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
-        />
-      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/* Structured Data (JSON-LD) for SEO - Scripts are automatically placed in head */}
+        <Script
+          id="organization-schema"
+          type="application/ld+json"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+        />
+        <Script
+          id="software-application-schema"
+          type="application/ld+json"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
+        />
+        <Script
+          id="website-schema"
+          type="application/ld+json"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+        />
         <ErrorBoundary>
           {children}
           <Toaster />
