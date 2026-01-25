@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { ChatInterface } from '@/components/chat/chat-interface';
@@ -21,6 +21,7 @@ type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'co
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading, logout, checkAuth } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
@@ -45,17 +46,27 @@ export default function DashboardPage() {
   const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
   const { selectConversation } = useConversationStore();
 
+  // Read tab from URL query parameter on mount and when it changes
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['chat', 'documents', 'topics', 'api-keys', 'embeddings', 'collections', 'analytics', 'subscription'].includes(tabParam)) {
+      setActiveTab(tabParam as TabType);
+    }
+  }, [searchParams]);
+
   // Listen for navigation to subscription tab from chat errors
   useEffect(() => {
     const handleNavigateToSubscription = () => {
       setActiveTab('subscription');
+      // Update URL without causing a page reload
+      router.push('/dashboard?tab=subscription', { scroll: false });
     };
     
     window.addEventListener('navigateToSubscription', handleNavigateToSubscription);
     return () => {
       window.removeEventListener('navigateToSubscription', handleNavigateToSubscription);
     };
-  }, []);
+  }, [router]);
 
   // Check auth on mount - only once to get fresh user data including subscriptionTier
   // Skip if we already have user data from login (to avoid redundant API calls)
