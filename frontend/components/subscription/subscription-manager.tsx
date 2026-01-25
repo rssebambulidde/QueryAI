@@ -46,9 +46,6 @@ export function SubscriptionManager() {
     setSelectedTier(null);
     // Reload subscription data after payment
     await loadSubscriptionData();
-    if (onSuccess) {
-      onSuccess();
-    }
   };
 
   const handleCancel = async () => {
