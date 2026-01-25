@@ -904,8 +904,25 @@ export interface PaymentInitiateResponse {
   order_tracking_id: string;
 }
 
+export interface RefundRequest {
+  paymentId: string;
+  amount?: number;
+  reason?: string;
+}
+
+export interface RefundResponse {
+  refund: {
+    id: string;
+    payment_id: string;
+    amount: number;
+    currency: string;
+    status: string;
+  };
+  refund_status: string;
+}
+
 export const paymentApi = {
-  initiate: async (data: PaymentInitiateRequest): Promise<ApiResponse<PaymentInitiateResponse>> => {
+  initiate: async (data: PaymentInitiateRequest & { recurring?: boolean }): Promise<ApiResponse<PaymentInitiateResponse>> => {
     const response = await apiClient.post('/api/payment/initiate', data);
     return response.data;
   },
