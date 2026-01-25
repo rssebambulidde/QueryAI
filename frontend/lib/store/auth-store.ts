@@ -14,7 +14,7 @@ interface AuthState {
 
   // Actions
   setUser: (user: User | null) => void;
-  setTokens: (accessToken: string, refreshToken: string) => void;
+  setTokens: (accessToken: string | null, refreshToken: string | null) => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, fullName?: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -38,10 +38,18 @@ export const useAuthStore = create<AuthState>()(
 
       setTokens: (accessToken, refreshToken) => {
         set({ accessToken, refreshToken });
-        // Also store in localStorage for API client
+        // Also store in localStorage for API client (or remove if null)
         if (typeof window !== 'undefined') {
-          localStorage.setItem('accessToken', accessToken);
-          localStorage.setItem('refreshToken', refreshToken);
+          if (accessToken) {
+            localStorage.setItem('accessToken', accessToken);
+          } else {
+            localStorage.removeItem('accessToken');
+          }
+          if (refreshToken) {
+            localStorage.setItem('refreshToken', refreshToken);
+          } else {
+            localStorage.removeItem('refreshToken');
+          }
         }
       },
 
