@@ -11,13 +11,12 @@ import { ApiKeyManager } from '@/components/api-keys/api-key-manager';
 import { EmbeddingManager } from '@/components/embeddings/embedding-manager';
 import { CollectionManager } from '@/components/collections/collection-manager';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
-import { AnalyticsDashboard } from '@/components/analytics/analytics-dashboard';
 import { SubscriptionManager } from '@/components/subscription/subscription-manager';
 import { RAGSettings } from '@/components/chat/rag-source-selector';
 import { documentApi } from '@/lib/api';
 import { useConversationStore } from '@/lib/store/conversation-store';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'analytics' | 'subscription';
+type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'subscription';
 
 function DashboardContent() {
   const router = useRouter();
@@ -49,7 +48,7 @@ function DashboardContent() {
   // Read tab from URL query parameter on mount and when it changes
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['chat', 'documents', 'topics', 'api-keys', 'embeddings', 'collections', 'analytics', 'subscription'].includes(tabParam)) {
+    if (tabParam && ['chat', 'documents', 'topics', 'api-keys', 'embeddings', 'collections', 'subscription'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     }
   }, [searchParams]);
@@ -136,24 +135,6 @@ function DashboardContent() {
     }
   }, [ragSettings]);
 
-  // Debug: Log user subscription tier and force refresh if missing
-  // IMPORTANT: This hook must be called before any early returns to follow Rules of Hooks
-  useEffect(() => {
-    if (typeof window !== 'undefined' && user) {
-      console.log('[Dashboard] User object:', user);
-      console.log('[Dashboard] User subscription tier:', user.subscriptionTier || 'free (default)');
-      console.log('[Dashboard] Subscription tier type:', typeof user.subscriptionTier);
-      console.log('[Dashboard] Should show analytics:', user.subscriptionTier === 'premium' || user.subscriptionTier === 'pro');
-      
-      if (!user.subscriptionTier || user.subscriptionTier === 'free') {
-        console.warn('[Dashboard] ⚠️ Analytics tab will be hidden. User subscription tier:', user.subscriptionTier || 'free');
-        console.warn('[Dashboard] To show analytics tab, update user subscription to "premium" or "pro" in database.');
-        console.warn('[Dashboard] Then log out and log back in to refresh user data.');
-      } else {
-        console.log('[Dashboard] ✅ Analytics tab should be visible. Subscription tier:', user.subscriptionTier);
-      }
-    }
-  }, [user]);
 
   const handleLogout = async () => {
     await logout();
@@ -240,10 +221,6 @@ function DashboardContent() {
                  }}
                />
              </div>
-          ) : activeTab === 'analytics' ? (
-            <div className="flex-1 overflow-y-auto">
-              <AnalyticsDashboard />
-            </div>
           ) : activeTab === 'subscription' ? (
             <div className="flex-1 overflow-y-auto p-6">
               <SubscriptionManager />
