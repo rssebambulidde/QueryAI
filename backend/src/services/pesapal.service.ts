@@ -20,6 +20,7 @@ export class PesapalService {
    */
   private static getApiBaseUrl(): string {
     const isProduction = config.PESAPAL_ENVIRONMENT === 'production';
+    // Pesapal v3 API endpoints
     return isProduction
       ? 'https://pay.pesapal.com/v3/api'
       : 'https://cybqa.pesapal.com/pesapalv3/api';
@@ -50,25 +51,94 @@ export class PesapalService {
       return this.accessToken;
     }
 
+    // Validate credentials are set
+    if (!config.PESAPAL_CONSUMER_KEY || !config.PESAPAL_CONSUMER_SECRET) {
+      logger.error('Pesapal credentials not configured');
+      throw new Error('Pesapal credentials are not configured. Please set PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET environment variables.');
+    }
+
     try {
       const client = this.getApiClient();
+      const apiUrl = this.getApiBaseUrl();
+      logger.info('Attempting Pesapal authentication', {
+        environment: config.PESAPAL_ENVIRONMENT,
+        apiUrl,
+        hasConsumerKey: !!config.PESAPAL_CONSUMER_KEY,
+        hasConsumerSecret: !!config.PESAPAL_CONSUMER_SECRET,
+      });
+
       const response = await client.post('/Auth/RequestToken', {
         consumer_key: config.PESAPAL_CONSUMER_KEY,
         consumer_secret: config.PESAPAL_CONSUMER_SECRET,
       });
 
-      if (response.data && response.data.token) {
-        this.accessToken = response.data.token;
+      logger.info('Pesapal authentication response received', {
+        status: response.status,
+        statusText: response.statusText,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : [],
+        responseData: response.data,
+      });
+
+      // Pesapal may return token in different formats
+      // Try response.data.token first, then response.data, then check if it's a string
+      let token: string | null = null;
+      
+      if (response.data) {
+        if (typeof response.data === 'string') {
+          token = response.data;
+        } else if (response.data.token) {
+          token = response.data.token;
+        } else if (response.data.access_token) {
+          token = response.data.access_token;
+        } else if (response.data.data?.token) {
+          token = response.data.data.token;
+        }
+      }
+
+      if (token) {
+        this.accessToken = token;
         // Set expiry to 55 minutes (tokens typically last 1 hour)
         this.tokenExpiry = new Date(Date.now() + 55 * 60 * 1000);
         logger.info('Pesapal authentication successful');
-        return this.accessToken as string;
+        return this.accessToken;
       }
 
-      throw new Error('Invalid authentication response from Pesapal');
+      // Log the full response for debugging
+      logger.error('Invalid Pesapal authentication response format', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        data: response.data,
+        dataType: typeof response.data,
+      });
+
+      throw new Error('Invalid authentication response from Pesapal: Token not found in response');
     } catch (error: any) {
-      logger.error('Pesapal authentication failed:', error.response?.data || error.message);
-      throw new Error(`Pesapal authentication failed: ${error.message}`);
+      const errorDetails = {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          baseURL: error.config?.baseURL,
+        },
+      };
+      
+      logger.error('Pesapal authentication failed:', errorDetails);
+      
+      // Provide more helpful error messages
+      if (error.response?.status === 401) {
+        throw new Error('Pesapal authentication failed: Invalid consumer key or secret. Please verify your Pesapal credentials.');
+      } else if (error.response?.status === 400) {
+        throw new Error(`Pesapal authentication failed: Bad request. ${error.response?.data?.message || error.message}`);
+      } else if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+        throw new Error('Pesapal authentication failed: Unable to connect to Pesapal API. Please check your network connection and Pesapal service status.');
+      } else {
+        throw new Error(`Pesapal authentication failed: ${error.response?.data?.message || error.message || 'Unknown error'}`);
+      }
     }
   }
 
