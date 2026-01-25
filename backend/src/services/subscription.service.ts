@@ -393,11 +393,12 @@ export class SubscriptionService {
   }
 
   /**
-   * Update subscription tier
+   * Update subscription tier with optional prorating
    */
   static async updateSubscriptionTier(
     userId: string,
-    tier: 'free' | 'premium' | 'pro'
+    tier: 'free' | 'premium' | 'pro',
+    shouldProrate: boolean = false
   ): Promise<Database.Subscription | null> {
     try {
       const subscription = await DatabaseService.getUserSubscription(userId);
@@ -429,7 +430,7 @@ export class SubscriptionService {
         current_period_start: periodStart.toISOString(),
         current_period_end: periodEnd.toISOString(),
         cancel_at_period_end: false,
-        pending_tier: null, // Clear any pending tier
+        pending_tier: undefined, // Clear any pending tier
       });
 
       // Log subscription history
