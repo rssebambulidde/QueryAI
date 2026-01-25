@@ -43,6 +43,11 @@ interface EnvConfig {
   PESAPAL_CONSUMER_SECRET?: string;
   PESAPAL_ENVIRONMENT?: 'sandbox' | 'production';
   PESAPAL_WEBHOOK_URL?: string;
+
+  // Email Service (Brevo)
+  BREVO_API_KEY?: string;
+  BREVO_SENDER_EMAIL?: string;
+  BREVO_SENDER_NAME?: string;
 }
 
 const getEnvVar = (key: string, defaultValue?: string): string => {
@@ -58,6 +63,9 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
     'PESAPAL_CONSUMER_SECRET',
     'PESAPAL_ENVIRONMENT',
     'PESAPAL_WEBHOOK_URL',
+    'BREVO_API_KEY',
+    'BREVO_SENDER_EMAIL',
+    'BREVO_SENDER_NAME',
   ];
   if (!value && !optionalKeys.includes(key)) {
     throw new Error(`Missing required environment variable: ${key}`);
@@ -108,6 +116,11 @@ const config: EnvConfig = {
   PESAPAL_CONSUMER_SECRET: getEnvVar('PESAPAL_CONSUMER_SECRET') || undefined,
   PESAPAL_ENVIRONMENT: (getEnvVar('PESAPAL_ENVIRONMENT', 'sandbox') as 'sandbox' | 'production') || 'sandbox',
   PESAPAL_WEBHOOK_URL: getEnvVar('PESAPAL_WEBHOOK_URL') || undefined,
+
+  // Email Service (Brevo) - Optional
+  BREVO_API_KEY: getEnvVar('BREVO_API_KEY') || undefined,
+  BREVO_SENDER_EMAIL: getEnvVar('BREVO_SENDER_EMAIL', 'noreply@queryai.com'),
+  BREVO_SENDER_NAME: getEnvVar('BREVO_SENDER_NAME', 'QueryAI'),
 };
 
 export default config;
