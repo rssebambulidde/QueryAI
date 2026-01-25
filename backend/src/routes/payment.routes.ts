@@ -56,11 +56,31 @@ router.post(
 
     // Build callback URLs - use production URL, not localhost
     // In production, API_BASE_URL should be set to Railway URL
-    const baseUrl = config.API_BASE_URL || (config.NODE_ENV === 'production' 
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN || 'queryai-production.up.railway.app'}`
-      : 'http://localhost:3001');
+    // Railway provides RAILWAY_PUBLIC_DOMAIN automatically
+    let baseUrl = config.API_BASE_URL;
+    if (!baseUrl || baseUrl.includes('localhost')) {
+      if (config.NODE_ENV === 'production') {
+        // Use Railway public domain if available, otherwise fallback
+        baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
+          ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+          : 'https://queryai-production.up.railway.app';
+      } else {
+        baseUrl = 'http://localhost:3001';
+      }
+    }
+    
+    // Ensure baseUrl doesn't have trailing slash
+    baseUrl = baseUrl.replace(/\/$/, '');
+    
     const callbackUrl = `${baseUrl}/api/payment/callback`;
     const cancellationUrl = `${baseUrl}/api/payment/cancel`;
+    
+    logger.info('Payment callback URLs configured', {
+      baseUrl,
+      callbackUrl,
+      cancellationUrl,
+      nodeEnv: config.NODE_ENV,
+    });
 
     try {
       // Submit order to Pesapal
@@ -163,55 +183,175 @@ router.post(
 /**
  * GET /api/payment/callback
  * Handle payment callback from Pesapal (redirect after payment)
+ * Pesapal sends: pesapal_transaction_tracking_id, pesapal_merchant_reference, pesapal_notification_type
  */
 router.get(
   '/callback',
   asyncHandler(async (req: Request, res: Response) => {
-    const { OrderTrackingId, OrderMerchantReference } = req.query;
+    // Pesapal sends query params with 'pesapal_' prefix or without
+    const orderTrackingId = (req.query.OrderTrackingId || 
+                             req.query.pesapal_transaction_tracking_id || 
+                             req.query.orderTrackingId) as string;
+    const merchantReference = (req.query.OrderMerchantReference || 
+                               req.query.pesapal_merchant_reference || 
+                               req.query.orderMerchantReference) as string;
+    const notificationType = (req.query.pesapal_notification_type || 
+                              req.query.OrderNotificationType) as string;
 
-    if (!OrderTrackingId && !OrderMerchantReference) {
-      const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
-        (config.NODE_ENV === 'production' 
-          ? 'https://queryai-frontend.pages.dev'
-          : 'http://localhost:3000');
+    logger.info('Payment callback received', {
+      orderTrackingId,
+      merchantReference,
+      notificationType,
+      allQueryParams: req.query,
+    });
+
+    const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
+      (config.NODE_ENV === 'production' 
+        ? 'https://queryai-frontend.pages.dev'
+        : 'http://localhost:3000');
+
+    if (!orderTrackingId && !merchantReference) {
+      logger.warn('Payment callback missing tracking ID and merchant reference');
       return res.redirect(`${frontendUrl}/dashboard?payment=error`);
     }
 
     try {
-      // Get payment status from Pesapal
-      if (OrderTrackingId) {
-        const status = await PesapalService.getTransactionStatus(OrderTrackingId as string);
-        
-        // Find and update payment
-        const payment = await DatabaseService.getPaymentByOrderTrackingId(OrderTrackingId as string);
-        if (payment) {
-          const paymentStatus = PesapalService['mapPesapalStatusToPaymentStatus'](status.payment_status);
+      let payment = null;
+      
+      // Find payment by tracking ID or merchant reference
+      if (orderTrackingId) {
+        payment = await DatabaseService.getPaymentByOrderTrackingId(orderTrackingId);
+      }
+      if (!payment && merchantReference) {
+        payment = await DatabaseService.getPaymentByMerchantReference(merchantReference);
+      }
+
+      if (!payment) {
+        logger.warn('Payment not found in callback', { orderTrackingId, merchantReference });
+        return res.redirect(`${frontendUrl}/dashboard?payment=error`);
+      }
+
+      // Get latest payment status from Pesapal
+      let paymentStatus = payment.status;
+      let paymentStatusDescription = '';
+      
+      if (orderTrackingId) {
+        try {
+          const status = await PesapalService.getTransactionStatus(orderTrackingId);
+          paymentStatusDescription = status.payment_status || status.status || '';
+          paymentStatus = PesapalService['mapPesapalStatusToPaymentStatus'](paymentStatusDescription);
+          
+          // Update payment with latest status
           await DatabaseService.updatePayment(payment.id, {
             status: paymentStatus,
             callback_data: status as any,
+            payment_method: status.payment_method || payment.payment_method,
+            completed_at: paymentStatus === 'completed' ? new Date().toISOString() : payment.completed_at,
           });
 
-          // If completed, update subscription
-          if (paymentStatus === 'completed') {
-            const { SubscriptionService } = await import('../services/subscription.service');
-            await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
-          }
+          logger.info('Payment status updated from Pesapal', {
+            paymentId: payment.id,
+            oldStatus: payment.status,
+            newStatus: paymentStatus,
+            pesapalStatus: paymentStatusDescription,
+          });
+        } catch (statusError: any) {
+          logger.error('Failed to get payment status from Pesapal:', statusError);
+          // Continue with existing payment status
         }
       }
 
-      // Redirect to frontend with success status
-      const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
-        (config.NODE_ENV === 'production' 
-          ? 'https://queryai-frontend.pages.dev'
-          : 'http://localhost:3000');
-      const status = OrderTrackingId ? 'success' : 'pending';
-      return res.redirect(`${frontendUrl}/dashboard?payment=${status}`);
+      // Get updated payment after status update
+      const updatedPayment = await DatabaseService.getPaymentById(payment.id);
+      if (!updatedPayment) {
+        logger.error('Payment not found after update', { paymentId: payment.id });
+        return res.redirect(`${frontendUrl}/dashboard?payment=error`);
+      }
+
+      // Handle based on payment status
+      if (paymentStatus === 'completed') {
+        // Update subscription
+        const { SubscriptionService } = await import('../services/subscription.service');
+        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+        
+        // Send success email
+        try {
+          const { EmailService } = await import('../services/email.service');
+          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+          if (userProfile) {
+            await EmailService.sendPaymentSuccessEmail(
+              userProfile.email,
+              userProfile.full_name || userProfile.email,
+              updatedPayment
+            );
+            logger.info('Payment success email sent', { paymentId: payment.id, userId: payment.user_id });
+          }
+        } catch (emailError) {
+          logger.error('Failed to send payment success email:', emailError);
+          // Don't fail redirect if email fails
+        }
+
+        logger.info('Payment completed successfully', {
+          paymentId: payment.id,
+          userId: payment.user_id,
+          tier: payment.tier,
+        });
+
+        return res.redirect(`${frontendUrl}/dashboard?payment=success`);
+      } else if (paymentStatus === 'cancelled') {
+        // Send cancellation email
+        try {
+          const { EmailService } = await import('../services/email.service');
+          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+          if (userProfile) {
+            await EmailService.sendPaymentCancellationEmail(
+              userProfile.email,
+              userProfile.full_name || userProfile.email,
+              updatedPayment
+            );
+            logger.info('Payment cancellation email sent', { paymentId: payment.id, userId: payment.user_id });
+          }
+        } catch (emailError) {
+          logger.error('Failed to send payment cancellation email:', emailError);
+          // Don't fail redirect if email fails
+        }
+
+        logger.info('Payment cancelled', {
+          paymentId: payment.id,
+          userId: payment.user_id,
+        });
+
+        return res.redirect(`${frontendUrl}/dashboard?payment=cancelled`);
+      } else if (paymentStatus === 'failed') {
+        // Send failure email
+        try {
+          const { EmailService } = await import('../services/email.service');
+          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+          if (userProfile) {
+            await EmailService.sendPaymentFailureEmail(
+              userProfile.email,
+              userProfile.full_name || userProfile.email,
+              updatedPayment,
+              updatedPayment.retry_count || 0
+            );
+            logger.info('Payment failure email sent', { paymentId: payment.id, userId: payment.user_id });
+          }
+        } catch (emailError) {
+          logger.error('Failed to send payment failure email:', emailError);
+          // Don't fail redirect if email fails
+        }
+
+        return res.redirect(`${frontendUrl}/dashboard?payment=failed`);
+      } else {
+        // Pending or other status
+        logger.info('Payment still pending', {
+          paymentId: payment.id,
+          status: paymentStatus,
+        });
+        return res.redirect(`${frontendUrl}/dashboard?payment=pending`);
+      }
     } catch (error: any) {
       logger.error('Payment callback error:', error);
-      const frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL || 
-        (config.NODE_ENV === 'production' 
-          ? 'https://queryai-frontend.pages.dev'
-          : 'http://localhost:3000');
       return res.redirect(`${frontendUrl}/dashboard?payment=error`);
     }
   })
