@@ -1,0 +1,15 @@
+# Ignore most files, but allow package files and source
+node_modules/
+dist/
+.git/
+.env
+.env.local
+*.log
+coverage/
+.nyc_output/
+*.md
+!README.md
+.vscode/
+.idea/
+*.swp
+*.swo

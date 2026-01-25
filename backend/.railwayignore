@@ -1,0 +1,37 @@
+# Railway ignore file (similar to .gitignore)
+# Files to exclude from Railway deployment
+
+# Development files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs (Railway handles logging)
+logs/
+*.log
+
+# Testing
+coverage/
+.nyc_output/
+*.test.ts
+*.spec.ts
+
+# Documentation
+*.md
+!README.md
+
+# Git
+.git/
+.gitignore
+
+# Node (Railway will install)
+node_modules/
+
+# Build output (Railway will build)
+dist/

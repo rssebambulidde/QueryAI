@@ -1,0 +1,1034 @@
+import axios, { AxiosInstance } from 'axios';
+
+// API Base URL
+// Note: NEXT_PUBLIC_ variables are embedded at BUILD TIME in Next.js
+// If you change this variable, you must rebuild/redeploy
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+// Debug: Log API URL in development (will be undefined in production if not set)
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log('[API Client] Using API URL:', API_URL);
+  if (API_URL.includes('localhost') && window.location.hostname !== 'localhost') {
+    console.warn('[API Client] ⚠️ WARNING: API URL is localhost but not running locally!');
+    console.warn('[API Client] Set NEXT_PUBLIC_API_URL in Cloudflare Pages environment variables.');
+  }
+}
+
+// Create axios instance
+const apiClient: AxiosInstance = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add request interceptor to include auth token
+apiClient.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('accessToken');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor for error handling
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    // Handle network errors (no response from server)
+    if (!error.response) {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
+      
+      // Provide helpful error message for network errors
+      if (isLocalhost && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+        // Production environment but API URL is localhost
+        error.message = `Network Error: API URL is set to localhost. Please configure NEXT_PUBLIC_API_URL in Cloudflare Pages environment variables.`;
+      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+        // Generic network error
+        error.message = `Network Error: Unable to connect to the API server. Please check your internet connection and ensure the backend is running.`;
+      }
+      return Promise.reject(error);
+    }
+    
+    // Handle rate limit errors (429) - don't retry, just show error
+    if (error.response?.status === 429) {
+      // Rate limit exceeded - return error immediately without retry
+      return Promise.reject(error);
+    }
+    
+    if (error.response?.status === 401) {
+      // Token expired or invalid
+      // Only redirect if not already on login/signup page to prevent loops
+      if (typeof window !== 'undefined') {
+        const currentPath = window.location.pathname;
+        const isAuthPage = currentPath === '/login' || currentPath === '/signup' || currentPath === '/forgot-password';
+        
+        if (!isAuthPage) {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          window.location.href = '/login';
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Types
+export interface User {
+  id: string;
+  email: string;
+  full_name?: string;
+  subscriptionTier?: 'free' | 'premium' | 'pro';
+}
+
+export interface Session {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message?: string;
+  data?: T;
+  error?: {
+    message: string;
+    code?: string;
+  };
+}
+
+export interface QuestionRequest {
+  question: string;
+  context?: string;
+  conversationHistory?: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+  }>;
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  enableSearch?: boolean;
+  topic?: string;
+  maxSearchResults?: number;
+  timeRange?: 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
+  startDate?: string;
+  endDate?: string;
+  country?: string;
+  // RAG options
+  enableDocumentSearch?: boolean;
+  enableWebSearch?: boolean;
+  topicId?: string;
+  documentIds?: string[];
+  maxDocumentChunks?: number;
+  minScore?: number;
+  // Conversation management
+  conversationId?: string;
+  resendUserMessageId?: string; // When editing: update this user message and replace following assistant
+}
+
+export interface QuestionResponse {
+  answer: string;
+  model: string;
+  sources?: Source[];
+  followUpQuestions?: string[]; // AI-generated follow-up questions
+  refusal?: boolean; // true when response is an off-topic refusal (11.1)
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  conversationId?: string;
+}
+
+export interface Source {
+  type: 'document' | 'web';
+  title: string;
+  url?: string;
+  documentId?: string;
+  snippet?: string;
+  score?: number;
+}
+
+export interface DocumentItem {
+  id?: string;
+  path: string;
+  name: string;
+  size: number;
+  mimeType: string;
+  status?: 'stored' | 'processing' | 'extracted' | 'embedding' | 'embedded' | 'processed' | 'failed' | 'embedding_failed';
+  textLength?: number;
+  extractionError?: string;
+  embeddingError?: string;
+  chunkCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Topic {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  scope_config?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Conversation {
+  id: string;
+  user_id: string;
+  topic_id?: string;
+  title?: string;
+  metadata?: {
+    filters?: {
+      topic?: string;
+      timeRange?: TimeRange;
+      startDate?: string;
+      endDate?: string;
+      country?: string;
+    };
+    [key: string]: any;
+  };
+  created_at: string;
+  updated_at: string;
+  messageCount?: number;
+  lastMessage?: string;
+  lastMessageAt?: string;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: Source[];
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export type TimeRange = 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
+
+// Auth API
+export const authApi = {
+  signup: async (data: { email: string; password: string; fullName?: string }): Promise<ApiResponse<{ user: User; session: Session }>> => {
+    const response = await apiClient.post('/api/auth/signup', data);
+    return response.data;
+  },
+
+  login: async (data: { email: string; password: string }): Promise<ApiResponse<{ user: User; session: Session }>> => {
+    const response = await apiClient.post('/api/auth/login', data);
+    return response.data;
+  },
+
+  logout: async (): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/logout');
+    return response.data;
+  },
+
+  refreshToken: async (refreshToken: string): Promise<ApiResponse<Session>> => {
+    const response = await apiClient.post('/api/auth/refresh', { refreshToken });
+    return response.data;
+  },
+
+  forgotPassword: async (email: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/forgot-password', { email });
+    return response.data;
+  },
+
+  resetPassword: async (data: { password: string; accessToken: string; refreshToken: string }): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/reset-password', data);
+    return response.data;
+  },
+
+  getMe: async (): Promise<ApiResponse<{ user: User }>> => {
+    const response = await apiClient.get('/api/auth/me');
+    return response.data;
+  },
+};
+
+// AI API
+export const aiApi = {
+  ask: async (request: QuestionRequest): Promise<ApiResponse<QuestionResponse>> => {
+    const response = await apiClient.post('/api/ai/ask', request);
+    return response.data;
+  },
+
+  askStream: async function* (request: QuestionRequest): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean }, void, unknown> {
+    const response = await fetch(`${API_URL}/api/ai/ask/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: typeof window !== 'undefined' ? `Bearer ${localStorage.getItem('accessToken') || ''}` : '',
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error('No reader available');
+    }
+
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.chunk) {
+              yield data.chunk;
+            }
+            if (data.followUpQuestions) {
+              yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal };
+            }
+            if (data.done) {
+              return;
+            }
+            if (data.error) {
+              throw new Error(data.error.message || 'Stream error');
+            }
+          } catch (e) {
+            // Skip invalid JSON
+          }
+        }
+      }
+    }
+  },
+
+  summarize: async (originalResponse: string, keyword: string, sources?: Source[]): Promise<ApiResponse<{ summary: string }>> => {
+    const response = await apiClient.post('/api/ai/summarize', { originalResponse, keyword, sources });
+    return response.data;
+  },
+
+  writeEssay: async (originalResponse: string, keyword: string, sources?: Source[]): Promise<ApiResponse<{ essay: string }>> => {
+    const response = await apiClient.post('/api/ai/essay', { originalResponse, keyword, sources });
+    return response.data;
+  },
+
+  generateReport: async (originalResponse: string, keyword: string, sources?: Source[]): Promise<ApiResponse<{ report: string }>> => {
+    const response = await apiClient.post('/api/ai/report', { originalResponse, keyword, sources });
+    return response.data;
+  },
+
+  researchSessionSummary: async (conversationId: string, topicName: string): Promise<ApiResponse<{ summary: string }>> => {
+    const response = await apiClient.post('/api/ai/research-session-summary', { conversationId, topicName });
+    return response.data;
+  },
+
+  suggestedStarters: async (topicId: string): Promise<ApiResponse<{ starters: string[] }>> => {
+    const response = await apiClient.get('/api/ai/suggested-starters', { params: { topicId } });
+    return response.data;
+  },
+};
+
+// Document API
+export const documentApi = {
+  list: async (): Promise<ApiResponse<DocumentItem[]>> => {
+    const response = await apiClient.get('/api/documents');
+    return response.data;
+  },
+
+  upload: async (file: File, onProgress?: (progress: number) => void, topicId?: string): Promise<ApiResponse<DocumentItem>> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (topicId) {
+      formData.append('topicId', topicId);
+    }
+
+    const response = await apiClient.post('/api/documents/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(progress);
+        }
+      },
+    });
+    return response.data;
+  },
+
+  delete: async (pathOrId: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete('/api/documents', {
+      params: { path: pathOrId, id: pathOrId },
+    });
+    return response.data;
+  },
+
+  download: async (path: string): Promise<Blob> => {
+    const response = await apiClient.get(`/api/documents/download?path=${encodeURIComponent(path)}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  process: async (documentId: string, options?: { maxChunkSize?: number; overlapSize?: number }): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post(`/api/documents/${documentId}/process`, options || {});
+    return response.data;
+  },
+
+  clearProcessing: async (documentId: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/documents/${documentId}/chunks`);
+    return response.data;
+  },
+};
+
+// Conversation API
+export const conversationApi = {
+  list: async (options?: { limit?: number; offset?: number; includeMetadata?: boolean }): Promise<ApiResponse<Conversation[]>> => {
+    const response = await apiClient.get('/api/conversations', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<Conversation>> => {
+    const response = await apiClient.get(`/api/conversations/${id}`);
+    return response.data;
+  },
+
+  create: async (data: { title?: string; topicId?: string }): Promise<ApiResponse<Conversation>> => {
+    const response = await apiClient.post('/api/conversations', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: { title?: string; topicId?: string | null; metadata?: any; filters?: any }): Promise<ApiResponse<Conversation>> => {
+    const response = await apiClient.put(`/api/conversations/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/conversations/${id}`);
+    return response.data;
+  },
+
+  getMessages: async (id: string, options?: { limit?: number; offset?: number }): Promise<ApiResponse<Message[]>> => {
+    const response = await apiClient.get(`/api/conversations/${id}/messages`, {
+      params: options,
+    });
+    return response.data;
+  },
+
+  saveMessage: async (id: string, data: { role: 'user' | 'assistant'; content: string; sources?: Source[]; metadata?: Record<string, any> }): Promise<ApiResponse<Message>> => {
+    const response = await apiClient.post(`/api/conversations/${id}/messages`, data);
+    return response.data;
+  },
+};
+
+// Topic API
+export const topicApi = {
+  list: async (): Promise<ApiResponse<Topic[]>> => {
+    const response = await apiClient.get('/api/topics');
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<Topic>> => {
+    const response = await apiClient.get(`/api/topics/${id}`);
+    return response.data;
+  },
+
+  create: async (data: { name: string; description?: string; scopeConfig?: Record<string, any> }): Promise<ApiResponse<Topic>> => {
+    const response = await apiClient.post('/api/topics', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: { name?: string; description?: string; scopeConfig?: Record<string, any> }): Promise<ApiResponse<Topic>> => {
+    const response = await apiClient.put(`/api/topics/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/topics/${id}`);
+    return response.data;
+  },
+};
+
+// API Key interface
+export interface ApiKey {
+  id: string;
+  user_id: string;
+  topic_id?: string;
+  key_hash: string;
+  key_prefix: string;
+  name: string;
+  description?: string;
+  rate_limit_per_hour: number;
+  rate_limit_per_day: number;
+  is_active: boolean;
+  last_used_at?: string;
+  expires_at?: string;
+  created_at: string;
+  updated_at: string;
+  key?: string; // Only present on creation
+}
+
+// API Key API
+export const apiKeyApi = {
+  list: async (): Promise<ApiResponse<ApiKey[]>> => {
+    const response = await apiClient.get('/api/api-keys');
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<ApiKey>> => {
+    const response = await apiClient.get(`/api/api-keys/${id}`);
+    return response.data;
+  },
+
+  create: async (data: {
+    name: string;
+    description?: string;
+    topicId?: string;
+    rateLimitPerHour?: number;
+    rateLimitPerDay?: number;
+    expiresAt?: string;
+  }): Promise<ApiResponse<ApiKey>> => {
+    const response = await apiClient.post('/api/api-keys', data);
+    return response.data;
+  },
+
+  update: async (
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      rateLimitPerHour?: number;
+      rateLimitPerDay?: number;
+      isActive?: boolean;
+      expiresAt?: string;
+    }
+  ): Promise<ApiResponse<ApiKey>> => {
+    const response = await apiClient.put(`/api/api-keys/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/api-keys/${id}`);
+    return response.data;
+  },
+
+  getUsage: async (id: string, options?: { startDate?: string; endDate?: string; limit?: number }): Promise<ApiResponse<{
+    usage: Array<{
+      id: string;
+      api_key_id: string;
+      endpoint: string;
+      method: string;
+      status_code?: number;
+      response_time_ms?: number;
+      created_at: string;
+    }>;
+    statistics: {
+      totalRequests: number;
+      successCount: number;
+      errorCount: number;
+      avgResponseTime: number;
+      endpointStats: Record<string, { count: number; avgTime: number }>;
+    };
+  }>> => {
+    const response = await apiClient.get(`/api/api-keys/${id}/usage`, {
+      params: options,
+    });
+    return response.data;
+  },
+};
+
+// Embedding Config interface
+export interface EmbeddingConfig {
+  id: string;
+  user_id: string;
+  topic_id: string;
+  name: string;
+  embed_code?: string;
+  customization?: Record<string, any>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Embedding API
+// Collection types
+export interface Collection {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  conversation_count?: number;
+  conversations?: Conversation[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCollectionInput {
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+}
+
+export interface UpdateCollectionInput {
+  name?: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+}
+
+export const collectionApi = {
+  list: async (): Promise<ApiResponse<Collection[]>> => {
+    const response = await apiClient.get('/api/collections');
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<Collection>> => {
+    const response = await apiClient.get(`/api/collections/${id}`);
+    return response.data;
+  },
+
+  create: async (input: CreateCollectionInput): Promise<ApiResponse<Collection>> => {
+    const response = await apiClient.post('/api/collections', input);
+    return response.data;
+  },
+
+  update: async (id: string, input: UpdateCollectionInput): Promise<ApiResponse<Collection>> => {
+    const response = await apiClient.put(`/api/collections/${id}`, input);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/collections/${id}`);
+    return response.data;
+  },
+
+  addConversation: async (collectionId: string, conversationId: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post(`/api/collections/${collectionId}/conversations/${conversationId}`);
+    return response.data;
+  },
+
+  removeConversation: async (collectionId: string, conversationId: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/collections/${collectionId}/conversations/${conversationId}`);
+    return response.data;
+  },
+
+  search: async (collectionId: string, query: string): Promise<ApiResponse<Conversation[]>> => {
+    const response = await apiClient.get(`/api/collections/${collectionId}/search`, {
+      params: { q: query },
+    });
+    return response.data;
+  },
+};
+
+export const embeddingApi = {
+  list: async (): Promise<ApiResponse<EmbeddingConfig[]>> => {
+    const response = await apiClient.get('/api/embeddings');
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<EmbeddingConfig>> => {
+    const response = await apiClient.get(`/api/embeddings/${id}`);
+    return response.data;
+  },
+
+  create: async (data: {
+    name: string;
+    topicId: string;
+    customization?: Record<string, any>;
+  }): Promise<ApiResponse<EmbeddingConfig>> => {
+    const response = await apiClient.post('/api/embeddings', data);
+    return response.data;
+  },
+
+  update: async (
+    id: string,
+    data: {
+      name?: string;
+      customization?: Record<string, any>;
+      isActive?: boolean;
+    }
+  ): Promise<ApiResponse<EmbeddingConfig>> => {
+    const response = await apiClient.put(`/api/embeddings/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/embeddings/${id}`);
+    return response.data;
+  },
+};
+
+// Analytics API Types
+export interface QueryStatistics {
+  totalQueries: number;
+  queriesThisMonth: number;
+  queriesLastMonth: number;
+  queriesThisWeek: number;
+  averagePerDay: number;
+  peakDay: {
+    date: string;
+    count: number;
+  };
+}
+
+export interface TopQuery {
+  query: string;
+  count: number;
+  lastAsked: string;
+  conversationId?: string;
+}
+
+export interface APIUsageMetrics {
+  totalApiCalls: number;
+  apiCallsThisMonth: number;
+  apiCallsLastMonth: number;
+  apiCallsThisWeek: number;
+  averagePerDay: number;
+  byEndpoint: Array<{
+    endpoint: string;
+    count: number;
+  }>;
+}
+
+export interface UsageByDate {
+  date: string;
+  queries: number;
+  apiCalls: number;
+  documentUploads: number;
+}
+
+export interface AnalyticsOverview {
+  queryStatistics: QueryStatistics;
+  topQueries: TopQuery[];
+  apiUsageMetrics: APIUsageMetrics;
+  usageByDate: UsageByDate[];
+  documentUploads: {
+    total: number;
+    thisMonth: number;
+    lastMonth: number;
+  };
+}
+
+export const analyticsApi = {
+  getOverview: async (days: number = 30): Promise<ApiResponse<AnalyticsOverview>> => {
+    const response = await apiClient.get('/api/analytics/overview', {
+      params: { days },
+    });
+    return response.data;
+  },
+
+  getQueryStatistics: async (
+    startDate?: string,
+    endDate?: string
+  ): Promise<ApiResponse<QueryStatistics>> => {
+    const response = await apiClient.get('/api/analytics/query-statistics', {
+      params: { startDate, endDate },
+    });
+    return response.data;
+  },
+
+  getTopQueries: async (
+    limit: number = 10,
+    startDate?: string,
+    endDate?: string
+  ): Promise<ApiResponse<{ queries: TopQuery[] }>> => {
+    const response = await apiClient.get('/api/analytics/top-queries', {
+      params: { limit, startDate, endDate },
+    });
+    return response.data;
+  },
+
+  getAPIUsage: async (
+    startDate?: string,
+    endDate?: string
+  ): Promise<ApiResponse<APIUsageMetrics>> => {
+    const response = await apiClient.get('/api/analytics/api-usage', {
+      params: { startDate, endDate },
+    });
+    return response.data;
+  },
+
+  getUsageByDate: async (
+    days: number = 30,
+    startDate?: string,
+    endDate?: string
+  ): Promise<ApiResponse<{ usage: UsageByDate[] }>> => {
+    const response = await apiClient.get('/api/analytics/usage-by-date', {
+      params: { days, startDate, endDate },
+    });
+    return response.data;
+  },
+};
+
+// Subscription API Types
+export interface Subscription {
+  id: string;
+  user_id: string;
+  tier: 'free' | 'premium' | 'pro';
+  status: 'active' | 'cancelled' | 'expired';
+  current_period_start?: string;
+  current_period_end?: string;
+  cancel_at_period_end: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TierLimits {
+  queriesPerMonth: number | null;
+  documentUploads: number | null;
+  maxTopics: number | null;
+  features: {
+    documentUpload: boolean;
+    embedding: boolean;
+    analytics: boolean;
+    apiAccess: boolean;
+    whiteLabel: boolean;
+  };
+}
+
+export interface UsageLimit {
+  allowed: boolean;
+  used: number;
+  limit: number | null;
+  remaining: number | null;
+}
+
+export interface SubscriptionData {
+  subscription: Subscription;
+  limits: TierLimits;
+  usage: {
+    queries: UsageLimit;
+    documentUploads: UsageLimit;
+    topics: UsageLimit;
+  };
+}
+
+export interface BillingHistory {
+  payments: Payment[];
+  total: number;
+}
+
+// Usage API Types
+export interface UsageStats {
+  queries: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number; // 0-100, or -1 for unlimited
+  };
+  documentUploads: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
+  topics: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
+  apiCalls?: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
+  periodStart: string;
+  periodEnd: string;
+  tier: 'free' | 'premium' | 'pro';
+}
+
+export interface UsageHistory {
+  date: string;
+  queries: number;
+  documentUploads: number;
+  apiCalls: number;
+}
+
+export interface UsageWarnings {
+  approaching: boolean;
+  warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics'; percentage: number }>;
+}
+
+// Usage API
+export const usageApi = {
+  getCurrent: async (): Promise<ApiResponse<{ usage: UsageStats }>> => {
+    const response = await apiClient.get('/api/usage/current');
+    return response.data;
+  },
+
+  getHistory: async (days?: number): Promise<ApiResponse<{ history: UsageHistory[]; days: number }>> => {
+    const response = await apiClient.get('/api/usage/history', {
+      params: days ? { days } : {},
+    });
+    return response.data;
+  },
+
+  getWarnings: async (): Promise<ApiResponse<UsageWarnings>> => {
+    const response = await apiClient.get('/api/usage/warnings');
+    return response.data;
+  },
+};
+
+export const subscriptionApi = {
+  get: async (): Promise<ApiResponse<SubscriptionData>> => {
+    const response = await apiClient.get('/api/subscription');
+    return response.data;
+  },
+
+  getLimits: async (): Promise<ApiResponse<{
+    queries: UsageLimit;
+    documentUploads: UsageLimit;
+    topics: UsageLimit;
+  }>> => {
+    const response = await apiClient.get('/api/subscription/limits');
+    return response.data;
+  },
+
+  upgrade: async (tier: 'free' | 'premium' | 'pro'): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.put('/api/subscription/upgrade', { tier });
+    return response.data;
+  },
+
+  cancel: async (immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.post('/api/subscription/cancel', { immediate });
+    return response.data;
+  },
+
+  downgrade: async (tier: 'free' | 'premium' | 'pro', immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.put('/api/subscription/downgrade', { tier, immediate });
+    return response.data;
+  },
+
+  reactivate: async (): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.post('/api/subscription/reactivate');
+    return response.data;
+  },
+
+  getBillingHistory: async (): Promise<ApiResponse<BillingHistory>> => {
+    const response = await apiClient.get('/api/subscription/billing-history');
+    return response.data;
+  },
+
+  downloadInvoice: async (paymentId: string): Promise<Blob> => {
+    const response = await apiClient.get(`/api/subscription/invoice/${paymentId}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  getHistory: async (): Promise<ApiResponse<{ history: any[]; total: number }>> => {
+    const response = await apiClient.get('/api/subscription/history');
+    return response.data;
+  },
+
+  getProratedPricing: async (toTier: 'free' | 'premium' | 'pro', currency: 'UGX' | 'USD' = 'UGX'): Promise<ApiResponse<{ proratedPricing: any }>> => {
+    const response = await apiClient.get('/api/subscription/prorated-pricing', {
+      params: { toTier, currency },
+    });
+    return response.data;
+  },
+
+  startTrial: async (tier: 'premium' | 'pro', trialDays: number = 7): Promise<ApiResponse<{ subscription: Subscription; trial_end: string }>> => {
+    const response = await apiClient.post('/api/subscription/start-trial', { tier, trialDays });
+    return response.data;
+  },
+};
+
+// Payment API
+export interface Payment {
+  id: string;
+  user_id: string;
+  subscription_id?: string;
+  pesapal_order_tracking_id?: string;
+  pesapal_merchant_reference?: string;
+  tier: 'free' | 'premium' | 'pro';
+  amount: number;
+  currency: string;
+  status: 'pending' | 'completed' | 'failed' | 'cancelled';
+  payment_method?: string;
+  payment_description?: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
+export interface PaymentInitiateRequest {
+  tier: 'premium' | 'pro';
+  currency: 'UGX' | 'USD';
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber?: string;
+}
+
+export interface PaymentInitiateResponse {
+  payment: {
+    id: string;
+    tier: 'premium' | 'pro';
+    amount: number;
+    currency: string;
+    status: string;
+  };
+  redirect_url: string;
+  order_tracking_id: string;
+}
+
+export interface RefundRequest {
+  paymentId: string;
+  amount?: number;
+  reason?: string;
+}
+
+export interface RefundResponse {
+  refund: {
+    id: string;
+    payment_id: string;
+    amount: number;
+    currency: string;
+    status: string;
+  };
+  refund_status: string;
+}
+
+export const paymentApi = {
+  initiate: async (data: PaymentInitiateRequest & { recurring?: boolean }): Promise<ApiResponse<PaymentInitiateResponse>> => {
+    const response = await apiClient.post('/api/payment/initiate', data);
+    return response.data;
+  },
+
+  getStatus: async (orderTrackingId: string): Promise<ApiResponse<{ payment: Payment }>> => {
+    const response = await apiClient.get(`/api/payment/status/${orderTrackingId}`);
+    return response.data;
+  },
+
+  getHistory: async (): Promise<ApiResponse<{ payments: Payment[] }>> => {
+    const response = await apiClient.get('/api/payment/history');
+    return response.data;
+  },
+
+  refund: async (data: RefundRequest): Promise<ApiResponse<RefundResponse>> => {
+    const response = await apiClient.post('/api/payment/refund', data);
+    return response.data;
+  },
+};
