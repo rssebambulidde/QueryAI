@@ -114,8 +114,10 @@ router.put(
     }
 
     // Validate downgrade (can't downgrade to same or higher tier)
-    const tierOrder = { free: 0, premium: 1, pro: 2 };
-    if (tierOrder[tier] >= tierOrder[subscription.tier as keyof typeof tierOrder]) {
+    const tierOrder: Record<'free' | 'premium' | 'pro', number> = { free: 0, premium: 1, pro: 2 };
+    const currentTier = subscription.tier as 'free' | 'premium' | 'pro';
+    const targetTier = tier as 'free' | 'premium' | 'pro';
+    if (tierOrder[targetTier] >= tierOrder[currentTier]) {
       throw new ValidationError('Cannot downgrade to same or higher tier');
     }
 
@@ -259,8 +261,13 @@ router.get(
     }
 
     const { paymentId } = req.params;
+    const id = Array.isArray(paymentId) ? paymentId[0] : paymentId;
+    
+    if (!id) {
+      throw new ValidationError('Payment ID is required');
+    }
 
-    const payment = await DatabaseService.getPaymentById(paymentId);
+    const payment = await DatabaseService.getPaymentById(id);
     if (!payment) {
       throw new ValidationError('Payment not found');
     }

@@ -453,8 +453,11 @@ export class SubscriptionService {
    */
   static async processRenewals(): Promise<void> {
     try {
+      // Import supabaseAdmin directly
+      const { supabaseAdmin } = await import('../config/database');
+      
       // Get all active subscriptions that need renewal
-      const { data: subscriptions, error } = await DatabaseService.supabaseAdmin
+      const { data: subscriptions, error } = await supabaseAdmin
         .from('subscriptions')
         .select('*')
         .eq('status', 'active')
