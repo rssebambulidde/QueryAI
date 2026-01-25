@@ -47,9 +47,19 @@ interface EnvConfig {
 
 const getEnvVar = (key: string, defaultValue?: string): string => {
   const value = process.env[key] || defaultValue;
-  if (!value && key !== 'ANTHROPIC_API_KEY' && key !== 'TAVILY_API_KEY' && 
-      key !== 'PINECONE_API_KEY' && key !== 'PINECONE_ENVIRONMENT' && 
-      key !== 'PINECONE_INDEX_NAME' && key !== 'OPENAI_API_KEY') {
+  const optionalKeys = [
+    'ANTHROPIC_API_KEY',
+    'TAVILY_API_KEY',
+    'PINECONE_API_KEY',
+    'PINECONE_ENVIRONMENT',
+    'PINECONE_INDEX_NAME',
+    'OPENAI_API_KEY',
+    'PESAPAL_CONSUMER_KEY',
+    'PESAPAL_CONSUMER_SECRET',
+    'PESAPAL_ENVIRONMENT',
+    'PESAPAL_WEBHOOK_URL',
+  ];
+  if (!value && !optionalKeys.includes(key)) {
     throw new Error(`Missing required environment variable: ${key}`);
   }
   return value || '';
@@ -93,11 +103,11 @@ const config: EnvConfig = {
   // Logging
   LOG_LEVEL: getEnvVar('LOG_LEVEL', 'info'),
 
-  // Payment Processing (Pesapal)
-  PESAPAL_CONSUMER_KEY: getEnvVar('PESAPAL_CONSUMER_KEY'),
-  PESAPAL_CONSUMER_SECRET: getEnvVar('PESAPAL_CONSUMER_SECRET'),
+  // Payment Processing (Pesapal) - Optional
+  PESAPAL_CONSUMER_KEY: getEnvVar('PESAPAL_CONSUMER_KEY') || undefined,
+  PESAPAL_CONSUMER_SECRET: getEnvVar('PESAPAL_CONSUMER_SECRET') || undefined,
   PESAPAL_ENVIRONMENT: (getEnvVar('PESAPAL_ENVIRONMENT', 'sandbox') as 'sandbox' | 'production') || 'sandbox',
-  PESAPAL_WEBHOOK_URL: getEnvVar('PESAPAL_WEBHOOK_URL'),
+  PESAPAL_WEBHOOK_URL: getEnvVar('PESAPAL_WEBHOOK_URL') || undefined,
 };
 
 export default config;
