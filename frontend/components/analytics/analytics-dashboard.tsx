@@ -259,7 +259,7 @@ export function AnalyticsDashboard() {
                   </div>
                   <div className="flex gap-2 h-4">
                     <div
-                      className="bg-blue-500 rounded"
+                      className="bg-orange-500 rounded"
                       style={{
                         width: `${(usage.queries / maxQueries) * 100}%`,
                       }}

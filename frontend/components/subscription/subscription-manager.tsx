@@ -84,7 +84,7 @@ export function SubscriptionManager() {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading subscription data...</p>
         </div>
       </div>
@@ -130,7 +130,7 @@ export function SubscriptionManager() {
       case 'pro':
         return 'from-purple-500 to-pink-500';
       case 'premium':
-        return 'from-blue-500 to-indigo-500';
+        return 'from-orange-500 to-orange-600';
       default:
         return 'from-gray-400 to-gray-600';
     }
@@ -186,7 +186,7 @@ export function SubscriptionManager() {
           <div>
             <div className="flex justify-between items-center mb-2">
               <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-blue-600" />
+                <Zap className="w-4 h-4 text-orange-600" />
                 <span className="font-medium">Queries</span>
               </div>
               <span className="text-sm text-gray-600">{formatLimit(usage.queries)}</span>
@@ -281,7 +281,7 @@ export function SubscriptionManager() {
           <h3 className="text-lg font-semibold mb-4">Upgrade Plan</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {tier === 'free' && (
-              <div className="border-2 border-blue-500 rounded-lg p-4">
+              <div className="border-2 border-orange-500 rounded-lg p-4">
                 <h4 className="font-semibold text-lg mb-2">Premium</h4>
                 <p className="text-gray-600 text-sm mb-4">
                   500 queries/month, 10 documents, 3 topics, analytics

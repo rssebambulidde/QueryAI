@@ -444,7 +444,7 @@ export const EmbeddingManager: React.FC = () => {
                     href={getEmbedUrl(embedding.id)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                    className="text-xs text-orange-600 hover:text-orange-700 flex items-center gap-1"
                   >
                     <Eye className="w-3 h-3" />
                     Preview

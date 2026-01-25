@@ -717,7 +717,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                         toast.info('Opening Subscription tab...');
                       }
                     }}
-                    className="text-sm text-blue-600 hover:text-blue-800 underline font-medium self-start mt-1"
+                    className="text-sm text-orange-600 hover:text-orange-800 underline font-medium self-start mt-1"
                   >
                     Upgrade your plan →
                   </button>

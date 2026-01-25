@@ -21,11 +21,11 @@ const getFileIcon = (mimeType: string, fileName: string): React.ReactElement => 
   if (mimeType === 'application/pdf' || extension === 'pdf') {
     return <FileText className="w-5 h-5 text-red-600" />;
   } else if (mimeType === 'text/markdown' || extension === 'md') {
-    return <FileCode className="w-5 h-5 text-blue-600" />;
+    return <FileCode className="w-5 h-5 text-orange-600" />;
   } else if (mimeType === 'text/plain' || extension === 'txt') {
     return <FileType className="w-5 h-5 text-gray-600" />;
   } else if (extension === 'docx') {
-    return <File className="w-5 h-5 text-blue-700" />;
+    return <File className="w-5 h-5 text-orange-700" />;
   }
   return <File className="w-5 h-5 text-gray-500" />;
 };
@@ -380,7 +380,7 @@ export const DocumentManager = () => {
         )}
       >
         <div className="flex flex-col items-center text-center">
-          <Upload className={cn('w-8 h-8 mb-2', isDragging ? 'text-blue-600' : 'text-gray-400')} />
+          <Upload className={cn('w-8 h-8 mb-2', isDragging ? 'text-orange-600' : 'text-gray-400')} />
           <p className="text-sm font-medium text-gray-700 mb-1">
             {isDragging ? 'Drop file here' : 'Drag & drop file here'}
           </p>
@@ -478,7 +478,7 @@ export const DocumentManager = () => {
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                className="bg-orange-600 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${uploadProgress}%` }}
               />
             </div>
@@ -490,7 +490,7 @@ export const DocumentManager = () => {
       <div className="border-t border-gray-100 pt-4">
         {isLoading && !isUploading ? (
           <div className="flex flex-col items-center justify-center py-8">
-            <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-blue-600 border-r-transparent mb-2"></div>
+            <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-orange-600 border-r-transparent mb-2"></div>
             <p className="text-sm text-gray-500">Loading documents...</p>
           </div>
         ) : sortedDocuments.length === 0 ? (
@@ -515,7 +515,7 @@ export const DocumentManager = () => {
                         <span className={cn(
                           "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0",
                           doc.status === 'processed' && "bg-green-100 text-green-700",
-                          doc.status === 'extracted' && "bg-blue-100 text-blue-700",
+                          doc.status === 'extracted' && "bg-orange-100 text-orange-700",
                           doc.status === 'embedding' && "bg-purple-100 text-purple-700",
                           doc.status === 'embedded' && "bg-green-100 text-green-700",
                           doc.status === 'stored' && "bg-gray-100 text-gray-700",
@@ -555,7 +555,7 @@ export const DocumentManager = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleProcess(doc)}
-                      className="h-8 px-3 text-blue-600 border-blue-200 hover:bg-blue-50"
+                      className="h-8 px-3 text-orange-600 border-orange-200 hover:bg-orange-50"
                       disabled={isLoading || isUploading}
                     >
                       <Play className="w-3 h-3 mr-1.5" />
@@ -691,8 +691,8 @@ export const DocumentManager = () => {
                 </p>
               </div>
               
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-xs text-blue-800">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                <p className="text-xs text-orange-800">
                   <strong>Tip:</strong> Larger chunks preserve more context but may be less precise. 
                   Overlap helps maintain continuity between chunks.
                 </p>

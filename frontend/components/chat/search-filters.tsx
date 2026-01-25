@@ -337,7 +337,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
           onChange={(e) => onChange({ ...filters, topic: e.target.value })}
           placeholder="e.g., technology, education, AI, finance..."
           disabled={disabled}
-          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400"
+          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 placeholder-gray-400"
         />
         <p className="text-xs text-gray-500 mt-1">Any keyword to filter search results</p>
       </div>
@@ -353,7 +353,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
             value={useCustomDates ? 'custom' : filters.timeRange || ''}
             onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange | 'custom')}
             disabled={disabled}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
           >
             <option value="">All time</option>
             {TIME_RANGE_OPTIONS.map((option) => (
@@ -373,7 +373,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                   value={filters.startDate || ''}
                   onChange={(e) => onChange({ ...filters, startDate: e.target.value })}
                   disabled={disabled}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
                 />
               </div>
               <div>
@@ -384,7 +384,7 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                   onChange={(e) => onChange({ ...filters, endDate: e.target.value })}
                   disabled={disabled}
                   min={filters.startDate}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
                 />
               </div>
             </div>

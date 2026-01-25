@@ -514,9 +514,9 @@ export const ApiKeyManager: React.FC = () => {
                         {usageData.statistics.errorCount}
                       </div>
                     </div>
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <div className="text-sm text-blue-600">Avg Response Time</div>
-                      <div className="text-2xl font-semibold text-blue-700 mt-1">
+                    <div className="bg-orange-50 rounded-lg p-4">
+                      <div className="text-sm text-orange-600">Avg Response Time</div>
+                      <div className="text-2xl font-semibold text-orange-700 mt-1">
                         {usageData.statistics.avgResponseTime}ms
                       </div>
                     </div>

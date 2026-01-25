@@ -599,7 +599,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
         {/* Quick Filters Section (Temporary) */}
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-blue-600" />
+            <Sparkles className="w-4 h-4 text-orange-600" />
             <label className="text-xs font-semibold text-gray-900">Quick Filters</label>
             <div className="flex items-center gap-1 text-xs text-gray-500">
               <Info className="w-3 h-3" />
@@ -661,7 +661,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
                   <button
                     key={topic.id}
                     onClick={() => handleTopicSelect(topic)}
-                    className="w-full text-left px-2 py-1.5 text-xs bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
+                    className="w-full text-left px-2 py-1.5 text-xs bg-orange-50 border border-orange-200 rounded hover:bg-orange-100 transition-colors"
                   >
                     <div className="font-medium text-blue-900">{topic.name}</div>
                     {topic.description && (
@@ -684,7 +684,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
                 value={useCustomDates ? 'custom' : filters.timeRange || ''}
                 onChange={(e) => handleTimeRangeChange(e.target.value as TimeRange | 'custom')}
                 disabled={disabled}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
               >
                 <option value="">All time</option>
                 {TIME_RANGE_OPTIONS.map((option) => (
@@ -704,7 +704,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
                       value={filters.startDate || ''}
                       onChange={(e) => onChange({ ...filters, startDate: e.target.value })}
                       disabled={disabled}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
                     />
                   </div>
                   <div>
@@ -715,7 +715,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
                       onChange={(e) => onChange({ ...filters, endDate: e.target.value })}
                       disabled={disabled}
                       min={filters.startDate}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
                     />
                   </div>
                 </div>

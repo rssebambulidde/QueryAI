@@ -507,7 +507,7 @@ export const HorizontalFilterBar: React.FC<HorizontalFilterBarProps> = ({
                 onChange={(e) => onChange({ ...filters, keyword: e.target.value })}
                 placeholder="Keyword"
                 disabled={disabled}
-                className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 w-24"
+                className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 w-24"
               />
             </div>
           )}
@@ -519,7 +519,7 @@ export const HorizontalFilterBar: React.FC<HorizontalFilterBarProps> = ({
               value={filters.timeRange || ''}
               onChange={(e) => onChange({ ...filters, timeRange: e.target.value as TimeRange || undefined })}
               disabled={disabled}
-              className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500"
             >
               <option value="">All time</option>
               {TIME_RANGE_OPTIONS.map((option) => (
@@ -537,7 +537,7 @@ export const HorizontalFilterBar: React.FC<HorizontalFilterBarProps> = ({
               value={filters.country || ''}
               onChange={(e) => onChange({ ...filters, country: e.target.value || undefined })}
               disabled={disabled}
-              className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-orange-500"
             >
               <option value="">All</option>
               {COUNTRIES.map((country) => (

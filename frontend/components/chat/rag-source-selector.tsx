@@ -83,7 +83,7 @@ export const RAGSourceSelector: React.FC<RAGSourceSelectorProps> = ({
           className={cn(
             'flex items-center gap-2 px-3 py-2 rounded-lg border transition-all',
             settings.enableDocumentSearch && isDocumentAvailable
-              ? 'bg-blue-50 border-blue-300 text-blue-700'
+              ? 'bg-orange-50 border-orange-300 text-orange-700'
               : 'bg-gray-50 border-gray-200 text-gray-500',
             !isDocumentAvailable
               ? 'opacity-50 cursor-not-allowed'
@@ -99,7 +99,7 @@ export const RAGSourceSelector: React.FC<RAGSourceSelectorProps> = ({
         >
           <FileText className={cn(
             'w-4 h-4',
-            settings.enableDocumentSearch && isDocumentAvailable ? 'text-blue-600' : 'text-gray-400'
+            settings.enableDocumentSearch && isDocumentAvailable ? 'text-orange-600' : 'text-gray-400'
           )} />
           <span className="text-sm font-medium">Documents</span>
           {isDocumentAvailable && (
@@ -113,7 +113,7 @@ export const RAGSourceSelector: React.FC<RAGSourceSelectorProps> = ({
             </span>
           )}
           {settings.enableDocumentSearch && isDocumentAvailable && (
-            <CheckCircle2 className="w-3 h-3 text-blue-600" />
+            <CheckCircle2 className="w-3 h-3 text-orange-600" />
           )}
           {!isDocumentAvailable && (
             <AlertCircle className="w-3 h-3 text-gray-400" />

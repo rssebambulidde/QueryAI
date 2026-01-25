@@ -64,7 +64,7 @@ export default function ForgotPasswordPage() {
             Or{' '}
             <Link
               href="/login"
-              className="font-medium text-blue-600 hover:text-blue-500"
+              className="font-medium text-orange-600 hover:text-orange-500"
             >
               return to sign in
             </Link>
