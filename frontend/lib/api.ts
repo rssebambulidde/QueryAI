@@ -31,6 +31,22 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Handle network errors (no response from server)
+    if (!error.response) {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
+      
+      // Provide helpful error message for network errors
+      if (isLocalhost && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+        // Production environment but API URL is localhost
+        error.message = `Network Error: API URL is set to localhost. Please configure NEXT_PUBLIC_API_URL in Cloudflare Pages environment variables.`;
+      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+        // Generic network error
+        error.message = `Network Error: Unable to connect to the API server. Please check your internet connection and ensure the backend is running.`;
+      }
+      return Promise.reject(error);
+    }
+    
     // Handle rate limit errors (429) - don't retry, just show error
     if (error.response?.status === 429) {
       // Rate limit exceeded - return error immediately without retry
