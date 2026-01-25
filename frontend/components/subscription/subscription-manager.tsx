@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { subscriptionApi, SubscriptionData, UsageLimit } from '@/lib/api';
+import { subscriptionApi, SubscriptionData, UsageLimit, Payment, BillingHistory } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { Check, X, Zap, FileText, Folder, BarChart3, Key, Sparkles } from 'lucide-react';
+import { Check, X, Zap, FileText, Folder, BarChart3, Key, Sparkles, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 
 export function SubscriptionManager() {
@@ -14,9 +14,14 @@ export function SubscriptionManager() {
   const [upgrading, setUpgrading] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [selectedTier, setSelectedTier] = useState<'premium' | 'pro' | null>(null);
+  const [billingHistory, setBillingHistory] = useState<BillingHistory | null>(null);
+  const [showBillingHistory, setShowBillingHistory] = useState(false);
+  const [showCancelOptions, setShowCancelOptions] = useState(false);
+  const [showDowngradeOptions, setShowDowngradeOptions] = useState(false);
 
   useEffect(() => {
     loadSubscriptionData();
+    loadBillingHistory();
   }, []);
 
   const loadSubscriptionData = async () => {
@@ -36,6 +41,17 @@ export function SubscriptionManager() {
     }
   };
 
+  const loadBillingHistory = async () => {
+    try {
+      const response = await subscriptionApi.getBillingHistory();
+      if (response.success && response.data) {
+        setBillingHistory(response.data);
+      }
+    } catch (err: any) {
+      console.error('Failed to load billing history:', err);
+    }
+  };
+
   const handleUpgrade = (tier: 'premium' | 'pro') => {
     setSelectedTier(tier);
     setShowPaymentDialog(true);
@@ -48,21 +64,65 @@ export function SubscriptionManager() {
     await loadSubscriptionData();
   };
 
-  const handleCancel = async () => {
-    if (!confirm('Are you sure you want to cancel your subscription? It will remain active until the end of the current period.')) {
+  const handleCancel = async (immediate: boolean = false) => {
+    const message = immediate
+      ? 'Are you sure you want to cancel your subscription immediately? You will lose access to premium features right away.'
+      : 'Are you sure you want to cancel your subscription? It will remain active until the end of the current period.';
+    
+    if (!confirm(message)) {
       return;
     }
 
     try {
       setError(null);
-      const response = await subscriptionApi.cancel();
+      const response = await subscriptionApi.cancel(immediate);
       if (response.success) {
         await loadSubscriptionData();
+        setShowCancelOptions(false);
       } else {
         setError(response.error?.message || 'Failed to cancel subscription');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to cancel subscription');
+    }
+  };
+
+  const handleDowngrade = async (targetTier: 'free' | 'premium' | 'pro', immediate: boolean = false) => {
+    const message = immediate
+      ? `Are you sure you want to downgrade to ${targetTier} immediately? You will lose access to current tier features right away.`
+      : `Are you sure you want to downgrade to ${targetTier}? The change will take effect at the end of the current period.`;
+    
+    if (!confirm(message)) {
+      return;
+    }
+
+    try {
+      setError(null);
+      const response = await subscriptionApi.downgrade(targetTier, immediate);
+      if (response.success) {
+        await loadSubscriptionData();
+        setShowDowngradeOptions(false);
+      } else {
+        setError(response.error?.message || 'Failed to downgrade subscription');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to downgrade subscription');
+    }
+  };
+
+  const handleDownloadInvoice = async (paymentId: string) => {
+    try {
+      const blob = await subscriptionApi.downloadInvoice(paymentId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice-${paymentId.substring(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      setError(err.message || 'Failed to download invoice');
     }
   };
 
@@ -315,19 +375,142 @@ export function SubscriptionManager() {
         </div>
       )}
 
+      {/* Downgrade Options */}
+      {tier !== 'free' && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Change Plan</h3>
+            <button
+              onClick={() => setShowDowngradeOptions(!showDowngradeOptions)}
+              className="text-orange-600 hover:text-orange-700"
+            >
+              {showDowngradeOptions ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+          </div>
+          {showDowngradeOptions && (
+            <div className="space-y-3 mt-4">
+              {tier === 'pro' && (
+                <>
+                  <Button
+                    onClick={() => handleDowngrade('premium', false)}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Downgrade to Premium (at period end)
+                  </Button>
+                  <Button
+                    onClick={() => handleDowngrade('premium', true)}
+                    variant="outline"
+                    className="w-full border-orange-500 text-orange-600"
+                  >
+                    Downgrade to Premium (immediate)
+                  </Button>
+                </>
+              )}
+              {(tier === 'pro' || tier === 'premium') && (
+                <>
+                  <Button
+                    onClick={() => handleDowngrade('free', false)}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Downgrade to Free (at period end)
+                  </Button>
+                  <Button
+                    onClick={() => handleDowngrade('free', true)}
+                    variant="outline"
+                    className="w-full border-red-500 text-red-600 hover:bg-red-50"
+                  >
+                    Downgrade to Free (immediate)
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Cancel Subscription */}
       {tier !== 'free' && !subscription.cancel_at_period_end && (
         <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4 text-red-600">Danger Zone</h3>
-          <Button
-            onClick={handleCancel}
-            variant="outline"
-            className="border-red-500 text-red-600 hover:bg-red-50"
-          >
-            Cancel Subscription
-          </Button>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-red-600">Cancel Subscription</h3>
+            <button
+              onClick={() => setShowCancelOptions(!showCancelOptions)}
+              className="text-red-600 hover:text-red-700"
+            >
+              {showCancelOptions ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+          </div>
+          {showCancelOptions && (
+            <div className="space-y-3 mt-4">
+              <Button
+                onClick={() => handleCancel(false)}
+                variant="outline"
+                className="w-full border-red-500 text-red-600 hover:bg-red-50"
+              >
+                Cancel at Period End
+              </Button>
+              <Button
+                onClick={() => handleCancel(true)}
+                variant="outline"
+                className="w-full border-red-600 bg-red-50 text-red-700 hover:bg-red-100"
+              >
+                Cancel Immediately
+              </Button>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Billing History */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Billing History</h3>
+          <button
+            onClick={() => setShowBillingHistory(!showBillingHistory)}
+            className="text-orange-600 hover:text-orange-700"
+          >
+            {showBillingHistory ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </button>
+        </div>
+        {showBillingHistory && (
+          <div className="mt-4">
+            {billingHistory && billingHistory.payments.length > 0 ? (
+              <div className="space-y-3">
+                {billingHistory.payments.map((payment: Payment) => (
+                  <div
+                    key={payment.id}
+                    className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium">
+                        {payment.tier.toUpperCase()} - {payment.currency} {payment.amount.toLocaleString()}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {new Date(payment.created_at).toLocaleDateString()} • {payment.status}
+                      </div>
+                    </div>
+                    {payment.status === 'completed' && (
+                      <Button
+                        onClick={() => handleDownloadInvoice(payment.id)}
+                        variant="outline"
+                        size="sm"
+                        className="ml-4"
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Invoice
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-600 text-center py-4">No billing history found</p>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Payment Dialog */}
       {showPaymentDialog && selectedTier && (

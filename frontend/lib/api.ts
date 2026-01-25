@@ -795,6 +795,11 @@ export interface SubscriptionData {
   };
 }
 
+export interface BillingHistory {
+  payments: Payment[];
+  total: number;
+}
+
 export const subscriptionApi = {
   get: async (): Promise<ApiResponse<SubscriptionData>> => {
     const response = await apiClient.get('/api/subscription');
@@ -815,13 +820,30 @@ export const subscriptionApi = {
     return response.data;
   },
 
-  cancel: async (): Promise<ApiResponse<{ subscription: Subscription }>> => {
-    const response = await apiClient.post('/api/subscription/cancel');
+  cancel: async (immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.post('/api/subscription/cancel', { immediate });
+    return response.data;
+  },
+
+  downgrade: async (tier: 'free' | 'premium' | 'pro', immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.put('/api/subscription/downgrade', { tier, immediate });
     return response.data;
   },
 
   reactivate: async (): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.post('/api/subscription/reactivate');
+    return response.data;
+  },
+
+  getBillingHistory: async (): Promise<ApiResponse<BillingHistory>> => {
+    const response = await apiClient.get('/api/subscription/billing-history');
+    return response.data;
+  },
+
+  downloadInvoice: async (paymentId: string): Promise<Blob> => {
+    const response = await apiClient.get(`/api/subscription/invoice/${paymentId}`, {
+      responseType: 'blob',
+    });
     return response.data;
   },
 };

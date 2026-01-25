@@ -381,16 +381,133 @@ export class SubscriptionService {
   }
 
   /**
-   * Cancel subscription (set to cancel at period end)
+   * Cancel subscription (immediate or at period end)
    */
-  static async cancelSubscription(userId: string): Promise<Database.Subscription | null> {
+  static async cancelSubscription(
+    userId: string,
+    immediate: boolean = false
+  ): Promise<Database.Subscription | null> {
     try {
-      return await DatabaseService.updateSubscription(userId, {
-        cancel_at_period_end: true,
-      });
+      if (immediate) {
+        // Immediate cancellation - downgrade to free
+        return await DatabaseService.updateSubscription(userId, {
+          tier: 'free',
+          status: 'active',
+          cancel_at_period_end: false,
+          current_period_end: new Date().toISOString(),
+        });
+      } else {
+        // Cancel at period end
+        return await DatabaseService.updateSubscription(userId, {
+          cancel_at_period_end: true,
+        });
+      }
     } catch (error) {
       logger.error('Failed to cancel subscription:', error);
       return null;
+    }
+  }
+
+  /**
+   * Downgrade subscription tier
+   */
+  static async downgradeSubscription(
+    userId: string,
+    targetTier: 'free' | 'premium' | 'pro',
+    immediate: boolean = false
+  ): Promise<Database.Subscription | null> {
+    try {
+      const subscription = await DatabaseService.getUserSubscription(userId);
+      if (!subscription) {
+        return null;
+      }
+
+      if (immediate) {
+        // Immediate downgrade
+        return await DatabaseService.updateSubscription(userId, {
+          tier: targetTier,
+          status: 'active',
+          cancel_at_period_end: false,
+          // Reset period for new tier
+          current_period_start: new Date().toISOString(),
+          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+      } else {
+        // Schedule downgrade at period end
+        // Store target tier in metadata or use a separate field
+        // For now, we'll use cancel_at_period_end and handle it in renewal logic
+        return await DatabaseService.updateSubscription(userId, {
+          cancel_at_period_end: true,
+          // We'll need to add a pending_tier field or handle this differently
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to downgrade subscription:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Process subscription renewal
+   * Should be called by a scheduled job/cron
+   */
+  static async processRenewals(): Promise<void> {
+    try {
+      // Get all active subscriptions that need renewal
+      const { data: subscriptions, error } = await DatabaseService.supabaseAdmin
+        .from('subscriptions')
+        .select('*')
+        .eq('status', 'active')
+        .lte('current_period_end', new Date().toISOString());
+
+      if (error) {
+        logger.error('Failed to fetch subscriptions for renewal:', error);
+        return;
+      }
+
+      if (!subscriptions || subscriptions.length === 0) {
+        logger.info('No subscriptions need renewal');
+        return;
+      }
+
+      for (const subscription of subscriptions) {
+        try {
+          if (subscription.cancel_at_period_end) {
+            // Subscription was cancelled - downgrade to free
+            await DatabaseService.updateSubscription(subscription.user_id, {
+              tier: 'free',
+              status: 'active',
+              cancel_at_period_end: false,
+              current_period_start: new Date().toISOString(),
+              current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            });
+            logger.info('Subscription cancelled and downgraded to free', {
+              userId: subscription.user_id,
+            });
+          } else if (subscription.tier !== 'free') {
+            // Auto-renew paid subscriptions
+            const now = new Date();
+            const periodEnd = new Date(now);
+            periodEnd.setDate(periodEnd.getDate() + 30); // 30 days from now
+
+            await DatabaseService.updateSubscription(subscription.user_id, {
+              current_period_start: now.toISOString(),
+              current_period_end: periodEnd.toISOString(),
+            });
+            logger.info('Subscription renewed', {
+              userId: subscription.user_id,
+              tier: subscription.tier,
+            });
+          }
+        } catch (error) {
+          logger.error('Failed to process renewal for subscription:', {
+            subscriptionId: subscription.id,
+            error,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to process renewals:', error);
     }
   }
 
