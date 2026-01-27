@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../config/database';
 import { Database } from '../types/database';
 import logger from '../config/logger';
 import { AppError, ValidationError } from '../types/error';
+import { ConversationStateService, ConversationState, StateTrackingOptions } from './conversation-state.service';
 
 export interface CreateConversationInput {
   userId: string;
@@ -365,6 +366,60 @@ export class ConversationService {
     } catch (error) {
       logger.warn('Unexpected error updating conversation timestamp:', error);
       // Don't throw - this is not critical
+    }
+  }
+
+  /**
+   * Update conversation state from messages
+   */
+  static async updateConversationState(
+    conversationId: string,
+    userId: string,
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+    options: StateTrackingOptions = {}
+  ): Promise<ConversationState | null> {
+    try {
+      // Get existing state
+      const existingState = await ConversationStateService.getState(conversationId, userId);
+
+      // Extract new state from messages
+      const newState = await ConversationStateService.extractState(messages, {
+        ...options,
+        messageCount: messages.length,
+      });
+
+      // Merge with existing state
+      const mergedState = ConversationStateService.mergeStates(existingState, newState);
+      mergedState.messageCount = messages.length;
+
+      // Update state in database
+      await ConversationStateService.updateState(conversationId, userId, mergedState);
+
+      return mergedState;
+    } catch (error: any) {
+      logger.warn('Failed to update conversation state', {
+        error: error.message,
+        conversationId,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Get conversation state
+   */
+  static async getConversationState(
+    conversationId: string,
+    userId: string
+  ): Promise<ConversationState | null> {
+    try {
+      return await ConversationStateService.getState(conversationId, userId);
+    } catch (error: any) {
+      logger.warn('Failed to get conversation state', {
+        error: error.message,
+        conversationId,
+      });
+      return null;
     }
   }
 }

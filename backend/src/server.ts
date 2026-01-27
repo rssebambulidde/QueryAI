@@ -25,6 +25,9 @@ import paymentRoutes from './routes/payment.routes';
 import usageRoutes from './routes/usage.routes';
 import testRoutes from './routes/test.routes';
 import debugRoutes from './routes/debug.routes';
+import cacheRoutes from './routes/cache.routes';
+import connectionsRoutes from './routes/connections.routes';
+import metricsRoutes from './routes/metrics.routes';
 
 const app: Express = express();
 
@@ -135,6 +138,9 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/usage', usageRoutes);
+app.use('/api/cache', cacheRoutes);
+app.use('/api/connections', connectionsRoutes);
+app.use('/api/metrics', metricsRoutes);
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }
@@ -249,8 +255,30 @@ app.use(notFoundHandler);
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
+// Initialize request queue and worker
+async function initializeQueue() {
+  try {
+    const { RequestQueueService } = await import('./services/request-queue.service');
+    const { RAGWorker } = await import('./workers/rag-worker');
+    
+    await RequestQueueService.initialize();
+    await RAGWorker.initialize();
+    
+    logger.info('Request queue and worker initialized');
+  } catch (error: any) {
+    logger.warn('Failed to initialize request queue (continuing without queue)', {
+      error: error.message,
+    });
+  }
+}
+
 // Start server
 const PORT = config.PORT;
+
+// Initialize queue on startup
+initializeQueue().catch((error) => {
+  logger.error('Queue initialization error:', error);
+});
 
 // Check if running as Railway cron job
 if (process.env.RAILWAY_CRON === 'true') {
@@ -271,17 +299,35 @@ if (process.env.RAILWAY_CRON === 'true') {
   });
 
   // Graceful shutdown
-  process.on('SIGTERM', () => {
+  process.on('SIGTERM', async () => {
     logger.info('SIGTERM signal received: closing HTTP server');
-    server.close(() => {
+    server.close(async () => {
+      // Close queue and worker
+      try {
+        const { RequestQueueService } = await import('./services/request-queue.service');
+        const { RAGWorker } = await import('./workers/rag-worker');
+        await RequestQueueService.close();
+        await RAGWorker.close();
+      } catch (error) {
+        logger.warn('Error closing queue/worker:', error);
+      }
       logger.info('HTTP server closed');
       process.exit(0);
     });
   });
 
-  process.on('SIGINT', () => {
+  process.on('SIGINT', async () => {
     logger.info('SIGINT signal received: closing HTTP server');
-    server.close(() => {
+    server.close(async () => {
+      // Close queue and worker
+      try {
+        const { RequestQueueService } = await import('./services/request-queue.service');
+        const { RAGWorker } = await import('./workers/rag-worker');
+        await RequestQueueService.close();
+        await RAGWorker.close();
+      } catch (error) {
+        logger.warn('Error closing queue/worker:', error);
+      }
       logger.info('HTTP server closed');
       process.exit(0);
     });

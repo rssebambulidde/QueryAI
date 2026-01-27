@@ -1,0 +1,250 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-26",
+  "conflictResolution": {
+    "strategies": {
+      "sourceAuthority": {
+        "description": "Prioritize sources based on authority and reliability",
+        "whenToUse": "When sources have different levels of authority or credibility",
+        "approach": [
+          "Prioritize authoritative sources (academic, official, reputable organizations)",
+          "Consider source expertise and domain authority",
+          "Prefer recent sources from established institutions",
+          "Acknowledge when using authority-based prioritization"
+        ],
+        "example": "When a government report conflicts with a blog post, prioritize the government report but acknowledge both sources exist."
+      },
+      "recency": {
+        "description": "Prioritize more recent information when sources conflict",
+        "whenToUse": "When information changes over time or sources are from different time periods",
+        "approach": [
+          "Prioritize more recent sources when information is time-sensitive",
+          "Acknowledge that information may have changed",
+          "Note the time difference between sources",
+          "Use recent information but mention older perspectives if relevant"
+        ],
+        "example": "When a 2020 study conflicts with a 2024 study, prioritize the 2024 study but note that the 2020 study may have been valid at that time."
+      },
+      "consensus": {
+        "description": "Present multiple perspectives when sources conflict",
+        "whenToUse": "When multiple credible sources have different views and no clear authority exists",
+        "approach": [
+          "Present both perspectives fairly",
+          "Cite each perspective with its source",
+          "Acknowledge the disagreement",
+          "Explain why there might be disagreement",
+          "Avoid taking sides when both are credible"
+        ],
+        "example": "When two reputable studies have different conclusions, present both perspectives with their sources and acknowledge the disagreement."
+      },
+      "contextualRelevance": {
+        "description": "Prioritize sources most relevant to the specific context",
+        "whenToUse": "When sources address different contexts or scopes",
+        "approach": [
+          "Prioritize sources most directly relevant to the question",
+          "Consider geographic, temporal, or domain-specific context",
+          "Acknowledge when context affects applicability",
+          "Note limitations of sources to specific contexts"
+        ],
+        "example": "When a US-specific study conflicts with a global study, prioritize based on the question's context (US vs. global)."
+      },
+      "evidenceStrength": {
+        "description": "Prioritize sources with stronger evidence or methodology",
+        "whenToUse": "When sources have different levels of evidence quality",
+        "approach": [
+          "Prioritize sources with stronger methodology",
+          "Consider sample size, study design, and evidence quality",
+          "Acknowledge methodological differences",
+          "Note limitations of weaker evidence"
+        ],
+        "example": "When a peer-reviewed study conflicts with an anecdotal report, prioritize the peer-reviewed study but acknowledge both exist."
+      }
+    },
+    "handlingConflicts": {
+      "acknowledgeConflict": {
+        "description": "Always acknowledge when sources conflict",
+        "requirements": [
+          "Explicitly state that sources disagree",
+          "Present conflicting information fairly",
+          "Cite each conflicting source",
+          "Avoid hiding or ignoring conflicts"
+        ],
+        "example": "Sources provide conflicting information about this topic. [Source A](url) states X, while [Source B](url) states Y."
+      },
+      "presentBothPerspectives": {
+        "description": "Present both perspectives when appropriate",
+        "requirements": [
+          "Give equal weight to both perspectives when both are credible",
+          "Cite each perspective with its source",
+          "Explain the nature of the disagreement",
+          "Avoid bias toward one perspective"
+        ],
+        "example": "There are different perspectives on this issue. According to [Source A](url), the approach is X. However, [Source B](url) suggests Y. Both perspectives have merit."
+      },
+      "prioritizeWithExplanation": {
+        "description": "When prioritizing one source, explain why",
+        "requirements": [
+          "Clearly state which source is being prioritized",
+          "Explain the reason for prioritization (authority, recency, evidence, etc.)",
+          "Acknowledge the alternative perspective",
+          "Cite both sources"
+        ],
+        "example": "While [Source A](url) suggests X, [Source B](url) (a more recent study from 2024) indicates Y. Based on recency, Y is more likely accurate."
+      },
+      "avoidSpeculation": {
+        "description": "Don't speculate about which source is correct",
+        "requirements": [
+          "Avoid guessing which source is right",
+          "Don't make unsupported claims about source accuracy",
+          "Present facts and let the user decide when appropriate",
+          "Acknowledge uncertainty when sources conflict"
+        ],
+        "example": "Sources conflict on this point. [Source A](url) states X, while [Source B](url) states Y. Without additional information, it's unclear which is accurate."
+      }
+    },
+    "acknowledgingUncertainty": {
+      "whenToAcknowledge": {
+        "conflictingSources": "When sources provide conflicting information",
+        "limitedSources": "When only one source is available and it may not be comprehensive",
+        "outdatedInformation": "When sources are old and information may have changed",
+        "methodologicalLimitations": "When sources have limitations in methodology or scope",
+        "incompleteInformation": "When sources don't fully address the question",
+        "ambiguousInformation": "When information is unclear or open to interpretation"
+      },
+      "howToAcknowledge": {
+        "explicitStatements": [
+          "Use phrases like 'sources conflict', 'information is unclear', 'may vary', 'uncertain'",
+          "Be direct about limitations",
+          "Explain why there's uncertainty",
+          "Cite sources even when acknowledging uncertainty"
+        ],
+        "examples": [
+          "Sources provide conflicting information about this topic. [Source A](url) suggests X, while [Source B](url) suggests Y.",
+          "The available information is limited. Based on [Source A](url), X appears to be the case, but this may not be comprehensive.",
+          "Information on this topic may have changed since the source was published. [Source A](url) from 2020 indicates X, but more recent information may differ."
+        ]
+      },
+      "uncertaintyPhrases": [
+        "Sources conflict on this point",
+        "Information is unclear",
+        "May vary depending on",
+        "Uncertain based on available sources",
+        "Sources provide different perspectives",
+        "Limited information available",
+        "May have changed since",
+        "Open to interpretation",
+        "Not definitively established",
+        "Requires further investigation"
+      ]
+    },
+    "examples": {
+      "conflictExample1": {
+        "scenario": "Two sources provide different statistics",
+        "conflict": "Source A says 50%, Source B says 60%",
+        "resolution": "Sources provide different statistics for this metric. [Source A](url) reports 50%, while [Source B](url) reports 60%. The difference may be due to different methodologies, time periods, or sample populations. Both sources are cited for transparency."
+      },
+      "conflictExample2": {
+        "scenario": "Recent source conflicts with older source",
+        "conflict": "2020 study says X, 2024 study says Y",
+        "resolution": "Information on this topic has evolved. A 2020 study [Source A](url) indicated X, but a more recent 2024 study [Source B](url) suggests Y. Based on recency, Y is more likely accurate, though X may have been valid at the time."
+      },
+      "conflictExample3": {
+        "scenario": "Authoritative source conflicts with less authoritative source",
+        "conflict": "Government report says X, blog post says Y",
+        "resolution": "Sources provide conflicting information. The government report [Source A](url) states X, while a blog post [Source B](url) suggests Y. Given the authoritative nature of the government report, X is prioritized, though Y is noted for completeness."
+      },
+      "conflictExample4": {
+        "scenario": "Multiple credible sources with different perspectives",
+        "conflict": "Three reputable studies have different conclusions",
+        "resolution": "There are different perspectives on this issue. Study A [Source A](url) concludes X, Study B [Source B](url) suggests Y, and Study C [Source C](url) indicates Z. All three studies are from reputable sources, and the disagreement may reflect different methodologies or contexts."
+      },
+      "uncertaintyExample1": {
+        "scenario": "Only one source available",
+        "situation": "Single source, may not be comprehensive",
+        "acknowledgment": "Based on the available source [Source A](url), X appears to be the case. However, information is limited to this single source, and additional sources may provide more comprehensive information."
+      },
+      "uncertaintyExample2": {
+        "scenario": "Outdated information",
+        "situation": "Source is from 2018, information may have changed",
+        "acknowledgment": "According to [Source A](url) from 2018, X was the case. However, information may have changed since then, and more recent sources may provide updated information."
+      },
+      "uncertaintyExample3": {
+        "scenario": "Ambiguous information",
+        "situation": "Source information is unclear or open to interpretation",
+        "acknowledgment": "The source [Source A](url) provides information that is somewhat ambiguous. It suggests X, but this may be open to interpretation or may depend on specific circumstances."
+      }
+    },
+    "bestPractices": {
+      "transparency": [
+        "Always be transparent about conflicts",
+        "Don't hide conflicting information",
+        "Cite all conflicting sources",
+        "Explain why you're prioritizing one source"
+      ],
+      "fairness": [
+        "Present conflicting perspectives fairly",
+        "Don't bias toward one perspective",
+        "Give equal weight when both are credible",
+        "Acknowledge merit in different perspectives"
+      ],
+      "userEmpowerment": [
+        "Present information so users can make informed decisions",
+        "Don't make decisions for users when sources conflict",
+        "Provide enough context for users to evaluate",
+        "Acknowledge limitations and uncertainties"
+      ],
+      "sourceAttribution": [
+        "Always cite conflicting sources",
+        "Make it clear which source says what",
+        "Don't merge conflicting information",
+        "Maintain clear source attribution"
+      ]
+    },
+    "commonMistakes": {
+      "ignoringConflicts": {
+        "mistake": "Ignoring or hiding conflicting information",
+        "correct": "Always acknowledge conflicts and present both perspectives",
+        "example": {
+          "wrong": "The answer is X. [Source A](url)",
+          "correct": "Sources provide conflicting information. [Source A](url) states X, while [Source B](url) states Y."
+        }
+      },
+      "takingSides": {
+        "mistake": "Taking sides without explanation when both sources are credible",
+        "correct": "Present both perspectives fairly or explain why one is prioritized",
+        "example": {
+          "wrong": "X is correct. [Source A](url) Y is wrong.",
+          "correct": "There are different perspectives. [Source A](url) suggests X, while [Source B](url) suggests Y. Both are from credible sources."
+        }
+      },
+      "speculating": {
+        "mistake": "Speculating about which source is correct without evidence",
+        "correct": "Acknowledge uncertainty and present both perspectives",
+        "example": {
+          "wrong": "Source A is probably right because it seems more logical.",
+          "correct": "Sources conflict. [Source A](url) states X, while [Source B](url) states Y. Without additional evidence, it's unclear which is accurate."
+        }
+      },
+      "mergingConflicts": {
+        "mistake": "Merging conflicting information into a single statement",
+        "correct": "Present conflicts separately with clear source attribution",
+        "example": {
+          "wrong": "The answer is between X and Y. [Source A](url) [Source B](url)",
+          "correct": "Sources provide different information. [Source A](url) states X, while [Source B](url) states Y."
+        }
+      }
+    },
+    "checklist": {
+      "beforeSubmission": [
+        "Check for any conflicting information in sources",
+        "Acknowledge all conflicts explicitly",
+        "Cite all conflicting sources",
+        "Explain prioritization if applicable",
+        "Acknowledge uncertainty when appropriate",
+        "Present conflicting perspectives fairly",
+        "Avoid speculation about source accuracy",
+        "Maintain clear source attribution"
+      ]
+    }
+  }
+}

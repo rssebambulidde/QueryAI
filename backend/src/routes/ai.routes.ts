@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { AIService, QuestionRequest } from '../services/ai.service';
+import { RequestQueueService, QueuePriority } from '../services/request-queue.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
 import { apiLimiter } from '../middleware/rateLimiter';
@@ -46,6 +47,9 @@ router.post(
       maxDocumentChunks,
       minScore,
       conversationId,
+      // Queue options
+      useQueue,
+      priority,
     } = req.body;
 
     if (!question) {
@@ -89,8 +93,53 @@ router.post(
       enableDocumentSearch: request.enableDocumentSearch,
       enableWebSearch: request.enableWebSearch,
       topicId: request.topicId,
+      useQueue: !!useQueue,
     });
 
+    // Use queue if requested
+    if (useQueue) {
+      try {
+        // Parse priority
+        let queuePriority = QueuePriority.NORMAL;
+        if (priority) {
+          const priorityMap: Record<string, QueuePriority> = {
+            'low': QueuePriority.LOW,
+            'normal': QueuePriority.NORMAL,
+            'high': QueuePriority.HIGH,
+            'urgent': QueuePriority.URGENT,
+          };
+          queuePriority = priorityMap[priority.toLowerCase()] || QueuePriority.NORMAL;
+        }
+
+        const job = await RequestQueueService.addRAGRequest(userId, request, {
+          priority: queuePriority,
+          metadata: {
+            conversationId,
+            topicId,
+            documentIds,
+          },
+        });
+
+        return res.status(202).json({
+          success: true,
+          message: 'Request queued successfully',
+          data: {
+            jobId: job.id,
+            status: 'queued',
+            priority: queuePriority,
+          },
+        });
+      } catch (queueError: any) {
+        logger.error('Failed to queue request', {
+          error: queueError.message,
+          userId,
+        });
+        // Fall back to direct processing
+        logger.info('Falling back to direct processing');
+      }
+    }
+
+    // Direct processing (default or fallback)
     const result = await AIService.answerQuestion(request, userId);
 
     // Log usage for analytics
@@ -598,6 +647,262 @@ router.get(
     res.status(200).json({
       success: true,
       data: { starters },
+    });
+  })
+);
+
+/**
+ * POST /api/ai/ask/queue
+ * Queue a RAG request for async processing
+ * Requires authentication
+ */
+router.post(
+  '/ask/queue',
+  authenticate,
+  tierRateLimiter,
+  enforceQueryLimit,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { 
+      question, 
+      context, 
+      conversationHistory, 
+      model, 
+      temperature, 
+      maxTokens,
+      enableSearch,
+      topic,
+      maxSearchResults,
+      timeRange,
+      startDate,
+      endDate,
+      country,
+      // RAG options
+      enableDocumentSearch,
+      enableWebSearch,
+      topicId,
+      documentIds,
+      maxDocumentChunks,
+      minScore,
+      conversationId,
+      priority,
+    } = req.body;
+
+    if (!question) {
+      throw new ValidationError('Question is required');
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const request: QuestionRequest = {
+      question: question.trim(),
+      context: context?.trim(),
+      conversationHistory: conversationHistory || [],
+      model,
+      temperature,
+      maxTokens,
+      enableSearch: enableSearch !== false,
+      topic: topic?.trim(),
+      maxSearchResults: maxSearchResults || 5,
+      timeRange,
+      startDate,
+      endDate,
+      country,
+      enableDocumentSearch: enableDocumentSearch !== false,
+      enableWebSearch: enableWebSearch !== false,
+      topicId: topicId,
+      documentIds: documentIds,
+      maxDocumentChunks: maxDocumentChunks || 5,
+      minScore: minScore || 0.5,
+      conversationId: conversationId,
+    };
+
+    // Parse priority
+    let queuePriority = QueuePriority.NORMAL;
+    if (priority) {
+      const priorityMap: Record<string, QueuePriority> = {
+        'low': QueuePriority.LOW,
+        'normal': QueuePriority.NORMAL,
+        'high': QueuePriority.HIGH,
+        'urgent': QueuePriority.URGENT,
+      };
+      queuePriority = priorityMap[priority.toLowerCase()] || QueuePriority.NORMAL;
+    }
+
+    const job = await RequestQueueService.addRAGRequest(userId, request, {
+      priority: queuePriority,
+      metadata: {
+        conversationId,
+        topicId,
+        documentIds,
+      },
+    });
+
+    res.status(202).json({
+      success: true,
+      message: 'Request queued successfully',
+      data: {
+        jobId: job.id,
+        status: 'queued',
+        priority: queuePriority,
+      },
+    });
+  })
+);
+
+/**
+ * GET /api/ai/queue/job/:jobId
+ * Get job status
+ */
+router.get(
+  '/queue/job/:jobId',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { jobId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const status = await RequestQueueService.getJobStatus(jobId);
+
+    if (!status) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job not found',
+      });
+    }
+
+    // Verify job belongs to user (basic check)
+    const job = await RequestQueueService.getJob(jobId);
+    if (job && job.data.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: status,
+    });
+  })
+);
+
+/**
+ * DELETE /api/ai/queue/job/:jobId
+ * Cancel a queued job
+ */
+router.delete(
+  '/queue/job/:jobId',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { jobId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    // Verify job belongs to user
+    const job = await RequestQueueService.getJob(jobId);
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job not found',
+      });
+    }
+
+    if (job.data.userId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied',
+      });
+    }
+
+    const cancelled = await RequestQueueService.cancelJob(jobId);
+
+    res.json({
+      success: cancelled,
+      message: cancelled ? 'Job cancelled successfully' : 'Failed to cancel job',
+    });
+  })
+);
+
+/**
+ * GET /api/ai/queue/stats
+ * Get queue statistics
+ */
+router.get(
+  '/queue/stats',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const stats = await RequestQueueService.getQueueStats();
+    const health = await RequestQueueService.getQueueHealth();
+    const { RAGWorker } = await import('../workers/rag-worker');
+    const workerStatus = RAGWorker.getWorkerStatus();
+
+    res.json({
+      success: true,
+      data: {
+        stats,
+        health,
+        worker: workerStatus,
+      },
+    });
+  })
+);
+
+/**
+ * GET /api/ai/queue/jobs
+ * Get jobs by state
+ */
+router.get(
+  '/queue/jobs',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { state = 'waiting', start = 0, end = 9 } = req.query;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const validStates = ['waiting', 'active', 'completed', 'failed', 'delayed', 'paused'];
+    if (!validStates.includes(state as string)) {
+      throw new ValidationError(`Invalid state. Must be one of: ${validStates.join(', ')}`);
+    }
+
+    const jobs = await RequestQueueService.getJobsByState(
+      state as any,
+      parseInt(start as string, 10),
+      parseInt(end as string, 10)
+    );
+
+    // Filter by user ID
+    const userJobs = jobs.filter(job => job.data.userId === userId);
+
+    res.json({
+      success: true,
+      data: {
+        jobs: userJobs.map(job => ({
+          id: job.id,
+          state: state,
+          priority: job.opts.priority,
+          progress: job.progress,
+          timestamp: job.timestamp,
+          question: job.data.request.question.substring(0, 100),
+        })),
+        count: userJobs.length,
+      },
     });
   })
 );

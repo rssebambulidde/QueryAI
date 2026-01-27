@@ -19,6 +19,8 @@ interface EnvConfig {
   // AI Services
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
+  EMBEDDING_MODEL?: string; // Embedding model: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
+  EMBEDDING_BATCH_SIZE?: string; // Batch size for embedding generation (default: 100, max: 2048)
 
   // Search API
   TAVILY_API_KEY?: string;
@@ -51,6 +53,14 @@ interface EnvConfig {
   BREVO_API_KEY?: string;
   BREVO_SENDER_EMAIL?: string;
   BREVO_SENDER_NAME?: string;
+
+  // Redis Cache
+  REDIS_URL?: string; // Redis connection URL (redis://[username]:[password]@[host]:[port]/[database])
+  REDIS_HOST?: string; // Redis host (if not using REDIS_URL)
+  REDIS_PORT?: number; // Redis port (if not using REDIS_URL)
+  REDIS_PASSWORD?: string; // Redis password (if not using REDIS_URL)
+  REDIS_USERNAME?: string; // Redis username (if not using REDIS_URL)
+  REDIS_DATABASE?: number; // Redis database number (if not using REDIS_URL)
 }
 
 const getEnvVar = (key: string, defaultValue?: string): string => {
@@ -70,6 +80,13 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
     'BREVO_API_KEY',
     'BREVO_SENDER_EMAIL',
     'BREVO_SENDER_NAME',
+    'EMBEDDING_MODEL',
+    'REDIS_URL',
+    'REDIS_HOST',
+    'REDIS_PORT',
+    'REDIS_PASSWORD',
+    'REDIS_USERNAME',
+    'REDIS_DATABASE',
   ];
   if (!value && !optionalKeys.includes(key)) {
     throw new Error(`Missing required environment variable: ${key}`);
@@ -93,6 +110,7 @@ const config: EnvConfig = {
   // AI Services (OpenAI is optional but recommended for AI features)
   OPENAI_API_KEY: getEnvVar('OPENAI_API_KEY'),
   ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
+  EMBEDDING_MODEL: getEnvVar('EMBEDDING_MODEL', 'text-embedding-3-small'),
 
   // Search API
   TAVILY_API_KEY: getEnvVar('TAVILY_API_KEY'),
@@ -128,6 +146,14 @@ const config: EnvConfig = {
   BREVO_API_KEY: getEnvVar('BREVO_API_KEY') || undefined,
   BREVO_SENDER_EMAIL: getEnvVar('BREVO_SENDER_EMAIL', 'noreply@queryai.com'),
   BREVO_SENDER_NAME: getEnvVar('BREVO_SENDER_NAME', 'QueryAI'),
+
+  // Redis Cache - Optional (for distributed caching)
+  REDIS_URL: getEnvVar('REDIS_URL') || undefined,
+  REDIS_HOST: getEnvVar('REDIS_HOST') || undefined,
+  REDIS_PORT: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : undefined,
+  REDIS_PASSWORD: getEnvVar('REDIS_PASSWORD') || undefined,
+  REDIS_USERNAME: getEnvVar('REDIS_USERNAME') || undefined,
+  REDIS_DATABASE: process.env.REDIS_DATABASE ? parseInt(process.env.REDIS_DATABASE, 10) : undefined,
 };
 
 export default config;

@@ -1,0 +1,294 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-26",
+  "qualityCriteria": {
+    "accuracy": {
+      "description": "Information must be accurate and verifiable",
+      "requirements": [
+        "All facts must be supported by provided sources",
+        "No speculation or unsupported claims",
+        "Verify information against multiple sources when possible",
+        "Clearly distinguish between facts and opinions",
+        "Admit uncertainty when information is unclear"
+      ],
+      "indicators": [
+        "All statements are cited with sources",
+        "No contradictory information",
+        "Information matches source content",
+        "Uncertainty is acknowledged when appropriate"
+      ]
+    },
+    "completeness": {
+      "description": "Answer should fully address the question",
+      "requirements": [
+        "Address all aspects of the question",
+        "Provide sufficient detail for understanding",
+        "Include relevant context when necessary",
+        "Cover multiple perspectives when applicable",
+        "Answer the question directly and completely"
+      ],
+      "indicators": [
+        "Question is fully answered",
+        "All key points are covered",
+        "Relevant context is provided",
+        "No important information is omitted"
+      ]
+    },
+    "clarity": {
+      "description": "Answer should be clear and easy to understand",
+      "requirements": [
+        "Use clear and concise language",
+        "Avoid jargon unless necessary (and explain when used)",
+        "Structure information logically",
+        "Use appropriate formatting (paragraphs, lists)",
+        "Define technical terms when first introduced"
+      ],
+      "indicators": [
+        "Language is clear and accessible",
+        "Information is well-organized",
+        "Formatting enhances readability",
+        "Technical terms are explained"
+      ]
+    },
+    "relevance": {
+      "description": "Answer should be relevant to the question",
+      "requirements": [
+        "Stay focused on the question asked",
+        "Avoid unnecessary tangents",
+        "Prioritize most relevant information",
+        "Connect information to the question",
+        "Maintain focus throughout the answer"
+      ],
+      "indicators": [
+        "Answer directly addresses the question",
+        "No irrelevant information",
+        "Most relevant points are emphasized",
+        "Information is connected to the question"
+      ]
+    },
+    "structure": {
+      "description": "Answer should be well-structured",
+      "requirements": [
+        "Use clear paragraph structure",
+        "Each paragraph covers one main idea",
+        "Information flows logically",
+        "Use appropriate transitions",
+        "Maintain consistent formatting"
+      ],
+      "indicators": [
+        "Clear paragraph structure",
+        "Logical flow of information",
+        "Smooth transitions between ideas",
+        "Consistent formatting throughout"
+      ]
+    }
+  },
+  "answerStructure": {
+    "paragraphBased": {
+      "description": "Format answers as 3-5 short, spaced paragraphs",
+      "template": "Each paragraph should:\n- Cover ONE distinct idea or perspective\n- Be 2-4 sentences long\n- Be derived from ONE source\n- Include exactly ONE inline citation\n- Be visually separated with blank lines",
+      "example": "Machine learning is a subset of artificial intelligence that enables systems to learn from data. [Web Source 1](https://example.com/ml-basics) It uses algorithms to identify patterns and make predictions based on training data. [Document 1]\n\nNeural networks are a key component of machine learning, inspired by the structure of the human brain. [Web Source 2](https://example.com/neural-networks) They consist of interconnected nodes that process information through multiple layers. [Document 2]"
+    },
+    "directAnswer": {
+      "description": "Provide direct answer first, then supporting details",
+      "template": "1. Direct answer to the question (1-2 sentences)\n2. Supporting details and context (2-3 paragraphs)\n3. Additional relevant information (1-2 paragraphs)",
+      "example": "Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without explicit programming. [Web Source 1](https://example.com/ml-definition)\n\nMachine learning algorithms analyze data to identify patterns and make decisions. [Document 1] The field has applications in image recognition, natural language processing, and recommendation systems. [Web Source 2](https://example.com/ml-applications)\n\nThere are three main types of machine learning: supervised learning, unsupervised learning, and reinforcement learning. [Document 2] Each type uses different approaches to learn from data and make predictions. [Web Source 3](https://example.com/ml-types)"
+    },
+    "comparative": {
+      "description": "For comparison questions, structure by comparison points",
+      "template": "1. Introduction to both concepts (1 paragraph)\n2. First concept details (1-2 paragraphs)\n3. Second concept details (1-2 paragraphs)\n4. Comparison and differences (1-2 paragraphs)",
+      "example": "Supervised and unsupervised learning are two main approaches to machine learning. [Web Source 1](https://example.com/learning-types)\n\nSupervised learning uses labeled data to train models, where each example has a known output. [Document 1] The algorithm learns to map inputs to outputs by finding patterns in the training data. [Web Source 2](https://example.com/supervised)\n\nUnsupervised learning works with unlabeled data and discovers hidden patterns. [Document 2] It doesn't have predefined outputs, making it useful for clustering and dimensionality reduction. [Web Source 3](https://example.com/unsupervised)\n\nThe key difference is that supervised learning requires labeled data while unsupervised learning finds patterns in unlabeled data. [Document 3]"
+    },
+    "procedural": {
+      "description": "For how-to questions, structure as step-by-step process",
+      "template": "1. Overview of the process (1 paragraph)\n2. Step-by-step instructions (2-4 paragraphs, one step per paragraph)\n3. Important considerations (1 paragraph)",
+      "example": "Deploying a machine learning model involves several key steps. [Web Source 1](https://example.com/deployment)\n\nFirst, prepare the model for production by serializing it and creating a prediction interface. [Document 1] This ensures the model can be loaded and used efficiently in a production environment. [Web Source 2](https://example.com/serialization)\n\nNext, set up the deployment infrastructure, which may include containerization with Docker or cloud services. [Document 2] This provides the necessary environment for running the model. [Web Source 3](https://example.com/infrastructure)\n\nFinally, implement monitoring and logging to track model performance and detect drift. [Document 3] This helps ensure the model continues to perform well over time. [Web Source 4](https://example.com/monitoring)"
+    }
+  },
+  "formatRequirements": {
+    "paragraphs": {
+      "description": "Use 3-5 short, spaced paragraphs",
+      "rules": [
+        "Each paragraph should be 2-4 sentences",
+        "Blank lines between paragraphs",
+        "Each paragraph covers one distinct idea",
+        "Paragraphs should flow logically"
+      ]
+    },
+    "citations": {
+      "description": "Include citations for all factual information",
+      "rules": [
+        "Every fact must have a citation",
+        "Citations should be inline",
+        "Use proper citation format",
+        "Citations should be clickable links"
+      ]
+    },
+    "formatting": {
+      "description": "Use appropriate formatting",
+      "rules": [
+        "Use bold (**text**) for key terms",
+        "Avoid numbered lists or bullet points in main answer",
+        "Use clear, concise language",
+        "Maintain consistent formatting"
+      ]
+    },
+    "length": {
+      "description": "Answer should be appropriate length",
+      "rules": [
+        "3-5 paragraphs for most questions",
+        "Each paragraph 2-4 sentences",
+        "Total length: 100-300 words typically",
+        "Adjust length based on question complexity"
+      ]
+    }
+  },
+  "qualityExamples": {
+    "goodAnswer": {
+      "question": "What is machine learning?",
+      "answer": "Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed. [Web Source 1](https://example.com/ml-basics) It uses algorithms to analyze data, identify patterns, and make decisions or predictions based on that analysis. [Document 1]\n\nThe field has applications in image recognition, natural language processing, and recommendation systems. [Web Source 2](https://example.com/ml-applications) Machine learning models can be trained on large datasets to recognize patterns that would be difficult for humans to identify. [Document 2]\n\nThere are three main types of machine learning: supervised learning, unsupervised learning, and reinforcement learning. [Web Source 3](https://example.com/ml-types) Each type uses different approaches to learn from data and make predictions. [Document 3]",
+      "quality": {
+        "accuracy": "All facts are cited with sources",
+        "completeness": "Covers definition, applications, and types",
+        "clarity": "Clear language, well-structured",
+        "relevance": "Directly answers the question",
+        "structure": "3 paragraphs, logical flow"
+      }
+    },
+    "badAnswer": {
+      "question": "What is machine learning?",
+      "answer": "Machine learning is AI. It uses data. There are different types.",
+      "quality": {
+        "accuracy": "No citations, vague statements",
+        "completeness": "Incomplete, lacks detail",
+        "clarity": "Too brief, unclear",
+        "relevance": "Partially relevant but insufficient",
+        "structure": "No structure, single sentence"
+      }
+    },
+    "goodAnswerFactual": {
+      "question": "What is the capital of France?",
+      "answer": "The capital of France is Paris. [Web Source 1](https://example.com/france-info) Paris is located in the north-central part of the country and serves as the country's political, economic, and cultural center. [Document 1]\n\nParis is one of the most visited cities in the world, known for landmarks like the Eiffel Tower and the Louvre Museum. [Web Source 2](https://example.com/paris-tourism) The city has a population of approximately 2.1 million people within its city limits. [Document 2]",
+      "quality": {
+        "accuracy": "All facts cited, verifiable",
+        "completeness": "Answers question with relevant context",
+        "clarity": "Clear and well-structured",
+        "relevance": "Directly answers with additional context",
+        "structure": "2 paragraphs, logical flow"
+      }
+    },
+    "badAnswerFactual": {
+      "question": "What is the capital of France?",
+      "answer": "Paris.",
+      "quality": {
+        "accuracy": "Correct but no citation",
+        "completeness": "Too brief, lacks context",
+        "clarity": "Clear but insufficient",
+        "relevance": "Answers but lacks detail",
+        "structure": "No structure"
+      }
+    },
+    "goodAnswerConceptual": {
+      "question": "How does neural network training work?",
+      "answer": "Neural network training involves feeding data through the network and adjusting weights to minimize error. [Document 1] The process uses backpropagation, where errors are calculated at the output layer and propagated backward through the network. [Web Source 1](https://example.com/neural-networks)\n\nDuring training, the network learns to recognize patterns by repeatedly processing training examples and updating connection weights. [Document 2] The goal is to find optimal weights that allow the network to make accurate predictions on new, unseen data. [Web Source 2](https://example.com/training-algorithms)\n\nTraining typically involves multiple epochs, where the entire training dataset is processed multiple times. [Document 3] The learning rate determines how much weights are adjusted during each update. [Web Source 3](https://example.com/learning-rate)",
+      "quality": {
+        "accuracy": "All technical details cited",
+        "completeness": "Covers process, backpropagation, and training details",
+        "clarity": "Technical terms explained clearly",
+        "relevance": "Fully addresses the question",
+        "structure": "3 paragraphs, logical progression"
+      }
+    },
+    "badAnswerConceptual": {
+      "question": "How does neural network training work?",
+      "answer": "You feed data in and it learns. The weights change.",
+      "quality": {
+        "accuracy": "Vague, no citations",
+        "completeness": "Incomplete explanation",
+        "clarity": "Unclear, lacks detail",
+        "relevance": "Partially relevant",
+        "structure": "No structure"
+      }
+    }
+  },
+  "commonMistakes": {
+    "tooBrief": {
+      "mistake": "Answer is too brief and lacks detail",
+      "correct": "Provide sufficient detail to fully answer the question",
+      "example": {
+        "wrong": "Machine learning is AI.",
+        "correct": "Machine learning is a subset of artificial intelligence that enables systems to learn from data. [Web Source 1](https://example.com/ml) It uses algorithms to identify patterns and make predictions. [Document 1]"
+      }
+    },
+    "tooVerbose": {
+      "mistake": "Answer is too long and includes unnecessary information",
+      "correct": "Be concise and focus on relevant information",
+      "example": {
+        "wrong": "Machine learning is a subset of AI... [very long explanation with tangents]",
+        "correct": "Machine learning is a subset of AI that enables systems to learn from data. [Web Source 1](https://example.com/ml) It has applications in various fields. [Document 1]"
+      }
+    },
+    "noCitations": {
+      "mistake": "Answer lacks citations for factual information",
+      "correct": "Include citations for all facts, statistics, and claims",
+      "example": {
+        "wrong": "The population of Tokyo is 14 million.",
+        "correct": "The population of Tokyo is 14 million [Web Source 1](https://example.com/tokyo-population)."
+      }
+    },
+    "poorStructure": {
+      "mistake": "Answer lacks clear structure and organization",
+      "correct": "Use clear paragraph structure with logical flow",
+      "example": {
+        "wrong": "Machine learning is AI. It uses data. There are types. Supervised learning uses labels.",
+        "correct": "Machine learning is a subset of AI that enables systems to learn from data. [Web Source 1](https://example.com/ml)\n\nThere are three main types: supervised, unsupervised, and reinforcement learning. [Document 1] Supervised learning uses labeled data to train models. [Web Source 2](https://example.com/supervised)"
+      }
+    },
+    "irrelevantInformation": {
+      "mistake": "Answer includes information not relevant to the question",
+      "correct": "Stay focused on the question and avoid tangents",
+      "example": {
+        "wrong": "Machine learning is AI. [Web Source 1](https://example.com/ml) Here's a long history of computing...",
+        "correct": "Machine learning is a subset of AI that enables systems to learn from data. [Web Source 1](https://example.com/ml) It uses algorithms to identify patterns. [Document 1]"
+      }
+    },
+    "unclearLanguage": {
+      "mistake": "Answer uses jargon without explanation",
+      "correct": "Use clear language and explain technical terms",
+      "example": {
+        "wrong": "ML uses backpropagation with gradient descent optimization.",
+        "correct": "Machine learning uses backpropagation, a method where errors are propagated backward through the network. [Web Source 1](https://example.com/backprop) This allows the network to adjust weights and improve accuracy. [Document 1]"
+      }
+    }
+  },
+  "qualityChecklist": {
+    "beforeSubmission": [
+      "Verify all facts are cited with sources",
+      "Check that the question is fully answered",
+      "Ensure information is clear and well-structured",
+      "Confirm answer stays relevant to the question",
+      "Validate that formatting is consistent",
+      "Review for any unnecessary information",
+      "Check that technical terms are explained",
+      "Ensure logical flow between paragraphs"
+    ],
+    "accuracyChecks": [
+      "All statements are supported by sources",
+      "No unsupported claims or speculation",
+      "Information matches source content",
+      "Uncertainty is acknowledged when appropriate"
+    ],
+    "completenessChecks": [
+      "Question is fully addressed",
+      "All key points are covered",
+      "Relevant context is provided",
+      "No important information is omitted"
+    ],
+    "clarityChecks": [
+      "Language is clear and accessible",
+      "Information is well-organized",
+      "Formatting enhances readability",
+      "Technical terms are explained"
+    ]
+  }
+}

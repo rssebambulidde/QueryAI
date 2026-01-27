@@ -195,9 +195,11 @@ export class AuthService {
         throw new AuthenticationError('Login failed: Invalid response from auth service');
       }
 
-      // Get user profile and subscription
-      const profile = await DatabaseService.getUserProfile(authData.user.id);
-      const subscription = await DatabaseService.getUserSubscription(authData.user.id);
+      // Get user profile and subscription in parallel for better performance
+      const [profile, subscription] = await Promise.all([
+        DatabaseService.getUserProfile(authData.user.id),
+        DatabaseService.getUserSubscription(authData.user.id),
+      ]);
 
       // Log login
       await DatabaseService.logUsage(authData.user.id, 'query', {

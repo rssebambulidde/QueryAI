@@ -1,4 +1,22 @@
 import { tavilyClient } from '../config/tavily';
+import { QueryOptimizerService, QueryOptimizationOptions } from './query-optimizer.service';
+import { TopicQueryBuilderService, TopicQueryOptions } from './topic-query-builder.service';
+import { QueryRewriterService, QueryRewritingOptions } from './query-rewriter.service';
+import { WebResultRerankerService, RerankingConfig } from './web-result-reranker.service';
+import { ResultQualityScorerService, QualityScoringConfig } from './result-quality-scorer.service';
+import { DomainAuthorityService, DomainAuthorityConfig } from './domain-authority.service';
+import { WebDeduplicationService, WebDeduplicationOptions } from './web-deduplication.service';
+import { FilteringStrategyService, FilteringOptions } from './filtering-strategy.service';
+import { RedisCacheService } from './redis-cache.service';
+import { RetryService } from './retry.service';
+import { CircuitBreakerService } from './circuit-breaker.service';
+import { 
+  FilteringMode, 
+  FilteringStrategy,
+  getFilteringStrategy,
+  selectFilteringVariant,
+  getFilteringABTestConfig,
+} from '../config/filtering.config';
 import logger from '../config/logger';
 import { AppError, ValidationError } from '../types/error';
 
@@ -127,6 +145,40 @@ export interface SearchRequest {
   endDate?: string; // ISO date string (YYYY-MM-DD)
   // Location filtering
   country?: string; // ISO country code (e.g., 'US', 'UG', 'KE')
+  // Query optimization options
+  optimizeQuery?: boolean; // Enable query optimization
+  optimizationContext?: string; // Additional context for optimization
+  // Topic integration options
+  useTopicAwareQuery?: boolean; // Use topic-aware query construction (default: true)
+  topicQueryOptions?: TopicQueryOptions; // Options for topic-aware query construction
+  // Query rewriting options
+  enableQueryRewriting?: boolean; // Enable query rewriting (default: false)
+  queryRewritingOptions?: QueryRewritingOptions; // Options for query rewriting
+  // Web result re-ranking options
+  enableWebResultReranking?: boolean; // Enable web result re-ranking (default: false)
+  rerankingConfig?: RerankingConfig; // Re-ranking configuration
+  // Quality scoring options
+  enableQualityScoring?: boolean; // Enable quality scoring (default: false)
+  qualityScoringConfig?: QualityScoringConfig; // Quality scoring configuration
+  minQualityScore?: number; // Minimum quality score threshold (0-1, default: 0.5)
+  filterByQuality?: boolean; // Filter results by quality threshold (default: false)
+  // Domain authority options
+  enableDomainAuthority?: boolean; // Enable domain authority scoring (default: true)
+  domainAuthorityConfig?: DomainAuthorityConfig; // Domain authority configuration
+  filterByAuthority?: boolean; // Filter results by authority threshold (default: false)
+  minAuthorityScore?: number; // Minimum authority score threshold (0-1, default: 0.5)
+  prioritizeAuthoritative?: boolean; // Prioritize authoritative sources in ranking (default: true)
+  // Web deduplication options
+  enableDeduplication?: boolean; // Enable web result deduplication (default: true)
+  deduplicationOptions?: WebDeduplicationOptions; // Deduplication configuration
+  // Filtering strategy options
+  filteringMode?: FilteringMode; // Filtering mode: 'strict', 'moderate', 'lenient' (default: 'moderate')
+  filteringStrategy?: FilteringStrategy; // Custom filtering strategy
+  enableFilteringABTesting?: boolean; // Enable A/B testing for filtering strategies (default: false)
+  userId?: string; // User ID for A/B testing (optional)
+  // Legacy filtering options (deprecated, use filteringMode instead)
+  filterByQuality?: boolean; // Filter results by quality threshold (default: false) - DEPRECATED
+  filterByAuthority?: boolean; // Filter results by authority threshold (default: false) - DEPRECATED
 }
 
 export interface SearchResult {
@@ -147,16 +199,9 @@ export interface SearchResponse {
   cached?: boolean;
 }
 
-// Simple in-memory cache (can be replaced with Redis in production)
-interface CacheEntry {
-  data: SearchResponse;
-  timestamp: number;
-  expiresAt: number;
-}
-
-const searchCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour in milliseconds
-const MAX_CACHE_SIZE = 1000; // Maximum number of cached entries
+// Cache configuration
+const CACHE_TTL = 3600; // 1 hour in seconds (for Redis)
+const CACHE_PREFIX = 'search'; // Cache key prefix for namespacing
 
 /**
  * Generate cache key from search request
@@ -174,29 +219,6 @@ function generateCacheKey(request: SearchRequest): string {
     request.country || '',
   ];
   return parts.join('|');
-}
-
-/**
- * Clean expired cache entries
- */
-function cleanCache(): void {
-  const now = Date.now();
-  for (const [key, entry] of searchCache.entries()) {
-    if (entry.expiresAt < now) {
-      searchCache.delete(key);
-    }
-  }
-
-  // If cache is still too large, remove oldest entries
-  if (searchCache.size > MAX_CACHE_SIZE) {
-    const entries = Array.from(searchCache.entries())
-      .sort((a, b) => a[1].timestamp - b[1].timestamp);
-    
-    const toRemove = entries.slice(0, searchCache.size - MAX_CACHE_SIZE);
-    for (const [key] of toRemove) {
-      searchCache.delete(key);
-    }
-  }
 }
 
 /**
@@ -218,18 +240,20 @@ export class SearchService {
         throw new ValidationError('Search query is too long (max 500 characters)');
       }
 
-      // Check cache first
+      // Check cache first (Redis or in-memory fallback)
       const cacheKey = generateCacheKey(request);
-      cleanCache();
+      const cached = await RedisCacheService.get<SearchResponse>(cacheKey, {
+        prefix: CACHE_PREFIX,
+        ttl: CACHE_TTL,
+      });
       
-      const cached = searchCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) {
+      if (cached) {
         logger.info('Search result retrieved from cache', {
           query: request.query,
           topic: request.topic,
         });
         return {
-          ...cached.data,
+          ...cached,
           cached: true,
         };
       }
@@ -245,118 +269,261 @@ export class SearchService {
         };
       }
 
-      // Build search query with topic filtering
-      let searchQuery = request.query.trim();
-      
-      // Add topic to query if provided - use quotes to make it more specific
-      if (request.topic) {
-        // Use quoted phrase to ensure the topic is treated as a required term
-        const topicPhrase = request.topic.includes(' ') ? `"${request.topic}"` : request.topic;
-        searchQuery = `${topicPhrase} ${searchQuery}`;
-      }
-      
-      // Add time-based keywords to query for better filtering (subtle enhancement)
-      if (request.timeRange && !request.startDate && !request.endDate) {
-        const timeKeywords: Record<string, string> = {
-          'day': 'recent OR today OR "last 24 hours"',
-          'd': 'recent OR today OR "last 24 hours"',
-          'week': 'recent OR "this week" OR "last 7 days"',
-          'w': 'recent OR "this week" OR "last 7 days"',
-          'month': 'recent OR "this month" OR "last 30 days"',
-          'm': 'recent OR "this month" OR "last 30 days"',
-          'year': 'recent OR "this year" OR "last 12 months"',
-          'y': 'recent OR "this year" OR "last 12 months"',
+      // Query rewriting (if enabled) - happens before other optimizations
+      const enableQueryRewriting = request.enableQueryRewriting ?? false; // Default to false
+      let queryVariations: string[] = [request.query.trim()];
+
+      if (enableQueryRewriting) {
+        const rewritingOptions = request.queryRewritingOptions || {
+          maxVariations: 3,
+          useCache: true,
+          context: request.optimizationContext,
         };
-        
-        const timeKeyword = timeKeywords[request.timeRange];
-        if (timeKeyword) {
-          // Add time context more subtly to help search engine prioritize recent content
-          searchQuery = `${searchQuery} ${timeKeyword}`;
-        }
+
+        const rewritten = await QueryRewriterService.rewriteQuery(
+          request.query.trim(),
+          rewritingOptions
+        );
+
+        queryVariations = rewritten.variations;
+
+        logger.info('Query rewritten into variations', {
+          originalQuery: request.query.substring(0, 100),
+          variationCount: queryVariations.length,
+          rewritingTimeMs: rewritten.rewritingTimeMs,
+          cached: rewritten.cached,
+        });
       }
 
-      logger.info('Performing Tavily search', {
-        query: searchQuery,
-        originalQuery: request.query,
-        topic: request.topic,
-        timeRange: request.timeRange,
-        country: request.country,
-        maxResults: request.maxResults || 5,
-      });
+      // Process each query variation
+      const allResults: Array<{ query: string; results: SearchResult[] }> = [];
 
-      // Build Tavily search options
-      const tavilyOptions: any = {
-        maxResults: request.maxResults || 5,
-        includeDomains: request.includeDomains,
-        excludeDomains: request.excludeDomains,
-        searchDepth: 'basic', // Options: 'basic' or 'advanced'
-        includeRawContent: false, // Don't include raw content to save tokens
-      };
+      for (const queryVariation of queryVariations) {
+        // Build search query with topic-aware construction
+        let searchQuery = queryVariation;
+        const useTopicAwareQuery = request.useTopicAwareQuery ?? true; // Default to true
 
-      // Add time range filtering
-      if (request.timeRange) {
-        tavilyOptions.timeRange = request.timeRange;
-      } else if (request.startDate || request.endDate) {
-        // Use custom date range if provided
-        if (request.startDate) {
-          tavilyOptions.startDate = request.startDate;
-        }
-        if (request.endDate) {
-          tavilyOptions.endDate = request.endDate;
-        }
-      }
+        if (request.topic && useTopicAwareQuery) {
+          // Use topic-aware query construction
+          const topicQueryResult = TopicQueryBuilderService.buildTopicQuery(
+            searchQuery,
+            request.topic,
+            request.topicQueryOptions || {
+              useTopicAsContext: true,
+              extractTopicKeywords: true,
+              useTopicTemplates: true,
+              topicWeight: 'medium',
+            }
+          );
 
-      // Add location filtering
-      if (request.country) {
-        tavilyOptions.country = request.country.toUpperCase();
-      }
+          searchQuery = topicQueryResult.enhancedQuery;
 
-      // Perform search
-      const response = await tavilyClient.search(searchQuery, tavilyOptions);
-
-      // Transform Tavily results to our format
-      let results: SearchResult[] = (response.results || []).map((result: any) => ({
-        title: result.title || 'Untitled',
-        url: result.url || '',
-        content: result.content || '',
-        score: result.score,
-        publishedDate: result.published_date,
-        author: result.author,
-      }));
-
-      // Filter results by topic/keyword if provided - ensure results are actually about the topic
-      if (request.topic) {
-        const topicLower = request.topic.toLowerCase().trim();
-        const topicWords = topicLower.split(/\s+/);
-        
-        results = results.filter((result) => {
-          // Check if topic appears in title or content
-          const titleLower = (result.title || '').toLowerCase();
-          const contentLower = (result.content || '').toLowerCase();
-          const combinedText = `${titleLower} ${contentLower}`;
-          
-          // For multi-word topics, check if all significant words appear
-          // For single-word topics, check if the word appears
-          if (topicWords.length > 1) {
-            // Multi-word topic: require the full phrase or all significant words
-            const hasFullPhrase = combinedText.includes(topicLower);
-            // Also check if all significant words (2+ chars) appear
-            const significantWords = topicWords.filter(w => w.length >= 2);
-            const hasAllWords = significantWords.length > 0 && 
-              significantWords.every(word => combinedText.includes(word));
-            
-            return hasFullPhrase || hasAllWords;
-          } else {
-            // Single-word topic: just check if it appears
-            return combinedText.includes(topicLower);
+          if (queryVariations.length === 1) {
+            // Only log if not using query rewriting (to avoid spam)
+            logger.info('Topic-aware query constructed', {
+              originalQuery: request.query.substring(0, 100),
+              enhancedQuery: searchQuery.substring(0, 100),
+              topic: request.topic,
+              integrationMethod: topicQueryResult.integrationMethod,
+              topicKeywordsCount: topicQueryResult.topicKeywords.length,
+              queryTemplate: topicQueryResult.queryTemplate,
+            });
           }
+        } else if (request.topic) {
+          // Fallback to simple prefix approach
+          const topicPhrase = request.topic.includes(' ')
+            ? `"${request.topic}"`
+            : request.topic;
+          searchQuery = `${topicPhrase} ${searchQuery}`;
+        }
+        // Add time-based keywords to query for better filtering (subtle enhancement)
+        if (request.timeRange && !request.startDate && !request.endDate) {
+          const timeKeywords: Record<string, string> = {
+            'day': 'recent OR today OR "last 24 hours"',
+            'd': 'recent OR today OR "last 24 hours"',
+            'week': 'recent OR "this week" OR "last 7 days"',
+            'w': 'recent OR "this week" OR "last 7 days"',
+            'month': 'recent OR "this month" OR "last 30 days"',
+            'm': 'recent OR "this month" OR "last 30 days"',
+            'year': 'recent OR "this year" OR "last 12 months"',
+            'y': 'recent OR "this year" OR "last 12 months"',
+          };
+          
+          const timeKeyword = timeKeywords[request.timeRange];
+          if (timeKeyword) {
+            // Add time context more subtly to help search engine prioritize recent content
+            searchQuery = `${searchQuery} ${timeKeyword}`;
+          }
+        }
+
+        if (queryVariations.length === 1) {
+          // Only log if not using query rewriting (to avoid spam)
+          logger.info('Performing Tavily search', {
+            query: searchQuery,
+            originalQuery: request.query,
+            topic: request.topic,
+            timeRange: request.timeRange,
+            country: request.country,
+            maxResults: request.maxResults || 5,
+          });
+        }
+
+        // Build Tavily search options
+        const tavilyOptions: any = {
+          maxResults: request.maxResults || 5,
+          includeDomains: request.includeDomains,
+          excludeDomains: request.excludeDomains,
+          searchDepth: 'basic', // Options: 'basic' or 'advanced'
+          includeRawContent: false, // Don't include raw content to save tokens
+        };
+
+        // Add time range filtering
+        if (request.timeRange) {
+          tavilyOptions.timeRange = request.timeRange;
+        } else if (request.startDate || request.endDate) {
+          // Use custom date range if provided
+          if (request.startDate) {
+            tavilyOptions.startDate = request.startDate;
+          }
+          if (request.endDate) {
+            tavilyOptions.endDate = request.endDate;
+          }
+        }
+
+        // Add location filtering
+        if (request.country) {
+          tavilyOptions.country = request.country.toUpperCase();
+        }
+
+        // Perform search with circuit breaker and retry logic
+        const circuitResult = await CircuitBreakerService.execute(
+          'tavily-search',
+          async () => {
+            const retryResult = await RetryService.execute(
+              async () => {
+                return await tavilyClient.search(searchQuery, tavilyOptions);
+              },
+              {
+                maxRetries: 3,
+                initialDelay: 1000,
+                multiplier: 2,
+                maxDelay: 10000,
+                onRetry: (error, attempt, delay) => {
+                  logger.warn('Retrying Tavily search', {
+                    attempt,
+                    delay,
+                    error: error.message,
+                    query: searchQuery.substring(0, 100),
+                  });
+                },
+              }
+            );
+            return retryResult.result;
+          },
+          {
+            failureThreshold: 5,
+            resetTimeout: 60000, // 60 seconds
+            monitoringWindow: 60000,
+            timeout: 30000, // 30 seconds
+            errorFilter: (error) => {
+              // Only count server errors as failures
+              return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
+            },
+          }
+        );
+
+        const response = circuitResult.result;
+
+        // Transform Tavily results to our format
+        let results: SearchResult[] = (response.results || []).map((result: any) => ({
+          title: result.title || 'Untitled',
+          url: result.url || '',
+          content: result.content || '',
+          score: result.score,
+          publishedDate: result.published_date,
+          author: result.author,
+        }));
+
+        // Filter results by topic/keyword if provided - ensure results are actually about the topic
+        if (request.topic) {
+          const topicLower = request.topic.toLowerCase().trim();
+          const topicWords = topicLower.split(/\s+/);
+          
+          results = results.filter((result) => {
+            // Check if topic appears in title or content
+            const titleLower = (result.title || '').toLowerCase();
+            const contentLower = (result.content || '').toLowerCase();
+            const combinedText = `${titleLower} ${contentLower}`;
+            
+            // For multi-word topics, check if all significant words appear
+            // For single-word topics, check if the word appears
+            if (topicWords.length > 1) {
+              // Multi-word topic: require the full phrase or all significant words
+              const hasFullPhrase = combinedText.includes(topicLower);
+              // Also check if all significant words (2+ chars) appear
+              const significantWords = topicWords.filter(w => w.length >= 2);
+              const hasAllWords = significantWords.length > 0 && 
+                significantWords.every(word => combinedText.includes(word));
+              
+              return hasFullPhrase || hasAllWords;
+            } else {
+              // Single-word topic: just check if it appears
+              return combinedText.includes(topicLower);
+            }
+          });
+          
+          if (queryVariations.length === 1) {
+            // Only log if not using query rewriting (to avoid spam)
+            logger.info('Filtered results by topic/keyword', {
+              topic: request.topic,
+              originalCount: (response.results || []).length,
+              filteredCount: results.length,
+            });
+          }
+        }
+
+        // Store results for this query variation
+        allResults.push({
+          query: queryVariation,
+          results,
         });
-        
-        logger.info('Filtered results by topic/keyword', {
-          topic: request.topic,
-          originalCount: (response.results || []).length,
-          filteredCount: results.length,
+      }
+
+      // Aggregate results if using query rewriting
+      let finalResults: SearchResult[];
+      if (enableQueryRewriting && allResults.length > 1) {
+        // Aggregate results from all query variations
+        const aggregated = QueryRewriterService.aggregateResults(
+          allResults.map(({ query, results }) => ({
+            query,
+            results: results.map(r => ({
+              title: r.title,
+              url: r.url,
+              content: r.content,
+              score: r.score || 0,
+            })),
+          })),
+          request.maxResults
+        );
+
+        // Convert back to SearchResult format
+        finalResults = aggregated.map(agg => ({
+          title: agg.title,
+          url: agg.url,
+          content: agg.content,
+          score: agg.aggregatedScore || agg.score,
+          publishedDate: undefined, // Not available after aggregation
+          author: undefined, // Not available after aggregation
+        }));
+
+        logger.info('Aggregated results from query variations', {
+          originalQuery: request.query.substring(0, 100),
+          variationCount: queryVariations.length,
+          totalResults: finalResults.length,
         });
+      } else {
+        // Use results from single query (or first variation)
+        finalResults = allResults[0]?.results || [];
       }
 
       // Filter results by time range if specified
@@ -390,7 +557,7 @@ export class SearchService {
           // Determine if this is a strict time range (last 24 hours = very strict)
           const isStrict = request.timeRange === 'day' || request.timeRange === 'd';
           
-          results = results.filter((result) => {
+          finalResults = finalResults.filter((result: SearchResult) => {
             let hasValidPublishedDate = false;
             let publishedDateWithinRange = false;
             
@@ -514,8 +681,8 @@ export class SearchService {
           logger.info('Filtered results by time range', {
             timeRange: request.timeRange,
             cutoffDate: cutoffDate.toISOString(),
-            originalCount: (response.results || []).length,
-            filteredCount: results.length,
+            originalCount: finalResults.length,
+            filteredCount: finalResults.length,
           });
         }
       } else if (request.startDate || request.endDate) {
@@ -524,7 +691,7 @@ export class SearchService {
         const endDate = request.endDate ? new Date(request.endDate) : new Date();
         
         const now = new Date();
-        results = results.filter((result) => {
+        finalResults = finalResults.filter((result: SearchResult) => {
           let hasValidPublishedDate = false;
           let publishedDateInRange = false;
           
@@ -596,30 +763,277 @@ export class SearchService {
         logger.info('Filtered results by custom date range', {
           startDate: request.startDate,
           endDate: request.endDate,
-          originalCount: (response.results || []).length,
-          filteredCount: results.length,
+          originalCount: finalResults.length,
+          filteredCount: finalResults.length,
+        });
+      }
+
+      // Re-rank web results if enabled
+      const enableWebResultReranking = request.enableWebResultReranking ?? false; // Default to false
+      if (enableWebResultReranking && finalResults.length > 0) {
+        const rerankingResult = WebResultRerankerService.rerankResults(
+          finalResults,
+          request.query,
+          request.rerankingConfig
+        );
+
+        // Update final results with re-ranked results
+        finalResults = rerankingResult.results;
+
+        logger.info('Web results re-ranked', {
+          originalQuery: request.query.substring(0, 100),
+          originalCount: rerankingResult.originalCount,
+          rerankedCount: finalResults.length,
+          rerankingTimeMs: rerankingResult.rerankingTimeMs,
+        });
+      }
+
+      // Quality scoring and filtering if enabled
+      const enableQualityScoring = request.enableQualityScoring ?? false; // Default to false
+      const filterByQuality = request.filterByQuality ?? false; // Default to false
+      const minQualityScore = request.minQualityScore ?? 0.5; // Default threshold
+      
+      if (enableQualityScoring && finalResults.length > 0) {
+        const startTime = Date.now();
+        
+        if (filterByQuality) {
+          // Filter results by quality threshold
+          const beforeCount = finalResults.length;
+          finalResults = ResultQualityScorerService.filterByQuality(
+            finalResults,
+            minQualityScore,
+            request.qualityScoringConfig
+          );
+          
+          logger.info('Results filtered by quality', {
+            originalQuery: request.query.substring(0, 100),
+            beforeCount,
+            afterCount: finalResults.length,
+            minQualityScore,
+            filteringTimeMs: Date.now() - startTime,
+          });
+        } else {
+          // Sort by quality (but don't filter)
+          finalResults = ResultQualityScorerService.sortByQuality(
+            finalResults,
+            request.qualityScoringConfig
+          );
+          
+          logger.info('Results sorted by quality', {
+            originalQuery: request.query.substring(0, 100),
+            resultCount: finalResults.length,
+            sortingTimeMs: Date.now() - startTime,
+          });
+        }
+      }
+
+      // Domain authority scoring and filtering if enabled
+      const enableDomainAuthority = request.enableDomainAuthority ?? true; // Default to true
+      const filterByAuthority = request.filterByAuthority ?? false; // Default to false
+      const minAuthorityScore = request.minAuthorityScore ?? 0.5; // Default threshold
+      const prioritizeAuthoritative = request.prioritizeAuthoritative ?? true; // Default to true
+      
+      if (enableDomainAuthority && finalResults.length > 0) {
+        const startTime = Date.now();
+        
+        // Apply domain authority configuration if provided
+        if (request.domainAuthorityConfig) {
+          DomainAuthorityService.setConfig(request.domainAuthorityConfig);
+        }
+        
+        if (filterByAuthority) {
+          // Filter results by authority threshold
+          const beforeCount = finalResults.length;
+          finalResults = DomainAuthorityService.filterByAuthority(
+            finalResults,
+            minAuthorityScore
+          );
+          
+          logger.info('Results filtered by domain authority', {
+            originalQuery: request.query.substring(0, 100),
+            beforeCount,
+            afterCount: finalResults.length,
+            minAuthorityScore,
+            filteringTimeMs: Date.now() - startTime,
+          });
+        }
+        
+        if (prioritizeAuthoritative) {
+          // Sort by domain authority (prioritize authoritative sources)
+          const baseScores = finalResults.map(r => r.score || 0.5);
+          finalResults = DomainAuthorityService.sortByAuthority(finalResults, baseScores);
+          
+          logger.info('Results prioritized by domain authority', {
+            originalQuery: request.query.substring(0, 100),
+            resultCount: finalResults.length,
+            sortingTimeMs: Date.now() - startTime,
+          });
+        }
+        
+        // Log authority statistics
+        const authorityStats = DomainAuthorityService.getAuthorityStatistics(finalResults);
+        logger.info('Domain authority statistics', {
+          originalQuery: request.query.substring(0, 100),
+          ...authorityStats,
+        });
+        
+        // Apply authority scoring to result scores
+        const scoredResults = DomainAuthorityService.scoreResultsWithAuthority(
+          finalResults,
+          finalResults.map(r => r.score || 0.5)
+        );
+        
+        // Update results with authority-adjusted scores
+        finalResults = scoredResults.map(({ result, score, authorityScore }) => ({
+          ...result,
+          score: score, // Authority-adjusted score
+        }));
+      }
+
+      // Web result deduplication if enabled
+      const enableDeduplication = request.enableDeduplication ?? true; // Default to true
+      
+      if (enableDeduplication && finalResults.length > 1) {
+        const startTime = Date.now();
+        
+        const deduplicationResult = WebDeduplicationService.deduplicate(
+          finalResults,
+          request.deduplicationOptions
+        );
+        
+        finalResults = deduplicationResult.results;
+        
+        logger.info('Web results deduplicated', {
+          originalQuery: request.query.substring(0, 100),
+          originalCount: deduplicationResult.stats.originalCount,
+          deduplicatedCount: deduplicationResult.stats.deduplicatedCount,
+          urlDuplicatesRemoved: deduplicationResult.stats.urlDuplicatesRemoved,
+          contentDuplicatesRemoved: deduplicationResult.stats.contentDuplicatesRemoved,
+          totalRemoved: deduplicationResult.stats.totalRemoved,
+          processingTimeMs: deduplicationResult.stats.processingTimeMs,
+          performanceWarning: deduplicationResult.stats.performanceWarning,
+        });
+        
+        if (deduplicationResult.stats.performanceWarning) {
+          logger.warn('Deduplication exceeded target time', {
+            processingTimeMs: deduplicationResult.stats.processingTimeMs,
+            targetTime: 150,
+          });
+        }
+      }
+
+      // Apply filtering strategy (replaces old hard filtering)
+      const filteringMode = request.filteringMode || 'moderate'; // Default to moderate
+      const enableFilteringABTesting = request.enableFilteringABTesting ?? false;
+      
+      if (finalResults.length > 0) {
+        const startTime = Date.now();
+        
+        // Calculate cutoff date for time range filtering
+        let cutoffDate: Date | null = null;
+        let isStrict = false;
+        
+        if (request.timeRange && !request.startDate && !request.endDate) {
+          const now = new Date();
+          switch (request.timeRange) {
+            case 'day':
+            case 'd':
+              cutoffDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+              isStrict = true;
+              break;
+            case 'week':
+            case 'w':
+              cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+              break;
+            case 'month':
+            case 'm':
+              cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+              break;
+            case 'year':
+            case 'y':
+              cutoffDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+              break;
+          }
+        } else if (request.startDate || request.endDate) {
+          cutoffDate = request.startDate ? new Date(request.startDate) : new Date(0);
+        }
+
+        // Apply filtering strategy
+        const filteringOptions: FilteringOptions = {
+          mode: filteringMode,
+          strategy: request.filteringStrategy,
+          userId: request.userId,
+          enableABTesting: enableFilteringABTesting,
+        };
+
+        const filteringResult = FilteringStrategyService.applyFilteringStrategy(
+          finalResults,
+          filteringOptions
+        );
+
+        // Apply contextual filtering (time range and topic)
+        if (cutoffDate !== null || request.topic) {
+          const strategy = request.filteringStrategy || 
+            (enableFilteringABTesting && request.userId 
+              ? selectFilteringVariant(request.userId, getFilteringABTestConfig())
+              : getFilteringStrategy(filteringMode));
+
+          // Convert to FilteringResult format for contextual filtering
+          let filteringResults = filteringResult.results.map(r => ({
+            ...r,
+            originalScore: r.score,
+            filteringScore: r.score || 0.5,
+          }));
+
+          filteringResults = FilteringStrategyService.applyContextualFiltering(
+            filteringResults,
+            strategy,
+            {
+              cutoffDate,
+              isStrict,
+              topic: request.topic,
+            }
+          );
+
+          // Convert back to SearchResult
+          finalResults = filteringResults.map(r => ({
+            ...r,
+            score: r.filteringScore || r.originalScore || r.score,
+          }));
+        } else {
+          finalResults = filteringResult.results;
+        }
+
+        logger.info('Filtering strategy applied', {
+          originalQuery: request.query.substring(0, 100),
+          mode: filteringMode,
+          originalCount: filteringResult.stats.originalCount,
+          filteredCount: filteringResult.stats.filteredCount,
+          hardFilteredCount: filteringResult.stats.hardFilteredCount,
+          rankingAdjustedCount: filteringResult.stats.rankingAdjustedCount,
+          diversityFilteredCount: filteringResult.stats.diversityFilteredCount,
+          processingTimeMs: filteringResult.stats.processingTimeMs,
         });
       }
 
       const searchResponse: SearchResponse = {
         query: request.query,
-        results,
+        results: finalResults,
         topic: request.topic,
         timeRange: request.timeRange,
         country: request.country,
         cached: false,
       };
 
-      // Cache the results
-      searchCache.set(cacheKey, {
-        data: searchResponse,
-        timestamp: Date.now(),
-        expiresAt: Date.now() + CACHE_TTL,
+      // Cache the results in Redis (with automatic fallback if Redis unavailable)
+      await RedisCacheService.set(cacheKey, searchResponse, {
+        prefix: CACHE_PREFIX,
+        ttl: CACHE_TTL,
       });
 
       logger.info('Search completed', {
         query: request.query,
-        resultsCount: results.length,
+        resultsCount: finalResults.length,
         topic: request.topic,
       });
 

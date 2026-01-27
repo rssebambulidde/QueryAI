@@ -4,6 +4,16 @@ import { AppError, ValidationError } from '../types/error';
 import OpenAI from 'openai';
 import { SearchService, SearchRequest } from './search.service';
 import { RAGService, RAGOptions } from './rag.service';
+import { FewShotSelectorService, FewShotSelectionOptions } from './few-shot-selector.service';
+import { CitationValidatorService } from './citation-validator.service';
+import { AnswerQualityService } from './answer-quality.service';
+import { ConflictResolutionService } from './conflict-resolution.service';
+import { RetryService } from './retry.service';
+import { DegradationService, ServiceType, DegradationLevel } from './degradation.service';
+import { CircuitBreakerService, CircuitState } from './circuit-breaker.service';
+import { LatencyTrackerService, OperationType } from './latency-tracker.service';
+import { ErrorTrackerService, ServiceType as ErrorServiceType } from './error-tracker.service';
+import { QualityMetricsService, QualityMetricType } from './quality-metrics.service';
 
 export interface QuestionRequest {
   question: string;
@@ -19,6 +29,10 @@ export interface QuestionRequest {
   enableSearch?: boolean;
   topic?: string; // Any keyword for topic filtering
   maxSearchResults?: number;
+  optimizeSearchQuery?: boolean; // Enable query optimization for web search
+  searchOptimizationContext?: string; // Context for search query optimization
+  useTopicAwareQuery?: boolean; // Use topic-aware query construction
+  topicQueryOptions?: import('./topic-query-builder.service').TopicQueryOptions; // Options for topic-aware query construction
   // Advanced search filters
   timeRange?: 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
   startDate?: string; // ISO date string (YYYY-MM-DD)
@@ -31,6 +45,81 @@ export interface QuestionRequest {
   documentIds?: string[]; // Specific documents to search
   maxDocumentChunks?: number; // Max document chunks to retrieve
   minScore?: number; // Minimum similarity score for document chunks
+  // Query expansion options
+  enableQueryExpansion?: boolean; // Enable query expansion for better recall
+  expansionStrategy?: 'llm' | 'embedding' | 'hybrid' | 'none'; // Expansion strategy
+  maxExpansions?: number; // Maximum number of expansion terms
+  // Query rewriting options
+  enableQueryRewriting?: boolean; // Enable query rewriting (default: false)
+  queryRewritingOptions?: import('./query-rewriter.service').QueryRewritingOptions; // Options for query rewriting
+  // Web result re-ranking options
+  enableWebResultReranking?: boolean; // Enable web result re-ranking (default: false)
+  webResultRerankingConfig?: import('./web-result-reranker.service').RerankingConfig; // Re-ranking configuration
+  // Quality scoring options
+  enableQualityScoring?: boolean; // Enable quality scoring (default: false)
+  qualityScoringConfig?: import('./result-quality-scorer.service').QualityScoringConfig; // Quality scoring configuration
+  minQualityScore?: number; // Minimum quality score threshold (0-1, default: 0.5)
+  filterByQuality?: boolean; // Filter results by quality threshold (default: false)
+  // Re-ranking options
+  enableReranking?: boolean; // Enable re-ranking of results
+  rerankingStrategy?: 'cross-encoder' | 'score-based' | 'hybrid' | 'none'; // Re-ranking strategy
+  rerankingTopK?: number; // Number of results to re-rank
+  rerankingMaxResults?: number; // Maximum results after re-ranking
+  // Adaptive threshold options
+  useAdaptiveThreshold?: boolean; // Enable adaptive similarity thresholds
+  minResults?: number; // Minimum number of results desired
+  maxResults?: number; // Maximum number of results desired (for threshold optimization)
+  // Diversity filtering options
+  enableDiversityFilter?: boolean; // Enable diversity filtering (MMR)
+  diversityLambda?: number; // Diversity parameter (0-1): higher = more relevance, lower = more diversity
+  diversityMaxResults?: number; // Maximum results after diversity filtering
+  // Deduplication options
+  enableResultDeduplication?: boolean; // Enable comprehensive result deduplication
+  deduplicationThreshold?: number; // Similarity threshold for deduplication (0-1)
+  deduplicationNearDuplicateThreshold?: number; // Threshold for near-duplicates (0-1)
+  // Adaptive context selection options
+  useAdaptiveContextSelection?: boolean; // Enable adaptive context selection based on query complexity (legacy)
+  enableAdaptiveContextSelection?: boolean; // Enable adaptive context selection (default: true)
+  adaptiveContextOptions?: import('./adaptive-context.service').AdaptiveContextOptions; // Adaptive context configuration
+  minChunks?: number; // Minimum number of chunks
+  maxChunks?: number; // Maximum number of chunks
+  // Dynamic limits options
+  enableDynamicLimits?: boolean; // Enable dynamic limit calculation (default: true)
+  dynamicLimitOptions?: import('../config/rag.config').DynamicLimitOptions; // Dynamic limit configuration
+  // Relevance ordering options
+  enableRelevanceOrdering?: boolean; // Enable relevance-based ordering (default: true)
+  orderingOptions?: import('./relevance-ordering.service').OrderingOptions; // Ordering configuration
+  // Context compression options
+  enableContextCompression?: boolean; // Enable context compression (default: true)
+  compressionOptions?: import('./context-compressor.service').CompressionOptions; // Compression configuration
+  maxContextTokens?: number; // Maximum tokens for context (default: 8000)
+  // Context summarization options
+  enableContextSummarization?: boolean; // Enable context summarization (default: true)
+  summarizationOptions?: import('./context-summarizer.service').SummarizationOptions; // Summarization configuration
+  // Source prioritization options
+  enableSourcePrioritization?: boolean; // Enable source prioritization (default: true)
+  prioritizationOptions?: import('./source-prioritizer.service').PrioritizationOptions; // Prioritization configuration
+  // Token budgeting options
+  enableTokenBudgeting?: boolean; // Enable token budgeting (default: true)
+  tokenBudgetOptions?: import('./token-budget.service').TokenBudgetOptions; // Token budget configuration
+  // Few-shot examples options
+  enableFewShotExamples?: boolean; // Enable few-shot examples (default: true)
+  fewShotOptions?: FewShotSelectionOptions; // Few-shot example selection configuration
+  // Conversation summarization options
+  enableConversationSummarization?: boolean; // Enable conversation history summarization (default: true)
+  conversationSummarizationOptions?: import('./conversation-summarizer.service').ConversationSummarizationOptions; // Summarization configuration
+  // History filtering options
+  enableHistoryFiltering?: boolean; // Enable relevance-based history filtering (default: true)
+  historyFilterOptions?: import('./history-filter.service').HistoryFilterOptions; // History filtering configuration
+  // Sliding window options
+  enableSlidingWindow?: boolean; // Enable sliding window for long conversations (default: true)
+  slidingWindowOptions?: import('./sliding-window.service').SlidingWindowOptions; // Sliding window configuration
+  // Conversation state tracking options
+  enableStateTracking?: boolean; // Enable conversation state tracking (default: true)
+  stateTrackingOptions?: import('./conversation-state.service').StateTrackingOptions; // State tracking configuration
+  // Citation parsing options
+  enableCitationParsing?: boolean; // Enable citation parsing from response (default: true)
+  citationParseOptions?: import('./citation-parser.service').CitationParseOptions; // Citation parsing configuration
   // Conversation management
   conversationId?: string; // Save messages to this conversation (auto-create if not provided)
 }
@@ -42,12 +131,32 @@ export interface Source {
   documentId?: string;
   snippet?: string;
   score?: number;
+  metadata?: import('../types/source').SourceMetadata;
 }
 
 export interface QuestionResponse {
   answer: string;
   model: string;
   sources?: Source[];
+  citations?: {
+    total: number;
+    document: number;
+    web: number;
+    reference: number;
+    parsed: import('./citation-parser.service').ParsedCitation[];
+    validation?: {
+      isValid: boolean;
+      matched: number;
+      unmatched: number;
+      errors: string[];
+      warnings: string[];
+      suggestions: string[];
+      missingSources: string[];
+      invalidUrls: string[];
+      invalidDocumentIds: string[];
+    };
+    inline?: import('../types/citation').InlineCitationData;
+  };
   followUpQuestions?: string[]; // AI-generated follow-up questions
   refusal?: boolean; // true when response is an off-topic refusal (e.g. from pre-check) (11.1)
   usage: {
@@ -55,6 +164,11 @@ export interface QuestionResponse {
     completionTokens: number;
     totalTokens: number;
   };
+  // Degradation information
+  degraded?: boolean;
+  degradationLevel?: DegradationLevel;
+  degradationMessage?: string;
+  partial?: boolean; // Indicates if results are partial due to degradation
 }
 
 /**
@@ -90,6 +204,24 @@ export class AIService {
     topicDescription?: string,
     topicScopeConfig?: Record<string, any> | null
   ): Promise<boolean> {
+    // Track latency for off-topic check
+    return await LatencyTrackerService.trackOperation(
+      OperationType.AI_OFF_TOPIC_CHECK,
+      async () => {
+        return await this.runOffTopicPreCheckInternal(question, topicName, topicDescription, topicScopeConfig);
+      }
+    );
+  }
+
+  /**
+   * Internal method for off-topic pre-check
+   */
+  private static async runOffTopicPreCheckInternal(
+    question: string,
+    topicName: string,
+    topicDescription?: string,
+    topicScopeConfig?: Record<string, any> | null
+  ): Promise<boolean> {
     const scopeLine = this.deriveScopeFromConfig(topicScopeConfig);
     const desc = topicDescription || 'general';
     const prompt = `Topic: ${topicName}. Description: ${desc}.${scopeLine}
@@ -98,12 +230,25 @@ Question: ${question}
 
 Is this question clearly within the topic? Answer only YES or NO.`;
     try {
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0,
-        max_tokens: 10,
-      });
+      // Use retry service for off-topic pre-check
+      const retryResult = await RetryService.execute(
+        async () => {
+          return await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0,
+            max_tokens: 10,
+          });
+        },
+        {
+          maxRetries: 2,
+          initialDelay: 500,
+          multiplier: 2,
+          maxDelay: 5000,
+        }
+      );
+
+      const completion = retryResult.result;
       const text = (completion.choices[0]?.message?.content || '').trim().toUpperCase();
       // Treat as off-topic only when the answer clearly starts with NO
       if (/^NO\b/.test(text)) return false;
@@ -141,7 +286,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     timeFilter?: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string },
     topicName?: string,
     topicDescription?: string,
-    topicScopeConfig?: Record<string, any> | null
+    topicScopeConfig?: Record<string, any> | null,
+    fewShotExamples?: string,
+    conversationState?: string
   ): string {
     const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
     const hasWebResults = ragContext?.includes('Web Search Results:') || false;
@@ -205,6 +352,40 @@ All your responses should be focused on this specific topic domain. When searchi
       }
     }
 
+    // Get enhanced guidelines in parallel for better performance
+    const [citationGuidelinesResult, qualityGuidelinesResult, conflictResolutionGuidelinesResult] = await Promise.allSettled([
+      Promise.resolve(CitationValidatorService.formatCitationGuidelines()),
+      Promise.resolve(AnswerQualityService.formatQualityGuidelines()),
+      Promise.resolve(ConflictResolutionService.formatConflictResolutionGuidelines()),
+    ]);
+
+    let citationGuidelines = '';
+    if (citationGuidelinesResult.status === 'fulfilled') {
+      citationGuidelines = citationGuidelinesResult.value;
+    } else {
+      logger.warn('Failed to load citation guidelines, using basic instructions', {
+        error: citationGuidelinesResult.reason?.message,
+      });
+    }
+
+    let qualityGuidelines = '';
+    if (qualityGuidelinesResult.status === 'fulfilled') {
+      qualityGuidelines = qualityGuidelinesResult.value;
+    } else {
+      logger.warn('Failed to load answer quality guidelines, using basic instructions', {
+        error: qualityGuidelinesResult.reason?.message,
+      });
+    }
+
+    let conflictResolutionGuidelines = '';
+    if (conflictResolutionGuidelinesResult.status === 'fulfilled') {
+      conflictResolutionGuidelines = conflictResolutionGuidelinesResult.value;
+    } else {
+      logger.warn('Failed to load conflict resolution guidelines, using basic instructions', {
+        error: conflictResolutionGuidelinesResult.reason?.message,
+      });
+    }
+
     const basePrompt = `You are a helpful AI assistant that provides accurate, informative, and well-structured answers to user questions using Retrieval-Augmented Generation (RAG).
 
 ${modeInstruction}${timeFilterInstruction}${topicScopeInstruction}
@@ -216,21 +397,27 @@ EVERY SINGLE PIECE OF INFORMATION in your response MUST have an inline clickable
 - Every sentence that contains factual information must include a source link
 - NO information should be presented without a source citation
 
+${citationGuidelines}
+
+${qualityGuidelines}
+
+${conflictResolutionGuidelines}
+
 Guidelines:
 - Provide clear, concise, and accurate answers
 - Use information from the provided document excerpts and/or web search results based on the mode
 - If you don't know something based on the provided sources, admit it rather than guessing
 - Use proper formatting (bullet points, paragraphs) when appropriate
-- MANDATORY INLINE CITATIONS - Every fact must have a clickable source link:
-  - For document excerpts: [Document 1], [Document 2], [Document 3], etc. (MANDATORY - cite every fact from documents)
-  - For web sources: [Web Source 1](URL), [Web Source 2](URL), etc. - ALWAYS include the URL in parentheses after the citation
-- When you reference information from a document, immediately follow it with the citation like this: "According to [Document 1], the process involves..." or "The policy states [Document 2] that..."
-- When you reference information from web sources, use this format: "According to [Web Source 1](https://example.com), the situation involves..." or "As reported by [Web Source 2](https://example.com/article)..."
 - Format your responses with clear structure: Use paragraphs for main points, bullet points for lists, and bold text for key terms when appropriate
 - Provide concise but comprehensive summaries that capture the essential information
 - Be friendly and professional`;
 
     let fullContext = '';
+
+    // Add conversation state if available
+    if (conversationState) {
+      fullContext += `\n\n## Conversation Context\n${conversationState}\n`;
+    }
 
     // Add RAG context (documents + web search)
     if (ragContext) {
@@ -247,8 +434,14 @@ Guidelines:
       fullContext += `Additional Context:\n${additionalContext}\n`;
     }
 
+    // Add few-shot examples if provided
+    let examplesSection = '';
+    if (fewShotExamples) {
+      examplesSection = fewShotExamples;
+    }
+
     if (fullContext) {
-      return `${basePrompt}
+      return `${basePrompt}${examplesSection}
 
 ${fullContext}
 
@@ -274,6 +467,14 @@ You MUST format your response as 3-5 short, spaced paragraphs following these ru
    - Example: "SQL is a standard language used to manage relational databases, allowing users to query and modify structured data efficiently. [official documentation](https://example.com/docs)"
    - Another example: "Relational systems such as MySQL and PostgreSQL rely on SQL to define schemas and enforce data integrity. [Database Guide](document://doc123)"
    - REMEMBER: Every piece of information must be traceable to a source. If you cannot cite a source, do not include that information.
+   
+   CITATION ENFORCEMENT:
+   - Before submitting your response, verify that EVERY factual statement has a citation
+   - Check that ALL statistics, numbers, and data points are cited
+   - Ensure ALL quotes and attributed statements have citations
+   - Validate that citation formats match the examples provided above
+   - Confirm that URLs in web citations match exactly those provided in the context
+   - If you find any uncited factual information, either add a citation or remove that information
 
 3. PARAGRAPH STRUCTURE:
    - NO numbered lists, bullet points, or structured sections
@@ -362,6 +563,19 @@ FOLLOW_UP_QUESTIONS:
    * However, when these questions are asked and answered, those answers MUST include source citations.
    */
   static async generateFollowUpQuestions(question: string, answer: string, topicName?: string): Promise<string[]> {
+    // Track latency for follow-up generation
+    return await LatencyTrackerService.trackOperation(
+      OperationType.AI_FOLLOW_UP_GENERATION,
+      async () => {
+        return await this.generateFollowUpQuestionsInternal(question, answer, topicName);
+      }
+    );
+  }
+
+  /**
+   * Internal method for generating follow-up questions
+   */
+  private static async generateFollowUpQuestionsInternal(question: string, answer: string, topicName?: string): Promise<string[]> {
     const ans = answer.length > 1500 ? answer.slice(0, 1500) + '...' : answer;
     const prompt = `Based on this exchange, generate exactly 4 short follow-up questions.
 
@@ -374,12 +588,25 @@ IMPORTANT: These are questions only. When these questions are answered later, th
 
 Output only the 4 questions, one per line. No numbering or bullets. Each must be a complete question and derived from the specific content above.`;
     try {
-      const c = await openai.chat.completions.create({
-        model: this.DEFAULT_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.5,
-        max_tokens: 300,
-      });
+      // Use retry service for follow-up question generation
+      const retryResult = await RetryService.execute(
+        async () => {
+          return await openai.chat.completions.create({
+            model: this.DEFAULT_MODEL,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.5,
+            max_tokens: 300,
+          });
+        },
+        {
+          maxRetries: 2,
+          initialDelay: 500,
+          multiplier: 2,
+          maxDelay: 5000,
+        }
+      );
+
+      const c = retryResult.result;
       const text = c.choices[0]?.message?.content || '';
       const lines = text.split('\n').map((l) => l.replace(/^\s*[-*•]?\s*\d*\.?\s*/, '').trim()).filter((l) => l.length > 5 && l.length < 200);
       return lines.slice(0, 4);
@@ -402,14 +629,16 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
     timeFilter?: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string },
     topicName?: string,
     topicDescription?: string,
-    topicScopeConfig?: Record<string, any> | null
+    topicScopeConfig?: Record<string, any> | null,
+    fewShotExamples?: string,
+    conversationState?: string
   ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
 
-    // Add system prompt with RAG context
+    // Add system prompt with RAG context and few-shot examples
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter, topicName, topicDescription, topicScopeConfig),
+      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter, topicName, topicDescription, topicScopeConfig, fewShotExamples, conversationState),
     });
 
     // Add conversation history if provided (strip FOLLOW_UP_QUESTIONS from assistant content to save tokens and give the model room to emit its own)
@@ -439,6 +668,31 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
     request: QuestionRequest,
     userId?: string
   ): Promise<QuestionResponse> {
+    // Track latency for AI question answering
+    return await LatencyTrackerService.trackOperation(
+      OperationType.AI_QUESTION_ANSWERING,
+      async () => {
+        return await this.answerQuestionInternal(request, userId);
+      },
+      {
+        userId,
+        metadata: {
+          questionLength: request.question.length,
+          enableSearch: request.enableSearch,
+          enableDocumentSearch: request.enableDocumentSearch,
+          enableWebSearch: request.enableWebSearch,
+        },
+      }
+    );
+  }
+
+  /**
+   * Internal method for answering questions
+   */
+  private static async answerQuestionInternal(
+    request: QuestionRequest,
+    userId?: string
+  ): Promise<QuestionResponse> {
     try {
       // Validate input
       if (!request.question || request.question.trim().length === 0) {
@@ -454,25 +708,40 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
       const maxTokens = request.maxTokens || this.DEFAULT_MAX_TOKENS;
 
       // Fetch topic details if topicId is provided (for Research Topic Mode)
+      // This can be done in parallel with RAG context retrieval if userId is available
       let topicName: string | undefined;
       let topicDescription: string | undefined;
       let topicScopeConfig: Record<string, any> | null | undefined;
-      if (request.topicId && userId) {
-        try {
-          const { TopicService } = await import('./topic.service');
-          const topic = await TopicService.getTopic(request.topicId, userId);
-          if (topic) {
-            topicName = topic.name;
-            topicDescription = topic.description ?? undefined;
-            topicScopeConfig = topic.scope_config ?? null;
-            logger.info('Topic context loaded', { topicId: request.topicId, topicName });
-          }
-        } catch (topicError: any) {
-          logger.warn('Failed to fetch topic details', {
-            topicId: request.topicId,
-            error: topicError.message,
-          });
-        }
+      
+      const topicFetchPromise = request.topicId && userId
+        ? (async () => {
+            try {
+              const { TopicService } = await import('./topic.service');
+              const topic = await TopicService.getTopic(request.topicId!, userId);
+              if (topic) {
+                return {
+                  topicName: topic.name,
+                  topicDescription: topic.description ?? undefined,
+                  topicScopeConfig: topic.scope_config ?? null,
+                };
+              }
+            } catch (topicError: any) {
+              logger.warn('Failed to fetch topic details', {
+                topicId: request.topicId,
+                error: topicError.message,
+              });
+            }
+            return null;
+          })()
+        : Promise.resolve(null);
+
+      // Wait for topic fetch to complete before off-topic check
+      const topicResult = await topicFetchPromise;
+      if (topicResult) {
+        topicName = topicResult.topicName;
+        topicDescription = topicResult.topicDescription;
+        topicScopeConfig = topicResult.topicScopeConfig;
+        logger.info('Topic context loaded', { topicId: request.topicId, topicName });
       }
 
       // Off-topic pre-check: skip RAG and return refusal when enabled and question is off-topic (8.x, 13.1)
@@ -530,6 +799,10 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
       // Retrieve RAG context (documents + web search)
       let ragContext: string | undefined;
       let sources: Source[] | undefined;
+      let contextDegraded = false;
+      let contextDegradationLevel: DegradationLevel | undefined;
+      let contextDegradationMessage: string | undefined;
+      let contextPartial = false;
 
       if (userId) {
         try {
@@ -548,6 +821,45 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
             startDate: request.startDate,
             endDate: request.endDate,
             country: request.country,
+            // Query expansion options
+            enableQueryExpansion: request.enableQueryExpansion ?? false,
+            expansionStrategy: request.expansionStrategy,
+            maxExpansions: request.maxExpansions,
+            enableQueryRewriting: request.enableQueryRewriting ?? false, // Default to false
+            queryRewritingOptions: request.queryRewritingOptions,
+            enableWebResultReranking: request.enableWebResultReranking ?? false, // Default to false
+            webResultRerankingConfig: request.webResultRerankingConfig,
+            enableQualityScoring: request.enableQualityScoring ?? false, // Default to false
+            qualityScoringConfig: request.qualityScoringConfig,
+            minQualityScore: request.minQualityScore,
+            filterByQuality: request.filterByQuality ?? false, // Default to false
+            // Re-ranking options
+            enableReranking: request.enableReranking ?? false,
+            rerankingStrategy: request.rerankingStrategy,
+            rerankingTopK: request.rerankingTopK,
+            rerankingMaxResults: request.rerankingMaxResults,
+            // Adaptive threshold options
+            useAdaptiveThreshold: request.useAdaptiveThreshold ?? true, // Default to true
+            minResults: request.minResults,
+            maxResults: request.maxResults,
+            // Diversity filtering options
+            enableDiversityFilter: request.enableDiversityFilter ?? false, // Default to false
+            diversityLambda: request.diversityLambda,
+            diversityMaxResults: request.diversityMaxResults,
+            diversitySimilarityThreshold: undefined, // Use default from config
+            // Deduplication options
+            enableResultDeduplication: request.enableResultDeduplication ?? false, // Default to false
+            deduplicationThreshold: request.deduplicationThreshold,
+            deduplicationNearDuplicateThreshold: request.deduplicationNearDuplicateThreshold,
+            // Adaptive context selection options
+            useAdaptiveContextSelection: request.useAdaptiveContextSelection ?? true, // Default to true (legacy)
+            enableAdaptiveContextSelection: request.enableAdaptiveContextSelection ?? true, // Default to true
+            adaptiveContextOptions: request.adaptiveContextOptions,
+            minChunks: request.minChunks,
+            maxChunks: request.maxChunks,
+            // Dynamic limits options
+            enableDynamicLimits: request.enableDynamicLimits ?? true, // Default to true
+            dynamicLimitOptions: request.dynamicLimitOptions,
           };
 
           // Only enable web search if enableSearch is true
@@ -555,19 +867,49 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
             ragOptions.enableWebSearch = false;
           }
 
+          // Retrieve RAG context and prepare formatting options in parallel
           const context = await RAGService.retrieveContext(request.question, ragOptions);
           
-          // Format context for prompt
-          ragContext = RAGService.formatContextForPrompt(context);
+          // Format context and extract sources in parallel (they're independent operations)
+          const [formattedContext, extractedSources] = await Promise.all([
+            RAGService.formatContextForPrompt(context, {
+              enableRelevanceOrdering: ragOptions.enableRelevanceOrdering ?? true,
+              orderingOptions: ragOptions.orderingOptions,
+              enableContextSummarization: ragOptions.enableContextSummarization ?? true,
+              summarizationOptions: ragOptions.summarizationOptions,
+              enableContextCompression: ragOptions.enableContextCompression ?? true,
+              compressionOptions: ragOptions.compressionOptions,
+              enableSourcePrioritization: ragOptions.enableSourcePrioritization ?? true,
+              prioritizationOptions: ragOptions.prioritizationOptions,
+              enableTokenBudgeting: ragOptions.enableTokenBudgeting ?? true,
+              tokenBudgetOptions: {
+                ...ragOptions.tokenBudgetOptions,
+                model: request.model || 'gpt-3.5-turbo',
+              },
+              query: request.question,
+              model: request.model || 'gpt-3.5-turbo',
+              userId: userId,
+            }),
+            Promise.resolve(RAGService.extractSources(context)),
+          ]);
           
-          // Extract sources
-          sources = RAGService.extractSources(context);
+          ragContext = formattedContext;
+          sources = extractedSources;
+
+          // Track degradation from context
+          const contextDegraded = context.degraded || false;
+          const contextDegradationLevel = context.degradationLevel;
+          const contextDegradationMessage = context.degradationMessage;
+          const contextPartial = context.partial || false;
 
           logger.info('RAG context retrieved', {
             userId,
             documentChunks: context.documentContexts.length,
             webResults: context.webSearchResults.length,
             totalSources: sources.length,
+            degraded: contextDegraded,
+            degradationLevel: contextDegradationLevel,
+            partial: contextPartial,
           });
         } catch (ragError: any) {
           // Log RAG error but don't fail the entire request
@@ -596,16 +938,42 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
                 content: r.content,
               }));
 
-              ragContext = RAGService.formatContextForPrompt({
+              ragContext = await RAGService.formatContextForPrompt({
                 documentContexts: [],
                 webSearchResults: webResults,
+              }, {
+                enableRelevanceOrdering: true,
+                enableContextSummarization: request.enableContextSummarization ?? true,
+                summarizationOptions: request.summarizationOptions,
+                enableContextCompression: request.enableContextCompression ?? true,
+                compressionOptions: request.compressionOptions,
+                enableSourcePrioritization: request.enableSourcePrioritization ?? true,
+                prioritizationOptions: request.prioritizationOptions,
+                enableTokenBudgeting: request.enableTokenBudgeting ?? true,
+                tokenBudgetOptions: {
+                  ...request.tokenBudgetOptions,
+                  model: request.model || 'gpt-3.5-turbo',
+                },
+                query: request.question,
+                model: request.model || 'gpt-3.5-turbo',
+                userId: userId,
               });
 
+              // Get current date as access date for web sources
+              const accessDate = new Date().toISOString();
+              
               sources = searchResponse.results.map((r) => ({
                 type: 'web' as const,
                 title: r.title,
                 url: r.url,
                 snippet: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
+                metadata: {
+                  publishedDate: r.publishedDate,
+                  publicationDate: r.publishedDate,
+                  accessDate, // Access date for web sources
+                  author: r.author,
+                  url: r.url,
+                },
               }));
 
               logger.info('Search results retrieved (fallback)', {
@@ -633,18 +1001,89 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
           }
         : undefined;
 
-      // Build messages with RAG context
+      // Fetch and process conversation history in parallel with RAG context retrieval
+      // This can be done independently since it doesn't depend on RAG results
+      const conversationHistoryPromise = (async () => {
+        let conversationHistory = request.conversationHistory;
+        
+        if (request.conversationId && userId && !conversationHistory && request.enableConversationSummarization !== false) {
+          try {
+            const { MessageService } = await import('./message.service');
+            
+            const summarizationOptions = {
+              model: request.model || 'gpt-3.5-turbo',
+              ...request.conversationSummarizationOptions,
+            };
+            
+            conversationHistory = await MessageService.getSummarizedHistory(
+              request.conversationId,
+              userId,
+              summarizationOptions
+            );
+            
+            logger.info('Conversation history summarized', {
+              conversationId: request.conversationId,
+              historyLength: conversationHistory.length,
+            });
+          } catch (error: any) {
+            logger.warn('Failed to fetch/summarize conversation history, continuing without history', {
+              error: error.message,
+              conversationId: request.conversationId,
+            });
+          }
+        }
+
+        // Filter conversation history by relevance to current query
+        if (conversationHistory && conversationHistory.length > 0 && request.enableHistoryFiltering !== false) {
+          try {
+            const { HistoryFilterService } = await import('./history-filter.service');
+            
+            const filterOptions = {
+              ...request.historyFilterOptions,
+            };
+            
+            const filterResult = await HistoryFilterService.filterHistory(
+              request.question,
+              conversationHistory,
+              filterOptions
+            );
+            
+            conversationHistory = filterResult.filteredHistory;
+            
+            logger.info('Conversation history filtered by relevance', {
+              originalCount: filterResult.stats.originalCount,
+              filteredCount: filterResult.stats.filteredCount,
+              removedCount: filterResult.stats.removedCount,
+              processingTimeMs: filterResult.stats.processingTimeMs,
+              avgRelevanceScore: filterResult.scores.reduce((sum, msg) => sum + msg.relevanceScore, 0) / filterResult.scores.length,
+            });
+          } catch (error: any) {
+            logger.warn('Failed to filter conversation history, using original history', {
+              error: error.message,
+            });
+          }
+        }
+
+        return conversationHistory;
+      })();
+
+      // Wait for RAG context to be available before processing few-shot examples
+      // (few-shot examples depend on whether documents/web results are available)
+      // But we can prepare the promise structure
+
       const messages = this.buildMessages(
         request.question,
         ragContext,
         request.context,
-        request.conversationHistory,
+        conversationHistory,
         request.enableDocumentSearch,
         request.enableWebSearch,
         timeFilter,
         topicName,
         topicDescription,
-        topicScopeConfig
+        topicScopeConfig,
+        fewShotExamplesText,
+        conversationStateText
       );
 
       logger.info('Sending question to OpenAI with RAG', {
@@ -656,16 +1095,151 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         historyLength: request.conversationHistory?.length || 0,
       });
 
-      // Call OpenAI API
-      const completion = await openai.chat.completions.create({
-        model,
-        messages,
-        temperature,
-        max_tokens: maxTokens,
-      });
+      // Call OpenAI API with retry logic and circuit breaker
+      let completion;
+      try {
+        const retryResult = await RetryService.execute(
+          async () => {
+            return await openai.chat.completions.create({
+              model,
+              messages,
+              temperature,
+              max_tokens: maxTokens,
+            });
+          },
+          {
+            maxRetries: 3,
+            initialDelay: 1000,
+            multiplier: 2,
+            maxDelay: 30000,
+            onRetry: (error, attempt, delay) => {
+              logger.warn('Retrying OpenAI API call', {
+                attempt,
+                delay,
+                error: error.message,
+                model,
+                questionLength: request.question.length,
+              });
+            },
+          }
+        );
+        completion = retryResult.result;
+      } catch (openaiError: any) {
+        // Track error
+        ErrorTrackerService.trackError(ErrorServiceType.AI, openaiError, {
+          userId,
+          metadata: {
+            operation: 'answerQuestion',
+            questionLength: request.question.length,
+          },
+        }).catch(() => {});
+
+        // Handle OpenAI service degradation
+        DegradationService.handleServiceError(ServiceType.OPENAI, openaiError);
+        
+        // If we have partial context, we can still provide a degraded response
+        if (ragContext && sources && sources.length > 0) {
+          logger.warn('OpenAI API failed but partial response available', {
+            error: openaiError.message,
+            sourcesCount: sources.length,
+          });
+          
+          // Return a degraded response with available context
+          const degradationStatus = DegradationService.getOverallStatus();
+          return {
+            answer: `I apologize, but I'm experiencing technical difficulties with the AI service. However, I found ${sources.length} relevant source${sources.length > 1 ? 's' : ''} that may help answer your question. Please try again in a moment, or review the sources provided below.\n\n${sources.map((s, i) => `${i + 1}. ${s.title}${s.url ? ` (${s.url})` : ''}`).join('\n')}`,
+            model: model,
+            sources,
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            degraded: true,
+            degradationLevel: DegradationLevel.SEVERE,
+            degradationMessage: degradationStatus.message || 'AI service is currently unavailable',
+            partial: true,
+          };
+        }
+        
+        // Re-throw if no fallback available
+        throw openaiError;
+      }
 
       const fullResponse = completion.choices[0]?.message?.content || 'No response generated';
       
+      // Parse citations from response if enabled
+      let parsedCitations: import('./citation-parser.service').CitationParseResult | undefined;
+      let citationValidation: import('./citation-validator.service').CitationValidationResult | undefined;
+      
+      if (request.enableCitationParsing !== false) {
+        try {
+          const { CitationParserService } = await import('./citation-parser.service');
+          
+          const parseOptions = {
+            removeCitations: false, // Keep citations in answer
+            preserveFormat: true,
+            ...request.citationParseOptions,
+          };
+          
+          parsedCitations = CitationParserService.parseCitations(fullResponse, parseOptions);
+          
+          logger.info('Citations parsed from response', {
+            totalCitations: parsedCitations.citationCount,
+            documentCitations: parsedCitations.documentCitations.length,
+            webCitations: parsedCitations.webCitations.length,
+            referenceCitations: parsedCitations.referenceCitations.length,
+            parsingTimeMs: parsedCitations.parsingTimeMs,
+          });
+
+          // Validate citations against sources if sources are available
+          if (sources && sources.length > 0 && parsedCitations.citations.length > 0) {
+            try {
+              const { CitationValidatorService } = await import('./citation-validator.service');
+              
+              // Convert sources to SourceInfo format
+              const sourceInfos: import('./citation-validator.service').SourceInfo[] = sources.map((source, idx) => ({
+                type: source.type,
+                index: idx + 1,
+                title: source.title,
+                url: source.url,
+                documentId: source.documentId,
+                id: source.documentId || source.url,
+              }));
+
+              citationValidation = CitationValidatorService.validateCitationsAgainstSources(
+                parsedCitations.citations,
+                sourceInfos
+              );
+
+              logger.info('Citations validated against sources', {
+                totalCitations: parsedCitations.citationCount,
+                matchedCitations: citationValidation.matchedCitations,
+                unmatchedCitations: citationValidation.unmatchedCitations,
+                errors: citationValidation.errors.length,
+                warnings: citationValidation.warnings.length,
+                isValid: citationValidation.isValid,
+              });
+
+              // Log validation issues
+              if (citationValidation.errors.length > 0) {
+                logger.warn('Citation validation errors found', {
+                  errorCount: citationValidation.errors.length,
+                  errors: citationValidation.errors.slice(0, 5), // Log first 5 errors
+                });
+              }
+
+              if (citationValidation.warnings.length > 0) {
+                logger.debug('Citation validation warnings', {
+                  warningCount: citationValidation.warnings.length,
+                  warnings: citationValidation.warnings.slice(0, 5), // Log first 5 warnings
+                });
+              }
+            } catch (validationError: any) {
+              logger.warn('Failed to validate citations against sources', {
+                error: validationError.message,
+              });
+            }
+          }
+        }
+      }
+
       // Parse follow-up questions from the response
       let answer = fullResponse;
       let followUpQuestions: string[] | undefined;
@@ -715,6 +1289,71 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         if (generated.length > 0) followUpQuestions = generated;
       }
 
+      // Build inline citation segments if citations are parsed (after answer is extracted)
+      let inlineCitations: import('../types/citation').InlineCitationResult | undefined;
+      if (parsedCitations && parsedCitations.citations.length > 0 && sources) {
+        try {
+          const { CitationParserService } = await import('./citation-parser.service');
+          
+          // Adjust citation positions to be relative to answer (not fullResponse)
+          // Citations were parsed from fullResponse, but answer may be shorter
+          const answerStartInFullResponse = fullResponse.indexOf(answer);
+          const adjustedCitations = parsedCitations.citations
+            .filter(citation => {
+              // Only include citations that are within the answer text
+              if (answerStartInFullResponse >= 0) {
+                return citation.position.start >= answerStartInFullResponse &&
+                       citation.position.end <= answerStartInFullResponse + answer.length;
+              }
+              // If answer is at start, use original positions
+              return citation.position.start < answer.length && citation.position.end <= answer.length;
+            })
+            .map(citation => {
+              // Adjust positions to be relative to answer
+              const adjustedStart = answerStartInFullResponse >= 0
+                ? citation.position.start - answerStartInFullResponse
+                : citation.position.start;
+              const adjustedEnd = answerStartInFullResponse >= 0
+                ? citation.position.end - answerStartInFullResponse
+                : citation.position.end;
+              
+              return {
+                ...citation,
+                position: {
+                  start: adjustedStart,
+                  end: adjustedEnd,
+                },
+              };
+            });
+
+          // Convert sources to format expected by inline citation builder
+          const sourceInfos = sources.map((source, idx) => ({
+            type: source.type,
+            title: source.title,
+            url: source.url,
+            documentId: source.documentId,
+            index: idx + 1,
+          }));
+
+          inlineCitations = CitationParserService.buildInlineCitationSegments(
+            answer,
+            adjustedCitations,
+            sourceInfos
+          );
+
+          logger.info('Inline citations built', {
+            segmentCount: inlineCitations.segmentCount,
+            citationCount: inlineCitations.citationCount,
+            originalCitationCount: parsedCitations.citations.length,
+            adjustedCitationCount: adjustedCitations.length,
+          });
+        } catch (error: any) {
+          logger.warn('Failed to build inline citations', {
+            error: error.message,
+          });
+        }
+      }
+
       if (!completion.usage) {
         throw new AppError('OpenAI API did not return usage information', 500, 'AI_API_ERROR');
       }
@@ -725,17 +1364,86 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         hasFollowUpQuestions: !!followUpQuestions,
       });
 
-      const response = {
+      // Check overall degradation status
+      const degradationStatus = DegradationService.getOverallStatus();
+      const isDegraded = degradationStatus.level !== DegradationLevel.NONE || contextDegraded;
+      const degradationLevel = contextDegradationLevel || degradationStatus.level;
+      const degradationMessage = contextDegradationMessage || (isDegraded ? degradationStatus.message : undefined);
+      const isPartial = contextPartial || (isDegraded && degradationStatus.canProvidePartialResults);
+
+      const response: QuestionResponse = {
         answer,
         model: completion.model,
         sources,
+        citations: parsedCitations ? {
+          total: parsedCitations.citationCount,
+          document: parsedCitations.documentCitations.length,
+          web: parsedCitations.webCitations.length,
+          reference: parsedCitations.referenceCitations.length,
+          parsed: parsedCitations.citations,
+          validation: citationValidation ? {
+            isValid: citationValidation.isValid,
+            matched: citationValidation.matchedCitations,
+            unmatched: citationValidation.unmatchedCitations,
+            errors: citationValidation.errors,
+            warnings: citationValidation.warnings,
+            suggestions: citationValidation.suggestions,
+            missingSources: citationValidation.missingSources,
+            invalidUrls: citationValidation.invalidUrls,
+            invalidDocumentIds: citationValidation.invalidDocumentIds,
+          } : undefined,
+          inline: inlineCitations ? {
+            segments: inlineCitations.segments,
+            citations: inlineCitations.citations,
+            sourceMap: Object.fromEntries(inlineCitations.sourceMap),
+            citationCount: inlineCitations.citationCount,
+            segmentCount: inlineCitations.segmentCount,
+          } : undefined,
+        } : undefined,
         followUpQuestions: followUpQuestions && followUpQuestions.length > 0 ? followUpQuestions : undefined,
         usage: {
           promptTokens: completion.usage.prompt_tokens,
           completionTokens: completion.usage.completion_tokens,
           totalTokens: completion.usage.total_tokens,
         },
+        degraded: isDegraded,
+        degradationLevel: isDegraded ? degradationLevel : undefined,
+        degradationMessage: degradationMessage,
+        partial: isPartial,
       };
+
+      // Collect quality metrics (async, don't block)
+      if (userId && answer) {
+        // Prepare citations for quality metrics
+        const qualityCitations = parsedCitations?.citations?.map(citation => ({
+          text: citation.text || '',
+          source: citation.source || '',
+          accurate: citationValidation?.isValid !== false, // Use validation result if available
+        })) || [];
+
+        QualityMetricsService.collectQualityMetrics(
+          userId,
+          request.question,
+          answer,
+          {
+            queryId: request.conversationId,
+            sources: sources || [],
+            citations: qualityCitations.length > 0 ? qualityCitations : undefined,
+            metadata: {
+              model: completion.model || model,
+              tokenUsage: completion.usage.total_tokens,
+              hasCitations: (parsedCitations?.citations?.length || 0) > 0,
+              citationValidation: citationValidation?.isValid,
+            },
+          }
+        ).catch((error: any) => {
+          // Don't fail if quality metrics collection fails
+          logger.warn('Failed to collect quality metrics', {
+            error: error.message,
+            userId,
+          });
+        });
+      }
 
       // Save messages to conversation if conversationId provided and userId available
       if (request.conversationId && userId) {
@@ -778,6 +1486,49 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
             userId,
           });
 
+          // Update conversation state if enabled
+          if (request.enableStateTracking !== false && conversationHistory) {
+            try {
+              const { ConversationService } = await import('./conversation.service');
+              
+              // Get all messages including the new ones
+              const { MessageService } = await import('./message.service');
+              const allMessages = await MessageService.getAllMessages(conversationId, userId!);
+              const allHistory = allMessages.map(msg => ({
+                role: msg.role as 'user' | 'assistant',
+                content: msg.content || '',
+              }));
+
+              // Check if state update is needed (every N messages)
+              const stateOptions = {
+                updateThreshold: request.stateTrackingOptions?.updateThreshold || 5,
+                ...request.stateTrackingOptions,
+              };
+
+              const messageCount = allHistory.length;
+              const shouldUpdate = messageCount % (stateOptions.updateThreshold || 5) === 0 || messageCount === 1;
+
+              if (shouldUpdate) {
+                await ConversationService.updateConversationState(
+                  conversationId,
+                  userId!,
+                  allHistory,
+                  stateOptions
+                );
+                
+                logger.info('Conversation state updated', {
+                  conversationId,
+                  messageCount,
+                });
+              }
+            } catch (stateError: any) {
+              logger.warn('Failed to update conversation state', {
+                error: stateError.message,
+                conversationId,
+              });
+            }
+          }
+
           // Add conversationId to response
           (response as any).conversationId = conversationId;
         } catch (saveError: any) {
@@ -798,6 +1549,15 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
       }
 
       if (error instanceof OpenAI.APIError) {
+        // Track error
+        ErrorTrackerService.trackError(ErrorServiceType.AI, error, {
+          userId,
+          metadata: {
+            operation: 'answerQuestion',
+            questionLength: request.question.length,
+          },
+        }).catch(() => {});
+
         logger.error('OpenAI API error:', {
           status: error.status,
           code: error.code,
@@ -836,6 +1596,57 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
    * Returns an async generator that yields chunks of the response
    */
   static async *answerQuestionStream(
+    request: QuestionRequest,
+    userId?: string
+  ): AsyncGenerator<string, void, unknown> {
+    const startTime = Date.now();
+    let success = false;
+    let error: string | undefined;
+
+    try {
+      // Track streaming latency (note: can't use trackOperation for generators)
+      const generator = this.answerQuestionStreamInternal(request, userId);
+      
+      // Wrap generator to track completion
+      const trackedGenerator = async function*() {
+        try {
+          for await (const chunk of generator) {
+            yield chunk;
+          }
+          success = true;
+        } catch (err: any) {
+          error = err.message;
+          throw err;
+        } finally {
+          const duration = Date.now() - startTime;
+          // Store latency metric (using private method via any cast)
+          const metric = {
+            operationType: OperationType.AI_STREAMING,
+            userId,
+            duration,
+            timestamp: Date.now(),
+            success,
+            error,
+            metadata: {
+              questionLength: request.question.length,
+            },
+          };
+          (LatencyTrackerService as any).storeLatencyMetric(metric).catch(() => {});
+          (LatencyTrackerService as any).checkAlerts(metric).catch(() => {});
+        }
+      };
+
+      yield* trackedGenerator();
+    } catch (err: any) {
+      error = err.message;
+      throw err;
+    }
+  }
+
+  /**
+   * Internal method for streaming answers
+   */
+  private static async *answerQuestionStreamInternal(
     request: QuestionRequest,
     userId?: string
   ): AsyncGenerator<string, void, unknown> {
@@ -895,6 +1706,61 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
             startDate: request.startDate,
             endDate: request.endDate,
             country: request.country,
+            // Query expansion options
+            enableQueryExpansion: request.enableQueryExpansion ?? false,
+            expansionStrategy: request.expansionStrategy,
+            maxExpansions: request.maxExpansions,
+            enableQueryRewriting: request.enableQueryRewriting ?? false, // Default to false
+            queryRewritingOptions: request.queryRewritingOptions,
+            enableWebResultReranking: request.enableWebResultReranking ?? false, // Default to false
+            webResultRerankingConfig: request.webResultRerankingConfig,
+            enableQualityScoring: request.enableQualityScoring ?? false, // Default to false
+            qualityScoringConfig: request.qualityScoringConfig,
+            minQualityScore: request.minQualityScore,
+            filterByQuality: request.filterByQuality ?? false, // Default to false
+            // Re-ranking options
+            enableReranking: request.enableReranking ?? false,
+            rerankingStrategy: request.rerankingStrategy,
+            rerankingTopK: request.rerankingTopK,
+            rerankingMaxResults: request.rerankingMaxResults,
+            // Adaptive threshold options
+            useAdaptiveThreshold: request.useAdaptiveThreshold ?? true, // Default to true
+            minResults: request.minResults,
+            maxResults: request.maxResults,
+            // Diversity filtering options
+            enableDiversityFilter: request.enableDiversityFilter ?? false, // Default to false
+            diversityLambda: request.diversityLambda,
+            diversityMaxResults: request.diversityMaxResults,
+            diversitySimilarityThreshold: undefined, // Use default from config
+            // Deduplication options
+            enableResultDeduplication: request.enableResultDeduplication ?? false, // Default to false
+            deduplicationThreshold: request.deduplicationThreshold,
+            deduplicationNearDuplicateThreshold: request.deduplicationNearDuplicateThreshold,
+            // Adaptive context selection options
+            useAdaptiveContextSelection: request.useAdaptiveContextSelection ?? true, // Default to true (legacy)
+            enableAdaptiveContextSelection: request.enableAdaptiveContextSelection ?? true, // Default to true
+            adaptiveContextOptions: request.adaptiveContextOptions,
+            minChunks: request.minChunks,
+            maxChunks: request.maxChunks,
+            // Dynamic limits options
+            enableDynamicLimits: request.enableDynamicLimits ?? true, // Default to true
+            dynamicLimitOptions: request.dynamicLimitOptions,
+            // Relevance ordering options
+            enableRelevanceOrdering: request.enableRelevanceOrdering ?? true, // Default to true
+            orderingOptions: request.orderingOptions,
+            // Context compression options
+            enableContextCompression: request.enableContextCompression ?? true, // Default to true
+            compressionOptions: request.compressionOptions,
+            maxContextTokens: request.maxContextTokens,
+            // Context summarization options
+            enableContextSummarization: request.enableContextSummarization ?? true, // Default to true
+            summarizationOptions: request.summarizationOptions,
+            // Source prioritization options
+            enableSourcePrioritization: request.enableSourcePrioritization ?? true, // Default to true
+            prioritizationOptions: request.prioritizationOptions,
+            // Token budgeting options
+            enableTokenBudgeting: request.enableTokenBudgeting ?? true, // Default to true
+            tokenBudgetOptions: request.tokenBudgetOptions,
           };
 
           // Only enable web search if enableSearch is true
@@ -903,7 +1769,24 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
           }
 
           const context = await RAGService.retrieveContext(request.question, ragOptions);
-          ragContext = RAGService.formatContextForPrompt(context);
+          ragContext = await RAGService.formatContextForPrompt(context, {
+            enableRelevanceOrdering: ragOptions.enableRelevanceOrdering ?? true,
+            orderingOptions: ragOptions.orderingOptions,
+            enableContextSummarization: ragOptions.enableContextSummarization ?? true,
+            summarizationOptions: ragOptions.summarizationOptions,
+            enableContextCompression: ragOptions.enableContextCompression ?? true,
+            compressionOptions: ragOptions.compressionOptions,
+            enableSourcePrioritization: ragOptions.enableSourcePrioritization ?? true,
+            prioritizationOptions: ragOptions.prioritizationOptions,
+            enableTokenBudgeting: ragOptions.enableTokenBudgeting ?? true,
+            tokenBudgetOptions: {
+              ...ragOptions.tokenBudgetOptions,
+              model: request.model || 'gpt-3.5-turbo',
+            },
+            query: request.question,
+            model: request.model || 'gpt-3.5-turbo',
+            userId: userId,
+          });
 
           logger.info('RAG context retrieved for streaming', {
             userId,
@@ -940,9 +1823,25 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
                 content: r.content,
               }));
 
-              ragContext = RAGService.formatContextForPrompt({
+              ragContext = await RAGService.formatContextForPrompt({
                 documentContexts: [],
                 webSearchResults: webResults,
+              }, {
+                enableRelevanceOrdering: true, // Enable ordering for fallback search
+                enableContextSummarization: request.enableContextSummarization ?? true,
+                summarizationOptions: request.summarizationOptions,
+                enableContextCompression: request.enableContextCompression ?? true,
+                compressionOptions: request.compressionOptions,
+                enableSourcePrioritization: request.enableSourcePrioritization ?? true,
+                prioritizationOptions: request.prioritizationOptions,
+                enableTokenBudgeting: request.enableTokenBudgeting ?? true,
+                tokenBudgetOptions: {
+                  ...request.tokenBudgetOptions,
+                  model: request.model || 'gpt-3.5-turbo',
+                },
+                query: request.question,
+                model: request.model || 'gpt-3.5-turbo',
+                userId: userId,
               });
 
               logger.info('Search results retrieved for streaming (fallback)', {
@@ -970,18 +1869,155 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
           }
         : undefined;
 
+      // Fetch conversation history if conversationId is provided
+      let conversationHistory = request.conversationHistory;
+      if (request.conversationId && userId && !conversationHistory) {
+        try {
+          const { MessageService } = await import('./message.service');
+          
+          // Use sliding window if enabled, otherwise use summarization
+          if (request.enableSlidingWindow !== false) {
+            const { SlidingWindowService } = await import('./sliding-window.service');
+            
+            const slidingWindowOptions = {
+              model: request.model || 'gpt-3.5-turbo',
+              ...request.slidingWindowOptions,
+            };
+            
+            conversationHistory = await MessageService.getSlidingWindowHistory(
+              request.conversationId,
+              userId,
+              slidingWindowOptions
+            );
+            
+            logger.info('Conversation history processed with sliding window', {
+              conversationId: request.conversationId,
+              historyLength: conversationHistory.length,
+            });
+          } else if (request.enableConversationSummarization !== false) {
+            const { ConversationSummarizerService } = await import('./conversation-summarizer.service');
+            
+            const summarizationOptions = {
+              model: request.model || 'gpt-3.5-turbo',
+              ...request.conversationSummarizationOptions,
+            };
+            
+            conversationHistory = await MessageService.getSummarizedHistory(
+              request.conversationId,
+              userId,
+              summarizationOptions
+            );
+            
+            logger.info('Conversation history summarized', {
+              conversationId: request.conversationId,
+              historyLength: conversationHistory.length,
+            });
+          } else {
+            // Get raw history without processing
+            const messages = await MessageService.getAllMessages(request.conversationId, userId);
+            conversationHistory = messages.map(msg => ({
+              role: msg.role as 'user' | 'assistant',
+              content: msg.content || '',
+            }));
+            
+            logger.info('Conversation history retrieved (no processing)', {
+              conversationId: request.conversationId,
+              historyLength: conversationHistory.length,
+            });
+          }
+        } catch (error: any) {
+          logger.warn('Failed to fetch conversation history, continuing without history', {
+            error: error.message,
+            conversationId: request.conversationId,
+          });
+        }
+      }
+
+      // Filter conversation history by relevance to current query
+      if (conversationHistory && conversationHistory.length > 0 && request.enableHistoryFiltering !== false) {
+        try {
+          const { HistoryFilterService } = await import('./history-filter.service');
+          
+          const filterOptions = {
+            ...request.historyFilterOptions,
+          };
+          
+          const filterResult = await HistoryFilterService.filterHistory(
+            request.question,
+            conversationHistory,
+            filterOptions
+          );
+          
+          conversationHistory = filterResult.filteredHistory;
+          
+          logger.info('Conversation history filtered by relevance', {
+            originalCount: filterResult.stats.originalCount,
+            filteredCount: filterResult.stats.filteredCount,
+            removedCount: filterResult.stats.removedCount,
+            processingTimeMs: filterResult.stats.processingTimeMs,
+            avgRelevanceScore: filterResult.scores.reduce((sum, msg) => sum + msg.relevanceScore, 0) / filterResult.scores.length,
+          });
+        } catch (error: any) {
+          logger.warn('Failed to filter conversation history, using original history', {
+            error: error.message,
+          });
+        }
+      }
+
+      // Wait for conversation history to complete (it was running in parallel)
+      let conversationHistory = await conversationHistoryPromise;
+
       // Build messages with RAG context
+      // Select few-shot examples if enabled (depends on RAG context, so must be after RAG)
+      let fewShotExamplesText = '';
+      if (request.enableFewShotExamples !== false) {
+        try {
+          const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
+          const hasWebResults = ragContext?.includes('Web Search Results:') || false;
+
+          const fewShotOptions: FewShotSelectionOptions = {
+            query: request.question,
+            hasDocuments,
+            hasWebResults,
+            maxExamples: request.fewShotOptions?.maxExamples || 2,
+            maxTokens: request.fewShotOptions?.maxTokens || 500,
+            model: request.model || 'gpt-3.5-turbo',
+            preferCitationStyle: request.fewShotOptions?.preferCitationStyle,
+            ...request.fewShotOptions,
+          };
+
+          const fewShotSelection = FewShotSelectorService.selectExamples(fewShotOptions);
+          
+          if (fewShotSelection.examples.length > 0) {
+            fewShotExamplesText = FewShotSelectorService.formatExamplesForPrompt(fewShotSelection.examples);
+            
+            logger.info('Few-shot examples selected', {
+              query: request.question.substring(0, 100),
+              exampleCount: fewShotSelection.examples.length,
+              totalTokens: fewShotSelection.totalTokens,
+              reasoning: fewShotSelection.reasoning,
+            });
+          }
+        } catch (error: any) {
+          logger.warn('Few-shot example selection failed, continuing without examples', {
+            error: error.message,
+          });
+        }
+      }
+
       const messages = this.buildMessages(
         request.question,
         ragContext,
         request.context,
-        request.conversationHistory,
+        conversationHistory,
         request.enableDocumentSearch,
         request.enableWebSearch,
         timeFilter,
         topicName,
         topicDescription,
-        topicScopeConfig
+        topicScopeConfig,
+        fewShotExamplesText,
+        conversationStateText
       );
 
       logger.info('Sending streaming question to OpenAI with RAG', {
@@ -1086,12 +2122,25 @@ ${qaText.slice(-6000)}
 
 Research Session Summary:`;
     try {
-      const completion = await openai.chat.completions.create({
-        model: this.DEFAULT_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.4,
-        max_tokens: 800,
-      });
+      // Use retry service for research session summary
+      const retryResult = await RetryService.execute(
+        async () => {
+          return await openai.chat.completions.create({
+            model: this.DEFAULT_MODEL,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.4,
+            max_tokens: 800,
+          });
+        },
+        {
+          maxRetries: 2,
+          initialDelay: 1000,
+          multiplier: 2,
+          maxDelay: 10000,
+        }
+      );
+
+      const completion = retryResult.result;
       return completion.choices[0]?.message?.content || 'Summary could not be generated.';
     } catch (err: any) {
       logger.error('Error generating research session summary:', err);
@@ -1128,12 +2177,25 @@ IMPORTANT: These are questions only. When these questions are answered later, th
 
 Output only the 4 questions, one per line. No numbering, bullets, or extra text.`;
     try {
-      const completion = await openai.chat.completions.create({
-        model: this.DEFAULT_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.6,
-        max_tokens: 400,
-      });
+      // Use retry service for suggested starters generation
+      const retryResult = await RetryService.execute(
+        async () => {
+          return await openai.chat.completions.create({
+            model: this.DEFAULT_MODEL,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.6,
+            max_tokens: 400,
+          });
+        },
+        {
+          maxRetries: 2,
+          initialDelay: 500,
+          multiplier: 2,
+          maxDelay: 5000,
+        }
+      );
+
+      const completion = retryResult.result;
       const text = completion.choices[0]?.message?.content || '';
       const lines = text.split('\n').map((l) => l.replace(/^\s*[-*•]?\s*\d*\.?\s*/, '').trim()).filter((l) => l.length > 5 && l.length < 200);
       return lines.slice(0, 4);
@@ -1171,13 +2233,25 @@ Instructions:
 Summary:`;
 
     try {
-      const completion = await openai.chat.completions.create({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature,
-        max_tokens: 300,
-      });
+      // Use retry service for response summarization
+      const retryResult = await RetryService.execute(
+        async () => {
+          return await openai.chat.completions.create({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature,
+            max_tokens: 300,
+          });
+        },
+        {
+          maxRetries: 2,
+          initialDelay: 1000,
+          multiplier: 2,
+          maxDelay: 10000,
+        }
+      );
 
+      const completion = retryResult.result;
       return completion.choices[0]?.message?.content || 'Summary could not be generated.';
     } catch (error: any) {
       logger.error('Error generating summary:', error);
@@ -1221,13 +2295,25 @@ Instructions:
 Essay:`;
 
     try {
-      const completion = await openai.chat.completions.create({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature,
-        max_tokens: 1500,
-      });
+      // Use retry service for essay generation
+      const retryResult = await RetryService.execute(
+        async () => {
+          return await openai.chat.completions.create({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature,
+            max_tokens: 1500,
+          });
+        },
+        {
+          maxRetries: 3,
+          initialDelay: 1000,
+          multiplier: 2,
+          maxDelay: 30000,
+        }
+      );
 
+      const completion = retryResult.result;
       return completion.choices[0]?.message?.content || 'Essay could not be generated.';
     } catch (error: any) {
       logger.error('Error generating essay:', error);
@@ -1272,13 +2358,25 @@ Instructions:
 Report:`;
 
     try {
-      const completion = await openai.chat.completions.create({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature,
-        max_tokens: 2500,
-      });
+      // Use retry service for detailed report generation
+      const retryResult = await RetryService.execute(
+        async () => {
+          return await openai.chat.completions.create({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature,
+            max_tokens: 2500,
+          });
+        },
+        {
+          maxRetries: 3,
+          initialDelay: 1000,
+          multiplier: 2,
+          maxDelay: 30000,
+        }
+      );
 
+      const completion = retryResult.result;
       return completion.choices[0]?.message?.content || 'Report could not be generated.';
     } catch (error: any) {
       logger.error('Error generating detailed report:', error);

@@ -1,0 +1,143 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-26",
+  "examples": [
+    {
+      "id": "factual-1",
+      "queryType": "factual",
+      "question": "What is machine learning?",
+      "answer": "Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed. [Web Source 1](https://example.com/ml-basics) It uses algorithms to analyze data, identify patterns, and make decisions or predictions based on that analysis. [Document 1] The field has applications in image recognition, natural language processing, and recommendation systems. [Web Source 2](https://example.com/ml-applications)",
+      "context": {
+        "hasDocuments": true,
+        "hasWebResults": true,
+        "citationStyle": "mixed"
+      },
+      "tags": ["definition", "basics", "ai"]
+    },
+    {
+      "id": "factual-2",
+      "queryType": "factual",
+      "question": "What is the capital of France?",
+      "answer": "The capital of France is Paris. [Web Source 1](https://example.com/france-info) Paris is located in the north-central part of the country and serves as the country's political, economic, and cultural center. [Document 1] It is one of the most visited cities in the world, known for landmarks like the Eiffel Tower and the Louvre Museum. [Web Source 2](https://example.com/paris-tourism)",
+      "context": {
+        "hasDocuments": true,
+        "hasWebResults": true,
+        "citationStyle": "mixed"
+      },
+      "tags": ["geography", "facts", "location"]
+    },
+    {
+      "id": "conceptual-1",
+      "queryType": "conceptual",
+      "question": "How does neural network training work?",
+      "answer": "Neural network training involves feeding data through the network and adjusting weights to minimize error. [Document 1] The process uses backpropagation, where errors are calculated at the output layer and propagated backward through the network. [Web Source 1](https://example.com/neural-networks) During training, the network learns to recognize patterns by repeatedly processing training examples and updating connection weights. [Document 2] The goal is to find optimal weights that allow the network to make accurate predictions on new, unseen data. [Web Source 2](https://example.com/training-algorithms)",
+      "context": {
+        "hasDocuments": true,
+        "hasWebResults": true,
+        "citationStyle": "mixed"
+      },
+      "tags": ["concepts", "neural-networks", "training"]
+    },
+    {
+      "id": "conceptual-2",
+      "queryType": "conceptual",
+      "question": "What is the difference between supervised and unsupervised learning?",
+      "answer": "Supervised learning uses labeled data to train models, where each example has a known output. [Document 1] The algorithm learns to map inputs to outputs by finding patterns in the labeled training data. [Web Source 1](https://example.com/supervised-learning) Unsupervised learning, in contrast, works with unlabeled data and discovers hidden patterns or structures. [Document 2] It doesn't have predefined outputs to learn from, making it useful for clustering, dimensionality reduction, and anomaly detection. [Web Source 2](https://example.com/unsupervised-learning)",
+      "context": {
+        "hasDocuments": true,
+        "hasWebResults": true,
+        "citationStyle": "mixed"
+      },
+      "tags": ["comparison", "concepts", "learning-types"]
+    },
+    {
+      "id": "procedural-1",
+      "queryType": "procedural",
+      "question": "How do I implement a REST API endpoint?",
+      "answer": "To implement a REST API endpoint, start by defining the route and HTTP method. [Document 1] Use a framework like Express.js to handle routing and request processing. [Web Source 1](https://example.com/rest-api-guide) Implement the endpoint logic to process requests, validate input, and return appropriate responses with status codes. [Document 2] Include error handling for invalid requests and ensure proper authentication and authorization. [Web Source 2](https://example.com/api-security)",
+      "context": {
+        "hasDocuments": true,
+        "hasWebResults": true,
+        "citationStyle": "mixed"
+      },
+      "tags": ["how-to", "programming", "api"]
+    },
+    {
+      "id": "procedural-2",
+      "queryType": "procedural",
+      "question": "What are the steps to deploy a machine learning model?",
+      "answer": "Deploying a machine learning model involves several key steps. [Document 1] First, prepare the model for production by serializing it and creating a prediction interface. [Web Source 1](https://example.com/ml-deployment) Next, set up the deployment infrastructure, which may include containerization with Docker or cloud services. [Document 2] Implement monitoring and logging to track model performance and detect drift. [Web Source 2](https://example.com/ml-monitoring) Finally, create an API endpoint that accepts input data and returns predictions. [Document 3]",
+      "context": {
+        "hasDocuments": true,
+        "hasWebResults": true,
+        "citationStyle": "mixed"
+      },
+      "tags": ["how-to", "deployment", "ml-ops"]
+    },
+    {
+      "id": "exploratory-1",
+      "queryType": "exploratory",
+      "question": "What are the latest developments in quantum computing?",
+      "answer": "Recent developments in quantum computing include advances in error correction and qubit stability. [Web Source 1](https://example.com/quantum-news) Researchers have achieved longer coherence times, allowing quantum computers to perform more complex calculations. [Document 1] Major tech companies are investing heavily in quantum hardware, with some systems now available through cloud platforms. [Web Source 2](https://example.com/quantum-cloud) New algorithms are being developed that could solve problems intractable for classical computers. [Web Source 3](https://example.com/quantum-algorithms) The field is moving closer to practical applications in cryptography, drug discovery, and optimization. [Document 2]",
+      "context": {
+        "hasDocuments": true,
+        "hasWebResults": true,
+        "citationStyle": "web-heavy"
+      },
+      "tags": ["research", "latest", "quantum"]
+    },
+    {
+      "id": "exploratory-2",
+      "queryType": "exploratory",
+      "question": "What are the emerging trends in artificial intelligence?",
+      "answer": "Current AI trends include the rise of large language models and multimodal AI systems. [Web Source 1](https://example.com/ai-trends) There's growing focus on AI safety, alignment, and explainability as systems become more powerful. [Document 1] Edge AI and federated learning are enabling AI to run on devices with limited resources. [Web Source 2](https://example.com/edge-ai) The integration of AI with other technologies like robotics and IoT is creating new possibilities. [Web Source 3](https://example.com/ai-integration) Ethical considerations and regulation are becoming increasingly important as AI adoption expands. [Document 2]",
+      "context": {
+        "hasDocuments": true,
+        "hasWebResults": true,
+        "citationStyle": "web-heavy"
+      },
+      "tags": ["trends", "research", "ai"]
+    },
+    {
+      "id": "document-only-1",
+      "queryType": "factual",
+      "question": "What does the policy document say about remote work?",
+      "answer": "According to the policy document, remote work is allowed for up to three days per week. [Document 1] Employees must have manager approval and maintain regular communication during remote work days. [Document 2] The policy emphasizes that remote work should not impact productivity or team collaboration. [Document 1] All remote work arrangements must be documented and reviewed quarterly. [Document 2]",
+      "context": {
+        "hasDocuments": true,
+        "hasWebResults": false,
+        "citationStyle": "document-only"
+      },
+      "tags": ["policy", "document-only", "workplace"]
+    },
+    {
+      "id": "web-only-1",
+      "queryType": "factual",
+      "question": "What is the current weather forecast?",
+      "answer": "The current weather forecast shows partly cloudy skies with temperatures reaching 72°F. [Web Source 1](https://example.com/weather) There's a 20% chance of rain in the afternoon, with winds from the southwest at 5-10 mph. [Web Source 2](https://example.com/weather-details) The forecast for the next few days indicates similar conditions with gradually increasing cloud cover. [Web Source 1](https://example.com/weather)",
+      "context": {
+        "hasDocuments": false,
+        "hasWebResults": true,
+        "citationStyle": "web-only"
+      },
+      "tags": ["weather", "web-only", "current"]
+    },
+    {
+      "id": "citation-example-1",
+      "queryType": "factual",
+      "question": "What are the health benefits of exercise?",
+      "answer": "Regular exercise provides numerous health benefits, including improved cardiovascular health and stronger muscles. [Web Source 1](https://example.com/exercise-benefits) Studies show that physical activity can reduce the risk of chronic diseases like diabetes and heart disease. [Document 1] Exercise also has mental health benefits, such as reducing stress and improving mood. [Web Source 2](https://example.com/mental-health) The recommended amount is at least 150 minutes of moderate-intensity exercise per week. [Document 2]",
+      "context": {
+        "hasDocuments": true,
+        "hasWebResults": true,
+        "citationStyle": "mixed"
+      },
+      "tags": ["health", "citations", "benefits"]
+    }
+  ],
+  "metadata": {
+    "totalExamples": 10,
+    "queryTypes": ["factual", "conceptual", "procedural", "exploratory"],
+    "citationStyles": ["mixed", "document-only", "web-only", "web-heavy"]
+  }
+}

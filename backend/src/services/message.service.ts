@@ -3,6 +3,8 @@ import { Database } from '../types/database';
 import logger from '../config/logger';
 import { AppError, ValidationError } from '../types/error';
 import { ConversationService } from './conversation.service';
+import { ConversationSummarizerService, ConversationSummarizationOptions } from './conversation-summarizer.service';
+import { SlidingWindowService, SlidingWindowOptions } from './sliding-window.service';
 
 export interface CreateMessageInput {
   conversationId: string;
@@ -214,6 +216,67 @@ export class MessageService {
       }
       logger.error('Unexpected error fetching messages:', error);
       throw new AppError('Failed to fetch messages', 500, 'MESSAGES_FETCH_ERROR');
+    }
+  }
+
+  /**
+   * Get conversation history with summarization applied
+   */
+  static async getSummarizedHistory(
+    conversationId: string,
+    userId: string,
+    options: ConversationSummarizationOptions = {}
+  ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+    try {
+      // Get all messages
+      const messages = await this.getAllMessages(conversationId, userId);
+
+      // Convert to format expected by summarizer
+      const history = messages.map(msg => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content || '',
+      }));
+
+      // Get summarized history
+      return await ConversationSummarizerService.getSummarizedHistory(history, options);
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      logger.error('Unexpected error getting summarized history:', error);
+      throw new AppError('Failed to get summarized history', 500, 'HISTORY_SUMMARIZATION_ERROR');
+    }
+  }
+
+  /**
+   * Get conversation history with sliding window applied
+   */
+  static async getSlidingWindowHistory(
+    conversationId: string,
+    userId: string,
+    options: SlidingWindowOptions = {}
+  ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+    try {
+      // Get all messages
+      const messages = await this.getAllMessages(conversationId, userId);
+
+      // Convert to format expected by sliding window service
+      const history = messages.map(msg => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content || '',
+      }));
+
+      // Apply sliding window
+      const windowResult = await SlidingWindowService.applySlidingWindow(history, options);
+
+      // Format for history
+      return SlidingWindowService.formatWindowForHistory(windowResult);
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      logger.error('Unexpected error getting sliding window history:', error);
+      throw new AppError('Failed to get sliding window history', 500, 'HISTORY_SLIDING_WINDOW_ERROR');
     }
   }
 

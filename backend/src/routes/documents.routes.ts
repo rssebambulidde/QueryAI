@@ -8,6 +8,7 @@ import { DocumentService } from '../services/document.service';
 import { ExtractionService } from '../services/extraction.service';
 import { ChunkService } from '../services/chunk.service';
 import { PineconeService } from '../services/pinecone.service';
+import { CacheInvalidationService } from '../services/cache-invalidation.service';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
 import { apiLimiter } from '../middleware/rateLimiter';
@@ -221,6 +222,21 @@ router.post(
                 chunkCount: chunks.length,
                 totalTokens: metadata.totalTokens,
               });
+
+              // Invalidate cache when document is newly embedded
+              try {
+                await CacheInvalidationService.invalidateDocumentCache(userId, [document.id], {
+                  invalidateRAG: true,
+                  invalidateEmbeddings: false, // Embeddings are new, no need to invalidate
+                  reason: 'Document embedded',
+                });
+              } catch (cacheError: any) {
+                // Don't fail embedding if cache invalidation fails
+                logger.warn('Cache invalidation failed after document embedding', {
+                  documentId: document.id,
+                  error: cacheError.message,
+                });
+              }
             } catch (embedError: any) {
               logger.error('Failed to store chunks after embedding', {
                 documentId: document.id,
@@ -743,6 +759,21 @@ router.post(
                 documentId: documentId,
                 chunkCount: chunks.length,
               });
+
+              // Invalidate cache when document is processed/embedded
+              try {
+                await CacheInvalidationService.invalidateDocumentCache(userId, [documentId], {
+                  invalidateRAG: true,
+                  invalidateEmbeddings: false, // Embeddings are new
+                  reason: 'Document processed',
+                });
+              } catch (cacheError: any) {
+                // Don't fail processing if cache invalidation fails
+                logger.warn('Cache invalidation failed after document processing', {
+                  documentId,
+                  error: cacheError.message,
+                });
+              }
             })
             .catch(async (error: any) => {
               await DocumentService.updateDocument(documentId, userId, {
@@ -1100,6 +1131,21 @@ router.post(
                 embeddedAt: new Date().toISOString(),
               },
             });
+
+            // Invalidate cache when document is embedded
+            try {
+              await CacheInvalidationService.invalidateDocumentCache(userId, [documentId], {
+                invalidateRAG: true,
+                invalidateEmbeddings: false, // Embeddings are new
+                reason: 'Document embedded',
+              });
+            } catch (cacheError: any) {
+              // Don't fail embedding if cache invalidation fails
+              logger.warn('Cache invalidation failed after document embedding', {
+                documentId,
+                error: cacheError.message,
+              });
+            }
           })
           .catch(async (error: any) => {
             await DocumentService.updateDocument(documentId, userId, {
@@ -1354,6 +1400,21 @@ router.delete(
         // Delete from database
         await DocumentService.deleteDocument(id, userId);
 
+        // Invalidate cache for this document
+        try {
+          await CacheInvalidationService.invalidateDocumentCache(userId, [id], {
+            invalidateRAG: true,
+            invalidateEmbeddings: true,
+            reason: 'Document deleted',
+          });
+        } catch (cacheError: any) {
+          // Don't fail document deletion if cache invalidation fails
+          logger.warn('Cache invalidation failed after document deletion', {
+            documentId: id,
+            error: cacheError.message,
+          });
+        }
+
         res.status(200).json({
           success: true,
           message: 'Document deleted successfully',
@@ -1387,6 +1448,21 @@ router.delete(
 
         // Delete from database
         await DocumentService.deleteDocument(document.id, userId);
+
+        // Invalidate cache for this document
+        try {
+          await CacheInvalidationService.invalidateDocumentCache(userId, [document.id], {
+            invalidateRAG: true,
+            invalidateEmbeddings: true,
+            reason: 'Document deleted',
+          });
+        } catch (cacheError: any) {
+          // Don't fail document deletion if cache invalidation fails
+          logger.warn('Cache invalidation failed after document deletion', {
+            documentId: document.id,
+            error: cacheError.message,
+          });
+        }
       }
 
       // Delete from storage (even if not in database)
