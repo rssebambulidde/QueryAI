@@ -138,26 +138,31 @@ This document provides a comprehensive assessment of the current payment/subscri
 
 ---
 
-## 3. PayPal Migration Plan (Replacing Pesapal)
+## 3. PayPal-Only Payment Strategy (Replacing Pesapal)
 
-### 3.1 Why Migrate to PayPal?
+### 3.1 Decision: PayPal-Only Payment Provider
+
+**Decision:** Use PayPal as the ONLY payment provider  
+**Rationale:** PayPal supports both PayPal accounts and Visa cards directly, providing complete payment coverage
 
 **Benefits:**
 1. **Global Acceptance:** PayPal supports 200+ countries, broader than Pesapal
-2. **Visa Card Support:** Direct credit/debit card processing (including Visa)
+2. **Visa Card Support:** Direct credit/debit card processing (including Visa) - No need for separate provider
 3. **Better Developer Experience:** More mature API, better documentation
 4. **Recurring Payments:** Robust subscription billing system
 5. **Lower Transaction Fees:** Typically 2.9% + $0.30 vs Pesapal's variable rates
 6. **Better User Trust:** More recognized brand globally
 7. **Mobile Payments:** PayPal app integration
 8. **Multi-Currency:** Better currency conversion and support
+9. **Simplified Integration:** Single payment provider = simpler codebase
+10. **Unified User Experience:** One payment flow for all users
 
-**Challenges:**
-1. **Migration Effort:** Need to migrate existing Pesapal users
-2. **Regional Coverage:** Pesapal may be better for some African markets
-3. **User Familiarity:** Some users may prefer Pesapal
+**Migration Strategy:**
+1. **Phase 1:** Implement PayPal integration (Weeks 1-3)
+2. **Phase 2:** Migrate existing Pesapal users to PayPal (Week 4)
+3. **Phase 3:** Remove all Pesapal code and references (Weeks 5-6)
 
-**Recommendation:** Support both PayPal and Pesapal initially, then phase out Pesapal
+**See:** `PAYPAL_ONLY_MIGRATION_PLAN.md` for detailed migration strategy
 
 ### 3.2 PayPal Integration Requirements
 
@@ -205,57 +210,72 @@ ALTER TABLE payments ADD COLUMN payment_provider TEXT DEFAULT 'pesapal' CHECK (p
 ALTER TABLE subscriptions ADD COLUMN paypal_subscription_id TEXT;
 ```
 
-### 3.3 Migration Strategy
+### 3.3 Migration Strategy (PayPal-Only)
 
-**Phase 1: Parallel Support (Weeks 1-2)**
-- Implement PayPal integration alongside Pesapal
-- Users can choose payment provider
-- Test PayPal in sandbox environment
+**Phase 1: PayPal Implementation (Weeks 1-3)**
+- Implement complete PayPal integration
+- Support PayPal accounts and Visa cards
+- Test thoroughly in sandbox
+- No Pesapal code in new implementation
 
-**Phase 2: PayPal Promotion (Weeks 3-4)**
-- Make PayPal default payment option
-- Show PayPal as primary, Pesapal as alternative
-- Monitor adoption rates
-
-**Phase 3: Pesapal Deprecation (Weeks 5-8)**
-- Migrate existing Pesapal subscriptions to PayPal
+**Phase 2: User Migration (Week 4)**
+- Identify all existing Pesapal users
+- Migrate active subscriptions to PayPal
 - Send migration emails to users
-- Provide grace period for Pesapal payments
-- Remove Pesapal as option for new subscriptions
+- Provide support during migration
 
-**Phase 4: Pesapal Removal (Week 9+)**
-- Remove Pesapal code
+**Phase 3: Pesapal Removal (Weeks 5-6)**
+- Remove all Pesapal code
+- Remove Pesapal service files
+- Remove Pesapal environment variables
 - Archive Pesapal payment records
-- Update documentation
+- Update all documentation
 
-### 3.4 PayPal Implementation Checklist
+**Timeline:** 6 weeks total  
+**See:** `PAYPAL_ONLY_MIGRATION_PLAN.md` for complete details
+
+### 3.4 PayPal-Only Implementation Checklist
 
 **Backend:**
-- [ ] Create PayPal service (`paypal.service.ts`)
+- [ ] Create PayPal service (`paypal.service.ts`) - ONLY payment service
 - [ ] Implement PayPal authentication
-- [ ] Implement payment initiation
+- [ ] Implement payment initiation (PayPal accounts & Visa cards)
 - [ ] Implement subscription creation
 - [ ] Implement webhook handler
 - [ ] Implement refund processing
-- [ ] Update payment routes
+- [ ] Update payment routes (remove Pesapal)
 - [ ] Add PayPal environment variables
-- [ ] Update database schema
-- [ ] Add PayPal payment methods to UI
+- [ ] Remove Pesapal environment variables
+- [ ] Update database schema (PayPal only)
+- [ ] Remove Pesapal service file
+- [ ] Remove all Pesapal references
 
 **Frontend:**
 - [ ] Add PayPal SDK integration
-- [ ] Update payment dialog to support PayPal
+- [ ] Update payment dialog (PayPal only, no provider selection)
 - [ ] Add PayPal button/checkout
+- [ ] Show "Pay with PayPal or Visa" message
 - [ ] Update subscription manager
-- [ ] Add payment method selection
+- [ ] Remove payment method selection UI
+
+**Migration:**
+- [ ] Identify existing Pesapal users
+- [ ] Create migration script
+- [ ] Send migration emails
+- [ ] Execute user migration
+- [ ] Verify migration success
 
 **Testing:**
-- [ ] Test PayPal sandbox payments
+- [ ] Test PayPal sandbox payments (account)
+- [ ] Test PayPal sandbox payments (Visa card)
 - [ ] Test recurring subscriptions
 - [ ] Test webhook handling
 - [ ] Test refund processing
 - [ ] Test error handling
 - [ ] End-to-end payment flow
+- [ ] Verify no Pesapal code remains
+
+**See:** `PAYPAL_ONLY_MIGRATION_PLAN.md` for detailed checklist
 
 ---
 

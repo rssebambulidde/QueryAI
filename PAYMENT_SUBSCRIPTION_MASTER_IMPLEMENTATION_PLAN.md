@@ -575,24 +575,28 @@ New Period: {{startDate}} to {{endDate}}
 
 ---
 
-## Phase 2: PayPal Integration (Weeks 3-6)
+## Phase 2: PayPal-Only Integration (Weeks 3-6)
 
 **Priority:** 🔴 High  
-**Goal:** Replace Pesapal with PayPal for better global support and Visa card processing  
-**Duration:** 4 weeks
+**Goal:** Implement PayPal as the ONLY payment provider (supports PayPal accounts and Visa cards directly)  
+**Duration:** 4 weeks  
+**Note:** This replaces Pesapal completely. See `PAYPAL_ONLY_MIGRATION_PLAN.md` for detailed migration strategy.
 
 ### Week 3: PayPal Backend Setup
 
-#### 3.1 PayPal Account Setup
+#### 3.1 PayPal Account Setup (PayPal-Only)
 **Status:** 🔴 Not Started  
-**Priority:** 🔴 High  
-**Estimated Effort:** 1 day
+**Priority:** 🔴 Critical  
+**Estimated Effort:** 1 day  
+**Note:** This is the ONLY payment provider. No Pesapal support.
 
 - [ ] **PayPal Business Account**
   - [ ] Create PayPal Business account
   - [ ] Complete business verification
   - [ ] Link bank account
   - [ ] Complete identity verification
+  - [ ] Enable subscription billing
+  - [ ] Enable direct card processing (Visa support)
 
 - [ ] **PayPal Developer Account**
   - [ ] Create PayPal Developer account
@@ -600,35 +604,48 @@ New Period: {{startDate}} to {{endDate}}
   - [ ] Generate API credentials (Client ID, Secret)
   - [ ] Configure sandbox environment
   - [ ] Get sandbox test credentials
+  - [ ] Test Visa card processing in sandbox
 
 - [ ] **Webhook Configuration**
-  - [ ] Register webhook URL in PayPal dashboard
+  - [ ] Register webhook URL: `https://your-backend.railway.app/api/payment/paypal-webhook`
   - [ ] Configure webhook events:
-    - Payment completed
-    - Subscription created
-    - Subscription updated
-    - Subscription cancelled
-    - Refund processed
+    - `PAYMENT.SALE.COMPLETED` - Payment completed
+    - `BILLING.SUBSCRIPTION.CREATED` - Subscription created
+    - `BILLING.SUBSCRIPTION.UPDATED` - Subscription updated
+    - `BILLING.SUBSCRIPTION.CANCELLED` - Subscription cancelled
+    - `BILLING.SUBSCRIPTION.PAYMENT.FAILED` - Payment failed
+    - `PAYMENT.CAPTURE.REFUNDED` - Refund processed
   - [ ] Get webhook ID
+  - [ ] Test webhook delivery
 
 - [ ] **Environment Variables**
   - [ ] Add PayPal credentials to environment
   - [ ] Configure sandbox/production mode
+  - [ ] Remove all `PESAPAL_*` environment variables
   - [ ] File: `.env` and Railway environment
 
-**Environment Variables:**
+**Environment Variables (PayPal-Only):**
 ```bash
-PAYPAL_CLIENT_ID=your_client_id
-PAYPAL_CLIENT_SECRET=your_client_secret
-PAYPAL_MODE=sandbox  # or 'live'
+# PayPal Configuration (ONLY payment provider)
+PAYPAL_CLIENT_ID=your_paypal_client_id
+PAYPAL_CLIENT_SECRET=your_paypal_client_secret
+PAYPAL_MODE=sandbox  # or 'live' for production
 PAYPAL_WEBHOOK_ID=your_webhook_id
+
+# Remove these (Pesapal - no longer used):
+# PESAPAL_CONSUMER_KEY
+# PESAPAL_CONSUMER_SECRET
+# PESAPAL_ENVIRONMENT
+# PESAPAL_WEBHOOK_URL
 ```
 
 **Acceptance Criteria:**
 - PayPal account fully verified
 - API credentials obtained
-- Webhook configured
+- Webhook configured and tested
 - Environment variables set
+- Visa card processing enabled
+- All Pesapal environment variables removed
 
 ---
 
@@ -690,101 +707,133 @@ PAYPAL_WEBHOOK_ID=your_webhook_id
 
 ---
 
-#### 3.3 Database Schema Updates
+#### 3.3 Database Schema Updates (PayPal-Only)
 **Status:** 🔴 Not Started  
-**Priority:** 🔴 High  
-**Estimated Effort:** 1 day
+**Priority:** 🔴 Critical  
+**Estimated Effort:** 1 day  
+**Note:** Remove Pesapal, use PayPal only
 
 - [ ] **Create Migration**
-  - [ ] Create migration file: `009_add_paypal_support.sql`
+  - [ ] Create migration file: `014_add_paypal_only_support.sql`
   - [ ] Add PayPal fields to payments table
   - [ ] Add PayPal subscription ID to subscriptions table
-  - [ ] Add payment provider field
-  - [ ] File: `backend/src/database/migrations/009_add_paypal_support.sql` (new)
+  - [ ] Set payment provider to PayPal only
+  - [ ] Remove Pesapal columns (after migration)
+  - [ ] File: `backend/src/database/migrations/014_add_paypal_only_support.sql` (new)
 
 - [ ] **Update Type Definitions**
   - [ ] Add PayPal fields to Payment type
   - [ ] Add PayPal fields to Subscription type
-  - [ ] Add payment provider enum
+  - [ ] Remove Pesapal types
+  - [ ] Set payment provider to 'paypal' only
   - [ ] File: `backend/src/types/database.ts`
 
 - [ ] **Run Migration**
   - [ ] Test migration in development
   - [ ] Run migration in production
   - [ ] Verify data integrity
+  - [ ] Archive Pesapal data (optional)
 
-**SQL Migration:**
+**SQL Migration (PayPal-Only):**
 ```sql
--- Add PayPal support to payments table
+-- Step 1: Add PayPal support
 ALTER TABLE payments 
   ADD COLUMN paypal_payment_id TEXT,
+  ADD COLUMN paypal_order_id TEXT,
   ADD COLUMN paypal_subscription_id TEXT,
-  ADD COLUMN payment_provider TEXT DEFAULT 'pesapal' 
-    CHECK (payment_provider IN ('pesapal', 'paypal'));
+  ADD COLUMN payment_provider TEXT DEFAULT 'paypal' 
+    CHECK (payment_provider IN ('paypal'));
 
--- Add PayPal subscription ID to subscriptions
+-- Step 2: Migrate existing Pesapal payments (if any)
+-- UPDATE payments SET payment_provider = 'paypal' WHERE payment_provider = 'pesapal';
+
+-- Step 3: Add PayPal subscription ID to subscriptions
 ALTER TABLE subscriptions 
   ADD COLUMN paypal_subscription_id TEXT;
 
--- Create indexes
-CREATE INDEX idx_payments_paypal_payment_id ON payments(paypal_payment_id);
-CREATE INDEX idx_payments_payment_provider ON payments(payment_provider);
+-- Step 4: Create indexes
+CREATE INDEX IF NOT EXISTS idx_payments_paypal_payment_id ON payments(paypal_payment_id);
+CREATE INDEX IF NOT EXISTS idx_payments_paypal_order_id ON payments(paypal_order_id);
+CREATE INDEX IF NOT EXISTS idx_payments_payment_provider ON payments(payment_provider);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_paypal_subscription_id ON subscriptions(paypal_subscription_id);
+
+-- Step 5: Remove Pesapal columns (after user migration)
+-- ALTER TABLE payments 
+--   DROP COLUMN IF EXISTS pesapal_order_tracking_id,
+--   DROP COLUMN IF EXISTS pesapal_merchant_reference;
 ```
 
 **Acceptance Criteria:**
 - Migration runs successfully
-- All fields added correctly
+- All PayPal fields added
+- Payment provider set to PayPal only
 - Types updated
 - Indexes created
+- Pesapal columns removed (after migration)
 
 ---
 
 ### Week 4: PayPal Backend Integration
 
-#### 4.1 Payment Routes Updates
+#### 4.1 Payment Routes Updates (PayPal-Only)
 **Status:** 🔴 Not Started  
-**Priority:** 🔴 High  
-**Estimated Effort:** 2 days
+**Priority:** 🔴 Critical  
+**Estimated Effort:** 2 days  
+**Note:** Remove all Pesapal code, use PayPal only
 
-- [ ] **Update Payment Initiation**
-  - [ ] Add payment provider selection
-  - [ ] Add PayPal payment initiation
-  - [ ] Support both Pesapal and PayPal
+- [ ] **Replace Payment Initiation**
+  - [ ] Remove Pesapal payment initiation
+  - [ ] Implement PayPal payment initiation only
+  - [ ] Support PayPal account payments
+  - [ ] Support Visa card payments (via PayPal)
+  - [ ] Remove payment provider selection
   - [ ] File: `backend/src/routes/payment.routes.ts`
 
-- [ ] **Update Payment Callback**
-  - [ ] Add PayPal callback handler
+- [ ] **Replace Payment Callback**
+  - [ ] Remove Pesapal callback handler
+  - [ ] Implement PayPal callback handler only
   - [ ] Handle PayPal redirects
+  - [ ] Execute PayPal payment after approval
   - [ ] Update subscription on payment success
   - [ ] File: `backend/src/routes/payment.routes.ts`
 
-- [ ] **Update Webhook Handler**
-  - [ ] Add PayPal webhook endpoint
-  - [ ] Verify webhook signature
+- [ ] **Replace Webhook Handler**
+  - [ ] Remove Pesapal webhook endpoint
+  - [ ] Implement PayPal webhook endpoint only
+  - [ ] Verify PayPal webhook signature
   - [ ] Process PayPal webhook events
   - [ ] File: `backend/src/routes/payment.routes.ts`
 
-- [ ] **Update Payment Status**
-  - [ ] Add PayPal payment status checking
+- [ ] **Replace Payment Status**
+  - [ ] Remove Pesapal status checking
+  - [ ] Implement PayPal payment status checking only
   - [ ] Update payment record
   - [ ] File: `backend/src/routes/payment.routes.ts`
 
-- [ ] **Update Refund Processing**
-  - [ ] Add PayPal refund processing
-  - [ ] Support both providers
+- [ ] **Replace Refund Processing**
+  - [ ] Remove Pesapal refund processing
+  - [ ] Implement PayPal refund processing only
   - [ ] File: `backend/src/routes/payment.routes.ts`
 
+- [ ] **Remove Pesapal Service**
+  - [ ] Delete `backend/src/services/pesapal.service.ts`
+  - [ ] Remove all imports
+  - [ ] Update all references
+
 - [ ] **Testing**
-  - [ ] Test PayPal payment flow
+  - [ ] Test PayPal payment flow (account)
+  - [ ] Test PayPal payment flow (Visa card)
   - [ ] Test callback handling
   - [ ] Test webhook processing
   - [ ] Test refund processing
+  - [ ] Verify no Pesapal code remains
 
 **Acceptance Criteria:**
-- PayPal payments work end-to-end
+- PayPal payments work end-to-end (account & Visa)
 - Callbacks handled correctly
 - Webhooks processed correctly
-- Both providers supported
+- All Pesapal code removed
+- No payment provider selection needed
 
 ---
 
@@ -858,46 +907,53 @@ CREATE INDEX idx_payments_payment_provider ON payments(payment_provider);
 
 ---
 
-#### 5.2 Payment Dialog Updates
+#### 5.2 Payment Dialog Updates (PayPal-Only)
 **Status:** 🔴 Not Started  
-**Priority:** 🔴 High  
-**Estimated Effort:** 2 days
+**Priority:** 🔴 Critical  
+**Estimated Effort:** 2 days  
+**Note:** Remove Pesapal, use PayPal only
 
 - [ ] **Update Payment Dialog**
-  - [ ] Add payment provider selection
-  - [ ] Add PayPal checkout option
+  - [ ] Remove payment provider selection
+  - [ ] Remove Pesapal option
+  - [ ] Use PayPal checkout only
   - [ ] Show PayPal button
+  - [ ] Show "Pay with PayPal or Visa" message
   - [ ] Handle PayPal payment flow
   - [ ] File: `frontend/components/payment/payment-dialog.tsx`
 
 - [ ] **Update Payment Flow**
   - [ ] Handle PayPal payment approval
   - [ ] Handle PayPal payment cancellation
-  - [ ] Update UI based on provider
+  - [ ] Support PayPal account payments
+  - [ ] Support Visa card payments (via PayPal)
   - [ ] File: `frontend/components/payment/payment-dialog.tsx`
 
 - [ ] **Update API Client**
-  - [ ] Add PayPal payment methods
-  - [ ] Update payment API calls
+  - [ ] Remove Pesapal API methods
+  - [ ] Update payment API calls for PayPal only
   - [ ] File: `frontend/lib/api.ts`
 
 - [ ] **UI/UX Improvements**
-  - [ ] Improve payment provider selection
-  - [ ] Add provider logos
+  - [ ] Update UI for PayPal only
+  - [ ] Show PayPal and Visa card options clearly
   - [ ] Improve payment flow clarity
+  - [ ] Remove provider selection UI
   - [ ] File: `frontend/components/payment/payment-dialog.tsx`
 
 - [ ] **Testing**
-  - [ ] Test PayPal payment flow
-  - [ ] Test Pesapal payment flow
-  - [ ] Test provider switching
+  - [ ] Test PayPal account payment flow
+  - [ ] Test Visa card payment flow (via PayPal)
+  - [ ] Test payment cancellation
   - [ ] Test error handling
+  - [ ] Verify no Pesapal references
 
 **Acceptance Criteria:**
-- Both payment providers work
+- PayPal payments work (account & Visa)
 - UI is clear and intuitive
 - Payment flow is smooth
 - Error handling works
+- No Pesapal references in UI
 
 ---
 
@@ -974,63 +1030,98 @@ CREATE INDEX idx_payments_payment_provider ON payments(payment_provider);
 
 ---
 
-#### 6.2 Migration Planning
+#### 6.2 Pesapal User Migration (Critical)
 **Status:** 🔴 Not Started  
-**Priority:** 🟡 Medium  
-**Estimated Effort:** 1 day
+**Priority:** 🔴 Critical  
+**Estimated Effort:** 2 days  
+**Note:** Must migrate all existing Pesapal users to PayPal
 
-- [ ] **Identify Existing Users**
-  - [ ] Query database for Pesapal users
-  - [ ] Categorize by subscription status
+- [ ] **Identify Existing Pesapal Users**
+  - [ ] Query database for all Pesapal users
+  - [ ] Categorize by subscription status:
+    - Active subscriptions
+    - Pending payments
+    - Cancelled subscriptions
   - [ ] Create migration list
+  - [ ] File: `backend/scripts/identify-pesapal-users.ts` (new)
 
 - [ ] **Create Migration Script**
-  - [ ] Script to migrate Pesapal subscriptions
+  - [ ] Script to migrate Pesapal subscriptions to PayPal
+  - [ ] Create PayPal subscriptions for active users
+  - [ ] Link PayPal subscriptions to database
+  - [ ] Update payment records
   - [ ] Handle edge cases
   - [ ] Test migration script
-  - [ ] File: `backend/scripts/migrate-to-paypal.ts` (new)
+  - [ ] File: `backend/scripts/migrate-pesapal-to-paypal.ts` (new)
 
 - [ ] **User Communication**
-  - [ ] Draft migration email
-  - [ ] Create migration notification
-  - [ ] Plan communication timeline
+  - [ ] Draft migration email (see PAYPAL_ONLY_MIGRATION_PLAN.md)
+  - [ ] Explain migration to PayPal
+  - [ ] Highlight benefits (Visa card support)
+  - [ ] Provide action steps
+  - [ ] Send to all Pesapal users
+  - [ ] File: `backend/scripts/send-migration-emails.ts` (new)
+
+- [ ] **Execute Migration**
+  - [ ] Run migration script
+  - [ ] Monitor for errors
+  - [ ] Verify all users migrated
+  - [ ] Send confirmation emails
 
 - [ ] **Testing**
-  - [ ] Test migration script
+  - [ ] Test migration script on sandbox
+  - [ ] Test with test users
   - [ ] Test rollback if needed
   - [ ] Verify data integrity
 
 **Acceptance Criteria:**
-- Migration script ready
-- User communication prepared
+- All Pesapal users identified
+- Migration script ready and tested
+- User communication sent
+- All users migrated successfully
+- No service interruption
 - Rollback plan in place
 
 ---
 
-#### 6.3 Documentation
+#### 6.3 Documentation & Cleanup
 **Status:** 🔴 Not Started  
-**Priority:** 🟡 Medium  
-**Estimated Effort:** 1 day
+**Priority:** 🔴 High  
+**Estimated Effort:** 2 days  
+**Note:** Remove all Pesapal documentation
 
 - [ ] **API Documentation**
-  - [ ] Update API docs with PayPal endpoints
-  - [ ] Document webhook events
+  - [ ] Update API docs with PayPal endpoints only
+  - [ ] Remove Pesapal API documentation
+  - [ ] Document PayPal webhook events
   - [ ] Document error codes
+  - [ ] Document Visa card support
 
 - [ ] **Setup Guides**
-  - [ ] Create PayPal setup guide
+  - [ ] Create PayPal-only setup guide
+  - [ ] Remove Pesapal setup guides
   - [ ] Update payment integration guide
   - [ ] Create troubleshooting guide
+  - [ ] Document PayPal account setup
+  - [ ] Document Visa card processing
 
 - [ ] **Code Documentation**
   - [ ] Add code comments
   - [ ] Update README files
-  - [ ] Document configuration
+  - [ ] Document PayPal configuration
+  - [ ] Remove Pesapal references
+
+- [ ] **Remove Pesapal Files**
+  - [ ] Delete Pesapal service file
+  - [ ] Remove Pesapal setup documentation
+  - [ ] Update all documentation references
 
 **Acceptance Criteria:**
-- Documentation complete
+- Documentation complete (PayPal only)
+- All Pesapal references removed
 - Guides are clear
 - Code is well-documented
+- PayPal and Visa card support documented
 
 ---
 
