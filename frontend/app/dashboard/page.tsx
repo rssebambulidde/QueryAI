@@ -15,6 +15,9 @@ import { SubscriptionManager } from '@/components/subscription/subscription-mana
 import { RAGSettings } from '@/components/chat/rag-source-selector';
 import { documentApi } from '@/lib/api';
 import { useConversationStore } from '@/lib/store/conversation-store';
+import { BottomNavigation } from '@/components/mobile/bottom-navigation';
+import { MobileSidebar, HamburgerMenu } from '@/components/mobile/mobile-sidebar';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'subscription';
 
@@ -24,6 +27,8 @@ function DashboardContent() {
   const { user, isAuthenticated, isLoading, logout, checkAuth } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const { isMobile } = useMobile();
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ragSettings');
@@ -161,35 +166,67 @@ function DashboardContent() {
       <nav className="bg-white shadow-sm flex-shrink-0 border-b border-gray-200">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
+              {isMobile && (
+                <HamburgerMenu onClick={() => setIsMobileSidebarOpen(true)} />
+              )}
               <h1 className="text-xl font-bold text-gray-900">QueryAI</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700">
+              <span className="text-sm text-gray-700 hidden sm:inline">
                 {user.full_name || user.email}
               </span>
-              <Button variant="outline" onClick={handleLogout}>
-                Logout
+              <Button 
+                variant="outline" 
+                onClick={handleLogout}
+                className="text-sm"
+                style={isMobile ? { minHeight: '44px', minWidth: '44px' } : undefined}
+              >
+                <span className="hidden sm:inline">Logout</span>
+                <span className="sm:hidden">Out</span>
               </Button>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="flex-1 flex overflow-hidden">
-        {/* Unified Sidebar with Navigation, Source Selection, and Conversations */}
-        <AppSidebar
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          ragSettings={ragSettings}
-          onRagSettingsChange={setRagSettings}
-          documentCount={documentCount}
-          hasProcessedDocuments={hasProcessedDocuments}
-          subscriptionTier={user?.subscriptionTier || 'free'}
-        />
+      <main className="flex-1 flex overflow-hidden relative">
+        {/* Mobile Sidebar */}
+        {isMobile && (
+          <MobileSidebar
+            isOpen={isMobileSidebarOpen}
+            onClose={() => setIsMobileSidebarOpen(false)}
+          >
+            <AppSidebar
+              activeTab={activeTab}
+              onTabChange={(tab) => {
+                setActiveTab(tab);
+                setIsMobileSidebarOpen(false);
+              }}
+              ragSettings={ragSettings}
+              onRagSettingsChange={setRagSettings}
+              documentCount={documentCount}
+              hasProcessedDocuments={hasProcessedDocuments}
+              subscriptionTier={user?.subscriptionTier || 'free'}
+            />
+          </MobileSidebar>
+        )}
+
+        {/* Desktop Sidebar */}
+        {!isMobile && (
+          <AppSidebar
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            ragSettings={ragSettings}
+            onRagSettingsChange={setRagSettings}
+            documentCount={documentCount}
+            hasProcessedDocuments={hasProcessedDocuments}
+            subscriptionTier={user?.subscriptionTier || 'free'}
+          />
+        )}
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden" style={isMobile ? { paddingBottom: '64px' } : undefined}>
           {activeTab === 'chat' ? (
             <div className="flex-1 overflow-hidden">
               {/* Chat Interface - Full width now */}
@@ -228,6 +265,9 @@ function DashboardContent() {
           ) : null}
         </div>
       </main>
+
+      {/* Bottom Navigation (Mobile Only) */}
+      <BottomNavigation />
     </div>
   );
 }

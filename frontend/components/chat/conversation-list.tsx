@@ -4,11 +4,15 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { ConversationItem } from './conversation-item';
+import { ConversationSearch } from './conversation-search';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/lib/hooks/use-toast';
+import { Conversation } from '@/lib/api';
+import { ConversationSearch } from './conversation-search';
+import { Conversation } from '@/lib/api';
 
 export const ConversationList: React.FC = () => {
   const {
@@ -20,8 +24,8 @@ export const ConversationList: React.FC = () => {
     selectConversation,
     deleteConversation,
   } = useConversationStore();
-  const [searchQuery, setSearchQuery] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [filteredConversations, setFilteredConversations] = useState<Conversation[]>(conversations);
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const hasLoadedRef = useRef(false);
@@ -40,10 +44,10 @@ export const ConversationList: React.FC = () => {
     }
   }, [isAuthenticated, loadConversations]);
 
-  const filteredConversations = conversations.filter((conv) =>
-    conv.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    conv.lastMessage?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Update filtered conversations when conversations change
+  useEffect(() => {
+    setFilteredConversations(conversations);
+  }, [conversations]);
 
   const handleNewConversation = async () => {
     try {
@@ -121,25 +125,11 @@ export const ConversationList: React.FC = () => {
           </div>
         </div>
         
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Search conversations..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 pr-8 h-9 text-sm"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+        {/* Enhanced Search & Filter */}
+        <ConversationSearch
+          conversations={conversations}
+          onFilterChange={setFilteredConversations}
+        />
       </div>
 
       {/* Conversation List */}
@@ -149,14 +139,12 @@ export const ConversationList: React.FC = () => {
         ) : filteredConversations.length === 0 ? (
           <div className="p-4 text-center">
             <p className="text-sm text-gray-500 mb-4">
-              {searchQuery ? 'No conversations found' : 'No conversations yet'}
+              No conversations found
             </p>
-            {!searchQuery && (
-              <Button onClick={handleNewConversation} size="sm" variant="outline">
-                <Plus className="w-4 h-4 mr-2" />
-                New Conversation
-              </Button>
-            )}
+            <Button onClick={handleNewConversation} size="sm" variant="outline">
+              <Plus className="w-4 h-4 mr-2" />
+              New Conversation
+            </Button>
           </div>
         ) : (
           <div className="divide-y divide-gray-100">

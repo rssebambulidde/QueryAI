@@ -5,6 +5,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'outline' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
+  touchOptimized?: boolean; // For mobile touch targets
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -16,6 +17,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       isLoading = false,
       disabled,
       children,
+      touchOptimized = false,
+      style,
       ...props
     },
     ref
@@ -39,6 +42,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       lg: 'px-6 py-3 text-lg',
     };
 
+    // Ensure minimum touch target size (44x44px) for mobile
+    const touchStyles = touchOptimized
+      ? { minHeight: '44px', minWidth: '44px', ...style }
+      : style;
+
     return (
       <button
         ref={ref}
@@ -46,8 +54,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           baseStyles,
           variants[variant],
           sizes[size],
+          touchOptimized && 'touch-manipulation', // Optimize for touch
           className
         )}
+        style={touchStyles}
         disabled={disabled || isLoading}
         {...props}
       >

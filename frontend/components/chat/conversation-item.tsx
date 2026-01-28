@@ -3,10 +3,11 @@
 import React, { useState } from 'react';
 import { Conversation } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { MessageSquare, Trash2, Edit2, Check, X, Folder } from 'lucide-react';
+import { MessageSquare, Trash2, Edit2, Check, X, Folder, Settings } from 'lucide-react';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
+import { ConversationTitleEditor } from './conversation-title-editor';
 
 interface ConversationItemProps {
   conversation: Conversation;
@@ -14,6 +15,7 @@ interface ConversationItemProps {
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onSaveToCollection?: (conversationId: string) => void;
+  onSettingsClick?: (conversationId: string) => void;
   formatTime: (dateString?: string) => string;
 }
 
@@ -23,6 +25,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   onSelect,
   onDelete,
   onSaveToCollection,
+  onSettingsClick,
   formatTime,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -127,6 +130,18 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                       title="Add to Collection"
                     >
                       <Folder className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {onSettingsClick && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSettingsClick(conversation.id);
+                      }}
+                      className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                      title="Settings"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
                     </button>
                   )}
                   <button

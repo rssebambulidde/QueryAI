@@ -4,9 +4,17 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { documentApi, DocumentItem, topicApi, Topic } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
-import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw, Play, Eraser, Settings, Tag } from 'lucide-react';
+import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw, Play, Eraser, Settings, Tag, Edit2, CheckSquare, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { DocumentViewer } from './document-viewer';
+import { DocumentMetadataEditor } from './document-metadata-editor';
+import { DocumentSearch } from './document-search';
+import { DocumentStatusBadge } from './document-status-badge';
+import { UploadProgress } from './upload-progress';
+import { useDocumentUpload } from '@/lib/hooks/use-document-upload';
+import { MobileUpload } from '@/components/mobile/mobile-upload';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 const formatBytes = (bytes: number): string => {
   if (!bytes || bytes <= 0) return '0 B';
@@ -44,10 +52,9 @@ const getTotalChunks = (documents: DocumentItem[]): number => {
 
 export const DocumentManager = () => {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [filteredDocuments, setFilteredDocuments] = useState<DocumentItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [showChunkingSettings, setShowChunkingSettings] = useState(false);
   const [processingDocument, setProcessingDocument] = useState<DocumentItem | null>(null);
@@ -57,16 +64,28 @@ export const DocumentManager = () => {
   });
   const [topics, setTopics] = useState<Topic[]>([]);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [viewingDocument, setViewingDocument] = useState<DocumentItem | null>(null);
+  const [editingDocument, setEditingDocument] = useState<DocumentItem | null>(null);
+  const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { isMobile } = useMobile();
+  
+  // Enhanced upload with progress tracking
+  const { uploads, uploadFile, cancelUpload, dismissUpload } = useDocumentUpload({
+    onSuccess: (document) => {
+      toast.success('Document uploaded successfully');
+      loadDocuments();
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Upload failed');
+    },
+  });
 
-  const sortedDocuments = useMemo(() => {
-    return [...documents].sort((a, b) => {
-      const aTime = a.createdAt ? Date.parse(a.createdAt) : 0;
-      const bTime = b.createdAt ? Date.parse(b.createdAt) : 0;
-      return bTime - aTime;
-    });
+  // Update filtered documents when documents change
+  useEffect(() => {
+    setFilteredDocuments(documents);
   }, [documents]);
 
   const totalSize = useMemo(() => getTotalSize(documents), [documents]);
@@ -156,36 +175,14 @@ export const DocumentManager = () => {
       return;
     }
 
-    setIsUploading(true);
-    setUploadProgress(0);
     try {
-      const response = await documentApi.upload(selectedFile, (progress) => {
-        setUploadProgress(progress);
-      }, selectedTopicId || undefined);
-      if (response.success) {
-        toast.success('Document uploaded successfully');
-        setSelectedFile(null);
-        setSelectedTopicId(null);
-        setUploadProgress(0);
-        // Reset file input
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        await loadDocuments();
-      } else {
-        toast.error(response.message || 'Upload failed');
-      }
+      await uploadFile(selectedFile);
+      setSelectedFile(null);
+      setSelectedTopicId(null);
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (error: any) {
-      if (error?.code === 'ECONNABORTED') {
-        toast.error('Upload timed out. Please try again.');
-      } else if (error?.response?.data?.error?.message) {
-        toast.error(error.response.data.error.message);
-      } else if (error?.response?.data?.message) {
-        toast.error(error.response.data.message);
-      } else {
-        toast.error(error.message || 'Upload failed');
-      }
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
+      // Error handled by useDocumentUpload
     }
   };
 
@@ -212,21 +209,58 @@ export const DocumentManager = () => {
     }
   };
 
-  const handleView = async (doc: DocumentItem) => {
-    if (!doc.path) {
-      toast.error('Document path not available');
+  const handleView = (doc: DocumentItem) => {
+    setViewingDocument(doc);
+  };
+
+  const handleEditMetadata = (doc: DocumentItem) => {
+    setEditingDocument(doc);
+  };
+
+  const handleBulkSelect = (docId: string) => {
+    setSelectedDocuments((prev) => {
+      const next = new Set(prev);
+      if (next.has(docId)) {
+        next.delete(docId);
+      } else {
+        next.add(docId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedDocuments.size === filteredDocuments.length) {
+      setSelectedDocuments(new Set());
+    } else {
+      setSelectedDocuments(new Set(filteredDocuments.map((d) => d.id || d.path)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedDocuments.size === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete ${selectedDocuments.size} document(s)?`)) {
       return;
     }
-    
+
+    setIsLoading(true);
     try {
-      const blob = await documentApi.download(doc.path);
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      // Clean up after a delay
-      setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      const deletePromises = Array.from(selectedDocuments).map((id) =>
+        documentApi.delete(id).catch((err) => {
+          console.error(`Failed to delete ${id}:`, err);
+          return null;
+        })
+      );
+      
+      await Promise.all(deletePromises);
+      toast.success(`${selectedDocuments.size} document(s) deleted`);
+      setSelectedDocuments(new Set());
+      await loadDocuments();
     } catch (error: any) {
-      console.error('View error:', error);
-      toast.error(error.message || 'Failed to open document');
+      toast.error('Some documents could not be deleted');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -364,87 +398,27 @@ export const DocumentManager = () => {
         </div>
       </div>
 
-      {/* Drag and Drop Zone */}
-      <div
-        ref={dropZoneRef}
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        className={cn(
-          'border-2 border-dashed rounded-lg p-6 mb-4 transition-colors',
-          isDragging
-            ? 'border-orange-500 bg-orange-50'
-            : 'border-gray-300 hover:border-gray-400 bg-gray-50',
-          selectedFile && 'border-orange-400 bg-orange-50'
-        )}
-      >
-        <div className="flex flex-col items-center text-center">
-          <Upload className={cn('w-8 h-8 mb-2', isDragging ? 'text-orange-600' : 'text-gray-400')} />
-          <p className="text-sm font-medium text-gray-700 mb-1">
-            {isDragging ? 'Drop file here' : 'Drag & drop file here'}
-          </p>
-          <p className="text-xs text-gray-500 mb-3">or</p>
-          <div className="flex flex-col sm:flex-row gap-3 items-center">
-            <input
-              ref={fileInputRef}
-              type="file"
-              id="file-upload"
-              accept=".pdf,.txt,.md,.docx"
-              onChange={(event) => {
-                const file = event.target.files?.[0] || null;
-                if (file) handleFileSelect(file);
-              }}
-              className="hidden"
-            />
-            <Button
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-            >
-              <File className="w-4 h-4 mr-2" />
-              Choose File
-            </Button>
-            {selectedFile && (
-              <>
-                <span className="text-sm text-gray-700 truncate max-w-xs">
-                  {selectedFile.name}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedFile(null);
-                    if (fileInputRef.current) fileInputRef.current.value = '';
-                  }}
-                  className="h-8 w-8 p-0"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </>
-            )}
-            <Button
-              onClick={handleUpload}
-              disabled={isUploading || !selectedFile}
-              className="min-w-[100px]"
-            >
-              {isUploading ? (
-                <>
-                  <Upload className="w-4 h-4 mr-2 animate-pulse" />
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4 mr-2" />
-                  Upload
-                </>
-              )}
-            </Button>
-          </div>
-          
-          {/* Topic Selection */}
+      {/* Upload Progress */}
+      {uploads.length > 0 && (
+        <div className="mb-4">
+          <UploadProgress
+            uploads={uploads}
+            onCancel={cancelUpload}
+            onDismiss={dismissUpload}
+          />
+        </div>
+      )}
+
+      {/* Mobile Upload Component */}
+      {isMobile ? (
+        <div className="mb-4">
+          <MobileUpload
+            onFileSelect={handleFileSelect}
+            accept=".pdf,.txt,.md,.docx,image/*"
+            maxSize={10 * 1024 * 1024}
+          />
           {selectedFile && (
-            <div className="mt-3 pt-3 border-t border-gray-200">
+            <div className="mt-4 pt-4 border-t border-gray-200">
               <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-2">
                 <Tag className="w-3 h-3" />
                 Tag with Topic (Optional)
@@ -452,8 +426,9 @@ export const DocumentManager = () => {
               <select
                 value={selectedTopicId || ''}
                 onChange={(e) => setSelectedTopicId(e.target.value || null)}
-                disabled={isUploading}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 bg-white"
+                disabled={uploads.some(u => u.status === 'uploading')}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 bg-white touch-manipulation"
+                style={{ minHeight: '44px' }}
               >
                 <option value="">No topic (general document)</option>
                 {topics.map((topic) => (
@@ -465,78 +440,189 @@ export const DocumentManager = () => {
               <p className="text-xs text-gray-500 mt-1">
                 Tagging documents with topics helps organize them and filter search results.
               </p>
+              <Button
+                onClick={handleUpload}
+                disabled={uploads.some(u => u.status === 'uploading') || !selectedFile}
+                className="w-full mt-3 touch-manipulation"
+                style={{ minHeight: '44px' }}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Upload Document
+              </Button>
             </div>
           )}
         </div>
-
-        {/* Upload Progress Bar */}
-        {isUploading && uploadProgress > 0 && (
-          <div className="mt-4 w-full">
-            <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-              <span>Uploading...</span>
-              <span>{uploadProgress}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-orange-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${uploadProgress}%` }}
+      ) : (
+        /* Desktop Drag and Drop Zone */
+        <div
+          ref={dropZoneRef}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={cn(
+            'border-2 border-dashed rounded-lg p-6 mb-4 transition-colors',
+            isDragging
+              ? 'border-orange-500 bg-orange-50'
+              : 'border-gray-300 hover:border-gray-400 bg-gray-50',
+            selectedFile && 'border-orange-400 bg-orange-50'
+          )}
+        >
+          <div className="flex flex-col items-center text-center">
+            <Upload className={cn('w-8 h-8 mb-2', isDragging ? 'text-orange-600' : 'text-gray-400')} />
+            <p className="text-sm font-medium text-gray-700 mb-1">
+              {isDragging ? 'Drop file here' : 'Drag & drop file here'}
+            </p>
+            <p className="text-xs text-gray-500 mb-3">or</p>
+            <div className="flex flex-col sm:flex-row gap-3 items-center">
+              <input
+                ref={fileInputRef}
+                type="file"
+                id="file-upload"
+                accept=".pdf,.txt,.md,.docx"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+                  if (file) handleFileSelect(file);
+                }}
+                className="hidden"
               />
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploads.some(u => u.status === 'uploading')}
+              >
+                <File className="w-4 h-4 mr-2" />
+                Choose File
+              </Button>
+              {selectedFile && (
+                <>
+                  <span className="text-sm text-gray-700 truncate max-w-xs">
+                    {selectedFile.name}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedFile(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    className="h-8 w-8 p-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </>
+              )}
+              <Button
+                onClick={handleUpload}
+                disabled={uploads.some(u => u.status === 'uploading') || !selectedFile}
+                className="min-w-[100px]"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Upload
+              </Button>
             </div>
+            
+            {/* Topic Selection */}
+            {selectedFile && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <label className="flex items-center gap-2 text-xs font-medium text-gray-700 mb-2">
+                  <Tag className="w-3 h-3" />
+                  Tag with Topic (Optional)
+                </label>
+                <select
+                  value={selectedTopicId || ''}
+                  onChange={(e) => setSelectedTopicId(e.target.value || null)}
+                  disabled={uploads.some(u => u.status === 'uploading')}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 bg-white"
+                >
+                  <option value="">No topic (general document)</option>
+                  {topics.map((topic) => (
+                    <option key={topic.id} value={topic.id}>
+                      {topic.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Tagging documents with topics helps organize them and filter search results.
+                </p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Documents List */}
       <div className="border-t border-gray-100 pt-4">
-        {isLoading && !isUploading ? (
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center py-8">
             <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-orange-600 border-r-transparent mb-2"></div>
             <p className="text-sm text-gray-500">Loading documents...</p>
           </div>
-        ) : sortedDocuments.length === 0 ? (
+        ) : filteredDocuments.length === 0 ? (
           <div className="text-center py-8">
             <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">No documents uploaded yet.</p>
-            <p className="text-xs text-gray-400 mt-1">Upload your first document to get started.</p>
+            <p className="text-sm text-gray-500">
+              {documents.length === 0
+                ? 'No documents uploaded yet.'
+                : 'No documents match your filters.'}
+            </p>
+            {documents.length === 0 && (
+              <p className="text-xs text-gray-400 mt-1">Upload your first document to get started.</p>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
-            {sortedDocuments.map((doc) => (
+            {/* Select All */}
+            {filteredDocuments.length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200">
+                <button
+                  onClick={handleSelectAll}
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                >
+                  {selectedDocuments.size === filteredDocuments.length ? (
+                    <CheckSquare className="w-4 h-4 text-orange-600" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                  <span>Select All</span>
+                </button>
+              </div>
+            )}
+            {filteredDocuments.map((doc) => {
+              const docId = doc.id || doc.path;
+              const isSelected = selectedDocuments.has(docId);
+              return (
               <div
-                key={doc.path}
-                className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 px-3 py-2.5 hover:bg-gray-50 transition-colors"
+                key={docId}
+                className={cn(
+                  'flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors',
+                  isSelected
+                    ? 'border-orange-500 bg-orange-50'
+                    : 'border-gray-100 hover:bg-gray-50'
+                )}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
+                  {/* Selection Checkbox */}
+                  <button
+                    onClick={() => handleBulkSelect(docId)}
+                    className="flex-shrink-0"
+                  >
+                    {isSelected ? (
+                      <CheckSquare className="w-4 h-4 text-orange-600" />
+                    ) : (
+                      <Square className="w-4 h-4 text-gray-400" />
+                    )}
+                  </button>
+                  
                   {getFileIcon(doc.mimeType, doc.name)}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
-                      {doc.status && (
-                        <span className={cn(
-                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0",
-                          doc.status === 'processed' && "bg-green-100 text-green-700",
-                          doc.status === 'extracted' && "bg-orange-100 text-orange-700",
-                          doc.status === 'embedding' && "bg-purple-100 text-purple-700",
-                          doc.status === 'embedded' && "bg-green-100 text-green-700",
-                          doc.status === 'stored' && "bg-gray-100 text-gray-700",
-                          (doc.status === 'processing' || doc.status === 'embedding') && "bg-yellow-100 text-yellow-700",
-                          (doc.status === 'failed' || doc.status === 'embedding_failed') && "bg-red-100 text-red-700"
-                        )}>
-                          {doc.status === 'processed' && <CheckCircle2 className="w-3 h-3" />}
-                          {doc.status === 'extracted' && <CheckCircle2 className="w-3 h-3" />}
-                          {doc.status === 'embedded' && <CheckCircle2 className="w-3 h-3" />}
-                          {doc.status === 'stored' && <File className="w-3 h-3" />}
-                          {(doc.status === 'processing' || doc.status === 'embedding') && <Clock className="w-3 h-3 animate-spin" />}
-                          {(doc.status === 'failed' || doc.status === 'embedding_failed') && <AlertCircle className="w-3 h-3" />}
-                          {doc.status === 'processed' && 'Processed'}
-                          {doc.status === 'extracted' && 'Extracted'}
-                          {doc.status === 'embedding' && 'Chunking...'}
-                          {doc.status === 'embedded' && 'Embedded'}
-                          {doc.status === 'stored' && 'Stored'}
-                          {doc.status === 'processing' && 'Processing...'}
-                          {(doc.status === 'failed' || doc.status === 'embedding_failed') && 'Failed'}
-                        </span>
-                      )}
+                      <DocumentStatusBadge
+                        document={doc}
+                        onRefresh={() => loadDocuments(false)}
+                        showProgress={true}
+                      />
                     </div>
                     <p className="text-xs text-gray-500">
                       {formatBytes(doc.size)}
@@ -549,6 +635,18 @@ export const DocumentManager = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Edit Metadata Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEditMetadata(doc)}
+                    className="h-8 px-3"
+                    title="Edit metadata"
+                  >
+                    <Edit2 className="w-3 h-3 mr-1.5" />
+                    Edit
+                  </Button>
+                  
                   {/* Process button - show for stored documents or documents that aren't processed yet */}
                   {doc.id && (doc.status === 'stored' || (doc.status !== 'processed' && doc.status !== 'processing' && doc.status !== 'embedding' && doc.status !== 'extracted' && doc.status !== 'embedded')) && (
                     <Button
@@ -556,7 +654,7 @@ export const DocumentManager = () => {
                       size="sm"
                       onClick={() => handleProcess(doc)}
                       className="h-8 px-3 text-orange-600 border-orange-200 hover:bg-orange-50"
-                      disabled={isLoading || isUploading}
+                      disabled={isLoading}
                     >
                       <Play className="w-3 h-3 mr-1.5" />
                       Process
@@ -627,10 +725,63 @@ export const DocumentManager = () => {
                   </Button>
                 </div>
               </div>
+            );
+            })}
+              </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Document Viewer */}
+      {viewingDocument && (
+        <DocumentViewer
+          document={viewingDocument}
+          isOpen={!!viewingDocument}
+          onClose={() => setViewingDocument(null)}
+          onNext={() => {
+            const currentIndex = filteredDocuments.findIndex(
+              (d) => (d.id || d.path) === (viewingDocument.id || viewingDocument.path)
+            );
+            if (currentIndex < filteredDocuments.length - 1) {
+              setViewingDocument(filteredDocuments[currentIndex + 1]);
+            }
+          }}
+          onPrevious={() => {
+            const currentIndex = filteredDocuments.findIndex(
+              (d) => (d.id || d.path) === (viewingDocument.id || viewingDocument.path)
+            );
+            if (currentIndex > 0) {
+              setViewingDocument(filteredDocuments[currentIndex - 1]);
+            }
+          }}
+          hasNext={
+            filteredDocuments.findIndex(
+              (d) => (d.id || d.path) === (viewingDocument.id || viewingDocument.path)
+            ) < filteredDocuments.length - 1
+          }
+          hasPrevious={
+            filteredDocuments.findIndex(
+              (d) => (d.id || d.path) === (viewingDocument.id || viewingDocument.path)
+            ) > 0
+          }
+        />
+      )}
+
+      {/* Document Metadata Editor */}
+      {editingDocument && (
+        <DocumentMetadataEditor
+          document={editingDocument}
+          isOpen={!!editingDocument}
+          onClose={() => setEditingDocument(null)}
+          onSave={(updated) => {
+            setDocuments((prev) =>
+              prev.map((d) => (d.id || d.path) === (updated.id || updated.path) ? updated : d)
+            );
+            loadDocuments();
+          }}
+        />
+      )}
 
       {/* Chunking Settings Dialog */}
       {showChunkingSettings && (

@@ -1,16 +1,22 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Source } from '@/lib/api';
 import { SourceCitation } from './source-citation';
+import { InlineCitation, CitationMatch } from './inline-citation';
+import { parseCitations, getCitationNumbers } from '@/lib/citation-parser';
+import { useCitationPreferencesStore } from '@/lib/store/citation-preferences-store';
+import { CitationRenderer } from '@/lib/citation-renderer';
 
 interface EnhancedContentProcessorProps {
   content: string;
   sources?: Source[];
   isUser?: boolean;
+  useInlineCitations?: boolean; // Enable inline citation rendering
+  showFootnotes?: boolean; // Show footnote-style citations at bottom
 }
 
 /**
@@ -21,12 +27,80 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
   content,
   sources,
   isUser = false,
+  useInlineCitations: propUseInlineCitations,
+  showFootnotes: propShowFootnotes,
 }) => {
-  // Process content to add inline citations
-  const processedContent = useMemo(() => {
-    if (!sources || sources.length === 0) return content;
+  const [expandedCitation, setExpandedCitation] = useState<Source | null>(null);
+  const { preferences } = useCitationPreferencesStore();
+  
+  // Use preferences if not overridden by props
+  const useInlineCitations = propUseInlineCitations ?? (preferences.style === 'inline');
+  const showFootnotes = propShowFootnotes ?? preferences.showFootnotes;
+
+  // Parse citations and replace based on style preference
+  const { processedContent: contentWithCitationLinks, citations } = useMemo(() => {
+    if (!sources || sources.length === 0) {
+      return { processedContent: content, citations: [] };
+    }
+    const { processedContent, citations: parsedCitations } = parseCitations(content, sources);
     
-    let processed = content;
+    // Get citation numbers for rendering
+    const citationNumbers = getCitationNumbers(parsedCitations);
+    
+    // Replace citation placeholders based on style
+    let processed = processedContent;
+    
+    if (preferences.style === 'inline' && useInlineCitations) {
+      // Inline style: use special markdown links for React component rendering
+      parsedCitations.forEach((citation, idx) => {
+        const placeholder = `__CITATION_${idx}__`;
+        const source = sources[citation.sourceIndex];
+        if (source) {
+          const citationNumber = citationNumbers.indexOf(citation.number) + 1 || citation.number;
+          const citationLink = `[citation:${citationNumber}](${source.url || '#'} "citation:${idx}")`;
+          processed = processed.replace(placeholder, citationLink);
+        }
+      });
+    } else {
+      // Footnote or Numbered style: render as text
+      parsedCitations.forEach((citation, idx) => {
+        const placeholder = `__CITATION_${idx}__`;
+        const source = sources[citation.sourceIndex];
+        if (source) {
+          const citationNumber = citationNumbers.indexOf(citation.number) + 1 || citation.number;
+          const citationText = CitationRenderer.render(
+            citation,
+            source,
+            citationNumber,
+            preferences.style,
+            preferences.format
+          );
+          processed = processed.replace(placeholder, citationText);
+        }
+      });
+    }
+    
+    return { processedContent: processed, citations: parsedCitations };
+  }, [content, sources, useInlineCitations, preferences.style, preferences.format]);
+
+  // Get unique citation numbers for footnotes
+  const citationNumbers = useMemo(() => {
+    return getCitationNumbers(citations);
+  }, [citations]);
+
+  // Process content to add inline citations (fallback mode)
+  const processedContent = useMemo(() => {
+    if (!sources || sources.length === 0) {
+      return contentWithCitationLinks;
+    }
+    
+    // If using inline citations with preferences, return processed content
+    if (useInlineCitations && preferences.style === 'inline') {
+      return contentWithCitationLinks;
+    }
+    
+    // For other styles or fallback, process citations as text
+    let processed = contentWithCitationLinks;
     
     // Pattern to match citations like [Web Source 1], [Document 2], etc.
     const citationPattern = /\[(Web Source|Document)\s+(\d+)\](?:\(([^)]+)\))?/gi;
@@ -66,88 +140,253 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
     });
     
     return processed;
-  }, [content, sources]);
+  }, [contentWithCitationLinks, sources, useInlineCitations]);
 
   const wrapperClass = 'ai-response-content font-sans text-[15px] leading-[1.72] tracking-[0.01em] text-gray-800 antialiased max-w-none';
 
+  // Render markdown with inline citations
   const renderContentWithInlineCitations = () => {
-    if (!sources || sources.length === 0) {
-      return (
-        <div className={wrapperClass}>
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeHighlight]}
-            components={getMarkdownComponents(isUser)}
-          >
-            {processedContent}
-          </ReactMarkdown>
-        </div>
-      );
+    if (!useInlineCitations || citations.length === 0) {
+      // Fallback to old rendering method
+      if (!sources || sources.length === 0) {
+        return (
+          <div className={wrapperClass}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={getMarkdownComponents(isUser)}
+            >
+              {processedContent}
+            </ReactMarkdown>
+          </div>
+        );
+      }
+
+      // Split content by paragraphs and process each (old method)
+      const paragraphs = processedContent.split(/\n\n+/);
+      const result: React.ReactNode[] = [];
+
+      paragraphs.forEach((paragraph, index) => {
+        const citationMatches = paragraph.match(/\[(Web Source|Document)\s+(\d+)\](?:\([^)]+\))?/gi);
+        
+        if (citationMatches && citationMatches.length > 0) {
+          const sourceIndices = new Set<number>();
+          citationMatches.forEach((match) => {
+            const numMatch = match.match(/(\d+)/);
+            if (numMatch) {
+              const sourceIndex = parseInt(numMatch[1]) - 1;
+              if (sourceIndex >= 0 && sourceIndex < sources.length && sources[sourceIndex]) {
+                sourceIndices.add(sourceIndex);
+              }
+            }
+          });
+
+          result.push(
+            <ReactMarkdown
+              key={`para-${index}`}
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={getMarkdownComponents(isUser)}
+            >
+              {paragraph}
+            </ReactMarkdown>
+          );
+
+          if (sourceIndices.size > 0) {
+            result.push(
+              <div key={`citations-${index}`} className="flex flex-wrap items-center gap-2 mt-2 mb-3">
+                {Array.from(sourceIndices).map((sourceIdx) => (
+                  <SourceCitation
+                    key={sourceIdx}
+                    source={sources[sourceIdx]}
+                    index={sourceIdx}
+                  />
+                ))}
+              </div>
+            );
+          }
+        } else {
+          result.push(
+            <ReactMarkdown
+              key={`para-${index}`}
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={getMarkdownComponents(isUser)}
+            >
+              {paragraph}
+            </ReactMarkdown>
+          );
+        }
+      });
+
+      return <div className={wrapperClass}>{result}</div>;
     }
 
-    // Split content by paragraphs and process each
-    const paragraphs = processedContent.split(/\n\n+/);
-    const result: React.ReactNode[] = [];
-
-    paragraphs.forEach((paragraph, index) => {
-      // Check if this paragraph contains citations
-      const citationMatches = paragraph.match(/\[(Web Source|Document)\s+(\d+)\](?:\([^)]+\))?/gi);
-      
-      if (citationMatches && citationMatches.length > 0) {
-        // Extract source indices from citations
-        const sourceIndices = new Set<number>();
-        citationMatches.forEach((match) => {
-          const numMatch = match.match(/(\d+)/);
-          if (numMatch) {
-            const sourceIndex = parseInt(numMatch[1]) - 1;
-            if (sourceIndex >= 0 && sourceIndex < sources.length && sources[sourceIndex]) {
-              sourceIndices.add(sourceIndex);
+    // New inline citation rendering - use custom markdown link component
+    const markdownComponents = {
+      ...getMarkdownComponents(isUser),
+      // Custom link renderer that detects citation links
+      a: ({ node, href, title, children, ...props }: any) => {
+        // Check if this is a citation link
+        if (title && title.startsWith('citation:')) {
+          const citationIdx = parseInt(title.replace('citation:', ''), 10);
+          const citation = citations[citationIdx];
+          if (citation) {
+            const source = sources![citation.sourceIndex];
+            if (source) {
+              const citationNumber = citationNumbers.indexOf(citation.number) + 1 || citation.number;
+              // Only show inline citation component if inline style is selected
+              if (preferences.style === 'inline') {
+                return (
+                  <InlineCitation
+                    source={source}
+                    citationNumber={preferences.showInlineNumbers ? citationNumber : 0}
+                    totalCitations={citationNumbers.length}
+                    isExpanded={expandedCitation === source}
+                    onExpand={(src) => setExpandedCitation(src === expandedCitation ? null : src)}
+                  />
+                );
+              }
+              // For other styles, render as regular link
+              return (
+                <a
+                  href={source.url || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-orange-600 hover:text-orange-700 underline underline-offset-2 font-medium"
+                  title={source.title}
+                >
+                  {children}
+                </a>
+              );
             }
           }
-        });
-
-        // Render paragraph with markdown
-        result.push(
-          <ReactMarkdown
-            key={`para-${index}`}
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeHighlight]}
-            components={getMarkdownComponents(isUser)}
+        }
+        // Regular link
+        return (
+          <a
+            className="text-orange-600 hover:text-orange-700 underline underline-offset-2 font-medium"
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={title}
+            {...props}
           >
-            {paragraph}
-          </ReactMarkdown>
+            {children}
+          </a>
         );
+      },
+    };
 
-        // Add inline citations after the paragraph
-        if (sourceIndices.size > 0) {
-          result.push(
-            <div key={`citations-${index}`} className="flex flex-wrap items-center gap-2 mt-2 mb-3">
-              {Array.from(sourceIndices).map((sourceIdx) => (
-                <SourceCitation
-                  key={sourceIdx}
-                  source={sources[sourceIdx]}
-                  index={sourceIdx}
-                />
-              ))}
+    // Render footnotes if needed
+    const renderFootnotes = () => {
+      if (preferences.style === 'footnote' && citationNumbers.length > 0) {
+        if (preferences.format === 'html') {
+          return (
+            <div
+              className="mt-6 pt-4 border-t border-gray-200"
+              dangerouslySetInnerHTML={{
+                __html: `<h4 class="text-sm font-semibold text-gray-700 mb-3">Footnotes</h4>` +
+                  CitationRenderer.renderFootnotes(
+                    citations,
+                    sources!,
+                    citationNumbers,
+                    preferences.format
+                  ),
+              }}
+            />
+          );
+        }
+        
+        if (preferences.format === 'plain') {
+          return (
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Footnotes</h4>
+              <div className="text-sm text-gray-600 whitespace-pre-line">
+                {CitationRenderer.renderFootnotes(
+                  citations,
+                  sources!,
+                  citationNumbers,
+                  preferences.format
+                )}
+              </div>
             </div>
           );
         }
-      } else {
-        // Regular paragraph without citations
-        result.push(
-          <ReactMarkdown
-            key={`para-${index}`}
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeHighlight]}
-            components={getMarkdownComponents(isUser)}
-          >
-            {paragraph}
-          </ReactMarkdown>
+        
+        // Markdown format
+        return (
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Footnotes</h4>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={getMarkdownComponents(isUser)}
+            >
+              {CitationRenderer.renderFootnotes(
+                citations,
+                sources!,
+                citationNumbers,
+                preferences.format
+              )}
+            </ReactMarkdown>
+          </div>
         );
       }
-    });
+      
+      // Show footnotes for inline style if enabled
+      if (preferences.style === 'inline' && showFootnotes && citationNumbers.length > 0) {
+        return (
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Sources</h4>
+            <ol className="space-y-2">
+              {citationNumbers.map((num) => {
+                const citation = citations.find(c => c.number === num);
+                if (!citation) return null;
+                const source = sources![citation.sourceIndex];
+                if (!source) return null;
+                return (
+                  <li key={num} className="text-sm text-gray-600 flex gap-2">
+                    <span className="font-medium text-gray-700 flex-shrink-0">{num}.</span>
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">{source.title || `Source ${num}`}</div>
+                      {source.url && (
+                        <a
+                          href={source.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-orange-600 hover:text-orange-700 underline"
+                        >
+                          {source.url}
+                        </a>
+                      )}
+                      {source.snippet && (
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{source.snippet}</p>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        );
+      }
+      
+      return null;
+    };
 
-    return <div className={wrapperClass}>{result}</div>;
+    return (
+      <div className={wrapperClass}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeHighlight]}
+          components={markdownComponents}
+        >
+          {processedContent}
+        </ReactMarkdown>
+        {renderFootnotes()}
+      </div>
+    );
   };
 
   return renderContentWithInlineCitations();

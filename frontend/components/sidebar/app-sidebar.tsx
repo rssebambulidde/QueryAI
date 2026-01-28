@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, CreditCard } from 'lucide-react';
+import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, CreditCard, Settings, TestTube, CheckSquare } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/lib/store/auth-store';
 import { SidebarTopicFilters } from './sidebar-topic-filters';
 import { cn } from '@/lib/utils';
 import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
@@ -47,6 +49,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const [showTopicsFilters, setShowTopicsFilters] = useState(false);
   const { toast } = useToast();
+  const router = useRouter();
+  const { user } = useAuthStore();
+  
+  // Check if user is admin/internal
+  const isAdmin =
+    subscriptionTier === 'pro' ||
+    user?.email?.includes('@admin') ||
+    user?.email?.includes('@internal');
   
   const {
     conversations,
@@ -221,6 +231,31 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             title="Subscription"
           >
             <CreditCard className="w-5 h-5" />
+          </button>
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => router.push('/dashboard/ab-testing')}
+                className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
+                title="A/B Testing"
+              >
+                <TestTube className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => router.push('/dashboard/validation')}
+                className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
+                title="Validation Reports"
+              >
+                <CheckSquare className="w-5 h-5" />
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => router.push('/dashboard/settings/profile')}
+            className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
+            title="Settings"
+          >
+            <Settings className="w-5 h-5" />
           </button>
         </nav>
       </div>
@@ -483,6 +518,40 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <CreditCard className="w-5 h-5" />
             Subscription
+          </button>
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => router.push('/dashboard/ab-testing')}
+                className={cn(
+                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                  'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                )}
+              >
+                <TestTube className="w-5 h-5" />
+                A/B Testing
+              </button>
+              <button
+                onClick={() => router.push('/dashboard/validation')}
+                className={cn(
+                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                  'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                )}
+              >
+                <CheckSquare className="w-5 h-5" />
+                Validation Reports
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => router.push('/dashboard/settings/profile')}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+              'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+            )}
+          >
+            <Settings className="w-5 h-5" />
+            Settings
           </button>
         </nav>
 

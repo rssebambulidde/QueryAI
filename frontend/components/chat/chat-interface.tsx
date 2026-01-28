@@ -10,10 +10,19 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { useFilterStore } from '@/lib/store/filter-store';
 import { Alert } from '@/components/ui/alert';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Settings } from 'lucide-react';
 import { UnifiedFilters } from './unified-filter-panel';
 import { ResearchModeBanner } from './research-mode-banner';
 import { ResearchSessionSummaryModal } from './research-session-summary-modal';
+import { StreamingControls, StreamingState } from './streaming-controls';
+import { SourcePanel } from './source-panel';
+import { CitationSettings } from './citation-settings';
+import { QueryExpansionDisplay, QueryExpansionSettings } from '@/components/advanced/query-expansion-display';
+import { RerankingControls, RerankingSettings } from '@/components/advanced/reranking-controls';
+import { ContextVisualization } from '@/components/advanced/context-visualization';
+import { TokenUsageDisplay } from '@/components/advanced/token-usage-display';
+import { CostEstimation } from '@/components/advanced/cost-estimation';
+import { ResponseTimeIndicator } from '@/components/health/response-time-indicator';
 
 interface ChatInterfaceProps {
   ragSettings?: RAGSettings;
@@ -24,7 +33,24 @@ type ApiMessage = {
   role: 'user' | 'assistant';
   content: string;
   sources?: Source[];
-  metadata?: { followUpQuestions?: string[]; isActionResponse?: boolean; actionType?: string; isRefusal?: boolean };
+  metadata?: {
+    followUpQuestions?: string[];
+    isActionResponse?: boolean;
+    actionType?: string;
+    isRefusal?: boolean;
+    responseTime?: number;
+    queryExpansion?: QuestionResponse['queryExpansion'];
+    reranking?: QuestionResponse['reranking'];
+    contextChunks?: QuestionResponse['contextChunks'];
+    selectionReasoning?: string;
+    usage?: QuestionResponse['usage'];
+    cost?: QuestionResponse['cost'];
+  };
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
   created_at: string;
 };
 
@@ -53,6 +79,7 @@ function mapApiMessagesToUi(apiMessages: ApiMessage[]): Message[] {
       followUpQuestions,
       isActionResponse: msg.metadata?.isActionResponse,
       isRefusal: msg.metadata?.isRefusal,
+      responseTime: msg.metadata?.responseTime,
     };
   });
 }
@@ -61,9 +88,42 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingState, setStreamingState] = useState<StreamingState>('completed');
   const [error, setError] = useState<string | null>(null);
   const [sources, setSources] = useState<Source[] | undefined>(undefined);
+  const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(false);
+  const [isCitationSettingsOpen, setIsCitationSettingsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isPausedRef = useRef(false);
+  const pausedChunksRef = useRef<string[]>([]);
+  const responseTimeStartRef = useRef<number | null>(null);
+  const previousResponseTimeRef = useRef<number | null>(null);
+  // Advanced features state
+  const [queryExpansionEnabled, setQueryExpansionEnabled] = useState(false);
+  const [queryExpansionSettings, setQueryExpansionSettings] = useState<QueryExpansionSettings>({
+    enableExpansion: false,
+    expansionMethod: 'hybrid',
+    maxExpansions: 5,
+    confidenceThreshold: 0.7,
+  });
+  const [rerankingEnabled, setRerankingEnabled] = useState(false);
+  const [rerankingSettings, setRerankingSettings] = useState<RerankingSettings>({
+    enableReranking: false,
+    rerankingMethod: 'cross-encoder',
+    topK: 10,
+    diversityWeight: 0.5,
+  });
+  const [lastResponseData, setLastResponseData] = useState<{
+    queryExpansion?: QuestionResponse['queryExpansion'];
+    reranking?: QuestionResponse['reranking'];
+    contextChunks?: QuestionResponse['contextChunks'];
+    selectionReasoning?: string;
+    usage?: QuestionResponse['usage'];
+    cost?: QuestionResponse['cost'];
+  } | null>(null);
+  const [previousTokenUsage, setPreviousTokenUsage] = useState<{ totalTokens: number } | null>(null);
+  const [previousCost, setPreviousCost] = useState<{ total: number } | null>(null);
   const { toast } = useToast();
   const { currentConversationId, createConversation, refreshConversations, conversations, updateConversationFilters, updateConversation } = useConversationStore();
   const { unifiedFilters, setUnifiedFilters, selectedTopic, setSelectedTopic } = useFilterStore();
@@ -125,6 +185,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
+
+  // Auto-open source panel when sources are available (first time)
+  useEffect(() => {
+    const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant' && m.sources && m.sources.length > 0);
+    const currentSources = lastAssistantMessage?.sources || [];
+    
+    if (currentSources.length > 0 && !isSourcePanelOpen && messages.length > 0) {
+      // Only auto-open if this is a new response (not on initial load)
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.role === 'assistant' && lastMessage.sources) {
+        setIsSourcePanelOpen(true);
+      }
+    }
+  }, [messages.length, isSourcePanelOpen]);
 
   // 10.2 Optional in-thread "Topic changed" message when user switches topic mid-conversation
   const prevTopicIdRef = useRef<string | null | undefined>(undefined);
@@ -351,6 +425,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         : messages.map((msg) => ({ role: msg.role, content: msg.content }));
 
       setIsStreaming(true);
+      setStreamingState('streaming');
+      isPausedRef.current = false;
+      pausedChunksRef.current = [];
+      
+      // Create abort controller for this stream
+      abortControllerRef.current = new AbortController();
+      
       let assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -359,6 +440,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         isStreaming: true, // Mark as streaming
       };
 
+      // Track response time start
+      responseTimeStartRef.current = Date.now();
+      
       // Add empty assistant message for streaming
       setMessages((prev) => [...prev, assistantMessage]);
 
@@ -380,13 +464,56 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         country: activeFilters.country,
         maxSearchResults: ragSettings.maxWebResults,
         ...(isResend && options?.resendUserMessageId && { resendUserMessageId: options.resendUserMessageId }),
+        // Advanced features
+        enableQueryExpansion: queryExpansionEnabled,
+        queryExpansionSettings: queryExpansionEnabled ? queryExpansionSettings : undefined,
+        enableReranking: rerankingEnabled,
+        rerankingSettings: rerankingEnabled ? rerankingSettings : undefined,
       };
 
       try {
         // Try streaming first
         let followUpQuestions: string[] | undefined;
         let isRefusal = false;
-        for await (const chunk of aiApi.askStream(request)) {
+        
+        const handleStreamError = (error: Error) => {
+          console.error('Stream error:', error);
+          if (error.name !== 'AbortError') {
+            setStreamingState('error');
+            setError(error.message || 'Streaming error occurred');
+          }
+        };
+        
+        for await (const chunk of aiApi.askStream(request, {
+          signal: abortControllerRef.current.signal,
+          onError: handleStreamError,
+          maxRetries: 3,
+          retryDelay: 1000,
+        })) {
+          // Check if paused
+          if (isPausedRef.current) {
+            if (typeof chunk === 'string') {
+              pausedChunksRef.current.push(chunk);
+            }
+            continue;
+          }
+          
+          // Process any paused chunks first
+          if (pausedChunksRef.current.length > 0) {
+            const pausedChunks = pausedChunksRef.current.splice(0);
+            for (const pausedChunk of pausedChunks) {
+              assistantMessage = {
+                ...assistantMessage,
+                content: assistantMessage.content + pausedChunk,
+              };
+            }
+            setMessages((prev) => {
+              const updated = [...prev];
+              updated[updated.length - 1] = assistantMessage;
+              return updated;
+            });
+          }
+          
           // Check if this is a follow-up questions object (may include refusal)
           if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
             followUpQuestions = chunk.followUpQuestions;
@@ -406,6 +533,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
               return updated;
             });
           }
+        }
+        
+        // Process any remaining paused chunks
+        if (pausedChunksRef.current.length > 0) {
+          const pausedChunks = pausedChunksRef.current.splice(0);
+          for (const pausedChunk of pausedChunks) {
+            assistantMessage = {
+              ...assistantMessage,
+              content: assistantMessage.content + pausedChunk,
+            };
+          }
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = assistantMessage;
+            return updated;
+          });
         }
         
         // Extract follow-up questions from the complete response if not already received (lenient regex)
@@ -448,22 +591,39 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           });
         }
 
+        // Store advanced features data from response (will be populated after reload)
+        // This will be handled when we reload messages from the database
+
         // Sources are persisted with the message by the backend; the reload from getMessages below will include them.
 
         setIsStreaming(false);
         setIsLoading(false);
+        setStreamingState('completed');
+        abortControllerRef.current = null;
         
         // Ensure the last message is marked as complete
+        // Calculate and store response time
+        const responseTime = responseTimeStartRef.current
+          ? Date.now() - responseTimeStartRef.current
+          : null;
+        
+        if (responseTime !== null) {
+          previousResponseTimeRef.current = responseTime;
+        }
+        
         setMessages((prev) => {
           const updated = [...prev];
           if (updated.length > 0 && updated[updated.length - 1].role === 'assistant') {
             updated[updated.length - 1] = {
               ...updated[updated.length - 1],
               isStreaming: false,
+              responseTime: responseTime || undefined,
             };
           }
           return updated;
         });
+        
+        responseTimeStartRef.current = null;
         
         // Reload messages from database to ensure they're persisted and displayed
         if (conversationId) {
@@ -472,6 +632,31 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             if (messagesResponse.success && messagesResponse.data) {
               const uiMessages = mapApiMessagesToUi(messagesResponse.data);
               setMessages(uiMessages);
+              
+              // Extract advanced features data from the last message if available
+              const lastMessage = messagesResponse.data[messagesResponse.data.length - 1];
+              if (lastMessage && lastMessage.metadata) {
+                const metadata = lastMessage.metadata;
+                setLastResponseData({
+                  queryExpansion: metadata.queryExpansion,
+                  reranking: metadata.reranking,
+                  contextChunks: metadata.contextChunks,
+                  selectionReasoning: metadata.selectionReasoning,
+                  usage: lastMessage.usage || metadata.usage,
+                  cost: metadata.cost,
+                });
+                
+                // Update previous token usage and cost for trend indicators
+                if (metadata.usage || lastMessage.usage) {
+                  const usage = metadata.usage || lastMessage.usage;
+                  if (usage) {
+                    setPreviousTokenUsage({ totalTokens: usage.totalTokens });
+                  }
+                }
+                if (metadata.cost) {
+                  setPreviousCost({ total: metadata.cost.total });
+                }
+              }
             }
           } catch (error: any) {
             console.warn('Failed to reload messages after streaming:', error);
@@ -482,9 +667,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         // Refresh conversations list to update last message and title (if first message)
         refreshConversations();
       } catch (streamError: any) {
+        // Don't fallback if cancelled
+        if (streamError.name === 'AbortError' || abortControllerRef.current?.signal.aborted) {
+          setStreamingState('cancelled');
+          setIsStreaming(false);
+          setIsLoading(false);
+          // Remove the empty assistant message
+          setMessages((prev) => prev.slice(0, -1));
+          abortControllerRef.current = null;
+          return;
+        }
+        
         // If streaming fails, try non-streaming as fallback
         console.warn('Streaming failed, falling back to non-streaming:', streamError);
         setIsStreaming(false);
+        setStreamingState('error');
         
         const fallbackResponse = await aiApi.ask(request);
         if (fallbackResponse.success && fallbackResponse.data) {
@@ -506,12 +703,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             }
           }
           
+          // Calculate response time for fallback
+          const fallbackResponseTime = responseTimeStartRef.current
+            ? Date.now() - responseTimeStartRef.current
+            : null;
+          
+          if (fallbackResponseTime !== null) {
+            previousResponseTimeRef.current = fallbackResponseTime;
+          }
+          
           assistantMessage = {
             ...assistantMessage,
             content: answer,
             sources: fallbackResponse.data.sources,
             followUpQuestions,
             isRefusal: fallbackResponse.data?.refusal ? true : undefined,
+            responseTime: fallbackResponseTime || undefined,
           };
           setMessages((prev) => {
             const updated = [...prev];
@@ -519,15 +726,60 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             return updated;
           });
           setIsLoading(false);
+          responseTimeStartRef.current = null;
+          
+          // Extract advanced features data from fallback response
+          if (fallbackResponse.data) {
+            const metadata = (fallbackResponse.data as any).metadata || {};
+            setLastResponseData({
+              queryExpansion: metadata.queryExpansion,
+              reranking: metadata.reranking,
+              contextChunks: metadata.contextChunks,
+              selectionReasoning: metadata.selectionReasoning,
+              usage: fallbackResponse.data.usage,
+              cost: metadata.cost,
+            });
+            
+            if (fallbackResponse.data.usage) {
+              setPreviousTokenUsage({ totalTokens: fallbackResponse.data.usage.totalTokens });
+            }
+            if (metadata.cost) {
+              setPreviousCost({ total: metadata.cost.total });
+            }
+          }
           
           // Reload messages from database to ensure they're persisted
           if (conversationId) {
             try {
               const messagesResponse = await conversationApi.getMessages(conversationId);
-              if (messagesResponse.success && messagesResponse.data) {
-                const uiMessages = mapApiMessagesToUi(messagesResponse.data);
-                setMessages(uiMessages);
+            if (messagesResponse.success && messagesResponse.data) {
+              const uiMessages = mapApiMessagesToUi(messagesResponse.data);
+              setMessages(uiMessages);
+              
+              // Extract advanced features data from the last message if available
+              const lastMessage = messagesResponse.data[messagesResponse.data.length - 1];
+              if (lastMessage && lastMessage.metadata) {
+                const metadata = lastMessage.metadata;
+                setLastResponseData({
+                  queryExpansion: metadata.queryExpansion,
+                  reranking: metadata.reranking,
+                  contextChunks: metadata.contextChunks,
+                  selectionReasoning: metadata.selectionReasoning,
+                  usage: lastMessage.usage || metadata.usage,
+                  cost: metadata.cost,
+                });
+                
+                if (metadata.usage || lastMessage.usage) {
+                  const usage = metadata.usage || lastMessage.usage;
+                  if (usage) {
+                    setPreviousTokenUsage({ totalTokens: usage.totalTokens });
+                  }
+                }
+                if (metadata.cost) {
+                  setPreviousCost({ total: metadata.cost.total });
+                }
               }
+            }
             } catch (error: any) {
               console.warn('Failed to reload messages after fallback:', error);
               // Continue - messages are already in local state
@@ -542,6 +794,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     } catch (err: any) {
       setIsLoading(false);
       setIsStreaming(false);
+      setStreamingState('error');
+      abortControllerRef.current = null;
       
       // Extract error message
       let errorMessage = 'Failed to get AI response';
@@ -638,6 +892,52 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     setSelectedTopic(null);
   };
 
+  // Streaming control handlers
+  const handlePauseStreaming = () => {
+    if (streamingState === 'streaming') {
+      isPausedRef.current = true;
+      setStreamingState('paused');
+    }
+  };
+
+  const handleResumeStreaming = () => {
+    if (streamingState === 'paused') {
+      isPausedRef.current = false;
+      setStreamingState('streaming');
+    }
+  };
+
+  const handleCancelStreaming = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setStreamingState('cancelled');
+      setIsStreaming(false);
+      setIsLoading(false);
+      // Remove the empty assistant message
+      setMessages((prev) => prev.slice(0, -1));
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleRetryStreaming = async () => {
+    if (messages.length === 0) return;
+    
+    // Get the last user message
+    const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
+    if (!lastUserMessage) return;
+    
+    // Remove any incomplete assistant messages
+    setMessages((prev) => {
+      const filtered = prev.filter(m => !(m.role === 'assistant' && m.isStreaming));
+      return filtered;
+    });
+    
+    // Retry with the last user message
+    setStreamingState('streaming');
+    setError(null);
+    await handleSend(lastUserMessage.content);
+  };
+
   const handleEditMessage = async (messageId: string, newContent: string) => {
     const messageIndex = messages.findIndex((m) => m.id === messageId);
     if (messageIndex === -1) return;
@@ -695,43 +995,136 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
               ? messages[index - 1]?.content 
               : undefined;
             
+            // Find previous assistant message's response time for trend indicator
+            const previousAssistantMessage = index > 0 
+              ? messages.slice(0, index).reverse().find(m => m.role === 'assistant')
+              : undefined;
+            const previousResponseTime = previousAssistantMessage?.responseTime;
+            
+            const isLastMessage = index === messages.length - 1;
+            const showControls = isLastMessage && message.role === 'assistant' && 
+              (streamingState === 'streaming' || streamingState === 'paused' || streamingState === 'error');
+            
             return (
-              <ChatMessage 
-                key={message.id} 
-                message={message}
-                onEdit={handleEditMessage}
-                onFollowUpClick={(question) => {
-                  handleSend(question);
-                }}
-                userQuestion={userQuestion}
-                selectedTopicName={selectedTopic?.name ?? null}
-                onExitResearchMode={handleExitResearchMode}
-                onActionResponse={async (content, actionType) => {
-                  const actionMessage: Message = {
-                    id: (Date.now() + 1).toString(),
-                    role: 'assistant',
-                    content,
-                    timestamp: new Date(),
-                    sources: message.sources,
-                    isActionResponse: true,
-                  };
-                  setMessages((prev) => [...prev, actionMessage]);
-                  if (currentConversationId && actionType) {
-                    try {
-                      await conversationApi.saveMessage(currentConversationId, {
-                        role: 'assistant',
-                        content,
-                        sources: message.sources,
-                        metadata: { isActionResponse: true, actionType },
-                      });
-                    } catch (err) {
-                      console.warn('Failed to persist action response:', err);
-                      toast.error('Could not save to conversation');
+              <div key={message.id}>
+                <ChatMessage 
+                  message={message}
+                  previousResponseTime={previousResponseTime}
+                  onEdit={handleEditMessage}
+                  onFollowUpClick={(question) => {
+                    handleSend(question);
+                  }}
+                  userQuestion={userQuestion}
+                  selectedTopicName={selectedTopic?.name ?? null}
+                  onExitResearchMode={handleExitResearchMode}
+                  onActionResponse={async (content, actionType) => {
+                    const actionMessage: Message = {
+                      id: (Date.now() + 1).toString(),
+                      role: 'assistant',
+                      content,
+                      timestamp: new Date(),
+                      sources: message.sources,
+                      isActionResponse: true,
+                    };
+                    setMessages((prev) => [...prev, actionMessage]);
+                    if (currentConversationId && actionType) {
+                      try {
+                        await conversationApi.saveMessage(currentConversationId, {
+                          role: 'assistant',
+                          content,
+                          sources: message.sources,
+                          metadata: { isActionResponse: true, actionType },
+                        });
+                      } catch (err) {
+                        console.warn('Failed to persist action response:', err);
+                        toast.error('Could not save to conversation');
+                      }
                     }
-                  }
-                }}
-                isStreaming={isStreaming && index === messages.length - 1}
-              />
+                  }}
+                  isStreaming={isStreaming && isLastMessage}
+                />
+                
+                {/* Advanced Features Display - Show after last assistant message */}
+                {isLastMessage && message.role === 'assistant' && !isStreaming && lastResponseData && (
+                  <div className="mt-4 space-y-3">
+                    {/* Query Expansion */}
+                    {lastResponseData.queryExpansion && (
+                      <QueryExpansionDisplay
+                        originalQuery={userQuestion || ''}
+                        expandedQuery={lastResponseData.queryExpansion.expanded}
+                        expansionReasoning={lastResponseData.queryExpansion.reasoning}
+                        enabled={queryExpansionEnabled}
+                        onToggle={setQueryExpansionEnabled}
+                        onSettingsChange={setQueryExpansionSettings}
+                        settings={queryExpansionSettings}
+                      />
+                    )}
+
+                    {/* Reranking Controls */}
+                    {lastResponseData.reranking && (
+                      <RerankingControls
+                        enabled={rerankingEnabled}
+                        onToggle={setRerankingEnabled}
+                        onSettingsChange={setRerankingSettings}
+                        settings={rerankingSettings}
+                        impact={lastResponseData.reranking.impact}
+                        preview={lastResponseData.reranking.preview}
+                      />
+                    )}
+
+                    {/* Context Visualization */}
+                    {lastResponseData.contextChunks && lastResponseData.contextChunks.length > 0 && (
+                      <ContextVisualization
+                        chunks={lastResponseData.contextChunks}
+                        tokenUsage={{
+                          total: lastResponseData.usage?.totalTokens || 0,
+                          prompt: lastResponseData.usage?.promptTokens || 0,
+                          completion: lastResponseData.usage?.completionTokens || 0,
+                          context: lastResponseData.contextChunks.reduce(
+                            (sum, chunk) => sum + chunk.tokens,
+                            0
+                          ),
+                        }}
+                        selectionReasoning={lastResponseData.selectionReasoning}
+                      />
+                    )}
+
+                    {/* Token Usage */}
+                    {lastResponseData.usage && (
+                      <TokenUsageDisplay
+                        tokenUsage={{
+                          promptTokens: lastResponseData.usage.promptTokens,
+                          completionTokens: lastResponseData.usage.completionTokens,
+                          totalTokens: lastResponseData.usage.totalTokens,
+                        }}
+                        previousUsage={previousTokenUsage || undefined}
+                        showAlerts={true}
+                      />
+                    )}
+
+                    {/* Cost Estimation */}
+                    {lastResponseData.cost && (
+                      <CostEstimation
+                        cost={lastResponseData.cost}
+                        previousCost={previousCost || undefined}
+                        showAlerts={true}
+                      />
+                    )}
+                  </div>
+                )}
+                
+                {showControls && (
+                  <div className="flex justify-start mb-4">
+                    <StreamingControls
+                      state={streamingState}
+                      onPause={handlePauseStreaming}
+                      onResume={handleResumeStreaming}
+                      onCancel={handleCancelStreaming}
+                      onRetry={handleRetryStreaming}
+                    />
+                  </div>
+                )}
+              </div>
             );
           })}
 
@@ -761,6 +1154,61 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         </div>
       </div>
 
+      {/* Source Panel - Show sources from last assistant message */}
+      {(() => {
+        // Get sources from the last assistant message
+        const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant' && m.sources && m.sources.length > 0);
+        const currentSources = lastAssistantMessage?.sources || [];
+        
+        if (currentSources.length > 0) {
+          return (
+            <SourcePanel
+              sources={currentSources}
+              isOpen={isSourcePanelOpen}
+              onToggle={() => setIsSourcePanelOpen(!isSourcePanelOpen)}
+              onSourceClick={(source) => {
+                if (source.type === 'document' && source.documentId) {
+                  // Download document
+                  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+                  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+                  
+                  fetch(`${API_URL}/api/documents/${source.documentId}/download`, {
+                    headers: {
+                      'Authorization': `Bearer ${token}`,
+                    },
+                  })
+                    .then(response => {
+                      if (response.ok) {
+                        return response.blob();
+                      }
+                      throw new Error('Download failed');
+                    })
+                    .then(blob => {
+                      const url = window.URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = source.title || 'document';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      window.URL.revokeObjectURL(url);
+                    })
+                    .catch(error => {
+                      console.error('Failed to download document:', error);
+                      if (source.url) {
+                        window.open(source.url, '_blank');
+                      }
+                    });
+                } else if (source.url) {
+                  window.open(source.url, '_blank');
+                }
+              }}
+            />
+          );
+        }
+        return null;
+      })()}
+
       <ResearchSessionSummaryModal
         open={showResearchSummaryModal}
         onClose={handleCloseResearchSummaryModal}
@@ -772,9 +1220,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         topicName={selectedTopic?.name || ''}
       />
 
+      {/* Citation Settings Modal */}
+      <CitationSettings
+        isOpen={isCitationSettingsOpen}
+        onClose={() => setIsCitationSettingsOpen(false)}
+      />
+
       {/* Input - Centered layout */}
       <div className="bg-white border-t border-gray-200 shadow-lg relative">
         <div className="max-w-3xl mx-auto pb-4">
+          {/* Citation Settings Button */}
+          <div className="flex items-center justify-end px-4 pt-2 pb-1">
+            <button
+              onClick={() => setIsCitationSettingsOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+              title="Citation settings"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Citation Settings
+            </button>
+          </div>
+
           {/* 6.1 Dynamic AI-generated or on-topic suggested starters when in research mode */}
           {selectedTopic && (
             <div className="px-4 pt-3 pb-1">
