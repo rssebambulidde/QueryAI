@@ -64,24 +64,22 @@ const corsOptions = {
     // Parse CORS_ORIGIN - support comma-separated origins
     const corsOrigins = config.CORS_ORIGIN
       .split(',')
-      .map(origin => origin.trim())
+      .map(o => o.trim())
       .filter(Boolean);
 
-    // Helper to normalize URL (handle both with and without https://)
+    // Helper to normalize URL: add https if needed, strip trailing slash (browser sends origin without slash)
     const normalizeUrl = (url: string): string => {
-      const trimmed = url.trim();
+      const trimmed = url.trim().replace(/\/+$/, '');
       if (!trimmed) return '';
-      // If already starts with http:// or https://, return as is
       if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
         return trimmed;
       }
-      // Otherwise, add https://
       return `https://${trimmed}`;
     };
 
     const allowedOrigins = [
-      ...corsOrigins,
-      // Cloudflare Pages frontend (if set) - normalize URL format
+      ...corsOrigins.map(normalizeUrl),
+      // Cloudflare Pages frontend (if set)
       ...(process.env.CLOUDFLARE_PAGES_URL
         ? [normalizeUrl(process.env.CLOUDFLARE_PAGES_URL)]
         : []),
@@ -90,7 +88,8 @@ const corsOptions = {
       'http://localhost:3001',
     ].filter(Boolean);
 
-    if (allowedOrigins.includes(origin) || config.NODE_ENV === 'development') {
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+    if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes(origin) || config.NODE_ENV === 'development') {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
