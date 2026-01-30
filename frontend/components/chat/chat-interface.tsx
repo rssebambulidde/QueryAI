@@ -91,7 +91,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   const [streamingState, setStreamingState] = useState<StreamingState>('completed');
   const [error, setError] = useState<string | null>(null);
   const [sources, setSources] = useState<Source[] | undefined>(undefined);
-  const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(false);
+  /** When set, show Perplexity-style sources sidebar on the right */
+  const [sourcePanelContext, setSourcePanelContext] = useState<{ sources: Source[]; query: string } | null>(null);
   const [isCitationSettingsOpen, setIsCitationSettingsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -189,22 +190,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   // Track when we just loaded a conversation so we don't auto-open sources (thread stays primary)
   const justLoadedConversationRef = useRef(false);
 
-  // Auto-open source panel only when a new response arrives (streaming), not when loading a conversation
-  useEffect(() => {
-    if (justLoadedConversationRef.current) {
-      justLoadedConversationRef.current = false;
-      return;
-    }
-    const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant' && m.sources && m.sources.length > 0);
-    const currentSources = lastAssistantMessage?.sources || [];
-    if (currentSources.length > 0 && !isSourcePanelOpen && messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage && lastMessage.role === 'assistant' && lastMessage.sources) {
-        setIsSourcePanelOpen(true);
-      }
-    }
-  }, [messages.length, isSourcePanelOpen]);
-
   // 10.2 Optional in-thread "Topic changed" message when user switches topic mid-conversation
   const prevTopicIdRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
@@ -234,7 +219,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     const loadConversationData = async () => {
       if (currentConversationId) {
         justLoadedConversationRef.current = true;
-        setIsSourcePanelOpen(false);
+        setSourcePanelContext(null);
         try {
           const messagesResponse = await conversationApi.getMessages(currentConversationId);
           if (messagesResponse.success && messagesResponse.data) {
@@ -280,7 +265,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         setMessages([]);
         setUnifiedFilters({ topicId: null, topic: null });
         setSelectedTopic(null);
-        setIsSourcePanelOpen(false);
+        setSourcePanelContext(null);
       }
     };
 
@@ -968,9 +953,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   return (
     <div className="flex flex-col h-full bg-white">
       <ResearchModeBanner onExit={handleExitResearchMode} />
-      {/* Messages - Centered layout like Perplexity */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
+      <div className="flex flex-1 min-h-0">
+        {/* Messages - left/center; sources sidebar opens on right when user clicks "N sources" */}
+        <div className="flex-1 min-w-0 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
           {messages.length === 0 && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center max-w-md">
@@ -1042,6 +1028,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                       }
                     }
                   }}
+                  onOpenSources={
+                    message.sources && message.sources.length > 0
+                      ? (sources, query) => setSourcePanelContext({ sources, query: query ?? '' })
+                      : undefined
+                  }
                   isStreaming={isStreaming && isLastMessage}
                 />
                 
@@ -1152,63 +1143,44 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           )}
 
           <div ref={messagesEndRef} />
+          </div>
         </div>
-      </div>
 
-      {/* Source Panel - Show sources from last assistant message */}
-      {(() => {
-        // Get sources from the last assistant message
-        const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant' && m.sources && m.sources.length > 0);
-        const currentSources = lastAssistantMessage?.sources || [];
-        
-        if (currentSources.length > 0) {
-          return (
-            <SourcePanel
-              sources={currentSources}
-              isOpen={isSourcePanelOpen}
-              onToggle={() => setIsSourcePanelOpen(!isSourcePanelOpen)}
-              onSourceClick={(source) => {
-                if (source.type === 'document' && source.documentId) {
-                  // Download document
-                  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-                  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-                  
-                  fetch(`${API_URL}/api/documents/${source.documentId}/download`, {
-                    headers: {
-                      'Authorization': `Bearer ${token}`,
-                    },
+        {/* Perplexity-style sources sidebar - opens when user clicks "N sources" */}
+        {sourcePanelContext && (
+          <SourcePanel
+            variant="sidebar"
+            sources={sourcePanelContext.sources}
+            title={sourcePanelContext.query}
+            isOpen={true}
+            onClose={() => setSourcePanelContext(null)}
+            onSourceClick={(source) => {
+              if (source.type === 'document' && source.documentId) {
+                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+                const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+                fetch(`${API_URL}/api/documents/${source.documentId}/download`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                })
+                  .then((r) => (r.ok ? r.blob() : Promise.reject(new Error('Download failed'))))
+                  .then((blob) => {
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = source.title || 'document';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
                   })
-                    .then(response => {
-                      if (response.ok) {
-                        return response.blob();
-                      }
-                      throw new Error('Download failed');
-                    })
-                    .then(blob => {
-                      const url = window.URL.createObjectURL(blob);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = source.title || 'document';
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      window.URL.revokeObjectURL(url);
-                    })
-                    .catch(error => {
-                      console.error('Failed to download document:', error);
-                      if (source.url) {
-                        window.open(source.url, '_blank');
-                      }
-                    });
-                } else if (source.url) {
-                  window.open(source.url, '_blank');
-                }
-              }}
-            />
-          );
-        }
-        return null;
-      })()}
+                  .catch(() => { if (source.url) window.open(source.url, '_blank'); });
+              } else if (source.url) {
+                window.open(source.url, '_blank');
+              }
+            }}
+            className="w-[min(400px,100%)]"
+          />
+        )}
+      </div>
 
       <ResearchSessionSummaryModal
         open={showResearchSummaryModal}

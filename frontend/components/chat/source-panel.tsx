@@ -27,6 +27,12 @@ interface SourcePanelProps {
   sources?: Source[];
   isOpen?: boolean;
   onToggle?: () => void;
+  /** When variant is 'sidebar', use onClose to close the panel */
+  onClose?: () => void;
+  /** Context title for sidebar header, e.g. "Sources for databricks" */
+  title?: string;
+  /** 'inline' = collapsible block below messages; 'sidebar' = right-hand panel (Perplexity-style) */
+  variant?: 'inline' | 'sidebar';
   onSourceClick?: (source: Source) => void;
   className?: string;
   viewMode?: SourceViewMode;
@@ -36,6 +42,9 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
   sources = [],
   isOpen = false,
   onToggle,
+  onClose,
+  title,
+  variant = 'inline',
   onSourceClick,
   className,
   viewMode: initialViewMode = 'list',
@@ -58,6 +67,11 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
       return scoreB - scoreA; // Descending order
     });
   }, [filteredSources]);
+
+  const sortedForSidebar = useMemo(
+    () => [...sources].sort((a, b) => (b.score ?? 0) - (a.score ?? 0)),
+    [sources]
+  );
 
   const documentCount = sources.filter(s => s.type === 'document').length;
   const webCount = sources.filter(s => s.type === 'web').length;
@@ -194,6 +208,92 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
 
   if (sources.length === 0) {
     return null;
+  }
+
+  // Perplexity-style right sidebar
+  if (variant === 'sidebar') {
+    const displayTitle = title?.trim() ? title.trim() : 'this response';
+    const headerLabel = displayTitle.length > 40 ? `Sources for ${displayTitle.slice(0, 37)}...` : `Sources for ${displayTitle}`;
+    return (
+      <div className={cn('flex flex-col h-full w-full bg-white border-l border-gray-200 flex-shrink-0', className)} style={{ width: 'min(400px, 100%)' }}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50/80">
+          <h3 className="font-semibold text-sm text-gray-900 truncate pr-2">{headerLabel}</h3>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
+              aria-label="Close sources"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <div className="divide-y divide-gray-100">
+            {sortedForSidebar.map((source, index) => {
+              const domain = getSourceDomain(source.url);
+              const sourceName = domain || (source.type === 'document' ? 'Document' : 'Web');
+              return (
+                <div
+                  key={`${source.type}-${index}`}
+                  className="px-4 py-3 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex gap-3">
+                    <div
+                      className={cn(
+                        'flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center',
+                        source.type === 'document' ? 'bg-blue-100' : 'bg-green-100'
+                      )}
+                    >
+                      {source.type === 'document' ? (
+                        <FileText className="w-4 h-4 text-blue-600" />
+                      ) : (
+                        <Globe className="w-4 h-4 text-green-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-gray-500 font-medium mb-0.5">{sourceName}</p>
+                      <h4
+                        className="font-semibold text-sm text-gray-900 line-clamp-2 cursor-pointer hover:text-orange-600 transition-colors mb-1"
+                        onClick={() => handleSourceClick(source)}
+                      >
+                        {source.title || `Source ${index + 1}`}
+                      </h4>
+                      {source.snippet && (
+                        <p className="text-xs text-gray-600 line-clamp-2">{source.snippet}</p>
+                      )}
+                      {(source.url || (source.type === 'document' && source.documentId)) && (
+                        <div className="mt-2 flex items-center gap-2">
+                          {source.type === 'document' && source.documentId ? (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleDocumentDownload(source); }}
+                              className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                            >
+                              <Download className="w-3 h-3" /> Download
+                            </button>
+                          ) : source.url ? (
+                            <a
+                              href={source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-green-600 hover:text-green-700 flex items-center gap-1"
+                            >
+                              <ExternalLink className="w-3 h-3" /> Open
+                            </a>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
-import { Copy, Edit2, Check, X } from 'lucide-react';
+import { Copy, Edit2, Check, X, Layers } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
@@ -42,12 +42,14 @@ interface ChatMessageProps {
   onFollowUpClick?: (question: string) => void;
   userQuestion?: string; // The user's original question for context
   onActionResponse?: (content: string, actionType?: 'summary' | 'essay' | 'report') => void; // Callback for action responses
+  /** Open Perplexity-style sources sidebar with this message's sources and optional query for header */
+  onOpenSources?: (sources: Source[], query?: string) => void;
   isStreaming?: boolean; // Whether the message is currently streaming
   selectedTopicName?: string | null; // For refusal hint (11.2)
   onExitResearchMode?: () => void; // For refusal hint "exit research mode" action
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onActionResponse, isStreaming = false, selectedTopicName, onExitResearchMode }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onActionResponse, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
@@ -311,8 +313,24 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
           </div>
         </div>
 
-        {/* AI Action Buttons for Assistant Messages - Only show on complete responses, not action/topic-change */}
-        {!isUser && onActionResponse && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
+        {/* Action row: "N sources" pill (Perplexity-style) + Summarize / Essay / Report / Export */}
+        {!isUser && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (hasSources && onOpenSources || onActionResponse) && (
+          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-200 flex-wrap">
+            {hasSources && onOpenSources && (
+              <button
+                type="button"
+                onClick={() => onOpenSources(message.sources!, userQuestion)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium',
+                  'bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors'
+                )}
+                aria-label={`View ${message.sources!.length} sources`}
+              >
+                <Layers className="w-3.5 h-3.5 text-gray-500" />
+                {message.sources!.length} sources
+              </button>
+            )}
+            {onActionResponse && (
           <AIActionButtons
             onSummarize={async () => {
               if (!userQuestion) return;
@@ -388,6 +406,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
             }}
             isLoading={isActionLoading}
           />
+            )}
+          </div>
         )}
 
         {/* Follow-up Questions for Assistant Messages - Show AI-generated questions */}
