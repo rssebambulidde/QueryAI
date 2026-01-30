@@ -48,12 +48,13 @@ apiClient.interceptors.response.use(
       const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
       
       // Provide helpful error message for network errors
+      const displayUrl = apiUrl.replace(/\/$/, '');
       if (isLocalhost && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
         // Production environment but API URL is localhost
         error.message = `Network Error: API URL is set to localhost. Please configure NEXT_PUBLIC_API_URL in Cloudflare Pages environment variables.`;
       } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
-        // Generic network error
-        error.message = `Network Error: Unable to connect to the API server. Please check your internet connection and ensure the backend is running.`;
+        // Generic network error - include URL so user can verify what the app is trying to reach
+        error.message = `Network Error: Unable to connect to the API server (${displayUrl}). Check that the backend is running and CORS allows this site.`;
       }
       return Promise.reject(error);
     }
