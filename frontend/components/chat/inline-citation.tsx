@@ -32,6 +32,7 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
   isExpanded = false,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [isTooltipHovered, setIsTooltipHovered] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -40,9 +41,9 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
   const isDocument = source.type === 'document';
   const isWeb = source.type === 'web';
 
-  // Handle tooltip positioning and visibility
+  // Handle tooltip positioning and visibility - keep open when hovering badge or tooltip
   useEffect(() => {
-    if (isHovered) {
+    if (isHovered || isTooltipHovered) {
       timeoutRef.current = setTimeout(() => {
         setShowTooltip(true);
       }, 300); // Small delay before showing tooltip
@@ -57,7 +58,7 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [isHovered]);
+  }, [isHovered, isTooltipHovered]);
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -179,7 +180,8 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
             'bg-white text-gray-900',
             'animate-in fade-in slide-in-from-bottom-2 duration-200'
           )}
-          style={{ pointerEvents: 'none' }}
+          onMouseEnter={() => setIsTooltipHovered(true)}
+          onMouseLeave={() => setIsTooltipHovered(false)}
         >
           {/* Tooltip Arrow */}
           <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1">
@@ -226,25 +228,39 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
 
           {/* Action Hints */}
           <div className="flex items-center justify-between pt-2 border-t border-gray-200">
-            <span className="text-xs text-gray-500">
-              Click to view details
-            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleClick(e);
+              }}
+              className="text-xs text-orange-600 hover:text-orange-700 font-medium underline"
+            >
+              View details
+            </button>
             {isDocument && source.documentId && (
               <button
-                onClick={handleDocumentClick}
-                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDocumentClick(e);
+                }}
+                className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
                 title="Download document"
               >
                 <Download className="w-3 h-3" />
+                Download
               </button>
             )}
             {isWeb && source.url && (
               <button
-                onClick={handleWebClick}
-                className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-700"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleWebClick(e);
+                }}
+                className="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-700 font-medium"
                 title="Open in new tab"
               >
                 <ExternalLink className="w-3 h-3" />
+                Open
               </button>
             )}
           </div>
