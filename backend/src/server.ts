@@ -89,7 +89,10 @@ const corsOptions = {
     ].filter(Boolean);
 
     const normalizedOrigin = origin.replace(/\/+$/, '');
-    if (allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes(origin) || config.NODE_ENV === 'development') {
+    const exactMatch = allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes(origin);
+    // Allow Cloudflare Pages preview URLs: https://<deployment-id>.queryai-frontend.pages.dev
+    const isCloudflarePreview = /^https:\/\/[a-z0-9-]+\.queryai-frontend\.pages\.dev$/i.test(normalizedOrigin);
+    if (exactMatch || isCloudflarePreview || config.NODE_ENV === 'development') {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
