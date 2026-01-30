@@ -13,11 +13,26 @@ If your build is failing after updating the build command, follow these steps:
 
 Common error patterns to look for:
 - `npm ERR!` - Dependency installation issues
+- `npm error Invalid Version:` - Lockfile/install issue (see **Fix 0** below)
 - `Type error:` - TypeScript compilation errors
 - `Error:` - Build process errors
 - `Command failed with exit code 1` - General build failure
 
 ## Step 2: Common Fixes
+
+### Fix 0: "npm error Invalid Version:" (install fails before build)
+
+Cloudflare runs `npm clean-install` (npm ci) by default. With lockfileVersion 3, npm ci can fail with **Invalid Version:** due to a known npm bug when comparing versions. Use **npm install** instead:
+
+1. In Cloudflare Dashboard → Your project → **Settings** → **Builds & deployments** → **Environment variables**
+2. Add variable: **Name** `SKIP_DEPENDENCY_INSTALL`, **Value** `1`
+3. Set **Build command** to:
+   ```
+   npm install && npm run build:cloudflare
+   ```
+4. Save and redeploy.
+
+This skips Cloudflare’s automatic `npm ci` and runs `npm install` inside your build command, which avoids the Invalid Version error.
 
 ### Fix 1: Install Dependencies First
 
@@ -166,7 +181,9 @@ Not:
 
 ## 📋 Quick Fix Summary
 
-**Most likely fixes (try in order):**
+**If you see `npm error Invalid Version:`** → Use **Fix 0** above (SKIP_DEPENDENCY_INSTALL + `npm install && npm run build:cloudflare`).
+
+**Otherwise, try in order:**
 
 1. **Change build command to:**
    ```
