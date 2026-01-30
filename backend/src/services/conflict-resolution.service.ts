@@ -209,18 +209,20 @@ export class ConflictResolutionService {
       formatted += 'Conflict Examples:\n';
       for (const [key, example] of Object.entries(cr.examples)) {
         if (key.startsWith('conflictExample')) {
-          formatted += `Scenario: ${example.scenario}\n`;
-          formatted += `Conflict: ${example.conflict}\n`;
-          formatted += `Resolution: ${example.resolution}\n\n`;
+          const ex = example as ConflictExample;
+          formatted += `Scenario: ${ex.scenario}\n`;
+          formatted += `Conflict: ${ex.conflict}\n`;
+          formatted += `Resolution: ${ex.resolution}\n\n`;
         }
       }
 
       formatted += 'Uncertainty Examples:\n';
       for (const [key, example] of Object.entries(cr.examples)) {
         if (key.startsWith('uncertaintyExample')) {
-          formatted += `Scenario: ${example.scenario}\n`;
-          formatted += `Situation: ${example.situation}\n`;
-          formatted += `Acknowledgment: ${example.acknowledgment}\n\n`;
+          const ex = example as UncertaintyExample;
+          formatted += `Scenario: ${ex.scenario}\n`;
+          formatted += `Situation: ${ex.situation}\n`;
+          formatted += `Acknowledgment: ${ex.acknowledgment}\n\n`;
         }
       }
 

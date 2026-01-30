@@ -20,7 +20,7 @@ export interface AuthResponse {
     id: string;
     email: string;
     fullName?: string;
-    subscriptionTier?: 'free' | 'premium' | 'pro';
+    subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
   };
   session: {
     accessToken: string;

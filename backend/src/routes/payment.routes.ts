@@ -1,17 +1,54 @@
 import { Router, Request, Response } from 'express';
-import { PesapalService } from '../services/pesapal.service';
+import * as PayPalService from '../services/paypal.service';
 import { DatabaseService } from '../services/database.service';
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
 import config from '../config/env';
+import type { Database } from '../types/database';
 
 const router = Router();
 
+function getBaseUrl(): string {
+  let baseUrl = config.API_BASE_URL;
+  if (!baseUrl || baseUrl.includes('localhost')) {
+    if (config.NODE_ENV === 'production') {
+      baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+        ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+        : 'https://queryai-production.up.railway.app';
+    } else {
+      baseUrl = 'http://localhost:3001';
+    }
+  }
+  return baseUrl.replace(/\/$/, '');
+}
+
+function getFrontendUrl(): string {
+  const isProduction =
+    config.NODE_ENV === 'production' ||
+    process.env.RAILWAY_ENVIRONMENT === 'production' ||
+    !!process.env.RAILWAY_PUBLIC_DOMAIN;
+  let frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL;
+  if (!frontendUrl || frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1')) {
+    frontendUrl = isProduction ? 'https://queryai-frontend.pages.dev' : 'http://localhost:3000';
+  }
+  return frontendUrl;
+}
+
+function mapPayPalOrderStatusToPaymentStatus(
+  status: string
+): 'pending' | 'completed' | 'failed' | 'cancelled' {
+  const s = (status || '').toUpperCase();
+  if (s === 'COMPLETED' || s === 'APPROVED') return 'completed';
+  if (s === 'VOIDED' || s === 'CANCELLED') return 'cancelled';
+  if (s === 'DECLINED' || s === 'FAILED') return 'failed';
+  return 'pending';
+}
+
 /**
  * POST /api/payment/initiate
- * Initiate a payment for subscription upgrade
+ * Initiate a PayPal payment for subscription upgrade (account or card via PayPal)
  */
 router.post(
   '/initiate',
@@ -22,144 +59,83 @@ router.post(
       throw new ValidationError('User not authenticated');
     }
 
-    const { tier, firstName, lastName, email, phoneNumber } = req.body;
+    const { tier, firstName, lastName, email, recurring = false, billing_period: bp } = req.body;
 
-    if (!tier || !['premium', 'pro'].includes(tier)) {
-      throw new ValidationError('Invalid tier. Must be "premium" or "pro"');
+    if (!tier || !['starter', 'premium', 'pro'].includes(tier)) {
+      if (tier === 'enterprise') {
+        throw new ValidationError('Enterprise is contact-for-pricing. Use the Enterprise contact form to reach sales.');
+      }
+      throw new ValidationError('Invalid tier. Must be "starter", "premium", or "pro"');
     }
 
     if (!firstName || !lastName || !email) {
       throw new ValidationError('Missing required fields: firstName, lastName, email');
     }
 
-    // Get user profile for additional info
+    const billingPeriod = (bp === 'annual' ? 'annual' : 'monthly') as 'monthly' | 'annual';
+
     const userProfile = await DatabaseService.getUserProfile(userId);
     if (!userProfile) {
       throw new ValidationError('User profile not found');
     }
 
-    // Get subscription to link payment
     const subscription = await DatabaseService.getUserSubscription(userId);
 
-    // Get currency from request (default to UGX)
-    const currency = req.body.currency || 'UGX';
-    if (!['UGX', 'USD'].includes(currency)) {
-      throw new ValidationError('Invalid currency. Must be "UGX" or "USD"');
+    const currency = (req.body.currency || 'USD') as string;
+    if (!['USD', 'UGX'].includes(currency)) {
+      throw new ValidationError('Invalid currency. Must be "USD" or "UGX"');
     }
 
-    // Tier pricing in UGX and USD
-    const tierPricing: Record<'premium' | 'pro', Record<'UGX' | 'USD', number>> = {
-      premium: { UGX: 50000, USD: 15 },
-      pro: { UGX: 150000, USD: 45 },
-    };
-    const amount = tierPricing[tier as 'premium' | 'pro'][currency as 'UGX' | 'USD'];
+    const { getPricing } = await import('../constants/pricing');
+    const amount = getPricing(
+      tier as 'starter' | 'premium' | 'pro',
+      currency as 'UGX' | 'USD',
+      billingPeriod
+    );
 
-    // Build callback URLs - use production URL, not localhost
-    // In production, API_BASE_URL should be set to Railway URL
-    // Railway provides RAILWAY_PUBLIC_DOMAIN automatically
-    let baseUrl = config.API_BASE_URL;
-    if (!baseUrl || baseUrl.includes('localhost')) {
-      if (config.NODE_ENV === 'production') {
-        // Use Railway public domain if available, otherwise fallback
-        baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
-          ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-          : 'https://queryai-production.up.railway.app';
-      } else {
-        baseUrl = 'http://localhost:3001';
-      }
-    }
-    
-    // Ensure baseUrl doesn't have trailing slash
-    baseUrl = baseUrl.replace(/\/$/, '');
-    
-    const callbackUrl = `${baseUrl}/api/payment/callback`;
-    const cancellationUrl = `${baseUrl}/api/payment/cancel`;
-    
-    logger.info('Payment callback URLs configured', {
+    const baseUrl = getBaseUrl();
+    const returnUrl = `${baseUrl}/api/payment/callback`;
+    const cancelUrl = `${baseUrl}/api/payment/cancel`;
+
+    logger.info('PayPal payment URLs configured', {
       baseUrl,
-      callbackUrl,
-      cancellationUrl,
+      returnUrl,
+      cancelUrl,
+      recurring: !!recurring,
       nodeEnv: config.NODE_ENV,
     });
 
-    try {
-      // Submit order to Pesapal
-      const orderResponse = await PesapalService.submitOrderRequest({
-        userId,
-        tier,
-        amount,
-        currency: currency as 'UGX' | 'USD',
-        description: `QueryAI ${tier} subscription`,
-        callbackUrl,
-        cancellationUrl,
-        firstName,
-        lastName,
-        email: email || userProfile.email,
-        phoneNumber: phoneNumber || undefined,
+    if (recurring) {
+      // Recurring: PayPal Subscriptions (plan-based billing)
+      const subscriptionResponse = await PayPalService.createSubscription({
+        tier: tier as 'starter' | 'premium' | 'pro',
+        returnUrl,
+        cancelUrl,
+        customId: userId,
+        billing_period: billingPeriod,
       });
 
-      // Check if user wants recurring payment
-      const { recurring = false } = req.body;
-
-      // Create payment record
       const payment = await DatabaseService.createPayment({
         user_id: userId,
         subscription_id: subscription?.id,
-        pesapal_order_tracking_id: orderResponse.order_tracking_id,
-        pesapal_merchant_reference: orderResponse.merchant_reference,
+        payment_provider: 'paypal',
+        paypal_subscription_id: subscriptionResponse.subscriptionId,
         tier,
         amount,
         currency: currency as 'UGX' | 'USD',
         status: 'pending',
-        payment_description: `QueryAI ${tier} subscription${recurring ? ' (recurring)' : ''}`,
+        payment_description: `QueryAI ${tier} subscription (${billingPeriod}, recurring)`,
+        callback_data: { billing_period: billingPeriod },
       });
 
-      // If recurring payment requested, create recurring payment authorization
-      if (recurring && orderResponse.order_tracking_id) {
-        try {
-          const { EmailService } = await import('../services/email.service');
-          const recurringResult = await PesapalService.createRecurringPayment({
-            userId,
-            tier,
-            amount,
-            currency: currency as 'UGX' | 'USD',
-            firstName,
-            lastName,
-            email: email || userProfile.email,
-            phoneNumber: phoneNumber || undefined,
-            callbackUrl: `${baseUrl}/api/payment/callback`,
-          });
-
-          // Update payment with recurring payment ID
-          await DatabaseService.updatePayment(payment.id, {
-            recurring_payment_id: recurringResult.recurring_payment_id,
-          });
-
-          // Update subscription to enable auto-renew
-          if (subscription) {
-            await DatabaseService.updateSubscription(userId, {
-              auto_renew: true,
-            });
-          }
-
-          logger.info('Recurring payment authorization created', {
-            paymentId: payment.id,
-            recurringPaymentId: recurringResult.recurring_payment_id,
-          });
-        } catch (recurringError: any) {
-          logger.warn('Failed to create recurring payment, proceeding with one-time payment', recurringError);
-          // Continue with one-time payment if recurring fails
-        }
-      }
-
-      logger.info('Payment initiated', {
+      logger.info('PayPal recurring subscription initiated', {
         userId,
         tier,
         paymentId: payment.id,
-        orderTrackingId: orderResponse.order_tracking_id,
+        subscriptionId: subscriptionResponse.subscriptionId,
       });
 
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         data: {
           payment: {
@@ -168,453 +144,448 @@ router.post(
             amount: payment.amount,
             currency: payment.currency,
             status: payment.status,
+            billing_period: billingPeriod,
           },
-          redirect_url: orderResponse.redirect_url,
-          order_tracking_id: orderResponse.order_tracking_id,
+          redirect_url: subscriptionResponse.approvalUrl,
+          subscription_id: subscriptionResponse.subscriptionId,
+          recurring: true,
+          billing_period: billingPeriod,
         },
       });
-    } catch (error: any) {
-      logger.error('Failed to initiate payment:', error);
-      throw new ValidationError(`Failed to initiate payment: ${error.message}`);
     }
+
+    // One-time: PayPal Orders (capture after approval)
+    const orderResponse = await PayPalService.createPayment({
+      amount,
+      currency,
+      description: `QueryAI ${tier} subscription (${billingPeriod})`,
+      custom_id: userId,
+      returnUrl,
+      cancelUrl,
+    });
+
+    const payment = await DatabaseService.createPayment({
+      user_id: userId,
+      subscription_id: subscription?.id,
+      payment_provider: 'paypal',
+      paypal_order_id: orderResponse.orderId,
+      tier,
+      amount,
+      currency: currency as 'UGX' | 'USD',
+      status: 'pending',
+      payment_description: `QueryAI ${tier} subscription (${billingPeriod})`,
+    });
+
+    logger.info('PayPal payment initiated', {
+      userId,
+      tier,
+      paymentId: payment.id,
+      orderId: orderResponse.orderId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        payment: {
+          id: payment.id,
+          tier: payment.tier,
+          amount: payment.amount,
+          currency: payment.currency,
+          status: payment.status,
+          billing_period: billingPeriod,
+        },
+        redirect_url: orderResponse.approvalUrl,
+        order_id: orderResponse.orderId,
+        billing_period: billingPeriod,
+      },
+    });
   })
 );
 
 /**
  * GET /api/payment/callback
- * Handle payment callback from Pesapal (redirect after payment)
- * Pesapal sends: pesapal_transaction_tracking_id, pesapal_merchant_reference, pesapal_notification_type
+ * Handle PayPal redirect after user approves. Token = order ID (one-time) or subscription ID (recurring).
  */
 router.get(
   '/callback',
   asyncHandler(async (req: Request, res: Response) => {
-    // Pesapal sends query params with 'pesapal_' prefix or without
-    const orderTrackingId = (req.query.OrderTrackingId || 
-                             req.query.pesapal_transaction_tracking_id || 
-                             req.query.orderTrackingId) as string;
-    const merchantReference = (req.query.OrderMerchantReference || 
-                               req.query.pesapal_merchant_reference || 
-                               req.query.orderMerchantReference) as string;
-    const notificationType = (req.query.pesapal_notification_type || 
-                              req.query.OrderNotificationType) as string;
+    const token = req.query.token as string;
+    const frontendUrl = getFrontendUrl();
 
-    logger.info('Payment callback received', {
-      orderTrackingId,
-      merchantReference,
-      notificationType,
-      allQueryParams: req.query,
-    });
+    logger.info('PayPal callback received', { token: token ? 'present' : 'missing', query: req.query });
 
-    // Always use production frontend URL in production, never localhost
-    // Check multiple indicators of production environment
-    // Railway provides RAILWAY_PUBLIC_DOMAIN automatically in production
-    const isProduction = config.NODE_ENV === 'production' || 
-                        process.env.RAILWAY_ENVIRONMENT === 'production' ||
-                        !!process.env.RAILWAY_PUBLIC_DOMAIN; // Railway sets this automatically
-    
-    let frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL;
-    if (!frontendUrl || frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1')) {
-      if (isProduction) {
-        frontendUrl = 'https://queryai-frontend.pages.dev';
-      } else {
-        frontendUrl = 'http://localhost:3000';
-      }
-    }
-    
-    logger.info('Frontend URL for redirect', { 
-      frontendUrl, 
-      nodeEnv: config.NODE_ENV,
-      railwayEnv: process.env.RAILWAY_ENVIRONMENT,
-      hasRailwayDomain: !!process.env.RAILWAY_PUBLIC_DOMAIN,
-      isProduction,
-      configFrontendUrl: config.FRONTEND_URL,
-      envFrontendUrl: process.env.FRONTEND_URL,
-    });
-
-    if (!orderTrackingId && !merchantReference) {
-      logger.warn('Payment callback missing tracking ID and merchant reference');
+    if (!token) {
+      logger.warn('PayPal callback missing token');
       return res.redirect(`${frontendUrl}/dashboard?payment=error`);
     }
 
-    try {
-      let payment = null;
-      
-      // Find payment by tracking ID or merchant reference
-      if (orderTrackingId) {
-        payment = await DatabaseService.getPaymentByOrderTrackingId(orderTrackingId);
-      }
-      if (!payment && merchantReference) {
-        payment = await DatabaseService.getPaymentByMerchantReference(merchantReference);
-      }
+    let payment = await DatabaseService.getPaymentByPayPalOrderId(token);
+    if (!payment) {
+      payment = await DatabaseService.getPaymentByPayPalSubscriptionId(token);
+    }
+    if (!payment) {
+      logger.warn('Payment not found in callback', { token });
+      return res.redirect(`${frontendUrl}/dashboard?payment=error`);
+    }
 
-      if (!payment) {
-        logger.warn('Payment not found in callback', { orderTrackingId, merchantReference });
-        return res.redirect(`${frontendUrl}/dashboard?payment=error`);
-      }
+    const isRecurring = !!payment.paypal_subscription_id;
+    let paymentStatus: 'pending' | 'completed' | 'failed' | 'cancelled' = payment.status;
 
-      // Get latest payment status from Pesapal
-      let paymentStatus = payment.status;
-      let paymentStatusDescription = '';
-      
-      if (orderTrackingId) {
-        try {
-          const status = await PesapalService.getTransactionStatus(orderTrackingId);
-          paymentStatusDescription = status.payment_status || '';
-          paymentStatus = PesapalService['mapPesapalStatusToPaymentStatus'](paymentStatusDescription);
-          
-          // Update payment with latest status
+    if (isRecurring) {
+      // Recurring: user approved subscription; sync from PayPal and activate
+      try {
+        const subDetails = await PayPalService.getSubscription(token);
+        const status = (subDetails.status || '').toUpperCase();
+        if (status === 'ACTIVE' || status === 'APPROVAL_PENDING') {
+          paymentStatus = 'completed';
+          const periodStart = subDetails.start_time
+            ? new Date(subDetails.start_time)
+            : new Date();
+          const periodEnd = subDetails.next_billing_time
+            ? new Date(subDetails.next_billing_time)
+            : new Date(periodStart.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+          const storedBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
+          const billingPeriod = storedBillingPeriod === 'annual' ? 'annual' : 'monthly';
+          const currency = (payment.currency || 'USD') as 'UGX' | 'USD';
+          const { getAnnualDiscountPercent } = await import('../constants/pricing');
+          const annualDiscount = billingPeriod === 'annual'
+            ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro', currency)
+            : 0;
+
+          await DatabaseService.updatePayment(payment.id, {
+            status: 'completed',
+            callback_data: {
+              ...(typeof payment.callback_data === 'object' && payment.callback_data ? payment.callback_data : {}),
+              ...(subDetails as unknown as Record<string, unknown>),
+            } as Record<string, unknown>,
+            completed_at: new Date().toISOString(),
+          });
+
+          await DatabaseService.updateSubscription(payment.user_id, {
+            paypal_subscription_id: token,
+            tier: payment.tier,
+            current_period_start: periodStart.toISOString(),
+            current_period_end: periodEnd.toISOString(),
+            status: 'active',
+            auto_renew: true,
+            billing_period: billingPeriod,
+            annual_discount: annualDiscount,
+          });
+
+          const { SubscriptionService } = await import('../services/subscription.service');
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+
+          logger.info('PayPal subscription activated', {
+            paymentId: payment.id,
+            subscriptionId: token,
+            tier: payment.tier,
+          });
+        }
+      } catch (subError: unknown) {
+        logger.error('PayPal subscription sync failed', { paymentId: payment.id, token, error: subError });
+        paymentStatus = 'failed';
+        await DatabaseService.updatePayment(payment.id, {
+          status: 'failed',
+          callback_data: { error: (subError as Error).message },
+        });
+        return res.redirect(`${frontendUrl}/dashboard?payment=failed`);
+      }
+    } else {
+      // One-time: capture order
+      let captureId: string | undefined;
+      let callbackData: Record<string, unknown> = {};
+
+      try {
+        const result = await PayPalService.executePayment(token);
+        paymentStatus = 'completed';
+        captureId = result.captureId;
+        callbackData = {
+          captureId: result.captureId,
+          amount: result.amount,
+          currency: result.currency,
+          payerEmail: result.payerEmail,
+          payerName: result.payerName,
+        };
+
+        await DatabaseService.updatePayment(payment.id, {
+          status: 'completed',
+          paypal_payment_id: captureId,
+          callback_data: callbackData,
+          payment_method: result.payerEmail ? 'paypal' : undefined,
+          completed_at: new Date().toISOString(),
+        });
+
+        logger.info('PayPal payment captured', {
+          paymentId: payment.id,
+          orderId: token,
+          captureId,
+        });
+      } catch (captureError: unknown) {
+        logger.error('PayPal capture failed', { paymentId: payment.id, orderId: token, error: captureError });
+        const err = captureError as { statusCode?: number; message?: string };
+        if (err.statusCode === 422 || (err.message && err.message.includes('already captured'))) {
+          const details = await PayPalService.getPaymentDetails(token);
+          paymentStatus = mapPayPalOrderStatusToPaymentStatus(details.status);
           await DatabaseService.updatePayment(payment.id, {
             status: paymentStatus,
-            callback_data: status as any,
-            payment_method: status.payment_method || payment.payment_method,
-            completed_at: paymentStatus === 'completed' ? new Date().toISOString() : payment.completed_at,
+            paypal_payment_id: details.captureId,
+            callback_data: { ...details },
+            completed_at: paymentStatus === 'completed' ? new Date().toISOString() : undefined,
           });
-
-          logger.info('Payment status updated from Pesapal', {
-            paymentId: payment.id,
-            oldStatus: payment.status,
-            newStatus: paymentStatus,
-            pesapalStatus: paymentStatusDescription,
+        } else {
+          paymentStatus = 'failed';
+          await DatabaseService.updatePayment(payment.id, {
+            status: 'failed',
+            callback_data: { error: (captureError as Error).message },
           });
-        } catch (statusError: any) {
-          logger.error('Failed to get payment status from Pesapal:', statusError);
-          // Continue with existing payment status
+          return res.redirect(`${frontendUrl}/dashboard?payment=failed`);
         }
       }
+    }
 
-      // Get updated payment after status update
-      const updatedPayment = await DatabaseService.getPaymentById(payment.id);
-      if (!updatedPayment) {
-        logger.error('Payment not found after update', { paymentId: payment.id });
-        return res.redirect(`${frontendUrl}/dashboard?payment=error`);
-      }
-
-      // Handle based on payment status
-      if (paymentStatus === 'completed') {
-        // Update subscription
-        const { SubscriptionService } = await import('../services/subscription.service');
-        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
-        
-        // Send success email
-        try {
-          const { EmailService } = await import('../services/email.service');
-          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-          if (userProfile) {
-            await EmailService.sendPaymentSuccessEmail(
-              userProfile.email,
-              userProfile.full_name || userProfile.email,
-              updatedPayment
-            );
-            logger.info('Payment success email sent', { paymentId: payment.id, userId: payment.user_id });
-          }
-        } catch (emailError) {
-          logger.error('Failed to send payment success email:', emailError);
-          // Don't fail redirect if email fails
-        }
-
-        logger.info('Payment completed successfully', {
-          paymentId: payment.id,
-          userId: payment.user_id,
-          tier: payment.tier,
-        });
-
-        return res.redirect(`${frontendUrl}/dashboard?payment=success`);
-      } else if (paymentStatus === 'cancelled') {
-        // Send cancellation email
-        try {
-          const { EmailService } = await import('../services/email.service');
-          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-          if (userProfile) {
-            await EmailService.sendPaymentCancellationEmail(
-              userProfile.email,
-              userProfile.full_name || userProfile.email,
-              updatedPayment
-            );
-            logger.info('Payment cancellation email sent', { paymentId: payment.id, userId: payment.user_id });
-          }
-        } catch (emailError) {
-          logger.error('Failed to send payment cancellation email:', emailError);
-          // Don't fail redirect if email fails
-        }
-
-        logger.info('Payment cancelled', {
-          paymentId: payment.id,
-          userId: payment.user_id,
-        });
-
-        return res.redirect(`${frontendUrl}/dashboard?payment=cancelled`);
-      } else if (paymentStatus === 'failed') {
-        // Send failure email
-        try {
-          const { EmailService } = await import('../services/email.service');
-          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-          if (userProfile) {
-            await EmailService.sendPaymentFailureEmail(
-              userProfile.email,
-              userProfile.full_name || userProfile.email,
-              updatedPayment,
-              updatedPayment.retry_count || 0
-            );
-            logger.info('Payment failure email sent', { paymentId: payment.id, userId: payment.user_id });
-          }
-        } catch (emailError) {
-          logger.error('Failed to send payment failure email:', emailError);
-          // Don't fail redirect if email fails
-        }
-
-        return res.redirect(`${frontendUrl}/dashboard?payment=failed`);
-      } else {
-        // Pending or other status
-        logger.info('Payment still pending', {
-          paymentId: payment.id,
-          status: paymentStatus,
-        });
-        return res.redirect(`${frontendUrl}/dashboard?payment=pending`);
-      }
-    } catch (error: any) {
-      logger.error('Payment callback error:', error);
+    const updatedPayment = await DatabaseService.getPaymentById(payment.id);
+    if (!updatedPayment) {
       return res.redirect(`${frontendUrl}/dashboard?payment=error`);
     }
+
+    if (paymentStatus === 'completed') {
+      const { SubscriptionService } = await import('../services/subscription.service');
+      const subscriptionBefore = await DatabaseService.getUserSubscription(payment.user_id);
+      await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+      const subscriptionAfter = await DatabaseService.getUserSubscription(payment.user_id);
+
+      try {
+        const { EmailService } = await import('../services/email.service');
+        const { getTierOrder } = await import('../constants/pricing');
+        const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+        if (userProfile) {
+          await EmailService.sendPaymentSuccessEmail(
+            userProfile.email,
+            userProfile.full_name || userProfile.email,
+            updatedPayment
+          );
+          await EmailService.sendInvoiceEmail(
+            userProfile.email,
+            userProfile.full_name || userProfile.email,
+            updatedPayment
+          );
+          const oldTier = subscriptionBefore?.tier ?? 'free';
+          const newTier = payment.tier;
+          if (oldTier === 'free' && newTier !== 'free') {
+            await EmailService.sendWelcomeEmail(
+              userProfile.email,
+              userProfile.full_name || userProfile.email,
+              newTier
+            );
+          } else if (
+            getTierOrder(newTier as 'free' | 'starter' | 'premium' | 'pro') >
+            getTierOrder(oldTier as 'free' | 'starter' | 'premium' | 'pro')
+          ) {
+            const periodStart = subscriptionAfter?.current_period_start
+              ? new Date(subscriptionAfter.current_period_start)
+              : new Date();
+            const periodEnd = subscriptionAfter?.current_period_end
+              ? new Date(subscriptionAfter.current_period_end)
+              : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+            await EmailService.sendUpgradeConfirmationEmail(
+              userProfile.email,
+              userProfile.full_name || userProfile.email,
+              newTier,
+              periodStart,
+              periodEnd,
+              { proratedAmount: updatedPayment.amount, currency: updatedPayment.currency }
+            );
+          }
+        }
+      } catch (emailError) {
+        logger.error('Failed to send payment emails:', emailError);
+      }
+
+      return res.redirect(`${frontendUrl}/dashboard?payment=success`);
+    }
+
+    if (paymentStatus === 'failed') {
+      try {
+        const { EmailService } = await import('../services/email.service');
+        const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+        if (userProfile) {
+          await EmailService.sendPaymentFailureEmail(
+            userProfile.email,
+            userProfile.full_name || userProfile.email,
+            updatedPayment,
+            updatedPayment.retry_count || 0
+          );
+        }
+      } catch (emailError) {
+        logger.error('Failed to send payment failure email:', emailError);
+      }
+      return res.redirect(`${frontendUrl}/dashboard?payment=failed`);
+    }
+
+    return res.redirect(`${frontendUrl}/dashboard?payment=pending`);
   })
 );
 
 /**
  * GET /api/payment/cancel
- * Handle payment cancellation
+ * User cancelled on PayPal; redirect to frontend.
  */
 router.get(
   '/cancel',
   asyncHandler(async (req: Request, res: Response) => {
-    // Always use production frontend URL in production, never localhost
-    // Check multiple indicators of production environment
-    // Railway provides RAILWAY_PUBLIC_DOMAIN automatically in production
-    const isProduction = config.NODE_ENV === 'production' || 
-                        process.env.RAILWAY_ENVIRONMENT === 'production' ||
-                        !!process.env.RAILWAY_PUBLIC_DOMAIN; // Railway sets this automatically
-    
-    let frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL;
-    if (!frontendUrl || frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1')) {
-      if (isProduction) {
-        frontendUrl = 'https://queryai-frontend.pages.dev';
-      } else {
-        frontendUrl = 'http://localhost:3000';
+    const frontendUrl = getFrontendUrl();
+    const token = req.query.token as string;
+    if (token) {
+      let payment = await DatabaseService.getPaymentByPayPalOrderId(token);
+      if (!payment) {
+        payment = await DatabaseService.getPaymentByPayPalSubscriptionId(token);
       }
-    }
-    
-    logger.info('Payment cancellation route called', {
-      queryParams: req.query,
-      frontendUrl,
-      nodeEnv: config.NODE_ENV,
-      railwayEnv: process.env.RAILWAY_ENVIRONMENT,
-      hasRailwayDomain: !!process.env.RAILWAY_PUBLIC_DOMAIN,
-      isProduction,
-      configFrontendUrl: config.FRONTEND_URL,
-      envFrontendUrl: process.env.FRONTEND_URL,
-    });
-    
-    // Try to get payment info from query params if available
-    // Pesapal may send different parameter formats
-    const orderTrackingId = (req.query.OrderTrackingId || 
-                             req.query.pesapal_transaction_tracking_id || 
-                             req.query.orderTrackingId) as string;
-    const merchantReference = (req.query.OrderMerchantReference || 
-                              req.query.pesapal_merchant_reference || 
-                              req.query.orderMerchantReference) as string;
-    
-    // Send payment cancellation email notification if we have payment info
-    if (merchantReference || orderTrackingId) {
-      try {
-        logger.info('Looking up payment', {
-          orderTrackingId,
-          merchantReference,
-        });
-        
-        let payment = null;
-        if (merchantReference) {
-          payment = await DatabaseService.getPaymentByMerchantReference(merchantReference);
-          logger.info('Payment lookup by merchant reference', {
-            merchantReference,
-            found: !!payment,
-            paymentId: payment?.id,
-          });
-        } else if (orderTrackingId) {
-          payment = await DatabaseService.getPaymentByOrderTrackingId(orderTrackingId);
-          logger.info('Payment lookup by order tracking ID', {
-            orderTrackingId,
-            found: !!payment,
-            paymentId: payment?.id,
-          });
-        }
-        
-        if (!payment) {
-          logger.warn('Payment not found for cancellation', {
-            orderTrackingId,
-            merchantReference,
-          });
-        } else if (payment) {
-          // Check actual status from Pesapal if we have tracking ID
-          let actualStatus: 'pending' | 'completed' | 'failed' | 'cancelled' = 'cancelled';
-          if (orderTrackingId) {
-            try {
-              const status = await PesapalService.getTransactionStatus(orderTrackingId);
-              actualStatus = PesapalService['mapPesapalStatusToPaymentStatus'](status.payment_status);
-              logger.info('Payment status from Pesapal on cancel', {
-                paymentId: payment.id,
-                pesapalStatus: status.payment_status,
-                mappedStatus: actualStatus,
-              });
-            } catch (statusError) {
-              logger.warn('Failed to get payment status from Pesapal on cancel:', statusError);
-              // Default to cancelled if we can't check
+      if (payment) {
+        await DatabaseService.updatePayment(payment.id, { status: 'cancelled' });
+        try {
+          const { EmailService } = await import('../services/email.service');
+          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+          if (userProfile) {
+            const updated = await DatabaseService.getPaymentById(payment.id);
+            if (updated) {
+              await EmailService.sendPaymentCancellationEmail(
+                userProfile.email,
+                userProfile.full_name || userProfile.email,
+                updated
+              );
             }
           }
-          
-          // Update payment status
-          await DatabaseService.updatePayment(payment.id, {
-            status: actualStatus,
-          });
-          
-          logger.info('Payment status updated', {
-            paymentId: payment.id,
-            userId: payment.user_id,
-            status: actualStatus,
-          });
-          
-          // Send cancellation email
-          if (payment.user_id) {
-            try {
-              const { EmailService } = await import('../services/email.service');
-              const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-              if (userProfile) {
-                const updatedPayment = await DatabaseService.getPaymentById(payment.id);
-                if (updatedPayment) {
-                  const emailSent = await EmailService.sendPaymentCancellationEmail(
-                    userProfile.email,
-                    userProfile.full_name || userProfile.email,
-                    updatedPayment
-                  );
-                  logger.info('Payment cancellation email sent', {
-                    paymentId: payment.id,
-                    userEmail: userProfile.email,
-                    emailSent,
-                  });
-                } else {
-                  logger.warn('Updated payment not found after status update', {
-                    paymentId: payment.id,
-                  });
-                }
-              } else {
-                logger.warn('User profile not found for payment cancellation email', {
-                  paymentId: payment.id,
-                  userId: payment.user_id,
-                });
-              }
-            } catch (emailError: any) {
-              logger.error('Failed to send payment cancellation email', {
-                paymentId: payment.id,
-                userId: payment.user_id,
-                error: emailError.message,
-                stack: emailError.stack,
-              });
-              // Don't fail the redirect if email fails
-            }
-          } else {
-            logger.warn('Payment has no user_id, cannot send cancellation email', {
-              paymentId: payment.id,
-            });
-          }
-        } else {
-          logger.warn('Payment not found for cancellation', {
-            orderTrackingId,
-            merchantReference,
-          });
+        } catch (emailError) {
+          logger.error('Failed to send cancellation email:', emailError);
         }
-      } catch (error) {
-        logger.error('Failed to process payment cancellation:', error);
-        // Don't fail the redirect if processing fails
       }
-    } else {
-      logger.warn('Payment cancellation route called without tracking ID or merchant reference');
     }
-    
     return res.redirect(`${frontendUrl}/dashboard?payment=cancelled`);
   })
 );
 
 /**
- * GET /api/payment/webhook
- * Reject GET requests - webhooks must be POST
+ * GET /api/payment/webhook - reject GET
  */
 router.get(
   '/webhook',
-  asyncHandler(async (req: Request, res: Response) => {
-    logger.warn('Webhook called with GET method - webhooks must use POST', {
-      query: req.query,
-      url: req.url,
-    });
-    res.status(405).json({ 
-      success: false, 
-      message: 'Webhook endpoint only accepts POST requests' 
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.status(405).json({
+      success: false,
+      message: 'Webhook endpoint only accepts POST requests',
     });
   })
 );
 
 /**
  * POST /api/payment/webhook
- * Handle Pesapal webhook (IPN - Instant Payment Notification)
+ * Handle PayPal webhook (verify signature, process events)
  */
 router.post(
   '/webhook',
   asyncHandler(async (req: Request, res: Response) => {
-    try {
-      const webhookData = req.body;
+    const webhookEvent = req.body as Record<string, unknown>;
+    const eventType = webhookEvent.event_type as string | undefined;
+    const resource = webhookEvent.resource as Record<string, unknown> | undefined;
 
-      logger.info('Received Pesapal webhook', {
-        orderTrackingId: webhookData.OrderTrackingId,
-        merchantReference: webhookData.OrderMerchantReference,
-        notificationType: webhookData.OrderNotificationType,
-        paymentStatus: webhookData.PaymentStatusDescription,
-        body: req.body,
+    logger.info('PayPal webhook received', {
+      event_type: eventType,
+      id: webhookEvent.id,
+    });
+
+    const authAlgo = req.headers['paypal-auth-algo'] as string;
+    const certUrl = req.headers['paypal-cert-url'] as string;
+    const transmissionId = req.headers['paypal-transmission-id'] as string;
+    const transmissionSig = req.headers['paypal-transmission-sig'] as string;
+    const transmissionTime = req.headers['paypal-transmission-time'] as string;
+
+    if (authAlgo && certUrl && transmissionId && transmissionSig && transmissionTime) {
+      const isValid = await PayPalService.verifyWebhookSignature({
+        authAlgo,
+        certUrl,
+        transmissionId,
+        transmissionSig,
+        transmissionTime,
+        webhookId: config.PAYPAL_WEBHOOK_ID || '',
+        webhookEvent,
       });
-
-      // Verify webhook authenticity
-      const isValid = await PesapalService.verifyWebhookSignature(webhookData);
       if (!isValid) {
-        logger.warn('Webhook verification failed, rejecting webhook', {
-          orderTrackingId: webhookData.OrderTrackingId,
-          merchantReference: webhookData.OrderMerchantReference,
-        });
-        // Still return 200 to prevent Pesapal from retrying invalid webhooks
+        logger.warn('PayPal webhook verification failed');
         res.status(200).json({ success: false, message: 'Webhook verification failed' });
         return;
       }
+    } else {
+      logger.warn('PayPal webhook missing verification headers');
+    }
 
-      // Process webhook
-      const payment = await PesapalService.processWebhook(webhookData);
+    if (eventType === 'PAYMENT.CAPTURE.COMPLETED' && resource) {
+      const captureId = resource.id as string | undefined;
+      if (captureId) {
+        const { supabaseAdmin } = await import('../config/database');
+        const { data: payments } = await supabaseAdmin
+          .from('payments')
+          .select('*')
+          .eq('paypal_payment_id', captureId)
+          .limit(1);
+        const payment = payments?.[0] as Database.Payment | undefined;
+        if (payment && payment.status !== 'completed') {
+          await DatabaseService.updatePayment(payment.id, {
+            status: 'completed',
+            callback_data: resource,
+            completed_at: new Date().toISOString(),
+          });
+          const { SubscriptionService } = await import('../services/subscription.service');
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+          logger.info('Payment completed via webhook', { paymentId: payment.id, captureId });
+        }
+      }
+    }
 
-      if (payment) {
-        logger.info('Webhook processed successfully', {
-          paymentId: payment.id,
-          status: payment.status,
+    if (eventType === 'PAYMENT.SALE.COMPLETED' && resource) {
+      const billingAgreementId = resource.billing_agreement_id as string | undefined;
+      if (billingAgreementId) {
+        const { SubscriptionService } = await import('../services/subscription.service');
+        await SubscriptionService.handlePayPalSubscriptionRenewal(billingAgreementId, resource);
+        logger.info('PayPal subscription renewal processed via webhook', {
+          paypalSubscriptionId: billingAgreementId,
         });
       }
-
-      // Always return 200 to acknowledge receipt
-      res.status(200).json({ success: true, message: 'Webhook received' });
-    } catch (error: any) {
-      logger.error('Webhook processing error:', error);
-      // Still return 200 to prevent Pesapal from retrying
-      res.status(200).json({ success: false, error: error.message });
     }
+
+    if (
+      (eventType === 'BILLING.SUBSCRIPTION.CANCELLED' || eventType === 'BILLING.SUBSCRIPTION.SUSPENDED') &&
+      resource
+    ) {
+      const subscriptionId = resource.id as string | undefined;
+      if (subscriptionId) {
+        const { SubscriptionService } = await import('../services/subscription.service');
+        await SubscriptionService.handlePayPalSubscriptionCancelled(
+          subscriptionId,
+          `PayPal event: ${eventType}`
+        );
+        logger.info('PayPal subscription cancel/suspend processed via webhook', {
+          paypalSubscriptionId: subscriptionId,
+          eventType,
+        });
+      }
+    }
+
+    const result = PayPalService.processWebhook(eventType || '', resource || {});
+    if (!result.handled) {
+      logger.debug('PayPal webhook event not handled', { event_type: eventType });
+    }
+
+    res.status(200).json({ success: true, message: 'Webhook received' });
   })
 );
 
 /**
- * GET /api/payment/status/:orderTrackingId
- * Get payment status by order tracking ID
+ * GET /api/payment/status/:orderId
+ * Get payment status by PayPal order ID
  */
 router.get(
-  '/status/:orderTrackingId',
+  '/status/:orderId',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
@@ -622,62 +593,48 @@ router.get(
       throw new ValidationError('User not authenticated');
     }
 
-    const { orderTrackingId } = req.params;
-    const trackingId = Array.isArray(orderTrackingId) ? orderTrackingId[0] : orderTrackingId;
-
-    if (!trackingId) {
-      throw new ValidationError('Order tracking ID is required');
+    const orderId = Array.isArray(req.params.orderId) ? req.params.orderId[0] : req.params.orderId;
+    if (!orderId) {
+      throw new ValidationError('Order ID is required');
     }
 
-    // Get payment from database
-    const payment = await DatabaseService.getPaymentByOrderTrackingId(trackingId);
-
+    const payment = await DatabaseService.getPaymentByPayPalOrderId(orderId);
     if (!payment) {
       throw new ValidationError('Payment not found');
     }
-
-    // Verify payment belongs to user
     if (payment.user_id !== userId) {
       throw new ValidationError('Unauthorized');
     }
 
-    // Get latest status from Pesapal
     try {
-      const pesapalStatus = await PesapalService.getTransactionStatus(trackingId);
-      
-      // Update payment if status changed
-      const paymentStatus = PesapalService['mapPesapalStatusToPaymentStatus'](pesapalStatus.payment_status);
+      const details = await PayPalService.getPaymentDetails(orderId);
+      const paymentStatus = mapPayPalOrderStatusToPaymentStatus(details.status);
       if (payment.status !== paymentStatus) {
         await DatabaseService.updatePayment(payment.id, {
           status: paymentStatus,
-          callback_data: pesapalStatus as any,
+          callback_data: details as unknown as Record<string, unknown>,
+          paypal_payment_id: details.captureId,
+          completed_at: paymentStatus === 'completed' ? new Date().toISOString() : undefined,
         });
-
-        // If completed, update subscription
         if (paymentStatus === 'completed') {
           const { SubscriptionService } = await import('../services/subscription.service');
           await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
         }
       }
 
+      const updated = await DatabaseService.getPaymentById(payment.id);
       res.status(200).json({
         success: true,
         data: {
-          payment: {
-            ...payment,
-            status: paymentStatus,
-          },
-          pesapal_status: pesapalStatus,
+          payment: updated || payment,
+          paypal_status: details.status,
         },
       });
-    } catch (error: any) {
-      logger.error('Failed to get payment status:', error);
-      // Return payment from database even if Pesapal call fails
+    } catch (error) {
+      logger.error('Failed to get PayPal payment status:', error);
       res.status(200).json({
         success: true,
-        data: {
-          payment,
-        },
+        data: { payment },
       });
     }
   })
@@ -685,7 +642,6 @@ router.get(
 
 /**
  * GET /api/payment/history
- * Get user's payment history
  */
 router.get(
   '/history',
@@ -695,21 +651,17 @@ router.get(
     if (!userId) {
       throw new ValidationError('User not authenticated');
     }
-
     const payments = await DatabaseService.getUserPayments(userId);
-
     res.status(200).json({
       success: true,
-      data: {
-        payments,
-      },
+      data: { payments },
     });
   })
 );
 
 /**
  * POST /api/payment/refund
- * Process refund for a payment
+ * Process refund via PayPal (uses capture ID)
  */
 router.post(
   '/refund',
@@ -721,162 +673,87 @@ router.post(
     }
 
     const { paymentId, amount, reason } = req.body;
-
     if (!paymentId) {
       throw new ValidationError('Payment ID is required');
     }
 
-    // Get payment
     const payment = await DatabaseService.getPaymentById(paymentId);
     if (!payment) {
       throw new ValidationError('Payment not found');
     }
-
-    // Verify payment belongs to user
     if (payment.user_id !== userId) {
       throw new ValidationError('Unauthorized');
     }
-
-    // Only allow refunds for completed payments
     if (payment.status !== 'completed') {
       throw new ValidationError('Only completed payments can be refunded');
     }
+    if (!payment.paypal_payment_id) {
+      throw new ValidationError('Payment capture ID not found (PayPal)');
+    }
 
-    // Calculate refund amount (default to full amount)
-    const refundAmount = amount || payment.amount;
-
-    // Validate refund amount
+    const refundAmount = amount ?? payment.amount;
     if (refundAmount > payment.amount) {
       throw new ValidationError('Refund amount cannot exceed payment amount');
     }
-
-    if (payment.refund_amount && (refundAmount + (payment.refund_amount || 0)) > payment.amount) {
+    const totalRefunded = (payment.refund_amount || 0) + refundAmount;
+    if (totalRefunded > payment.amount) {
       throw new ValidationError('Total refund amount cannot exceed payment amount');
     }
 
+    const refundResult = await PayPalService.refundPayment({
+      captureId: payment.paypal_payment_id,
+      amount: refundAmount,
+      currency: payment.currency,
+      note: reason || 'Customer request',
+    });
+
+    const refund = await DatabaseService.createRefund({
+      payment_id: paymentId,
+      user_id: userId,
+      amount: refundAmount,
+      currency: payment.currency,
+      reason: reason,
+      paypal_refund_id: refundResult.refundId,
+      status: refundResult.status === 'COMPLETED' ? 'completed' : 'pending',
+    });
+
+    await DatabaseService.updatePayment(paymentId, {
+      refund_amount: totalRefunded,
+      refund_reason: reason,
+      refunded_at: refundResult.status === 'COMPLETED' ? new Date().toISOString() : undefined,
+    });
+
+    logger.info('Refund processed', {
+      paymentId,
+      refundId: refund?.id,
+      amount: refundAmount,
+      status: refundResult.status,
+    });
+
     try {
-      // Process refund through Pesapal
-      if (!payment.pesapal_order_tracking_id) {
-        throw new ValidationError('Payment tracking ID not found');
+      const { EmailService } = await import('../services/email.service');
+      const userProfile = await DatabaseService.getUserProfile(userId);
+      if (userProfile) {
+        await EmailService.sendRefundConfirmationEmail(
+          userProfile.email,
+          userProfile.full_name || userProfile.email,
+          refundAmount,
+          payment.currency,
+          { estimatedDays: 5 }
+        );
       }
-
-      const refundResult = await PesapalService.processRefund({
-        orderTrackingId: payment.pesapal_order_tracking_id,
-        amount: refundAmount,
-        currency: payment.currency,
-        reason: reason || 'Customer request',
-      });
-
-      // Create refund record
-      const refund = await DatabaseService.createRefund({
-        payment_id: paymentId,
-        user_id: userId,
-        amount: refundAmount,
-        currency: payment.currency,
-        reason: reason,
-        pesapal_refund_id: refundResult.refund_id,
-        status: refundResult.status === 'completed' ? 'completed' : 'pending',
-      });
-
-      // Update payment with refund information
-      const totalRefunded = (payment.refund_amount || 0) + refundAmount;
-      await DatabaseService.updatePayment(paymentId, {
-        refund_amount: totalRefunded,
-        refund_reason: reason,
-        refunded_at: refundResult.status === 'completed' ? new Date().toISOString() : undefined,
-      });
-
-      logger.info('Refund processed', {
-        paymentId,
-        refundId: refund?.id,
-        amount: refundAmount,
-        status: refundResult.status,
-      });
-
-      res.status(200).json({
-        success: true,
-        message: 'Refund processed successfully',
-        data: {
-          refund: refund,
-          refund_status: refundResult.status,
-        },
-      });
-    } catch (error: any) {
-      logger.error('Failed to process refund:', error);
-      throw new ValidationError(`Failed to process refund: ${error.message}`);
-    }
-  })
-);
-
-/**
- * GET /api/payment/ipn-list
- * Get list of registered IPN URLs
- */
-router.get(
-  '/ipn-list',
-  authenticate,
-  asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new ValidationError('User not authenticated');
+    } catch (emailError) {
+      logger.error('Failed to send refund confirmation email:', emailError);
     }
 
-    // Only allow admin users (for now, you can add admin check)
-    // For production, add proper admin role checking
-
-    try {
-      const ipnList = await PesapalService.getIPNList();
-
-      res.status(200).json({
-        success: true,
-        data: {
-          ipn_list: ipnList,
-        },
-      });
-    } catch (error: any) {
-      logger.error('Failed to get IPN list:', error);
-      throw new ValidationError(`Failed to get IPN list: ${error.message}`);
-    }
-  })
-);
-
-/**
- * DELETE /api/payment/ipn/:ipnId
- * Delete an IPN URL
- */
-router.delete(
-  '/ipn/:ipnId',
-  authenticate,
-  asyncHandler(async (req: Request, res: Response) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new ValidationError('User not authenticated');
-    }
-
-    // Only allow admin users (for now, you can add admin check)
-
-    const { ipnId } = req.params;
-    const id = Array.isArray(ipnId) ? ipnId[0] : ipnId;
-
-    if (!id) {
-      throw new ValidationError('IPN ID is required');
-    }
-
-    try {
-      const deleted = await PesapalService.deleteIPN(id);
-
-      if (deleted) {
-        res.status(200).json({
-          success: true,
-          message: 'IPN URL deleted successfully',
-        });
-      } else {
-        throw new ValidationError('Failed to delete IPN URL');
-      }
-    } catch (error: any) {
-      logger.error('Failed to delete IPN:', error);
-      throw new ValidationError(`Failed to delete IPN: ${error.message}`);
-    }
+    res.status(200).json({
+      success: true,
+      message: 'Refund processed successfully',
+      data: {
+        refund,
+        refund_status: refundResult.status,
+      },
+    });
   })
 );
 

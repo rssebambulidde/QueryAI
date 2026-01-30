@@ -126,6 +126,7 @@ export interface ABTestAnalysis {
       precision: boolean;
       recall: boolean;
       f1Score: boolean;
+      mrr: boolean;
       responseTime: boolean;
       answerQuality: boolean;
       citationAccuracy: boolean;
@@ -136,6 +137,7 @@ export interface ABTestAnalysis {
       precision?: number;
       recall?: number;
       f1Score?: number;
+      mrr?: number;
       responseTime?: number;
       answerQuality?: number;
       citationAccuracy?: number;
@@ -565,6 +567,7 @@ export class ABTestingService {
       precision: false,
       recall: false,
       f1Score: false,
+      mrr: false,
       responseTime: false,
       answerQuality: false,
       citationAccuracy: false,
@@ -577,6 +580,7 @@ export class ABTestingService {
         improvement: improvements,
         statisticalSignificance,
         pValues,
+        confidence: 0,
       };
     }
 
@@ -641,14 +645,20 @@ export class ABTestingService {
       });
 
       const pValue = this.calculateTTest(valuesA, valuesB);
-      pValues[key] = pValue;
-      statisticalSignificance[key] = pValue !== undefined && pValue < significanceLevel;
+      (pValues as any)[key] = pValue;
+      (statisticalSignificance as any)[key] = pValue !== undefined && pValue < significanceLevel;
     }
+
+    const pValArr = Object.values(pValues).filter((v): v is number => typeof v === 'number');
+    const confidence = pValArr.length > 0
+      ? Math.max(0, 1 - Math.max(...pValArr))
+      : 0;
 
     return {
       improvement: improvements,
       statisticalSignificance,
       pValues,
+      confidence,
     };
   }
 
@@ -850,6 +860,17 @@ export class ABTestingService {
     report += `| Metric | Variant A | Variant B | Improvement | Significant |\n`;
     report += `|--------|-----------|-----------|-------------|-------------|\n`;
 
+    const metricToAverageKey: Record<string, keyof typeof analysis.variantA.metrics> = {
+      precision: 'averagePrecision',
+      recall: 'averageRecall',
+      f1Score: 'averageF1Score',
+      mrr: 'averageMRR',
+      responseTime: 'averageResponseTime',
+      answerQuality: 'averageAnswerQuality',
+      citationAccuracy: 'averageCitationAccuracy',
+      relevanceScore: 'averageRelevanceScore',
+      userRating: 'averageUserRating',
+    };
     const metrics = [
       { key: 'precision', label: 'Precision' },
       { key: 'recall', label: 'Recall' },
@@ -864,12 +885,14 @@ export class ABTestingService {
 
     for (const metric of metrics) {
       const key = metric.key as keyof typeof analysis.comparison.improvement;
-      const valueA = analysis.variantA.metrics[key as keyof typeof analysis.variantA.metrics];
-      const valueB = analysis.variantB.metrics[key as keyof typeof analysis.variantB.metrics];
+      const avgKey = metricToAverageKey[key];
+      const valueA = avgKey ? analysis.variantA.metrics[avgKey] : undefined;
+      const valueB = avgKey ? analysis.variantB.metrics[avgKey] : undefined;
       const improvement = analysis.comparison.improvement[key];
-      const significant = analysis.comparison.statisticalSignificance[key];
-      const pValue = analysis.comparison.pValues[key];
+      const significant = (analysis.comparison.statisticalSignificance as any)[key];
+      const pValue = (analysis.comparison.pValues as any)[key];
 
+      if (valueA === undefined || valueB === undefined) continue;
       report += `| ${metric.label} | ${valueA.toFixed(3)} | ${valueB.toFixed(3)} | ${improvement > 0 ? '+' : ''}${improvement.toFixed(1)}% | ${significant ? '✅' : '❌'} ${pValue !== undefined ? `(p=${pValue.toFixed(3)})` : ''} |\n`;
     }
 

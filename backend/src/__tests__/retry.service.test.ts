@@ -17,363 +17,282 @@ describe('RetryService', () => {
     });
 
     it('should retry on failure and succeed', async () => {
-      jest.useFakeTimers();
       let callCount = 0;
+      const err = new Error('Temporary error');
+      (err as Error & { status?: number }).status = 500;
       const fn = jest.fn().mockImplementation(async () => {
         callCount++;
-        if (callCount < 2) {
-          throw new Error('Temporary error');
-        }
+        if (callCount < 2) throw err;
         return 'success';
       });
 
-      const promise = RetryService.execute(fn, {
+      const result = await RetryService.execute(fn, {
         maxRetries: 3,
-        initialDelay: 100,
+        initialDelay: 5,
+        maxDelay: 10,
+        jitter: false,
       });
-
-      // Fast-forward through retry delays
-      jest.advanceTimersByTime(200);
-
-      const result = await promise;
 
       expect(result.result).toBe('success');
       expect(result.attempts).toBe(2);
       expect(fn).toHaveBeenCalledTimes(2);
-      
-      jest.useRealTimers();
-    });
+    }, 10000);
 
     it('should exhaust retries and throw error', async () => {
-      jest.useFakeTimers();
-      const fn = jest.fn().mockRejectedValue(new Error('Persistent error'));
+      const err = new Error('Persistent error');
+      (err as Error & { status?: number }).status = 500;
+      const fn = jest.fn().mockRejectedValue(err);
 
-      const promise = RetryService.execute(fn, {
-        maxRetries: 2,
-        initialDelay: 100,
-      });
-
-      // Fast-forward through retry delays
-      jest.advanceTimersByTime(500);
-
-      await expect(promise).rejects.toThrow('Persistent error');
+      await expect(
+        RetryService.execute(fn, {
+          maxRetries: 2,
+          initialDelay: 5,
+          maxDelay: 10,
+          jitter: false,
+        })
+      ).rejects.toThrow('Persistent error');
       expect(fn).toHaveBeenCalledTimes(3); // Initial + 2 retries
-
-      jest.useRealTimers();
-    });
+    }, 10000);
 
     it('should use exponential backoff', async () => {
-      jest.useFakeTimers();
       const delays: number[] = [];
-      let lastTime = Date.now();
-
-      const fn = jest.fn().mockRejectedValue(new Error('Error'));
-
-      const onRetry = jest.fn((error, attempt, delay) => {
+      const err = new Error('Error');
+      (err as Error & { status?: number }).status = 500;
+      const fn = jest.fn().mockRejectedValue(err);
+      const onRetry = jest.fn((_error, _attempt, delay) => {
         delays.push(delay);
       });
 
-      const promise = RetryService.execute(fn, {
-        maxRetries: 3,
-        initialDelay: 100,
-        multiplier: 2,
-        onRetry,
-      });
-
-      // Fast-forward through all retries
-      jest.advanceTimersByTime(1000);
-
       try {
-        await promise;
-      } catch (e) {
+        await RetryService.execute(fn, {
+          maxRetries: 3,
+          initialDelay: 10,
+          multiplier: 2,
+          maxDelay: 100,
+          jitter: false,
+          onRetry,
+        });
+      } catch {
         // Expected
       }
 
-      // Delays should increase exponentially: 100, 200, 400
       expect(delays.length).toBeGreaterThan(0);
       expect(onRetry).toHaveBeenCalled();
-
-      jest.useRealTimers();
-    });
+    }, 10000);
 
     it('should respect maxDelay', async () => {
-      jest.useFakeTimers();
       const delays: number[] = [];
-
-      const fn = jest.fn().mockRejectedValue(new Error('Error'));
-
-      const onRetry = jest.fn((error, attempt, delay) => {
+      const err = new Error('Error');
+      (err as Error & { status?: number }).status = 500;
+      const fn = jest.fn().mockRejectedValue(err);
+      const onRetry = jest.fn((_error, _attempt, delay) => {
         delays.push(delay);
       });
 
-      const promise = RetryService.execute(fn, {
-        maxRetries: 5,
-        initialDelay: 1000,
-        multiplier: 2,
-        maxDelay: 2000,
-        onRetry,
-      });
-
-      // Fast-forward through all retries
-      jest.advanceTimersByTime(10000);
-
       try {
-        await promise;
-      } catch (e) {
+        await RetryService.execute(fn, {
+          maxRetries: 5,
+          initialDelay: 100,
+          multiplier: 2,
+          maxDelay: 200,
+          jitter: false,
+          onRetry,
+        });
+      } catch {
         // Expected
       }
 
-      // All delays should be capped at maxDelay
-      delays.forEach(delay => {
-        expect(delay).toBeLessThanOrEqual(2000);
-      });
-
-      jest.useRealTimers();
-    });
+      delays.forEach((d) => expect(d).toBeLessThanOrEqual(200));
+    }, 15000);
 
     it('should not retry non-retryable errors', async () => {
       const error = new Error('Validation error');
-      (error as any).status = 400; // Not retryable
+      (error as Error & { status?: number }).status = 400;
 
       const fn = jest.fn().mockRejectedValue(error);
 
       await expect(RetryService.execute(fn)).rejects.toThrow('Validation error');
-      expect(fn).toHaveBeenCalledTimes(1); // No retries
+      expect(fn).toHaveBeenCalledTimes(1);
     });
 
     it('should retry on rate limit errors', async () => {
-      jest.useFakeTimers();
       let callCount = 0;
       const error = new Error('Rate limit');
-      (error as any).status = 429;
-
+      (error as Error & { status?: number }).status = 429;
       const fn = jest.fn().mockImplementation(async () => {
         callCount++;
-        if (callCount < 2) {
-          throw error;
-        }
+        if (callCount < 2) throw error;
         return 'success';
       });
 
-      const promise = RetryService.execute(fn, {
+      const result = await RetryService.execute(fn, {
         maxRetries: 3,
-        initialDelay: 100,
+        initialDelay: 5,
+        maxDelay: 10,
+        jitter: false,
       });
-
-      jest.advanceTimersByTime(200);
-
-      const result = await promise;
       expect(result.result).toBe('success');
       expect(fn).toHaveBeenCalledTimes(2);
-
-      jest.useRealTimers();
-    });
+    }, 10000);
 
     it('should retry on server errors', async () => {
-      jest.useFakeTimers();
       let callCount = 0;
       const error = new Error('Server error');
-      (error as any).status = 500;
-
+      (error as Error & { status?: number }).status = 500;
       const fn = jest.fn().mockImplementation(async () => {
         callCount++;
-        if (callCount < 2) {
-          throw error;
-        }
+        if (callCount < 2) throw error;
         return 'success';
       });
 
-      const promise = RetryService.execute(fn, {
+      const result = await RetryService.execute(fn, {
         maxRetries: 3,
-        initialDelay: 100,
+        initialDelay: 5,
+        maxDelay: 10,
+        jitter: false,
       });
-
-      jest.advanceTimersByTime(200);
-
-      const result = await promise;
       expect(result.result).toBe('success');
-
-      jest.useRealTimers();
-    });
+    }, 10000);
 
     it('should retry on network errors', async () => {
-      jest.useFakeTimers();
       let callCount = 0;
       const error = new Error('Connection error');
-      (error as any).code = 'ECONNRESET';
-
+      (error as Error & { code?: string }).code = 'ECONNRESET';
       const fn = jest.fn().mockImplementation(async () => {
         callCount++;
-        if (callCount < 2) {
-          throw error;
-        }
+        if (callCount < 2) throw error;
         return 'success';
       });
 
-      const promise = RetryService.execute(fn, {
+      const result = await RetryService.execute(fn, {
         maxRetries: 3,
-        initialDelay: 100,
+        initialDelay: 5,
+        maxDelay: 10,
+        jitter: false,
       });
-
-      jest.advanceTimersByTime(200);
-
-      const result = await promise;
       expect(result.result).toBe('success');
-
-      jest.useRealTimers();
-    });
+    }, 10000);
 
     it('should call onRetry callback', async () => {
-      jest.useFakeTimers();
       const onRetry = jest.fn();
-      const fn = jest.fn().mockRejectedValue(new Error('Error'));
-
-      const promise = RetryService.execute(fn, {
-        maxRetries: 2,
-        initialDelay: 100,
-        onRetry,
-      });
-
-      jest.advanceTimersByTime(500);
+      const err = new Error('Error');
+      (err as Error & { status?: number }).status = 500;
+      const fn = jest.fn().mockRejectedValue(err);
 
       try {
-        await promise;
-      } catch (e) {
+        await RetryService.execute(fn, {
+          maxRetries: 2,
+          initialDelay: 5,
+          maxDelay: 10,
+          jitter: false,
+          onRetry,
+        });
+      } catch {
         // Expected
       }
 
       expect(onRetry).toHaveBeenCalled();
-
-      jest.useRealTimers();
-    });
+    }, 10000);
 
     it('should handle jitter', async () => {
-      jest.useFakeTimers();
       const delays: number[] = [];
-
-      const fn = jest.fn().mockRejectedValue(new Error('Error'));
-
-      const onRetry = jest.fn((error, attempt, delay) => {
+      const err = new Error('Error');
+      (err as Error & { status?: number }).status = 500;
+      const fn = jest.fn().mockRejectedValue(err);
+      const onRetry = jest.fn((_error, _attempt, delay) => {
         delays.push(delay);
       });
 
-      const promise = RetryService.execute(fn, {
-        maxRetries: 2,
-        initialDelay: 1000,
-        jitter: true,
-        onRetry,
-      });
-
-      jest.advanceTimersByTime(5000);
-
       try {
-        await promise;
-      } catch (e) {
+        await RetryService.execute(fn, {
+          maxRetries: 2,
+          initialDelay: 10,
+          maxDelay: 50,
+          jitter: true,
+          onRetry,
+        });
+      } catch {
         // Expected
       }
 
-      // With jitter, delays should have some variation
       expect(delays.length).toBeGreaterThan(0);
-
-      jest.useRealTimers();
-    });
+    }, 10000);
 
     it('should calculate totalTime correctly', async () => {
-      jest.useFakeTimers();
       const fn = jest.fn().mockResolvedValue('success');
-
-      const startTime = Date.now();
-      const promise = RetryService.execute(fn);
-      jest.advanceTimersByTime(100);
-      const result = await promise;
-
+      const result = await RetryService.execute(fn);
       expect(result.totalTime).toBeGreaterThanOrEqual(0);
-
-      jest.useRealTimers();
     });
   });
 
   describe('getStats', () => {
     it('should return retry statistics', async () => {
-      jest.useFakeTimers();
       let callCount = 0;
+      const err = new Error('Error');
+      (err as Error & { status?: number }).status = 500;
       const fn = jest.fn().mockImplementation(async () => {
         callCount++;
-        if (callCount < 2) {
-          throw new Error('Error');
-        }
+        if (callCount < 2) throw err;
         return 'success';
       });
 
-      const promise = RetryService.execute(fn, {
+      await RetryService.execute(fn, {
         maxRetries: 3,
-        initialDelay: 100,
+        initialDelay: 5,
+        maxDelay: 10,
+        jitter: false,
       });
-
-      jest.advanceTimersByTime(200);
-      await promise;
 
       const stats = RetryService.getStats();
       expect(stats.totalAttempts).toBeGreaterThan(0);
       expect(stats.successfulRetries).toBeGreaterThan(0);
-
-      jest.useRealTimers();
-    });
+    }, 10000);
 
     it('should track failed retries', async () => {
-      jest.useFakeTimers();
-      const fn = jest.fn().mockRejectedValue(new Error('Persistent error'));
-
-      const promise = RetryService.execute(fn, {
-        maxRetries: 2,
-        initialDelay: 100,
-      });
-
-      jest.advanceTimersByTime(500);
+      const err = new Error('Persistent error');
+      (err as Error & { status?: number }).status = 500;
+      const fn = jest.fn().mockRejectedValue(err);
 
       try {
-        await promise;
-      } catch (e) {
+        await RetryService.execute(fn, {
+          maxRetries: 2,
+          initialDelay: 5,
+          maxDelay: 10,
+          jitter: false,
+        });
+      } catch {
         // Expected
       }
 
       const stats = RetryService.getStats();
       expect(stats.failedRetries).toBeGreaterThan(0);
-
-      jest.useRealTimers();
-    });
+    }, 10000);
 
     it('should track retries by error type', async () => {
-      jest.useFakeTimers();
-      const fn = jest.fn().mockRejectedValue(new Error('Error'));
-
-      const promise = RetryService.execute(fn, {
-        maxRetries: 1,
-        initialDelay: 100,
-      });
-
-      jest.advanceTimersByTime(300);
+      const err = new Error('Error');
+      (err as Error & { status?: number }).status = 500;
+      const fn = jest.fn().mockRejectedValue(err);
 
       try {
-        await promise;
-      } catch (e) {
+        await RetryService.execute(fn, {
+          maxRetries: 1,
+          initialDelay: 5,
+          maxDelay: 10,
+          jitter: false,
+        });
+      } catch {
         // Expected
       }
 
       const stats = RetryService.getStats();
       expect(stats.retriesByError).toBeDefined();
-
-      jest.useRealTimers();
-    });
+    }, 10000);
   });
 
   describe('resetStats', () => {
     it('should reset all statistics', async () => {
-      jest.useFakeTimers();
       const fn = jest.fn().mockResolvedValue('success');
-
       await RetryService.execute(fn);
-      jest.advanceTimersByTime(100);
 
       let stats = RetryService.getStats();
       expect(stats.totalAttempts).toBeGreaterThan(0);
@@ -384,27 +303,25 @@ describe('RetryService', () => {
       expect(stats.totalAttempts).toBe(0);
       expect(stats.successfulRetries).toBe(0);
       expect(stats.failedRetries).toBe(0);
-
-      jest.useRealTimers();
     });
   });
 
   describe('isRetryableError', () => {
     it('should identify retryable errors', () => {
       const error = new Error('Rate limit');
-      (error as any).status = 429;
+      (error as Error & { status?: number }).status = 429;
       expect(RetryService.isRetryableError(error)).toBe(true);
     });
 
     it('should identify non-retryable errors', () => {
       const error = new Error('Validation error');
-      (error as any).status = 400;
+      (error as Error & { status?: number }).status = 400;
       expect(RetryService.isRetryableError(error)).toBe(false);
     });
 
     it('should check error codes', () => {
       const error = new Error('Connection error');
-      (error as any).code = 'ECONNRESET';
+      (error as Error & { code?: string }).code = 'ECONNRESET';
       expect(RetryService.isRetryableError(error)).toBe(true);
     });
 
@@ -415,7 +332,7 @@ describe('RetryService', () => {
 
     it('should check OpenAI error types', () => {
       const error = new Error('Error');
-      (error as any).type = 'rate_limit_error';
+      (error as Error & { type?: string }).type = 'rate_limit_error';
       expect(RetryService.isRetryableError(error)).toBe(true);
     });
   });

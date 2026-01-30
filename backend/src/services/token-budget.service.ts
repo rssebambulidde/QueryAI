@@ -4,7 +4,7 @@
  * Ensures no context overflow by managing token distribution
  */
 
-import { TokenCountService } from './token-count.service';
+import { TokenCountService, type EncodingType } from './token-count.service';
 import logger from '../config/logger';
 import { RAGContext, DocumentContext } from './rag.service';
 
@@ -423,13 +423,12 @@ export class TokenBudgetService {
   private static truncateToTokens(
     text: string,
     maxTokens: number,
-    encodingType: string
+    encodingType: EncodingType
   ): string {
     if (maxTokens <= 0) {
       return '';
     }
     
-    const encodingType = TokenCountService.getEncodingForModel('gpt-3.5-turbo');
     const tokens = TokenCountService.countTokens(text, encodingType);
     
     if (tokens <= maxTokens) {

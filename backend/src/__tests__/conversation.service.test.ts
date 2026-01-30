@@ -82,7 +82,7 @@ describe('ConversationService', () => {
             single: jest.fn().mockResolvedValue({
               data: mockConversation,
               error: null,
-            }),
+            } as any),
           })),
         })),
       });
@@ -105,7 +105,7 @@ describe('ConversationService', () => {
             single: jest.fn().mockResolvedValue({
               data: { ...mockConversation, title: 'New Conversation' },
               error: null,
-            }),
+            } as any),
           })),
         })),
       });
@@ -127,7 +127,7 @@ describe('ConversationService', () => {
             single: jest.fn().mockResolvedValue({
               data: { ...mockConversation, topic_id: mockTopicId },
               error: null,
-            }),
+            } as any),
           })),
         })),
       });
@@ -158,7 +158,7 @@ describe('ConversationService', () => {
             single: jest.fn().mockResolvedValue({
               data: null,
               error: { message: 'Database error' },
-            }),
+            } as any),
           })),
         })),
       });
@@ -175,7 +175,7 @@ describe('ConversationService', () => {
             single: jest.fn().mockResolvedValue({
               data: mockConversation,
               error: null,
-            }),
+            } as any),
           })),
         })),
       });
@@ -196,7 +196,7 @@ describe('ConversationService', () => {
             single: jest.fn().mockResolvedValue({
               data: null,
               error: { code: 'PGRST116' },
-            }),
+            } as any),
           })),
         })),
       });
@@ -216,10 +216,10 @@ describe('ConversationService', () => {
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
             order: jest.fn(() => ({
-              desc: jest.fn().mockResolvedValue({
+              range: jest.fn().mockResolvedValue({
                 data: [mockConversation],
                 error: null,
-              }),
+              } as any),
             })),
           })),
         })),
@@ -231,17 +231,15 @@ describe('ConversationService', () => {
       expect(Array.isArray(conversations)).toBe(true);
     });
 
-    it('should filter by topic_id when provided', async () => {
+    it('should accept options (limit, offset)', async () => {
       (supabaseAdmin.from as any).mockReturnValueOnce({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
-            eq: jest.fn(() => ({
-              order: jest.fn(() => ({
-                desc: jest.fn().mockResolvedValue({
-                  data: [mockConversation],
-                  error: null,
-                }),
-              })),
+            order: jest.fn(() => ({
+              range: jest.fn().mockResolvedValue({
+                data: [mockConversation],
+                error: null,
+              } as any),
             })),
           })),
         })),
@@ -249,7 +247,7 @@ describe('ConversationService', () => {
 
       const conversations = await ConversationService.getUserConversations(
         mockUserId,
-        mockTopicId
+        { limit: 50, offset: 0 }
       );
 
       expect(conversations).toBeDefined();
@@ -269,7 +267,7 @@ describe('ConversationService', () => {
               single: jest.fn().mockResolvedValue({
                 data: mockConversation,
                 error: null,
-              }),
+              } as any),
             })),
           })),
         })
@@ -280,7 +278,7 @@ describe('ConversationService', () => {
                 single: jest.fn().mockResolvedValue({
                   data: { ...mockConversation, ...updates },
                   error: null,
-                }),
+                } as any),
               })),
             })),
           })),
@@ -303,7 +301,7 @@ describe('ConversationService', () => {
             single: jest.fn().mockResolvedValue({
               data: null,
               error: { code: 'PGRST116' },
-            }),
+            } as any),
           })),
         })),
       });
@@ -325,18 +323,18 @@ describe('ConversationService', () => {
               single: jest.fn().mockResolvedValue({
                 data: mockConversation,
                 error: null,
-              }),
+              } as any),
             })),
           })),
         })
         .mockReturnValueOnce({
           delete: jest.fn(() => ({
-            eq: jest.fn().mockResolvedValue({
-              data: null,
-              error: null,
-            }),
-          })),
-        });
+          eq: jest.fn().mockResolvedValue({
+            data: null,
+            error: null,
+          } as any),
+        })),
+      });
 
       await ConversationService.deleteConversation(mockConversationId, mockUserId);
 
@@ -350,7 +348,7 @@ describe('ConversationService', () => {
             single: jest.fn().mockResolvedValue({
               data: null,
               error: { code: 'PGRST116' },
-            }),
+            } as any),
           })),
         })),
       });
@@ -392,7 +390,7 @@ describe('ConversationService', () => {
           eq: jest.fn().mockResolvedValue({
             data: null,
             error: null,
-          }),
+          } as any),
         })),
       });
 

@@ -7,6 +7,7 @@ import { DateRangePicker, DateRange } from '@/components/analytics/date-range-pi
 import { MetricsCards } from '@/components/analytics/metrics-cards';
 import { PerformanceDashboard } from '@/components/analytics/performance-dashboard';
 import { QualityMetrics } from '@/components/analytics/quality-metrics';
+import { CostDashboard } from '@/components/analytics/cost-dashboard';
 import { ExportReportsDialog } from '@/components/analytics/export-reports-dialog';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
@@ -132,6 +133,12 @@ export default function AnalyticsPage() {
             dateRange={dateRange}
             loading={loading}
           />
+        </div>
+
+        {/* Cost Dashboard */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold text-gray-900">Cost Dashboard</h2>
+          <CostDashboard />
         </div>
       </div>
 

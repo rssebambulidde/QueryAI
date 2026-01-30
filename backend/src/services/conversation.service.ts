@@ -383,10 +383,7 @@ export class ConversationService {
       const existingState = await ConversationStateService.getState(conversationId, userId);
 
       // Extract new state from messages
-      const newState = await ConversationStateService.extractState(messages, {
-        ...options,
-        messageCount: messages.length,
-      });
+      const newState = await ConversationStateService.extractState(messages, options);
 
       // Merge with existing state
       const mergedState = ConversationStateService.mergeStates(existingState, newState);

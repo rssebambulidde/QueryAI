@@ -18,6 +18,8 @@ import { ErrorRecoveryService } from '../services/error-recovery.service';
 import { ValidationError } from '../types/error';
 import logger from '../config/logger';
 import { apiLimiter } from '../middleware/rateLimiter';
+import { touchKeys } from '../services/cache.service';
+import { getQueryServiceStats } from '../services/query.service';
 
 const router = Router();
 
@@ -63,6 +65,49 @@ router.get(
         createdAt: version?.createdAt,
         updatedAt: version?.updatedAt,
       },
+    });
+  })
+);
+
+/**
+ * GET /api/cache/query-stats
+ * Query service stats (dedupe, batching, etc.)
+ */
+router.get(
+  '/query-stats',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const stats = getQueryServiceStats();
+    res.json({ success: true, data: stats });
+  })
+);
+
+/**
+ * POST /api/cache/warm
+ * Cache warming: touch keys to promote in Redis or preload.
+ * Body: { keys: Array<{ key: string; prefix: string }> }
+ */
+router.post(
+  '/warm',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { keys } = req.body;
+    if (!Array.isArray(keys) || keys.length === 0) {
+      throw new ValidationError('keys array is required and must be non-empty');
+    }
+    const max = 500;
+    const limited = keys.slice(0, max).map((k: { key?: string; prefix?: string }) => {
+      if (!k || typeof k.key !== 'string' || typeof k.prefix !== 'string') {
+        throw new ValidationError('Each entry must have key and prefix');
+      }
+      return { key: k.key, prefix: k.prefix };
+    });
+    const { touched } = await touchKeys(limited);
+    res.json({
+      success: true,
+      data: { touched, total: limited.length },
     });
   })
 );
@@ -440,7 +485,7 @@ router.get(
     const opportunities = AsyncMonitorService.getParallelizationOpportunities();
     const slowOperations = AsyncMonitorService.getSlowOperations(1000);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         stats,
@@ -561,17 +606,17 @@ router.post(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { circuit } = req.params;
+    const circuit = Array.isArray(req.params.circuit) ? req.params.circuit[0] : req.params.circuit;
 
     try {
       CircuitBreakerService.reset(circuit);
 
-      res.json({
+      return res.json({
         success: true,
         message: `Circuit breaker ${circuit} reset`,
       });
     } catch (error: any) {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
         message: error.message,
       });
@@ -588,17 +633,17 @@ router.post(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { circuit } = req.params;
+    const circuit = Array.isArray(req.params.circuit) ? req.params.circuit[0] : req.params.circuit;
 
     try {
       CircuitBreakerService.open(circuit);
 
-      res.json({
+      return res.json({
         success: true,
         message: `Circuit breaker ${circuit} opened`,
       });
     } catch (error: any) {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
         message: error.message,
       });
@@ -615,17 +660,17 @@ router.post(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { circuit } = req.params;
+    const circuit = Array.isArray(req.params.circuit) ? req.params.circuit[0] : req.params.circuit;
 
     try {
       CircuitBreakerService.close(circuit);
 
-      res.json({
+      return res.json({
         success: true,
         message: `Circuit breaker ${circuit} closed`,
       });
     } catch (error: any) {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
         message: error.message,
       });

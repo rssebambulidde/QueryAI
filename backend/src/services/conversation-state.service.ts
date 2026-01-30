@@ -8,7 +8,7 @@ import { Database } from '../types/database';
 import { openai } from '../config/openai';
 import logger from '../config/logger';
 import { AppError } from '../types/error';
-import { TokenCountService } from './token-count.service';
+import { TokenCountService, type EncodingType } from './token-count.service';
 
 /**
  * Conversation state structure
@@ -280,7 +280,7 @@ export class ConversationStateService {
   private static truncateToTokenBudget(
     text: string,
     maxTokens: number,
-    encodingType: string
+    encodingType: EncodingType
   ): string {
     const tokens = TokenCountService.countTokens(text, encodingType);
     

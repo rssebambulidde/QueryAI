@@ -1,16 +1,23 @@
 import { DatabaseService } from '../services/database.service';
 import { supabaseAdmin } from '../config/database';
 
-jest.mock('../config/database');
+jest.mock('../config/database', () => {
+  const mockFrom = jest.fn();
+  return {
+    supabaseAdmin: { from: mockFrom },
+    supabase: { from: jest.fn() },
+    default: {},
+    testConnection: jest.fn(),
+    checkDatabaseHealth: jest.fn(),
+    testRedisConnection: jest.fn(),
+  };
+});
+
+const mockFrom = (supabaseAdmin as unknown as { from: jest.Mock }).from;
 
 describe('DatabaseService', () => {
-  const mockSupabase = {
-    from: jest.fn(),
-  };
-
   beforeEach(() => {
     jest.clearAllMocks();
-    (supabaseAdmin as any) = mockSupabase;
   });
 
   describe('createUserProfile', () => {
@@ -27,12 +34,12 @@ describe('DatabaseService', () => {
         single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.createUserProfile('user-1', 'test@example.com', 'Test User');
 
       expect(result).toEqual(mockData);
-      expect(mockSupabase.from).toHaveBeenCalledWith('user_profiles');
+      expect(mockFrom).toHaveBeenCalledWith('user_profiles');
       expect(mockQuery.insert).toHaveBeenCalledWith({
         id: 'user-1',
         email: 'test@example.com',
@@ -50,7 +57,7 @@ describe('DatabaseService', () => {
         }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.createUserProfile('user-1', 'test@example.com');
 
@@ -72,7 +79,7 @@ describe('DatabaseService', () => {
         single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.getUserProfile('user-1');
 
@@ -90,7 +97,7 @@ describe('DatabaseService', () => {
         }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.getUserProfile('user-1');
 
@@ -104,7 +111,7 @@ describe('DatabaseService', () => {
         single: jest.fn().mockRejectedValue(new Error('Database error')),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.getUserProfile('user-1');
 
@@ -127,7 +134,7 @@ describe('DatabaseService', () => {
         single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.updateUserProfile('user-1', {
         email: 'updated@example.com',
@@ -146,7 +153,7 @@ describe('DatabaseService', () => {
         single: jest.fn().mockRejectedValue(new Error('Database error')),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.updateUserProfile('user-1', {});
 
@@ -169,7 +176,7 @@ describe('DatabaseService', () => {
         single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.getUserSubscription('user-1');
 
@@ -195,7 +202,7 @@ describe('DatabaseService', () => {
         }),
       };
 
-      mockSupabase.from
+      mockFrom
         .mockReturnValueOnce(mockGetQuery)
         .mockReturnValueOnce(mockCreateQuery);
 
@@ -212,7 +219,7 @@ describe('DatabaseService', () => {
         insert: jest.fn().mockResolvedValue({ error: null }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.logUsage('user-1', 'query', {
         query: 'test query',
@@ -233,7 +240,7 @@ describe('DatabaseService', () => {
         }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.logUsage('user-1', 'query');
 
@@ -256,7 +263,7 @@ describe('DatabaseService', () => {
         single: jest.fn().mockResolvedValue({ data: mockData, error: null }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.updateSubscription('user-1', {
         tier: 'pro',
@@ -273,7 +280,7 @@ describe('DatabaseService', () => {
         single: jest.fn().mockRejectedValue(new Error('Database error')),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.updateSubscription('user-1', {});
 
@@ -282,17 +289,24 @@ describe('DatabaseService', () => {
   });
 
   describe('getUserUsageCount', () => {
-    it('should get usage count successfully', async () => {
-      const mockQuery = {
+    function thenableQuery(result: { count: number | null; error: { message: string } | null }) {
+      const chain = {
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
         gte: jest.fn().mockReturnThis(),
         lte: jest.fn().mockReturnThis(),
+        then(resolve: (v: typeof result) => void) {
+          return Promise.resolve(result).then(resolve);
+        },
+        catch(reject?: (e: unknown) => void) {
+          return Promise.resolve(result).catch(reject);
+        },
       };
+      return chain;
+    }
 
-      (mockQuery.select as jest.Mock).mockResolvedValue({ count: 10, error: null });
-
-      mockSupabase.from.mockReturnValue(mockQuery);
+    it('should get usage count successfully', async () => {
+      mockFrom.mockReturnValue(thenableQuery({ count: 10, error: null }));
 
       const result = await DatabaseService.getUserUsageCount('user-1', 'query');
 
@@ -300,17 +314,9 @@ describe('DatabaseService', () => {
     });
 
     it('should return 0 on error', async () => {
-      const mockQuery = {
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-      };
-
-      (mockQuery.select as jest.Mock).mockResolvedValue({
-        count: null,
-        error: { message: 'Database error' },
-      });
-
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(
+        thenableQuery({ count: null, error: { message: 'Database error' } })
+      );
 
       const result = await DatabaseService.getUserUsageCount('user-1', 'query');
 
@@ -318,16 +324,9 @@ describe('DatabaseService', () => {
     });
 
     it('should filter by date range', async () => {
-      const mockQuery = {
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        gte: jest.fn().mockReturnThis(),
-        lte: jest.fn().mockReturnThis(),
-      };
+      const mockQuery = thenableQuery({ count: 5, error: null });
 
-      (mockQuery.select as jest.Mock).mockResolvedValue({ count: 5, error: null });
-
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const startDate = new Date('2024-01-01');
       const endDate = new Date('2024-01-31');
@@ -357,7 +356,7 @@ describe('DatabaseService', () => {
         single: jest.fn().mockResolvedValue({ data: mockPayment, error: null }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.createPayment({
         user_id: 'user-1',
@@ -374,20 +373,17 @@ describe('DatabaseService', () => {
       const mockQuery = {
         insert: jest.fn().mockReturnThis(),
         select: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({
-          data: null,
-          error: { message: 'Database error' },
-        }),
+        single: jest.fn().mockRejectedValue(new Error('Database error')),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       await expect(
         DatabaseService.createPayment({
           user_id: 'user-1',
           amount: 100,
         } as any)
-      ).rejects.toThrow();
+      ).rejects.toThrow('Database error');
     });
   });
 
@@ -405,7 +401,7 @@ describe('DatabaseService', () => {
         single: jest.fn().mockResolvedValue({ data: mockPayment, error: null }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.getPaymentById('pay-1');
 
@@ -422,7 +418,7 @@ describe('DatabaseService', () => {
         }),
       };
 
-      mockSupabase.from.mockReturnValue(mockQuery);
+      mockFrom.mockReturnValue(mockQuery);
 
       const result = await DatabaseService.getPaymentById('pay-1');
 

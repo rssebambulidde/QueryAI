@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toast";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { PayPalProvider } from "@/components/payment/paypal-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,32 +16,48 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://queryai.com";
+
 export const metadata: Metadata = {
-  title: "QueryAI - Fact Research Assistant | Find Verified Information Fast",
-  description: "QueryAI is a fact research assistant that helps you find accurate, verified information quickly. Research questions using real-time web search and document analysis. Get source-cited answers.",
-  keywords: "fact research assistant, research tool, verified information, document research, fact-checking, source-cited research",
+  metadataBase: new URL(baseUrl),
+  title: {
+    default: "QueryAI - Fact Research Assistant | SamaBrains | Kampala, Uganda",
+    template: "%s | QueryAI by SamaBrains",
+  },
+  description: "QueryAI by SamaBrains Solution Company – fact research assistant for accurate, verified information. Real-time web search and document analysis. Source-cited answers. Based in Kampala, Uganda.",
+  keywords: "QueryAI, SamaBrains, fact research assistant, research tool, verified information, document research, fact-checking, source-cited research, Kampala, Uganda",
+  authors: [{ name: "SamaBrains Solution Company", url: baseUrl }],
+  creator: "SamaBrains Solution Company",
+  publisher: "SamaBrains Solution Company",
+  robots: { index: true, follow: true },
   icons: {
     icon: '/icon.svg',
     apple: '/apple-icon.svg',
   },
   openGraph: {
-    title: "QueryAI - Fact Research Assistant",
-    description: "Find accurate, verified information quickly. Research questions using real-time web search and your documents. Get source-cited answers.",
+    title: "QueryAI - Fact Research Assistant | SamaBrains",
+    description: "Find accurate, verified information quickly. QueryAI by SamaBrains Solution Company – Kampala, Uganda.",
     type: "website",
+    url: baseUrl,
+    siteName: "QueryAI",
+    locale: "en_US",
     images: [
       {
         url: '/apple-icon.svg',
         width: 180,
         height: 180,
-        alt: 'QueryAI Logo',
+        alt: 'QueryAI Logo - SamaBrains',
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "QueryAI - Fact Research Assistant",
-    description: "Find accurate, verified information quickly. Research questions using real-time web search and your documents.",
+    title: "QueryAI - Fact Research Assistant | SamaBrains",
+    description: "Find accurate, verified information quickly. QueryAI by SamaBrains – Kampala, Uganda.",
     images: ['/apple-icon.svg'],
+  },
+  alternates: {
+    canonical: baseUrl,
   },
 };
 
@@ -50,15 +67,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   // Structured Data (JSON-LD) for SEO
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://queryai.com";
-  
   const organizationSchema = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    "name": "QueryAI",
-    "description": "Fact Research Assistant - Find accurate, verified information quickly",
+    "name": "SamaBrains Solution Company",
+    "alternateName": "SamaBrains",
+    "description": "QueryAI – Fact Research Assistant. Find accurate, verified information quickly.",
     "url": baseUrl,
     "logo": `${baseUrl}/icon.svg`,
+    "email": "info@samabrain.com",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Kampala",
+      "addressCountry": "UG",
+    },
   };
 
   const softwareApplicationSchema = {
@@ -66,8 +88,14 @@ export default function RootLayout({
     "@type": "SoftwareApplication",
     "name": "QueryAI",
     "applicationCategory": "ResearchApplication",
-    "description": "QueryAI is a fact research assistant that helps you find accurate, verified information quickly. Research questions using real-time web search and document analysis. Get source-cited answers.",
+    "description": "QueryAI by SamaBrains – fact research assistant for accurate, verified information. Real-time web search and document analysis. Source-cited answers. Kampala, Uganda.",
     "operatingSystem": "Web",
+    "publisher": {
+      "@type": "Organization",
+      "name": "SamaBrains Solution Company",
+      "url": baseUrl,
+      "email": "info@samabrain.com",
+    },
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -88,7 +116,13 @@ export default function RootLayout({
     "@type": "WebSite",
     "name": "QueryAI",
     "url": baseUrl,
-    "description": "Fact Research Assistant - Find accurate, verified information quickly",
+    "description": "QueryAI by SamaBrains Solution Company – Fact Research Assistant. Kampala, Uganda.",
+    "publisher": {
+      "@type": "Organization",
+      "name": "SamaBrains Solution Company",
+      "url": baseUrl,
+      "email": "info@samabrain.com",
+    },
     "potentialAction": {
       "@type": "SearchAction",
       "target": {
@@ -124,8 +158,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
         />
         <ErrorBoundary>
-          {children}
-          <Toaster />
+          <PayPalProvider>
+            {children}
+            <Toaster />
+          </PayPalProvider>
         </ErrorBoundary>
       </body>
     </html>

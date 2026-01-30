@@ -14,6 +14,66 @@ import { CircuitBreakerService, CircuitState } from './circuit-breaker.service';
 import { LatencyTrackerService, OperationType } from './latency-tracker.service';
 import { ErrorTrackerService, ServiceType as ErrorServiceType } from './error-tracker.service';
 import { QualityMetricsService, QualityMetricType } from './quality-metrics.service';
+import { RedisCacheService } from './redis-cache.service';
+import { CostTrackingService } from './cost-tracking.service';
+import { SubscriptionService } from './subscription.service';
+import crypto from 'crypto';
+
+// LLM Response Cache Configuration
+const LLM_CACHE_TTL = 3600; // 1 hour in seconds
+const LLM_CACHE_PREFIX = 'llm'; // Cache key prefix for LLM responses
+
+// LLM Cache Statistics
+interface LLMCacheStats {
+  hits: number;
+  misses: number;
+  sets: number;
+  errors: number;
+}
+
+let llmCacheStats: LLMCacheStats = {
+  hits: 0,
+  misses: 0,
+  sets: 0,
+  errors: 0,
+};
+
+/**
+ * Generate cache key for LLM response
+ * Based on question hash, model, temperature, and context hash
+ */
+function generateLLMCacheKey(
+  question: string,
+  model: string,
+  temperature: number,
+  ragContext?: string,
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+): string {
+  // Create hash of question
+  const questionHash = crypto.createHash('sha256')
+    .update(question.trim().toLowerCase())
+    .digest('hex')
+    .substring(0, 16);
+  
+  // Create hash of RAG context (if available)
+  const contextHash = ragContext
+    ? crypto.createHash('sha256')
+        .update(ragContext)
+        .digest('hex')
+        .substring(0, 8)
+    : 'no-context';
+  
+  // Create hash of conversation history (if available)
+  const historyHash = conversationHistory && conversationHistory.length > 0
+    ? crypto.createHash('sha256')
+        .update(JSON.stringify(conversationHistory.slice(-5))) // Last 5 messages
+        .digest('hex')
+        .substring(0, 8)
+    : 'no-history';
+  
+  // Combine all parts
+  return `${questionHash}|${model}|${temperature}|${contextHash}|${historyHash}`;
+}
 
 export interface QuestionRequest {
   question: string;
@@ -80,7 +140,7 @@ export interface QuestionRequest {
   // Adaptive context selection options
   useAdaptiveContextSelection?: boolean; // Enable adaptive context selection based on query complexity (legacy)
   enableAdaptiveContextSelection?: boolean; // Enable adaptive context selection (default: true)
-  adaptiveContextOptions?: import('./adaptive-context.service').AdaptiveContextOptions; // Adaptive context configuration
+  adaptiveContextOptions?: Partial<import('./adaptive-context.service').AdaptiveContextOptions>; // Adaptive context configuration
   minChunks?: number; // Minimum number of chunks
   maxChunks?: number; // Maximum number of chunks
   // Dynamic limits options
@@ -155,7 +215,7 @@ export interface QuestionResponse {
       invalidUrls: string[];
       invalidDocumentIds: string[];
     };
-    inline?: import('../types/citation').InlineCitationData;
+    inline?: unknown;
   };
   followUpQuestions?: string[]; // AI-generated follow-up questions
   refusal?: boolean; // true when response is an off-topic refusal (e.g. from pre-check) (11.1)
@@ -180,6 +240,11 @@ export class AIService {
   private static readonly DEFAULT_MODEL = 'gpt-3.5-turbo';
   private static readonly DEFAULT_TEMPERATURE = 0.7;
   private static readonly DEFAULT_MAX_TOKENS = 1800; // enough for answer + FOLLOW_UP_QUESTIONS on 2nd+ turns and in research mode
+  
+  // Model selection configuration
+  private static readonly GPT4_MODEL = 'gpt-4o-mini'; // Using GPT-4o-mini as it's cheaper than GPT-4 but still powerful
+  private static readonly GPT35_MODEL = 'gpt-3.5-turbo';
+  private static readonly PRO_TIER_GPT4_THRESHOLD = 0.2; // 20% of Pro tier queries use GPT-4 (80% use GPT-3.5)
 
   /**
    * Build system prompt with RAG context (documents + web search)
@@ -278,6 +343,167 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     return ` Scope includes: ${parts.join('; ')}.`;
   }
 
+  /**
+   * Detect if a query is complex and requires GPT-4
+   * Complex queries typically have:
+   * - Multiple parts or sub-questions
+   * - Technical/specialized terminology
+   * - Analysis or comparison requests
+   * - Long context requirements
+   */
+  private static isComplexQuery(
+    question: string,
+    ragContext?: string,
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+  ): boolean {
+    const questionLower = question.toLowerCase();
+    
+    // Check for complex query indicators
+    const complexIndicators = [
+      // Multiple questions
+      /\?.*\?/, // Multiple question marks
+      /(?:and|or|also|additionally|furthermore|moreover).*\?/i, // Multiple parts
+      
+      // Analysis/comparison requests
+      /(?:compare|contrast|analyze|analysis|evaluate|examine|assess|critique)/i,
+      /(?:difference|similarity|relationship|correlation|impact|effect)/i,
+      /(?:pros?|cons?|advantages?|disadvantages?|benefits?|drawbacks?)/i,
+      
+      // Technical/specialized
+      /(?:algorithm|implementation|architecture|design|methodology|framework)/i,
+      /(?:optimize|optimization|performance|efficiency|scalability)/i,
+      /(?:debug|troubleshoot|diagnose|fix|resolve|error|issue|problem)/i,
+      
+      // Multi-step reasoning
+      /(?:step|steps|process|procedure|workflow|pipeline)/i,
+      /(?:how to|how do|how does|how can|how would|how should)/i,
+      /(?:explain.*step|walk.*through|guide|tutorial)/i,
+      
+      // Long context requirements
+      /(?:summarize|summary|overview|review|synthesis|synthesize)/i,
+      /(?:all|every|entire|complete|full|comprehensive)/i,
+    ];
+
+    // Check if question contains complex indicators
+    const hasComplexIndicators = complexIndicators.some(pattern => pattern.test(question));
+    
+    // Check question length (longer questions often need more reasoning)
+    const isLongQuestion = question.length > 200;
+    
+    // Check if there's extensive context (RAG context or long conversation history)
+    const hasExtensiveContext = (ragContext && ragContext.length > 3000) ||
+      (conversationHistory && conversationHistory.length > 5);
+    
+    // Check for mathematical or logical reasoning
+    const hasMathLogic = /(?:calculate|solve|equation|formula|theorem|proof|logic|reasoning)/i.test(question);
+    
+    // Complex if it meets multiple criteria or has strong indicators
+    const complexityScore = 
+      (hasComplexIndicators ? 2 : 0) +
+      (isLongQuestion ? 1 : 0) +
+      (hasExtensiveContext ? 1 : 0) +
+      (hasMathLogic ? 2 : 0);
+    
+    // Threshold: score >= 3 indicates complex query
+    return complexityScore >= 3;
+  }
+
+  /**
+   * Select model based on user tier and query complexity
+   * - Free/Premium: Always use GPT-3.5 Turbo
+   * - Pro: Use GPT-3.5 for 80% of queries, GPT-4 for complex queries (20%)
+   */
+  private static async selectModel(
+    userId: string | undefined,
+    question: string,
+    ragContext?: string,
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
+    requestedModel?: string
+  ): Promise<{ model: string; reason: string }> {
+    // If user explicitly requested a model, use it (but still track cost)
+    if (requestedModel) {
+      return {
+        model: requestedModel,
+        reason: 'user-requested',
+      };
+    }
+
+    // If no userId, default to GPT-3.5 Turbo
+    if (!userId) {
+      return {
+        model: this.GPT35_MODEL,
+        reason: 'no-user-default',
+      };
+    }
+
+    try {
+      // Get user subscription tier
+      const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
+      
+      if (!subscriptionData) {
+        // No subscription found, default to GPT-3.5 Turbo
+        return {
+          model: this.GPT35_MODEL,
+          reason: 'no-subscription-default',
+        };
+      }
+
+      const tier = subscriptionData.subscription.tier;
+
+      // Free, Starter, and Premium tiers: Always use GPT-3.5 Turbo
+      if (tier === 'free' || tier === 'starter' || tier === 'premium') {
+        return {
+          model: this.GPT35_MODEL,
+          reason: `tier-${tier}-gpt35-only`,
+        };
+      }
+
+      // Pro tier: Use GPT-4 for complex queries (20%), GPT-3.5 for others (80%)
+      if (tier === 'pro') {
+        const isComplex = this.isComplexQuery(question, ragContext, conversationHistory);
+        
+        if (isComplex) {
+          return {
+            model: this.GPT4_MODEL,
+            reason: 'pro-tier-complex-query',
+          };
+        }
+        
+        // For Pro tier, use random selection to achieve ~20% GPT-4 usage
+        // This ensures we don't always use GPT-4 for complex queries only
+        const useGPT4 = Math.random() < this.PRO_TIER_GPT4_THRESHOLD;
+        
+        if (useGPT4) {
+          return {
+            model: this.GPT4_MODEL,
+            reason: 'pro-tier-random-gpt4',
+          };
+        }
+        
+        return {
+          model: this.GPT35_MODEL,
+          reason: 'pro-tier-standard-gpt35',
+        };
+      }
+
+      // Default fallback
+      return {
+        model: this.GPT35_MODEL,
+        reason: 'default-fallback',
+      };
+    } catch (error: any) {
+      logger.error('Failed to select model based on tier', {
+        error: error.message,
+        userId,
+      });
+      // Fallback to GPT-3.5 Turbo on error
+      return {
+        model: this.GPT35_MODEL,
+        reason: 'error-fallback',
+      };
+    }
+  }
+
   private static buildSystemPrompt(
     ragContext?: string,
     additionalContext?: string,
@@ -352,37 +578,31 @@ All your responses should be focused on this specific topic domain. When searchi
       }
     }
 
-    // Get enhanced guidelines in parallel for better performance
-    const [citationGuidelinesResult, qualityGuidelinesResult, conflictResolutionGuidelinesResult] = await Promise.allSettled([
-      Promise.resolve(CitationValidatorService.formatCitationGuidelines()),
-      Promise.resolve(AnswerQualityService.formatQualityGuidelines()),
-      Promise.resolve(ConflictResolutionService.formatConflictResolutionGuidelines()),
-    ]);
-
+    // Load enhanced guidelines (sync)
     let citationGuidelines = '';
-    if (citationGuidelinesResult.status === 'fulfilled') {
-      citationGuidelines = citationGuidelinesResult.value;
-    } else {
+    try {
+      citationGuidelines = CitationValidatorService.formatCitationGuidelines();
+    } catch (e: unknown) {
       logger.warn('Failed to load citation guidelines, using basic instructions', {
-        error: citationGuidelinesResult.reason?.message,
+        error: e instanceof Error ? e.message : String(e),
       });
     }
 
     let qualityGuidelines = '';
-    if (qualityGuidelinesResult.status === 'fulfilled') {
-      qualityGuidelines = qualityGuidelinesResult.value;
-    } else {
+    try {
+      qualityGuidelines = AnswerQualityService.formatQualityGuidelines();
+    } catch (e: unknown) {
       logger.warn('Failed to load answer quality guidelines, using basic instructions', {
-        error: qualityGuidelinesResult.reason?.message,
+        error: e instanceof Error ? e.message : String(e),
       });
     }
 
     let conflictResolutionGuidelines = '';
-    if (conflictResolutionGuidelinesResult.status === 'fulfilled') {
-      conflictResolutionGuidelines = conflictResolutionGuidelinesResult.value;
-    } else {
+    try {
+      conflictResolutionGuidelines = ConflictResolutionService.formatConflictResolutionGuidelines();
+    } catch (e: unknown) {
       logger.warn('Failed to load conflict resolution guidelines, using basic instructions', {
-        error: conflictResolutionGuidelinesResult.reason?.message,
+        error: e instanceof Error ? e.message : String(e),
       });
     }
 
@@ -703,7 +923,6 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         throw new ValidationError('Question is too long (max 2000 characters)');
       }
 
-      const model = request.model || this.DEFAULT_MODEL;
       const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
       const maxTokens = request.maxTokens || this.DEFAULT_MAX_TOKENS;
 
@@ -783,9 +1002,11 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
               logger.warn('Failed to save refusal to conversation', { error: e?.message });
             }
           }
+          // Use default model for refusal (no API call needed)
+          const defaultModel = this.GPT35_MODEL;
           const response: QuestionResponse = {
             answer: refusal,
-            model: model,
+            model: defaultModel,
             sources: [],
             followUpQuestions: [followUp],
             refusal: true,
@@ -1067,9 +1288,73 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         return conversationHistory;
       })();
 
-      // Wait for RAG context to be available before processing few-shot examples
-      // (few-shot examples depend on whether documents/web results are available)
-      // But we can prepare the promise structure
+      // Wait for conversation history to be ready
+      const conversationHistory = await conversationHistoryPromise;
+
+      // Select model based on tier and query complexity (after RAG context is available)
+      let selectedModel: string;
+      let modelSelectionReason: string;
+      
+      if (request.model) {
+        // User explicitly requested a model
+        selectedModel = request.model;
+        modelSelectionReason = 'user-requested';
+      } else {
+        // Select model based on tier
+        const modelSelection = await this.selectModel(
+          userId,
+          request.question,
+          ragContext,
+          conversationHistory,
+          request.model
+        );
+        selectedModel = modelSelection.model;
+        modelSelectionReason = modelSelection.reason;
+      }
+      
+      // Log model selection
+      if (userId) {
+        try {
+          const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
+          logger.info('Model selected based on tier', {
+            userId,
+            tier: subscriptionData?.subscription.tier || 'unknown',
+            selectedModel,
+            reason: modelSelectionReason,
+            question: request.question.substring(0, 100),
+          });
+        } catch (error) {
+          // Ignore errors in logging
+        }
+      }
+
+      // Few-shot examples and conversation state (depend on RAG context)
+      let fewShotExamplesText = '';
+      let conversationStateText = '';
+      if (request.enableFewShotExamples !== false) {
+        try {
+          const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
+          const hasWebResults = ragContext?.includes('Web Search Results:') || false;
+          const fewShotOptions: FewShotSelectionOptions = {
+            query: request.question,
+            hasDocuments,
+            hasWebResults,
+            maxExamples: request.fewShotOptions?.maxExamples ?? 2,
+            maxTokens: request.fewShotOptions?.maxTokens ?? 500,
+            model: request.model || 'gpt-3.5-turbo',
+            preferCitationStyle: request.fewShotOptions?.preferCitationStyle,
+            ...request.fewShotOptions,
+          };
+          const fewShotSelection = FewShotSelectorService.selectExamples(fewShotOptions);
+          if (fewShotSelection.examples.length > 0) {
+            fewShotExamplesText = FewShotSelectorService.formatExamplesForPrompt(fewShotSelection.examples);
+          }
+        } catch (err: unknown) {
+          logger.warn('Few-shot example selection failed, continuing without examples', {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
 
       const messages = this.buildMessages(
         request.question,
@@ -1087,21 +1372,67 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
       );
 
       logger.info('Sending question to OpenAI with RAG', {
-        model,
+        model: selectedModel,
         questionLength: request.question.length,
         hasContext: !!request.context,
         hasRAGContext: !!ragContext,
         sourcesCount: sources?.length || 0,
-        historyLength: request.conversationHistory?.length || 0,
+        historyLength: conversationHistory?.length || 0,
+        modelSelectionReason,
       });
 
-      // Call OpenAI API with retry logic and circuit breaker
-      let completion;
+      // Check LLM response cache (only for non-streaming, similar queries)
+      // Skip caching if conversation history is too long (to avoid stale responses)
+      const shouldCache = !request.conversationHistory || request.conversationHistory.length <= 10;
+      let completion: OpenAI.Chat.Completions.ChatCompletion | undefined;
+      let cachedResponse: QuestionResponse | null = null;
+      
+      if (shouldCache) {
+        const llmCacheKey = generateLLMCacheKey(
+          request.question,
+          selectedModel,
+          temperature,
+          ragContext,
+          conversationHistory
+        );
+        
+        const cached = await RedisCacheService.get<QuestionResponse>(llmCacheKey, {
+          prefix: LLM_CACHE_PREFIX,
+          ttl: LLM_CACHE_TTL,
+        });
+        
+        if (cached) {
+          llmCacheStats.hits++;
+          logger.info('LLM response retrieved from cache', {
+            question: request.question.substring(0, 100),
+            model: selectedModel,
+            cacheKey: llmCacheKey.substring(0, 50),
+          });
+          cachedResponse = cached;
+        } else {
+          llmCacheStats.misses++;
+          logger.debug('LLM cache miss', {
+            question: request.question.substring(0, 100),
+            model: selectedModel,
+          });
+        }
+      }
+
+      // Return cached response if available
+      if (cachedResponse) {
+        logger.info('Returning cached LLM response', {
+          question: request.question.substring(0, 100),
+          model: selectedModel,
+        });
+        return cachedResponse;
+      }
+
+      // Call OpenAI API with retry logic and circuit breaker (if not cached)
       try {
         const retryResult = await RetryService.execute(
           async () => {
             return await openai.chat.completions.create({
-              model,
+              model: selectedModel,
               messages,
               temperature,
               max_tokens: maxTokens,
@@ -1117,7 +1448,7 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
                 attempt,
                 delay,
                 error: error.message,
-                model,
+                model: selectedModel,
                 questionLength: request.question.length,
               });
             },
@@ -1148,7 +1479,7 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
           const degradationStatus = DegradationService.getOverallStatus();
           return {
             answer: `I apologize, but I'm experiencing technical difficulties with the AI service. However, I found ${sources.length} relevant source${sources.length > 1 ? 's' : ''} that may help answer your question. Please try again in a moment, or review the sources provided below.\n\n${sources.map((s, i) => `${i + 1}. ${s.title}${s.url ? ` (${s.url})` : ''}`).join('\n')}`,
-            model: model,
+            model: selectedModel,
             sources,
             usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
             degraded: true,
@@ -1237,6 +1568,10 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
               });
             }
           }
+        } catch (parseError: any) {
+          logger.warn('Failed to parse citations from response', {
+            error: parseError?.message ?? String(parseError),
+          });
         }
       }
 
@@ -1358,10 +1693,40 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         throw new AppError('OpenAI API did not return usage information', 500, 'AI_API_ERROR');
       }
 
+      // Calculate and track cost
+      const costData = CostTrackingService.calculateCost(
+        completion.model,
+        completion.usage.prompt_tokens,
+        completion.usage.completion_tokens
+      );
+      
+      // Track cost in database (async, don't block)
+      if (userId) {
+        CostTrackingService.trackCost(userId, {
+          userId,
+          queryId: request.conversationId,
+          model: costData.model,
+          promptTokens: costData.promptTokens,
+          completionTokens: costData.completionTokens,
+          totalTokens: costData.totalTokens,
+          cost: costData.totalCost,
+          metadata: {
+            modelSelectionReason,
+            question: request.question.substring(0, 200),
+            hasRAGContext: !!ragContext,
+            sourcesCount: sources?.length || 0,
+          },
+        }).catch((error: any) => {
+          logger.warn('Failed to track cost', { error: error.message });
+        });
+      }
+
       logger.info('OpenAI response received', {
         model: completion.model,
         tokensUsed: completion.usage.total_tokens,
+        cost: costData.totalCost,
         hasFollowUpQuestions: !!followUpQuestions,
+        modelSelectionReason,
       });
 
       // Check overall degradation status
@@ -1412,12 +1777,43 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         partial: isPartial,
       };
 
+      // Cache LLM response (only if shouldCache and not degraded)
+      if (shouldCache && !isDegraded && !isPartial) {
+        const llmCacheKey = generateLLMCacheKey(
+          request.question,
+          selectedModel,
+          temperature,
+          ragContext,
+          conversationHistory
+        );
+        
+        const cacheSet = await RedisCacheService.set(llmCacheKey, response, {
+          prefix: LLM_CACHE_PREFIX,
+          ttl: LLM_CACHE_TTL,
+        });
+        
+        if (cacheSet) {
+          llmCacheStats.sets++;
+          logger.debug('LLM response cached', {
+            question: request.question.substring(0, 100),
+            model: selectedModel,
+            ttl: LLM_CACHE_TTL,
+          });
+        } else {
+          llmCacheStats.errors++;
+          logger.warn('Failed to cache LLM response', {
+            question: request.question.substring(0, 100),
+            model: selectedModel,
+          });
+        }
+      }
+
       // Collect quality metrics (async, don't block)
       if (userId && answer) {
         // Prepare citations for quality metrics
-        const qualityCitations = parsedCitations?.citations?.map(citation => ({
-          text: citation.text || '',
-          source: citation.source || '',
+        const qualityCitations = parsedCitations?.citations?.map((citation: import('./citation-parser.service').ParsedCitation) => ({
+          text: citation.format || '',
+          source: citation.url ?? citation.documentId ?? '',
           accurate: citationValidation?.isValid !== false, // Use validation result if available
         })) || [];
 
@@ -1430,7 +1826,7 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
             sources: sources || [],
             citations: qualityCitations.length > 0 ? qualityCitations : undefined,
             metadata: {
-              model: completion.model || model,
+              model: completion.model || selectedModel,
               tokenUsage: completion.usage.total_tokens,
               hasCitations: (parsedCitations?.citations?.length || 0) > 0,
               citationValidation: citationValidation?.isValid,
@@ -1660,7 +2056,6 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         throw new ValidationError('Question is too long (max 2000 characters)');
       }
 
-      const model = request.model || this.DEFAULT_MODEL;
       const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
       const maxTokens = request.maxTokens || this.DEFAULT_MAX_TOKENS;
 
@@ -1964,12 +2359,10 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         }
       }
 
-      // Wait for conversation history to complete (it was running in parallel)
-      let conversationHistory = await conversationHistoryPromise;
-
       // Build messages with RAG context
       // Select few-shot examples if enabled (depends on RAG context, so must be after RAG)
       let fewShotExamplesText = '';
+      let conversationStateText = '';
       if (request.enableFewShotExamples !== false) {
         try {
           const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
@@ -2005,6 +2398,43 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         }
       }
 
+      // Select model based on tier and query complexity (after RAG context is available)
+      let selectedModel: string;
+      let modelSelectionReason: string;
+      
+      if (request.model) {
+        // User explicitly requested a model
+        selectedModel = request.model;
+        modelSelectionReason = 'user-requested';
+      } else {
+        // Select model based on tier
+        const modelSelection = await this.selectModel(
+          userId,
+          request.question,
+          ragContext,
+          conversationHistory,
+          request.model
+        );
+        selectedModel = modelSelection.model;
+        modelSelectionReason = modelSelection.reason;
+      }
+      
+      // Log model selection
+      if (userId) {
+        try {
+          const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
+          logger.info('Model selected for streaming based on tier', {
+            userId,
+            tier: subscriptionData?.subscription.tier || 'unknown',
+            selectedModel,
+            reason: modelSelectionReason,
+            question: request.question.substring(0, 100),
+          });
+        } catch (error) {
+          // Ignore errors in logging
+        }
+      }
+
       const messages = this.buildMessages(
         request.question,
         ragContext,
@@ -2021,16 +2451,17 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
       );
 
       logger.info('Sending streaming question to OpenAI with RAG', {
-        model,
+        model: selectedModel,
         questionLength: request.question.length,
         hasContext: !!request.context,
         hasRAGContext: !!ragContext,
-        historyLength: request.conversationHistory?.length || 0,
+        historyLength: conversationHistory?.length || 0,
+        modelSelectionReason,
       });
 
       // Call OpenAI API with streaming
       const stream = await openai.chat.completions.create({
-        model,
+        model: selectedModel,
         messages,
         temperature,
         max_tokens: maxTokens,
@@ -2045,7 +2476,10 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
         }
       }
 
-      logger.info('OpenAI streaming response completed', { model });
+      logger.info('OpenAI streaming response completed', { 
+        model: selectedModel,
+        modelSelectionReason,
+      });
     } catch (error: any) {
       // Handle OpenAI-specific errors
       if (error instanceof ValidationError) {
@@ -2382,5 +2816,32 @@ Report:`;
       logger.error('Error generating detailed report:', error);
       throw new AppError('Failed to generate detailed report', 500, 'REPORT_ERROR');
     }
+  }
+
+  /**
+   * Get LLM cache statistics
+   */
+  static getLLMCacheStats(): LLMCacheStats & { hitRate: number } {
+    const total = llmCacheStats.hits + llmCacheStats.misses;
+    const hitRate = total > 0 
+      ? (llmCacheStats.hits / total) * 100 
+      : 0;
+    
+    return {
+      ...llmCacheStats,
+      hitRate: Math.round(hitRate * 100) / 100, // Round to 2 decimal places
+    };
+  }
+
+  /**
+   * Reset LLM cache statistics
+   */
+  static resetLLMCacheStats(): void {
+    llmCacheStats = {
+      hits: 0,
+      misses: 0,
+      sets: 0,
+      errors: 0,
+    };
   }
 }

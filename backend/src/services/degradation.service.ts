@@ -111,12 +111,13 @@ export class DegradationService {
 
       // If circuit is open, service is severely degraded
       if (circuitState === CircuitState.OPEN) {
+        const effectiveLevel = level === DegradationLevel.NONE ? DegradationLevel.SEVERE : level;
         if (level === DegradationLevel.NONE) {
           this.updateServiceStatus(service, DegradationLevel.SEVERE);
         }
         affectedServices.push(service);
-        if (this.compareDegradationLevels(level, maxLevel) > 0) {
-          maxLevel = level;
+        if (this.compareDegradationLevels(effectiveLevel, maxLevel) > 0) {
+          maxLevel = effectiveLevel;
         }
       } else if (level !== DegradationLevel.NONE) {
         affectedServices.push(service);

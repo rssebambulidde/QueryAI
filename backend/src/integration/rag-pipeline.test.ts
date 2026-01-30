@@ -115,7 +115,7 @@ describe('RAG Pipeline Integration Tests', () => {
     });
 
     (DocumentService.getDocument as jest.Mock).mockResolvedValue(testDocument);
-    (ChunkService.getChunksByDocumentId as jest.Mock).mockResolvedValue(testChunks);
+    (ChunkService.getChunksByDocument as jest.Mock).mockResolvedValue(testChunks);
 
     // Mock OpenAI
     const mockOpenAI = {

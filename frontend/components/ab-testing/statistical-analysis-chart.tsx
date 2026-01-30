@@ -22,6 +22,7 @@ export const StatisticalAnalysisChart: React.FC<StatisticalAnalysisChartProps> =
   const variantA = metrics.variantA;
   const variantB = metrics.variantB;
   const significance = metrics.statisticalSignificance;
+  const isSignificant = significance?.isSignificant ?? false;
 
   // Get all unique metric keys
   const metricKeys = Array.from(
@@ -57,7 +58,6 @@ export const StatisticalAnalysisChart: React.FC<StatisticalAnalysisChartProps> =
           const valueB = variantB.averageMetrics[metricKey] || 0;
           const maxValue = getMaxValue(metricKey);
           const improvement = getImprovement(metricKey);
-          const isSignificant = significance.isSignificant;
 
           return (
             <div key={metricKey} className="space-y-2">

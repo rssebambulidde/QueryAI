@@ -714,8 +714,8 @@ describe('RAG Pipeline Performance Tests', () => {
 
       for (const query of queries) {
         const startTime = Date.now();
-        await SearchService.search(query, {
-          userId: testUserId,
+        await SearchService.search({
+          query,
           maxResults: 5,
         });
         const endTime = Date.now();

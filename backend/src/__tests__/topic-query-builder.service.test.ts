@@ -14,10 +14,10 @@ describe('TopicQueryBuilderService', () => {
     });
 
     it('should handle single-word topics', () => {
-      const keywords = TopicQueryBuilderService.extractTopicKeywords('AI');
+      const keywords = TopicQueryBuilderService.extractTopicKeywords('Deep');
 
       expect(keywords.length).toBeGreaterThan(0);
-      expect(keywords).toContain('ai');
+      expect(keywords).toContain('deep');
     });
 
     it('should remove punctuation', () => {

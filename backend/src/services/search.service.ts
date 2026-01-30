@@ -6,7 +6,7 @@ import { WebResultRerankerService, RerankingConfig } from './web-result-reranker
 import { ResultQualityScorerService, QualityScoringConfig } from './result-quality-scorer.service';
 import { DomainAuthorityService, DomainAuthorityConfig } from './domain-authority.service';
 import { WebDeduplicationService, WebDeduplicationOptions } from './web-deduplication.service';
-import { FilteringStrategyService, FilteringOptions } from './filtering-strategy.service';
+import { FilteringStrategyService, FilteringOptions, FilteringResult } from './filtering-strategy.service';
 import { RedisCacheService } from './redis-cache.service';
 import { RetryService } from './retry.service';
 import { CircuitBreakerService } from './circuit-breaker.service';
@@ -176,9 +176,6 @@ export interface SearchRequest {
   filteringStrategy?: FilteringStrategy; // Custom filtering strategy
   enableFilteringABTesting?: boolean; // Enable A/B testing for filtering strategies (default: false)
   userId?: string; // User ID for A/B testing (optional)
-  // Legacy filtering options (deprecated, use filteringMode instead)
-  filterByQuality?: boolean; // Filter results by quality threshold (default: false) - DEPRECATED
-  filterByAuthority?: boolean; // Filter results by authority threshold (default: false) - DEPRECATED
 }
 
 export interface SearchResult {
@@ -199,9 +196,24 @@ export interface SearchResponse {
   cached?: boolean;
 }
 
-// Cache configuration
-const CACHE_TTL = 3600; // 1 hour in seconds (for Redis)
-const CACHE_PREFIX = 'search'; // Cache key prefix for namespacing
+// Cache configuration for Tavily searches
+const TAVILY_CACHE_TTL = 86400; // 24 hours in seconds (for Tavily results)
+const CACHE_PREFIX = 'tavily'; // Cache key prefix for Tavily searches
+
+// Cache statistics for Tavily searches
+interface TavilyCacheStats {
+  hits: number;
+  misses: number;
+  sets: number;
+  errors: number;
+}
+
+let tavilyCacheStats: TavilyCacheStats = {
+  hits: 0,
+  misses: 0,
+  sets: 0,
+  errors: 0,
+};
 
 /**
  * Generate cache key from search request
@@ -244,22 +256,32 @@ export class SearchService {
       const cacheKey = generateCacheKey(request);
       const cached = await RedisCacheService.get<SearchResponse>(cacheKey, {
         prefix: CACHE_PREFIX,
-        ttl: CACHE_TTL,
+        ttl: TAVILY_CACHE_TTL,
       });
       
       if (cached) {
-        logger.info('Search result retrieved from cache', {
+        tavilyCacheStats.hits++;
+        logger.info('Tavily search result retrieved from cache', {
           query: request.query,
           topic: request.topic,
+          cacheKey: cacheKey.substring(0, 100),
         });
         return {
           ...cached,
           cached: true,
         };
       }
+      
+      tavilyCacheStats.misses++;
+      logger.debug('Tavily cache miss', {
+        query: request.query,
+        topic: request.topic,
+        cacheKey: cacheKey.substring(0, 100),
+      });
 
       // Check if Tavily is configured
-      if (!tavilyClient) {
+      const client = tavilyClient;
+      if (!client) {
         logger.warn('Tavily client not available, returning empty results');
         return {
           query: request.query,
@@ -401,7 +423,7 @@ export class SearchService {
           async () => {
             const retryResult = await RetryService.execute(
               async () => {
-                return await tavilyClient.search(searchQuery, tavilyOptions);
+                return await client.search(searchQuery, tavilyOptions);
               },
               {
                 maxRetries: 3,
@@ -979,7 +1001,7 @@ export class SearchService {
               : getFilteringStrategy(filteringMode));
 
           // Convert to FilteringResult format for contextual filtering
-          let filteringResults = filteringResult.results.map(r => ({
+          let filteringResults: FilteringResult[] = filteringResult.results.map(r => ({
             ...r,
             originalScore: r.score,
             filteringScore: r.score || 0.5,
@@ -996,9 +1018,13 @@ export class SearchService {
           );
 
           // Convert back to SearchResult
-          finalResults = filteringResults.map(r => ({
-            ...r,
-            score: r.filteringScore || r.originalScore || r.score,
+          finalResults = filteringResults.map((r): SearchResult => ({
+            title: r.title,
+            url: r.url,
+            content: r.content,
+            score: r.filteringScore ?? r.originalScore ?? r.score,
+            publishedDate: r.publishedDate,
+            author: r.author,
           }));
         } else {
           finalResults = filteringResult.results;
@@ -1026,10 +1052,25 @@ export class SearchService {
       };
 
       // Cache the results in Redis (with automatic fallback if Redis unavailable)
-      await RedisCacheService.set(cacheKey, searchResponse, {
+      const cacheSet = await RedisCacheService.set(cacheKey, searchResponse, {
         prefix: CACHE_PREFIX,
-        ttl: CACHE_TTL,
+        ttl: TAVILY_CACHE_TTL,
       });
+      
+      if (cacheSet) {
+        tavilyCacheStats.sets++;
+        logger.debug('Tavily search result cached', {
+          query: request.query,
+          topic: request.topic,
+          ttl: TAVILY_CACHE_TTL,
+        });
+      } else {
+        tavilyCacheStats.errors++;
+        logger.warn('Failed to cache Tavily search result', {
+          query: request.query,
+          topic: request.topic,
+        });
+      }
 
       logger.info('Search completed', {
         query: request.query,
@@ -1075,26 +1116,53 @@ export class SearchService {
   }
 
   /**
-   * Clear search cache
+   * Clear search cache (Tavily Redis entries)
    */
-  static clearCache(): void {
-    searchCache.clear();
+  static async clearCache(): Promise<void> {
+    await RedisCacheService.clearAll({ prefix: CACHE_PREFIX });
     logger.info('Search cache cleared');
   }
 
   /**
-   * Get cache statistics
+   * Get Tavily cache statistics
+   */
+  static getTavilyCacheStats(): TavilyCacheStats & { hitRate: number } {
+    const total = tavilyCacheStats.hits + tavilyCacheStats.misses;
+    const hitRate = total > 0 
+      ? (tavilyCacheStats.hits / total) * 100 
+      : 0;
+    
+    return {
+      ...tavilyCacheStats,
+      hitRate: Math.round(hitRate * 100) / 100, // Round to 2 decimal places
+    };
+  }
+
+  /**
+   * Reset Tavily cache statistics
+   */
+  static resetTavilyCacheStats(): void {
+    tavilyCacheStats = {
+      hits: 0,
+      misses: 0,
+      sets: 0,
+      errors: 0,
+    };
+  }
+
+  /**
+   * Get cache statistics (Tavily cache)
    */
   static getCacheStats(): {
     size: number;
     maxSize: number;
     entries: number;
   } {
-    cleanCache();
+    const total = tavilyCacheStats.hits + tavilyCacheStats.misses;
     return {
-      size: searchCache.size,
-      maxSize: MAX_CACHE_SIZE,
-      entries: searchCache.size,
+      size: total,
+      maxSize: 0,
+      entries: total,
     };
   }
 }

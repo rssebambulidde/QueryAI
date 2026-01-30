@@ -14,8 +14,8 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   }
 }
 
-// Create axios instance
-const apiClient: AxiosInstance = axios.create({
+// Create axios instance (exported for use by api-health, api-validation, api-ab-testing)
+export const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
@@ -90,7 +90,7 @@ export interface User {
   email: string;
   full_name?: string;
   avatar_url?: string;
-  subscriptionTier?: 'free' | 'premium' | 'pro';
+  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro';
 }
 
 export interface Session {
@@ -919,11 +919,14 @@ export const analyticsApi = {
 export interface Subscription {
   id: string;
   user_id: string;
-  tier: 'free' | 'premium' | 'pro';
+  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
   status: 'active' | 'cancelled' | 'expired';
   current_period_start?: string;
   current_period_end?: string;
   cancel_at_period_end: boolean;
+  paypal_subscription_id?: string;
+  billing_period?: 'monthly' | 'annual';
+  annual_discount?: number;
   created_at: string;
   updated_at: string;
 }
@@ -955,6 +958,7 @@ export interface SubscriptionData {
     queries: UsageLimit;
     documentUploads: UsageLimit;
     topics: UsageLimit;
+    tavilySearches?: UsageLimit;
   };
 }
 
@@ -983,6 +987,12 @@ export interface UsageStats {
     remaining: number | null;
     percentage: number;
   };
+  tavilySearches: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
   apiCalls?: {
     used: number;
     limit: number | null;
@@ -991,7 +1001,7 @@ export interface UsageStats {
   };
   periodStart: string;
   periodEnd: string;
-  tier: 'free' | 'premium' | 'pro';
+  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
 }
 
 export interface UsageHistory {
@@ -1003,7 +1013,24 @@ export interface UsageHistory {
 
 export interface UsageWarnings {
   approaching: boolean;
-  warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics'; percentage: number }>;
+  warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics' | 'tavilySearches'; percentage: number }>;
+}
+
+export interface OverageRecord {
+  metric_type: 'queries' | 'document_upload' | 'tavily_searches';
+  limit_value: number;
+  usage_value: number;
+  overage_units: number;
+  unit_price: number;
+  amount_charged: number;
+}
+
+export interface OverageSummary {
+  periodStart: string;
+  periodEnd: string;
+  currency: string;
+  totalCharged: number;
+  records: OverageRecord[];
 }
 
 // Usage API
@@ -1026,6 +1053,87 @@ export const usageApi = {
   },
 };
 
+// Billing API (overage)
+export const billingApi = {
+  getOverage: async (params?: {
+    periodStart?: string;
+    periodEnd?: string;
+    currency?: 'USD' | 'UGX';
+  }): Promise<ApiResponse<OverageSummary>> => {
+    const response = await apiClient.get('/api/billing/overage', { params: params ?? {} });
+    return response.data;
+  },
+
+  initiateOveragePayment: async (params: {
+    periodStart: string;
+    periodEnd: string;
+    currency?: 'USD' | 'UGX';
+  }): Promise<
+    ApiResponse<
+      | { noOverage: true; message: string }
+      | { payment_id: string; redirect_url: string; order_id: string; amount: number; currency: string }
+    >
+  > => {
+    const response = await apiClient.post('/api/billing/overage/initiate', {
+      periodStart: params.periodStart,
+      periodEnd: params.periodEnd,
+      currency: params.currency ?? 'USD',
+    });
+    return response.data;
+  },
+};
+
+// Enterprise API
+export const enterpriseApi = {
+  submitInquiry: async (params: {
+    name: string;
+    email: string;
+    company?: string;
+    message?: string;
+  }): Promise<ApiResponse<{ id: string; message: string }>> => {
+    const response = await apiClient.post('/api/enterprise/inquiry', params);
+    return response.data;
+  },
+};
+
+// Cost Analytics (Week 12)
+export interface CostSummary {
+  totalCost: number;
+  totalQueries: number;
+  totalTokens: number;
+  averageCostPerQuery: number;
+  modelBreakdown: Record<string, { count: number; totalCost: number; totalTokens: number }>;
+}
+
+export interface CostTrendPoint {
+  date: string;
+  totalCost: number;
+  totalQueries: number;
+  totalTokens: number;
+  byModel: Record<string, { cost: number; queries: number; tokens: number }>;
+}
+
+export const costApi = {
+  getSummary: async (params?: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<CostSummary>> => {
+    const response = await apiClient.get('/api/analytics/cost/summary', { params: params ?? {} });
+    return response.data;
+  },
+
+  getTrends: async (params: {
+    startDate: string;
+    endDate: string;
+    interval?: 'hour' | 'day' | 'week';
+  }): Promise<
+    ApiResponse<{ trends: CostTrendPoint[]; interval: string; startDate: string; endDate: string }>
+  > => {
+    const response = await apiClient.get('/api/analytics/cost/trends', { params: params ?? {} });
+    return response.data;
+  },
+};
+
 export const subscriptionApi = {
   get: async (): Promise<ApiResponse<SubscriptionData>> => {
     const response = await apiClient.get('/api/subscription');
@@ -1041,7 +1149,7 @@ export const subscriptionApi = {
     return response.data;
   },
 
-  upgrade: async (tier: 'free' | 'premium' | 'pro'): Promise<ApiResponse<{ subscription: Subscription }>> => {
+  upgrade: async (tier: 'free' | 'starter' | 'premium' | 'pro'): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.put('/api/subscription/upgrade', { tier });
     return response.data;
   },
@@ -1051,7 +1159,7 @@ export const subscriptionApi = {
     return response.data;
   },
 
-  downgrade: async (tier: 'free' | 'premium' | 'pro', immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
+  downgrade: async (tier: 'free' | 'starter' | 'premium' | 'pro', immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.put('/api/subscription/downgrade', { tier, immediate });
     return response.data;
   },
@@ -1078,15 +1186,28 @@ export const subscriptionApi = {
     return response.data;
   },
 
-  getProratedPricing: async (toTier: 'free' | 'premium' | 'pro', currency: 'UGX' | 'USD' = 'UGX'): Promise<ApiResponse<{ proratedPricing: any }>> => {
-    const response = await apiClient.get('/api/subscription/prorated-pricing', {
-      params: { toTier, currency },
-    });
+  getProratedPricing: async (
+    toTier: 'free' | 'starter' | 'premium' | 'pro',
+    currency: 'UGX' | 'USD' = 'UGX',
+    toBillingPeriod?: 'monthly' | 'annual'
+  ): Promise<ApiResponse<{ proratedPricing: any }>> => {
+    const params: { toTier: string; currency: string; toBillingPeriod?: string } = { toTier, currency };
+    if (toBillingPeriod) params.toBillingPeriod = toBillingPeriod;
+    const response = await apiClient.get('/api/subscription/prorated-pricing', { params });
     return response.data;
   },
 
-  startTrial: async (tier: 'premium' | 'pro', trialDays: number = 7): Promise<ApiResponse<{ subscription: Subscription; trial_end: string }>> => {
+  startTrial: async (tier: 'starter' | 'premium' | 'pro', trialDays: number = 7): Promise<ApiResponse<{ subscription: Subscription; trial_end: string }>> => {
     const response = await apiClient.post('/api/subscription/start-trial', { tier, trialDays });
+    return response.data;
+  },
+
+  getPayPalStatus: async (): Promise<ApiResponse<{
+    hasPayPalSubscription: boolean;
+    subscription: Subscription;
+    paypalStatus: { subscriptionId: string; status: string; next_billing_time?: string } | null;
+  }>> => {
+    const response = await apiClient.get('/api/subscription/paypal-status');
     return response.data;
   },
 };
@@ -1096,9 +1217,11 @@ export interface Payment {
   id: string;
   user_id: string;
   subscription_id?: string;
-  pesapal_order_tracking_id?: string;
-  pesapal_merchant_reference?: string;
-  tier: 'free' | 'premium' | 'pro';
+  paypal_order_id?: string;
+  paypal_payment_id?: string;
+  paypal_subscription_id?: string;
+  payment_provider?: 'paypal';
+  tier: 'free' | 'starter' | 'premium' | 'pro';
   amount: number;
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'cancelled';
@@ -1110,24 +1233,33 @@ export interface Payment {
 }
 
 export interface PaymentInitiateRequest {
-  tier: 'premium' | 'pro';
+  tier: 'starter' | 'premium' | 'pro';
   currency: 'UGX' | 'USD';
   firstName: string;
   lastName: string;
   email: string;
   phoneNumber?: string;
+  billing_period?: 'monthly' | 'annual';
 }
 
 export interface PaymentInitiateResponse {
   payment: {
     id: string;
-    tier: 'premium' | 'pro';
+    tier: 'starter' | 'premium' | 'pro';
     amount: number;
     currency: string;
     status: string;
+    billing_period?: 'monthly' | 'annual';
   };
   redirect_url: string;
-  order_tracking_id: string;
+  /** One-time payment: PayPal order ID */
+  order_id?: string;
+  /** Recurring: PayPal subscription ID */
+  subscription_id?: string;
+  recurring?: boolean;
+  billing_period?: 'monthly' | 'annual';
+  /** @deprecated Use order_id or subscription_id */
+  order_tracking_id?: string;
 }
 
 export interface RefundRequest {
@@ -1148,7 +1280,9 @@ export interface RefundResponse {
 }
 
 export const paymentApi = {
-  initiate: async (data: PaymentInitiateRequest & { recurring?: boolean }): Promise<ApiResponse<PaymentInitiateResponse>> => {
+  initiate: async (
+    data: PaymentInitiateRequest & { recurring?: boolean }
+  ): Promise<ApiResponse<PaymentInitiateResponse>> => {
     const response = await apiClient.post('/api/payment/initiate', data);
     return response.data;
   },

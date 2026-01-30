@@ -2,10 +2,16 @@ import { describe, it, expect, beforeEach } from '@jest/globals';
 import { ChunkingService } from '../services/chunking.service';
 import { SemanticChunkingService } from '../services/semantic-chunking.service';
 import { TokenCountService } from '../services/token-count.service';
+import { EmbeddingService } from '../services/embedding.service';
+
+jest.mock('../services/embedding.service');
 
 describe('Chunking Strategy Comparison', () => {
+  const fakeEmbedding = new Array(1536).fill(0).map((_, i) => (i % 10) / 10);
+
   beforeEach(() => {
     TokenCountService.clearCache();
+    (EmbeddingService.generateEmbedding as jest.Mock).mockResolvedValue([...fakeEmbedding]);
   });
 
   describe('Strategy Selection', () => {

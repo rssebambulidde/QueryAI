@@ -1,24 +1,31 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { paymentApi, PaymentInitiateRequest } from '@/lib/api';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
-import { Loader2 } from 'lucide-react';
+import { PayPalButton } from '@/components/payment/paypal-button';
+import { getPricing, getAnnualSavings, formatPrice } from '@/lib/pricing';
+import type { BillingPeriod } from '@/lib/pricing';
 
 interface PaymentDialogProps {
-  tier: 'premium' | 'pro';
+  tier: 'starter' | 'premium' | 'pro';
   onClose: () => void;
   onSuccess?: () => void;
+  /** When opening for "switch billing period", preselect monthly or annual. */
+  initialBillingPeriod?: BillingPeriod;
+  /** When true, preselect "Subscribe (recurring billing)" and use for subscription flows. */
+  initialRecurring?: boolean;
 }
 
-export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) {
+export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, initialRecurring }: PaymentDialogProps) {
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currency, setCurrency] = useState<'UGX' | 'USD'>('UGX');
+  const [currency, setCurrency] = useState<'UGX' | 'USD'>('USD');
+  const [recurring, setRecurring] = useState(!!initialRecurring);
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>(initialBillingPeriod ?? 'monthly');
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -40,92 +47,19 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
     }
   }, [user]);
 
-  const tierPricing: Record<'premium' | 'pro', Record<'UGX' | 'USD', number>> = {
-    premium: { UGX: 50000, USD: 15 },
-    pro: { UGX: 150000, USD: 45 },
-  };
+  useEffect(() => {
+    if (initialBillingPeriod) setBillingPeriod(initialBillingPeriod);
+  }, [initialBillingPeriod]);
+  useEffect(() => {
+    if (initialRecurring) setRecurring(true);
+  }, [initialRecurring]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+  const amount = getPricing(tier, currency, billingPeriod);
+  const annualSavings = getAnnualSavings(tier, currency);
 
-    if (!formData.firstName || !formData.lastName || !formData.email) {
-      setError('Please fill in all required fields');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Validate form data before sending
-      if (!formData.firstName.trim()) {
-        setError('First name is required');
-        setLoading(false);
-        return;
-      }
-      if (!formData.lastName.trim()) {
-        setError('Last name is required');
-        setLoading(false);
-        return;
-      }
-      if (!formData.email.trim() || !formData.email.includes('@')) {
-        setError('Valid email is required');
-        setLoading(false);
-        return;
-      }
-      
-      const requestData: PaymentInitiateRequest = {
-        tier,
-        currency,
-        firstName: formData.firstName.trim(),
-        lastName: formData.lastName.trim(),
-        email: formData.email.trim(),
-        phoneNumber: formData.phoneNumber?.trim() || undefined,
-      };
-      
-      console.log('[PaymentDialog] Sending payment request:', { ...requestData, phoneNumber: requestData.phoneNumber ? '***' : undefined });
-      
-      const response = await paymentApi.initiate(requestData);
-
-      if (response.success && response.data) {
-        // Redirect to Pesapal payment page
-        window.location.href = response.data.redirect_url;
-      } else {
-        setError(response.error?.message || 'Failed to initiate payment');
-      }
-    } catch (err: any) {
-      // Extract detailed error message
-      let errorMessage = 'Failed to initiate payment';
-      
-      if (err.response?.status === 400) {
-        // Bad request - validation error
-        const errorData = err.response?.data?.error;
-        if (errorData?.message) {
-          errorMessage = errorData.message;
-        } else {
-          errorMessage = 'Invalid payment information. Please check all fields and try again.';
-        }
-      } else if (err.response?.status === 500 || err.message?.includes('Pesapal authentication')) {
-        // Server error or Pesapal authentication issue
-        const errorData = err.response?.data?.error;
-        if (errorData?.message) {
-          errorMessage = errorData.message;
-        } else if (err.message?.includes('Pesapal authentication')) {
-          errorMessage = 'Payment service authentication failed. Please contact support or try again later. If this persists, check that Pesapal credentials are configured correctly.';
-        } else {
-          errorMessage = 'Payment service error. Please try again later or contact support.';
-        }
-      } else if (err.response?.data?.error?.message) {
-        errorMessage = err.response.data.error.message;
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-      
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
+  const handlePayPalError = (message: string) => {
+    setError(message);
+    setLoading(false);
   };
 
   return (
@@ -134,19 +68,26 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
         {/* Header - Fixed */}
         <div className="flex-shrink-0 p-6 border-b border-gray-200">
           <h2 className="text-xl font-bold mb-2">
-            Upgrade to {tier === 'premium' ? 'Premium' : 'Pro'}
+            Upgrade to {tier === 'starter' ? 'Starter' : tier === 'premium' ? 'Premium' : 'Pro'}
           </h2>
           <p className="text-gray-600 text-sm">
-            You will be redirected to Pesapal to complete your payment of{' '}
-            <span className="font-semibold text-orange-600">{currency} {tierPricing[tier][currency].toLocaleString()}</span>
+            Pay with PayPal or Visa —{' '}
+            <span className="font-semibold text-orange-600">{formatPrice(amount, currency)}</span>
+            {billingPeriod === 'annual' && ' /year'}
+            {recurring && ' (recurring)'}
           </p>
+          {billingPeriod === 'annual' && annualSavings.savingsPercentage > 0 && (
+            <p className="text-green-600 text-sm mt-1">
+              Save {annualSavings.savingsPercentage}% with annual billing
+            </p>
+          )}
         </div>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {/* Currency Selection */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="mb-4 space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
               Select Currency <span className="text-red-500">*</span>
             </label>
             <div className="flex gap-3">
@@ -160,7 +101,7 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
                 }`}
                 disabled={loading}
               >
-                UGX (Ugandan Shilling)
+                UGX
               </button>
               <button
                 type="button"
@@ -172,9 +113,56 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
                 }`}
                 disabled={loading}
               >
-                USD (US Dollar)
+                USD
               </button>
             </div>
+
+            {/* Billing period selector */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Billing period</label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setBillingPeriod('monthly')}
+                  className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+                    billingPeriod === 'monthly'
+                      ? 'border-orange-500 bg-orange-50 text-orange-700'
+                      : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                  }`}
+                  disabled={loading}
+                >
+                  Monthly
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingPeriod('annual')}
+                  className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+                    billingPeriod === 'annual'
+                      ? 'border-orange-500 bg-orange-50 text-orange-700'
+                      : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                  }`}
+                  disabled={loading}
+                >
+                  Annual
+                  {annualSavings.savingsPercentage > 0 && (
+                    <span className="ml-1 text-xs font-normal text-green-600">
+                      (Save {annualSavings.savingsPercentage}%)
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <input
+                type="checkbox"
+                checked={recurring}
+                onChange={(e) => setRecurring(e.target.checked)}
+                disabled={loading}
+                className="rounded border-gray-300"
+              />
+              Subscribe (recurring billing)
+            </label>
           </div>
 
           {error && (
@@ -183,7 +171,7 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4" id="payment-form">
+          <form className="space-y-4" id="payment-form" onSubmit={(e) => e.preventDefault()}>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               First Name <span className="text-red-500">*</span>
@@ -240,7 +228,21 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
         </div>
 
         {/* Footer with buttons - Fixed */}
-        <div className="flex-shrink-0 p-6 border-t border-gray-200 bg-gray-50">
+        <div className="flex-shrink-0 p-6 border-t border-gray-200 bg-gray-50 space-y-3">
+          <p className="text-sm text-gray-600 text-center mb-1">Pay with PayPal or use your Visa card via PayPal.</p>
+          <PayPalButton
+            tier={tier}
+            currency={currency}
+            firstName={formData.firstName}
+            lastName={formData.lastName}
+            email={formData.email}
+            phoneNumber={formData.phoneNumber || undefined}
+            recurring={recurring}
+            billingPeriod={billingPeriod}
+            disabled={loading}
+            onError={handlePayPalError}
+            onRedirect={() => setLoading(true)}
+          />
           <div className="flex gap-3">
             <Button
               type="button"
@@ -250,21 +252,6 @@ export function PaymentDialog({ tier, onClose, onSuccess }: PaymentDialogProps) 
               className="flex-1"
             >
               Cancel
-            </Button>
-            <Button
-              type="submit"
-              form="payment-form"
-              disabled={loading}
-              className="flex-1 bg-orange-600 hover:bg-orange-700 text-white"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                `Pay ${currency} ${tierPricing[tier][currency].toLocaleString()}`
-              )}
             </Button>
           </div>
         </div>

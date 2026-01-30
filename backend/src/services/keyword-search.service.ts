@@ -33,16 +33,11 @@ export interface KeywordSearchOptions {
  * Handles keyword-based document retrieval using BM25
  */
 export class KeywordSearchService {
-  private static index: BM25Index | null = null;
-
   /**
-   * Get or create BM25 index
+   * Get BM25 index (delegates to global singleton so resetBM25Index() works in tests)
    */
   private static getIndex(): BM25Index {
-    if (!this.index) {
-      this.index = getBM25Index();
-    }
-    return this.index;
+    return getBM25Index();
   }
 
   /**

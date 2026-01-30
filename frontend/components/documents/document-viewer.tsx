@@ -138,12 +138,12 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
     try {
       const blob = await documentApi.download(document.path);
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = window.document.createElement('a');
       link.href = url;
       link.download = document.name;
-      document.body.appendChild(link);
+      window.document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      window.document.body.removeChild(link);
       URL.revokeObjectURL(url);
       toast.success('Download started');
     } catch (error: any) {

@@ -3,7 +3,7 @@
  * Manages queuing system for RAG operations using BullMQ
  */
 
-import { Queue, QueueOptions, Job, JobOptions } from 'bullmq';
+import { Queue, QueueOptions, Job, JobsOptions } from 'bullmq';
 import logger from '../config/logger';
 import { QuestionRequest } from './ai.service';
 
@@ -167,7 +167,7 @@ export class RequestQueueService {
       },
     };
 
-    const jobOptions: JobOptions = {
+    const jobOptions: JobsOptions = {
       priority: options?.priority || this.DEFAULT_PRIORITY,
       jobId: options?.jobId,
       delay: options?.delay,
@@ -252,14 +252,14 @@ export class RequestQueueService {
   static async getQueueStats(): Promise<QueueStats> {
     const queue = this.getQueue();
 
-    const [waiting, active, completed, failed, delayed, paused] = await Promise.all([
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
       queue.getWaitingCount(),
       queue.getActiveCount(),
       queue.getCompletedCount(),
       queue.getFailedCount(),
       queue.getDelayedCount(),
-      queue.getPausedCount(),
     ]);
+    const paused = 0; // BullMQ Queue has no getPausedCount
 
     return {
       waiting,
@@ -294,7 +294,7 @@ export class RequestQueueService {
       case 'delayed':
         return queue.getDelayed(start, end);
       case 'paused':
-        return queue.getPaused(start, end);
+        return []; // BullMQ Queue has no getPaused
       default:
         return [];
     }

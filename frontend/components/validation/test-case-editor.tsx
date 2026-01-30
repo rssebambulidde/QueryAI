@@ -176,11 +176,9 @@ export const TestCaseEditor: React.FC<TestCaseEditorProps> = ({
                     if (file) handleImport(file);
                   }}
                 />
-                <Button variant="outline" size="sm" asChild>
-                  <span>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Import
-                  </span>
+                <Button variant="outline" size="sm" type="button">
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import
                 </Button>
               </label>
               <Button variant="outline" size="sm" onClick={handleExport}>

@@ -41,18 +41,33 @@ export namespace Database {
     created_at: string;
   }
 
+  /** Payment provider: PayPal only. */
+  export type PaymentProvider = 'paypal';
+
+  /** Billing period: monthly or annual. */
+  export type BillingPeriod = 'monthly' | 'annual';
+
+  export type SubscriptionTier = 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+
   export interface Subscription {
     id: string;
     user_id: string;
-    tier: 'free' | 'premium' | 'pro';
+    tier: SubscriptionTier;
     status: 'active' | 'cancelled' | 'expired';
     current_period_start?: string;
     current_period_end?: string;
     cancel_at_period_end: boolean;
-    pending_tier?: 'free' | 'premium' | 'pro';
+    pending_tier?: SubscriptionTier;
     trial_end?: string;
     grace_period_end?: string;
     auto_renew: boolean;
+    tavily_searches_used?: number;
+    tavily_searches_limit?: number;
+    paypal_subscription_id?: string;
+    /** Billing interval; default 'monthly'. */
+    billing_period?: BillingPeriod;
+    /** Discount percentage when billing_period is annual (0–100). */
+    annual_discount?: number;
     created_at: string;
     updated_at: string;
   }
@@ -156,9 +171,11 @@ export namespace Database {
     id: string;
     user_id: string;
     subscription_id?: string;
-    pesapal_order_tracking_id?: string;
-    pesapal_merchant_reference?: string;
-    tier: 'free' | 'premium' | 'pro';
+    payment_provider: PaymentProvider;
+    paypal_payment_id?: string;
+    paypal_order_id?: string;
+    paypal_subscription_id?: string;
+    tier: SubscriptionTier;
     amount: number;
     currency: string;
     status: 'pending' | 'completed' | 'failed' | 'cancelled';
@@ -195,11 +212,103 @@ export namespace Database {
     amount: number;
     currency: string;
     reason?: string;
-    pesapal_refund_id?: string;
+    paypal_refund_id?: string;
     status: 'pending' | 'completed' | 'failed';
     refund_data?: Record<string, any>;
     created_at: string;
     updated_at: string;
     completed_at?: string;
+  }
+
+  export interface EmailPreferences {
+    user_id: string;
+    opt_out_non_critical: boolean;
+    opt_out_reminders: boolean;
+    opt_out_marketing: boolean;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface EmailLog {
+    id: string;
+    user_id: string | null;
+    to_email: string;
+    to_name: string | null;
+    subject: string;
+    html_content: string | null;
+    text_content: string | null;
+    template_id: string | null;
+    status: 'pending' | 'sent' | 'failed' | 'skipped';
+    retry_count: number;
+    max_retries: number;
+    last_error: string | null;
+    brevo_message_id: string | null;
+    metadata: Record<string, any> | null;
+    created_at: string;
+    updated_at: string;
+    sent_at: string | null;
+  }
+
+  /** Overage tracking: usage beyond tier limits, per user/period/metric. */
+  export type OverageMetricType = 'queries' | 'document_upload' | 'tavily_searches';
+
+  export interface OverageRecord {
+    id: string;
+    user_id: string;
+    subscription_id?: string;
+    period_start: string;
+    period_end: string;
+    metric_type: OverageMetricType;
+    limit_value: number;
+    usage_value: number;
+    overage_units: number;
+    tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+    currency: string;
+    unit_price: number;
+    amount_charged: number;
+    payment_id?: string;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface Team {
+    id: string;
+    name: string;
+    slug: string;
+    owner_id: string;
+    subscription_id?: string;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export type TeamMemberRole = 'owner' | 'admin' | 'member';
+
+  export interface TeamMember {
+    id: string;
+    team_id: string;
+    user_id: string;
+    role: TeamMemberRole;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface TeamInvite {
+    id: string;
+    team_id: string;
+    email: string;
+    role: 'admin' | 'member';
+    token: string;
+    expires_at: string;
+    inviter_id?: string;
+    created_at: string;
+  }
+
+  export interface EnterpriseInquiry {
+    id: string;
+    name: string;
+    email: string;
+    company?: string;
+    message?: string;
+    created_at: string;
   }
 }

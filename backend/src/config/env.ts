@@ -40,11 +40,25 @@ interface EnvConfig {
   // Logging
   LOG_LEVEL: string;
 
-  // Payment Processing (Pesapal)
+  // Payment Processing (Pesapal – deprecated, use PayPal)
   PESAPAL_CONSUMER_KEY?: string;
   PESAPAL_CONSUMER_SECRET?: string;
   PESAPAL_ENVIRONMENT?: 'sandbox' | 'production';
   PESAPAL_WEBHOOK_URL?: string;
+
+  // Payment Processing (PayPal – primary)
+  PAYPAL_CLIENT_ID?: string;
+  PAYPAL_CLIENT_SECRET?: string;
+  PAYPAL_MODE?: 'sandbox' | 'live';
+  PAYPAL_WEBHOOK_ID?: string;
+  /** Optional plan IDs for subscriptions (monthly). Create in PayPal dashboard or via API. */
+  PAYPAL_PLAN_ID_STARTER?: string;
+  PAYPAL_PLAN_ID_PREMIUM?: string;
+  PAYPAL_PLAN_ID_PRO?: string;
+  /** Optional plan IDs for annual subscriptions. When set, annual billing uses these. */
+  PAYPAL_PLAN_ID_STARTER_ANNUAL?: string;
+  PAYPAL_PLAN_ID_PREMIUM_ANNUAL?: string;
+  PAYPAL_PLAN_ID_PRO_ANNUAL?: string;
 
   // Frontend URL (for payment redirects)
   FRONTEND_URL?: string;
@@ -76,6 +90,16 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
     'PESAPAL_CONSUMER_SECRET',
     'PESAPAL_ENVIRONMENT',
     'PESAPAL_WEBHOOK_URL',
+    'PAYPAL_CLIENT_ID',
+    'PAYPAL_CLIENT_SECRET',
+    'PAYPAL_MODE',
+    'PAYPAL_WEBHOOK_ID',
+    'PAYPAL_PLAN_ID_STARTER',
+    'PAYPAL_PLAN_ID_PREMIUM',
+    'PAYPAL_PLAN_ID_PRO',
+    'PAYPAL_PLAN_ID_STARTER_ANNUAL',
+    'PAYPAL_PLAN_ID_PREMIUM_ANNUAL',
+    'PAYPAL_PLAN_ID_PRO_ANNUAL',
     'FRONTEND_URL',
     'BREVO_API_KEY',
     'BREVO_SENDER_EMAIL',
@@ -133,11 +157,23 @@ const config: EnvConfig = {
   // Logging
   LOG_LEVEL: getEnvVar('LOG_LEVEL', 'info'),
 
-  // Payment Processing (Pesapal) - Optional
+  // Payment Processing (Pesapal) - Optional, deprecated
   PESAPAL_CONSUMER_KEY: getEnvVar('PESAPAL_CONSUMER_KEY') || undefined,
   PESAPAL_CONSUMER_SECRET: getEnvVar('PESAPAL_CONSUMER_SECRET') || undefined,
   PESAPAL_ENVIRONMENT: (getEnvVar('PESAPAL_ENVIRONMENT', 'sandbox') as 'sandbox' | 'production') || 'sandbox',
   PESAPAL_WEBHOOK_URL: getEnvVar('PESAPAL_WEBHOOK_URL') || undefined,
+
+  // Payment Processing (PayPal) - Optional
+  PAYPAL_CLIENT_ID: getEnvVar('PAYPAL_CLIENT_ID') || undefined,
+  PAYPAL_CLIENT_SECRET: getEnvVar('PAYPAL_CLIENT_SECRET') || undefined,
+  PAYPAL_MODE: (getEnvVar('PAYPAL_MODE', 'sandbox') as 'sandbox' | 'live') || 'sandbox',
+  PAYPAL_WEBHOOK_ID: getEnvVar('PAYPAL_WEBHOOK_ID') || undefined,
+  PAYPAL_PLAN_ID_STARTER: getEnvVar('PAYPAL_PLAN_ID_STARTER') || undefined,
+  PAYPAL_PLAN_ID_PREMIUM: getEnvVar('PAYPAL_PLAN_ID_PREMIUM') || undefined,
+  PAYPAL_PLAN_ID_PRO: getEnvVar('PAYPAL_PLAN_ID_PRO') || undefined,
+  PAYPAL_PLAN_ID_STARTER_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_STARTER_ANNUAL') || undefined,
+  PAYPAL_PLAN_ID_PREMIUM_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_PREMIUM_ANNUAL') || undefined,
+  PAYPAL_PLAN_ID_PRO_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_PRO_ANNUAL') || undefined,
 
   // Frontend URL (for payment redirects) - Optional
   FRONTEND_URL: getEnvVar('FRONTEND_URL') || undefined,

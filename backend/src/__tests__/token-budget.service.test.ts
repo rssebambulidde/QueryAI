@@ -111,118 +111,48 @@ describe('TokenBudgetService', () => {
     });
   });
 
-  describe('allocateContext', () => {
-    it('should allocate tokens to document context', () => {
-      const budget = TokenBudgetService.calculateBudget({
-        model: 'gpt-3.5-turbo',
-      });
-
-      const allocation = TokenBudgetService.allocateContext(budget, {
-        documentContext: 'This is a test document.',
-        webResults: '',
-      });
-
-      expect(allocation.documentContext).toBeGreaterThan(0);
-      expect(allocation.total).toBeGreaterThan(0);
-    });
-
-    it('should allocate tokens to web results', () => {
-      const budget = TokenBudgetService.calculateBudget({
-        model: 'gpt-3.5-turbo',
-      });
-
-      const allocation = TokenBudgetService.allocateContext(budget, {
-        documentContext: '',
-        webResults: 'This is a web result.',
-      });
-
-      expect(allocation.webResults).toBeGreaterThan(0);
-    });
-
-    it('should respect budget limits', () => {
-      const budget = TokenBudgetService.calculateBudget({
-        model: 'gpt-3.5-turbo',
-      });
-
-      const largeContext = 'word '.repeat(10000);
-      const allocation = TokenBudgetService.allocateContext(budget, {
-        documentContext: largeContext,
-        webResults: '',
-      });
-
-      expect(allocation.documentContext).toBeLessThanOrEqual(
-        budget.allocations.documentContext
-      );
-    });
-
-    it('should generate warnings when budget exceeded', () => {
-      const budget = TokenBudgetService.calculateBudget({
-        model: 'gpt-3.5-turbo',
-      });
-
-      const largeContext = 'word '.repeat(100000);
-      const allocation = TokenBudgetService.allocateContext(budget, {
-        documentContext: largeContext,
-        webResults: '',
-      });
-
-      expect(allocation.warnings.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('validateBudget', () => {
-    it('should validate budget within limits', () => {
-      const budget = TokenBudgetService.calculateBudget({
-        model: 'gpt-3.5-turbo',
-      });
-
-      const isValid = TokenBudgetService.validateBudget(budget);
-      expect(isValid).toBe(true);
-    });
-
-    it('should detect budget violations', () => {
-      const budget = TokenBudgetService.calculateBudget({
-        model: 'gpt-3.5-turbo',
-      });
-
-      // Manually set usage to exceed budget
-      budget.usage.total = budget.modelLimit + 1000;
-
-      const isValid = TokenBudgetService.validateBudget(budget);
-      expect(isValid).toBe(false);
-    });
-  });
-
-  describe('getRemainingBudget', () => {
-    it('should calculate remaining budget correctly', () => {
+  describe('budget remaining', () => {
+    it('should expose remaining budget from calculateBudget', () => {
       const budget = TokenBudgetService.calculateBudget({
         model: 'gpt-3.5-turbo',
         systemPrompt: 'System prompt',
         userPrompt: 'User question',
       });
 
-      const remaining = TokenBudgetService.getRemainingBudget(budget);
-      expect(remaining.total).toBeGreaterThan(0);
-      expect(remaining.documentContext).toBeGreaterThan(0);
-      expect(remaining.webResults).toBeGreaterThan(0);
+      expect(budget.remaining.total).toBeGreaterThan(0);
+      expect(budget.remaining.documentContext).toBeGreaterThan(0);
+      expect(budget.remaining.webResults).toBeGreaterThan(0);
     });
 
-    it('should account for used tokens', () => {
+    it('should reduce remaining when system/user prompts used', () => {
       const budget = TokenBudgetService.calculateBudget({
         model: 'gpt-3.5-turbo',
-        systemPrompt: 'System prompt',
-        userPrompt: 'User question',
+        systemPrompt: 'Long system prompt. '.repeat(20),
+        userPrompt: 'User question with more text.',
       });
 
-      TokenBudgetService.allocateContext(budget, {
-        documentContext: 'Document content',
-        webResults: '',
+      expect(budget.usage.total).toBeGreaterThan(0);
+      expect(budget.remaining.total).toBeLessThan(budget.modelLimit);
+    });
+  });
+
+  describe('budget validation', () => {
+    it('should have no warnings when within limits', () => {
+      const budget = TokenBudgetService.calculateBudget({
+        model: 'gpt-3.5-turbo',
       });
 
-      const remaining = TokenBudgetService.getRemainingBudget(budget);
-      expect(remaining.documentContext).toBeLessThan(
-        budget.allocations.documentContext
-      );
+      expect(budget.warnings.length).toBe(0);
+    });
+
+    it('should add warnings when usage exceeds allocation', () => {
+      const budget = TokenBudgetService.calculateBudget({
+        model: 'gpt-3.5-turbo',
+        systemPrompt: 'x '.repeat(50000),
+        userPrompt: 'y '.repeat(50000),
+      });
+
+      expect(budget.warnings.length).toBeGreaterThan(0);
     });
   });
 });

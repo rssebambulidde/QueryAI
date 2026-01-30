@@ -37,3 +37,18 @@ export const checkDatabaseHealth = async (): Promise<{
     };
   }
 };
+
+// Test Redis connection
+export const testRedisConnection = async (): Promise<boolean> => {
+  try {
+    const { checkRedisHealth, isRedisConfigured } = await import('./redis.config');
+    if (!isRedisConfigured()) {
+      logger.warn('Redis is not configured');
+      return false;
+    }
+    return await checkRedisHealth();
+  } catch (error) {
+    logger.error('Redis connection error:', error);
+    return false;
+  }
+};

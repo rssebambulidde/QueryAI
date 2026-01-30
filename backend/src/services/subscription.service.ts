@@ -1,4 +1,5 @@
 import { DatabaseService } from './database.service';
+import * as PayPalService from './paypal.service';
 import { Database } from '../types/database';
 import logger from '../config/logger';
 
@@ -7,28 +8,45 @@ import logger from '../config/logger';
  * Based on PROJECT_SPECIFICATION.md pricing tiers
  */
 export interface TierLimits {
-  queriesPerMonth: number | null; // null = unlimited
-  documentUploads: number | null; // null = unlimited
-  maxTopics: number | null; // null = unlimited
+  queriesPerMonth: number | null;
+  documentUploads: number | null;
+  maxTopics: number | null;
+  tavilySearchesPerMonth: number | null;
   features: {
     documentUpload: boolean;
     embedding: boolean;
     analytics: boolean;
     apiAccess: boolean;
     whiteLabel: boolean;
+    teamCollaboration?: boolean;
   };
+  maxTeamMembers?: number | null;
 }
 
 /**
  * Subscription tier limits map
  */
-export const TIER_LIMITS: Record<'free' | 'premium' | 'pro', TierLimits> = {
+export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enterprise', TierLimits> = {
   free: {
     queriesPerMonth: 50,
     documentUploads: 0, // No document upload
     maxTopics: 0, // No topics
+    tavilySearchesPerMonth: 5, // 5 searches per month for free tier
     features: {
       documentUpload: false,
+      embedding: false,
+      analytics: false,
+      apiAccess: false,
+      whiteLabel: false,
+    },
+  },
+  starter: {
+    queriesPerMonth: 100,
+    documentUploads: 3, // 3 documents for starter tier
+    maxTopics: 1,
+    tavilySearchesPerMonth: 10, // 10 searches per month for starter tier
+    features: {
+      documentUpload: true, // Enabled for starter tier
       embedding: false,
       analytics: false,
       apiAccess: false,
@@ -39,6 +57,7 @@ export const TIER_LIMITS: Record<'free' | 'premium' | 'pro', TierLimits> = {
     queriesPerMonth: 500,
     documentUploads: 10,
     maxTopics: 3,
+    tavilySearchesPerMonth: 50, // 50 searches per month for premium tier
     features: {
       documentUpload: true,
       embedding: true,
@@ -48,9 +67,10 @@ export const TIER_LIMITS: Record<'free' | 'premium' | 'pro', TierLimits> = {
     },
   },
   pro: {
-    queriesPerMonth: null, // Unlimited
-    documentUploads: null, // Unlimited
-    maxTopics: null, // Unlimited
+    queriesPerMonth: null,
+    documentUploads: null,
+    maxTopics: null,
+    tavilySearchesPerMonth: 200,
     features: {
       documentUpload: true,
       embedding: true,
@@ -58,6 +78,21 @@ export const TIER_LIMITS: Record<'free' | 'premium' | 'pro', TierLimits> = {
       apiAccess: true,
       whiteLabel: true,
     },
+  },
+  enterprise: {
+    queriesPerMonth: null,
+    documentUploads: null,
+    maxTopics: null,
+    tavilySearchesPerMonth: null,
+    features: {
+      documentUpload: true,
+      embedding: true,
+      analytics: true,
+      apiAccess: true,
+      whiteLabel: true,
+      teamCollaboration: true,
+    },
+    maxTeamMembers: 50,
   },
 };
 
@@ -191,7 +226,7 @@ export class SubscriptionService {
         return false;
       }
 
-      return subscriptionData.limits.features[feature];
+      return subscriptionData.limits.features[feature] ?? false;
     } catch (error) {
       logger.error('Failed to check feature access:', error);
       return false;
@@ -393,11 +428,146 @@ export class SubscriptionService {
   }
 
   /**
+   * Check if user has reached Tavily search limit
+   */
+  static async checkTavilySearchLimit(userId: string): Promise<{
+    allowed: boolean;
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+  }> {
+    try {
+      const subscriptionData = await this.getUserSubscriptionWithLimits(userId);
+      
+      if (!subscriptionData) {
+        return {
+          allowed: false,
+          used: 0,
+          limit: 0,
+          remaining: 0,
+        };
+      }
+
+      const { limits } = subscriptionData;
+      
+      // Check if tier has unlimited Tavily searches
+      if (limits.tavilySearchesPerMonth === null) {
+        return {
+          allowed: true,
+          used: 0,
+          limit: null,
+          remaining: null,
+        };
+      }
+
+      // Calculate current period (monthly)
+      const now = new Date();
+      const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      periodStart.setHours(0, 0, 0, 0);
+      const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      periodEnd.setHours(23, 59, 59, 999);
+
+      // Get Tavily usage count for current month
+      const used = await this.getTavilyUsageCount(userId, periodStart, periodEnd);
+
+      const remaining = limits.tavilySearchesPerMonth - used;
+      const allowed = used < limits.tavilySearchesPerMonth;
+
+      return {
+        allowed,
+        used,
+        limit: limits.tavilySearchesPerMonth,
+        remaining: Math.max(0, remaining),
+      };
+    } catch (error) {
+      logger.error('Failed to check Tavily search limit:', error);
+      return {
+        allowed: false,
+        used: 0,
+        limit: 0,
+        remaining: 0,
+      };
+    }
+  }
+
+  /**
+   * Get current Tavily usage count for a user in a given period
+   */
+  static async getTavilyUsageCount(
+    userId: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<number> {
+    try {
+      // Calculate period if not provided
+      let periodStart: Date;
+      let periodEnd: Date;
+
+      if (startDate && endDate) {
+        periodStart = startDate;
+        periodEnd = endDate;
+      } else {
+        const now = new Date();
+        periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        periodStart.setHours(0, 0, 0, 0);
+        periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        periodEnd.setHours(23, 59, 59, 999);
+      }
+
+      // Get usage count from usage_logs where metadata indicates Tavily search
+      // We need to fetch all records and filter in memory since Supabase JSONB queries can be tricky
+      const { supabaseAdmin } = await import('../config/database');
+      const { data, error } = await supabaseAdmin
+        .from('usage_logs')
+        .select('metadata')
+        .eq('user_id', userId)
+        .eq('type', 'query')
+        .gte('created_at', periodStart.toISOString())
+        .lte('created_at', periodEnd.toISOString());
+
+      if (error) {
+        logger.error('Error getting Tavily usage count:', error);
+        return 0;
+      }
+
+      // Filter records where metadata.usedTavily is true
+      const tavilyCount = (data || []).filter(
+        (log) => log.metadata && log.metadata.usedTavily === true
+      ).length;
+
+      return tavilyCount;
+    } catch (error) {
+      logger.error('Failed to get Tavily usage count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Increment Tavily usage for a user
+   * This should be called after a successful Tavily search
+   */
+  static async incrementTavilyUsage(
+    userId: string,
+    metadata?: Record<string, any>
+  ): Promise<void> {
+    try {
+      await DatabaseService.logUsage(userId, 'query', {
+        ...metadata,
+        usedTavily: true,
+      });
+      logger.info('Tavily usage incremented', { userId });
+    } catch (error) {
+      logger.error('Failed to increment Tavily usage:', error);
+      // Don't throw - usage tracking failure shouldn't break the request
+    }
+  }
+
+  /**
    * Update subscription tier with optional prorating
    */
   static async updateSubscriptionTier(
     userId: string,
-    tier: 'free' | 'premium' | 'pro',
+    tier: Database.SubscriptionTier,
     shouldProrate: boolean = false
   ): Promise<Database.Subscription | null> {
     try {
@@ -419,9 +589,11 @@ export class SubscriptionService {
         // Keep same period end for prorated changes
       } else {
         // Full period reset
+        const bp = (subscription as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
+        const days = bp === 'annual' ? 365 : 30;
         periodStart = now;
         periodEnd = new Date(now);
-        periodEnd.setDate(periodEnd.getDate() + 30); // 30 days from now
+        periodEnd.setDate(periodEnd.getDate() + days);
       }
 
       const updated = await DatabaseService.updateSubscription(userId, {
@@ -453,23 +625,49 @@ export class SubscriptionService {
   }
 
   /**
-   * Cancel subscription (immediate or at period end)
+   * Cancel subscription (immediate or at period end).
+   * If subscription has paypal_subscription_id, cancels at PayPal first.
    */
   static async cancelSubscription(
     userId: string,
     immediate: boolean = false
   ): Promise<Database.Subscription | null> {
     try {
+      const subscription = await DatabaseService.getUserSubscription(userId);
+      if (!subscription) {
+        return null;
+      }
+
+      if (subscription.paypal_subscription_id) {
+        try {
+          await PayPalService.cancelSubscription(
+            subscription.paypal_subscription_id,
+            immediate ? 'User requested immediate cancellation' : 'User requested cancel at period end'
+          );
+          logger.info('PayPal subscription cancelled', {
+            userId,
+            paypalSubscriptionId: subscription.paypal_subscription_id,
+            immediate,
+          });
+        } catch (paypalError) {
+          logger.error('Failed to cancel PayPal subscription, updating DB only', {
+            userId,
+            paypalSubscriptionId: subscription.paypal_subscription_id,
+            error: paypalError,
+          });
+          // Continue to update DB so local state is consistent
+        }
+      }
+
       if (immediate) {
-        // Immediate cancellation - downgrade to free
         return await DatabaseService.updateSubscription(userId, {
           tier: 'free',
           status: 'active',
           cancel_at_period_end: false,
           current_period_end: new Date().toISOString(),
+          paypal_subscription_id: null as unknown as undefined,
         });
       } else {
-        // Cancel at period end
         return await DatabaseService.updateSubscription(userId, {
           cancel_at_period_end: true,
         });
@@ -481,11 +679,205 @@ export class SubscriptionService {
   }
 
   /**
+   * Create a PayPal subscription (plan-based recurring).
+   * User must complete approval via approvalUrl; then sync in payment callback.
+   */
+  static async createPayPalSubscription(
+    tier: 'starter' | 'premium' | 'pro',
+    returnUrl: string,
+    cancelUrl: string,
+    customId?: string,
+    billingPeriod: 'monthly' | 'annual' = 'monthly'
+  ): Promise<PayPalService.CreateSubscriptionResult> {
+    return PayPalService.createSubscription({
+      tier,
+      returnUrl,
+      cancelUrl,
+      customId,
+      billing_period: billingPeriod,
+    });
+  }
+
+  /**
+   * Update PayPal subscription (e.g. custom_id or plan_id).
+   */
+  static async updatePayPalSubscription(
+    paypalSubscriptionId: string,
+    updates: { plan_id?: string; custom_id?: string }
+  ): Promise<PayPalService.SubscriptionDetails | null> {
+    try {
+      return await PayPalService.updateSubscription(paypalSubscriptionId, updates);
+    } catch (error) {
+      logger.error('Failed to update PayPal subscription', { paypalSubscriptionId, error });
+      return null;
+    }
+  }
+
+  /**
+   * Get PayPal subscription status (for subscriptions with paypal_subscription_id).
+   */
+  static async getPayPalSubscriptionStatus(
+    paypalSubscriptionId: string
+  ): Promise<PayPalService.SubscriptionDetails | null> {
+    try {
+      return await PayPalService.getSubscription(paypalSubscriptionId);
+    } catch (error) {
+      logger.error('Failed to get PayPal subscription status:', { paypalSubscriptionId, error });
+      return null;
+    }
+  }
+
+  /**
+   * Handle PayPal subscription renewal (called from webhook PAYMENT.SALE.COMPLETED).
+   * Extends period, creates payment record, sends renewal email.
+   */
+  static async handlePayPalSubscriptionRenewal(
+    paypalSubscriptionId: string,
+    saleResource: Record<string, unknown>
+  ): Promise<void> {
+    try {
+      const subscription = await DatabaseService.getSubscriptionByPayPalSubscriptionId(
+        paypalSubscriptionId
+      );
+      if (!subscription) {
+        logger.warn('Subscription not found for PayPal renewal', { paypalSubscriptionId });
+        return;
+      }
+
+      const now = new Date();
+      const periodEnd = new Date(now);
+      const billingPeriod = (subscription as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
+      const days = billingPeriod === 'annual' ? 365 : 30;
+      periodEnd.setDate(periodEnd.getDate() + days);
+
+      await DatabaseService.updateSubscription(subscription.user_id, {
+        current_period_start: now.toISOString(),
+        current_period_end: periodEnd.toISOString(),
+      });
+
+      const amount = (saleResource.amount as { value?: string })?.value;
+      const currency = (saleResource.amount as { currency_code?: string })?.currency_code || 'USD';
+      const saleId = saleResource.id as string | undefined;
+
+      await DatabaseService.createPayment({
+        user_id: subscription.user_id,
+        subscription_id: subscription.id,
+        payment_provider: 'paypal' as const,
+        paypal_subscription_id: paypalSubscriptionId,
+        paypal_payment_id: saleId,
+        tier: subscription.tier,
+        amount: amount ? parseFloat(amount) : 0,
+        currency: currency as 'UGX' | 'USD',
+        status: 'completed',
+        payment_description: `QueryAI ${subscription.tier} subscription renewal (${billingPeriod})`,
+        callback_data: saleResource,
+        completed_at: now.toISOString(),
+      });
+
+      await DatabaseService.logSubscriptionHistory(
+        subscription.id,
+        subscription.user_id,
+        'renewal',
+        { current_period_end: subscription.current_period_end },
+        { current_period_start: now.toISOString(), current_period_end: periodEnd.toISOString() },
+        'PayPal subscription renewed'
+      );
+
+      try {
+        const { EmailService } = await import('./email.service');
+        const { getPricing } = await import('../constants/pricing');
+        const user = await DatabaseService.getUserProfile(subscription.user_id);
+        if (user) {
+          const amt = amount ? parseFloat(amount) : getPricing(
+            subscription.tier as 'starter' | 'premium' | 'pro',
+            currency as 'UGX' | 'USD',
+            billingPeriod as 'monthly' | 'annual'
+          );
+          await EmailService.sendRenewalConfirmationEmail(
+            user.email,
+            user.full_name || user.email,
+            { ...subscription, current_period_start: now.toISOString(), current_period_end: periodEnd.toISOString() } as Database.Subscription,
+            now,
+            periodEnd,
+            amt,
+            currency as 'UGX' | 'USD'
+          );
+        }
+      } catch (emailError) {
+        logger.error('Failed to send renewal confirmation email', { subscriptionId: subscription.id, error: emailError });
+      }
+
+      logger.info('PayPal subscription renewal processed', {
+        userId: subscription.user_id,
+        paypalSubscriptionId,
+        tier: subscription.tier,
+      });
+    } catch (error) {
+      logger.error('Failed to handle PayPal subscription renewal', { paypalSubscriptionId, error });
+    }
+  }
+
+  /**
+   * Handle PayPal subscription cancelled/suspended (called from webhook).
+   * Sets cancel_at_period_end or downgrades when appropriate.
+   */
+  static async handlePayPalSubscriptionCancelled(
+    paypalSubscriptionId: string,
+    reason?: string
+  ): Promise<void> {
+    try {
+      const subscription = await DatabaseService.getSubscriptionByPayPalSubscriptionId(
+        paypalSubscriptionId
+      );
+      if (!subscription) {
+        logger.warn('Subscription not found for PayPal cancel event', { paypalSubscriptionId });
+        return;
+      }
+
+      const now = new Date();
+      const periodEnd = subscription.current_period_end ? new Date(subscription.current_period_end) : now;
+
+      if (now >= periodEnd) {
+        await DatabaseService.updateSubscription(subscription.user_id, {
+          tier: 'free',
+          status: 'active',
+          cancel_at_period_end: false,
+          paypal_subscription_id: undefined,
+          current_period_end: now.toISOString(),
+        });
+        await DatabaseService.logSubscriptionHistory(
+          subscription.id,
+          subscription.user_id,
+          'cancellation',
+          { tier: subscription.tier, paypal_subscription_id: paypalSubscriptionId },
+          { tier: 'free' },
+          reason || 'PayPal subscription ended'
+        );
+        logger.info('PayPal subscription ended, downgraded to free', {
+          userId: subscription.user_id,
+          paypalSubscriptionId,
+        });
+      } else {
+        await DatabaseService.updateSubscription(subscription.user_id, {
+          cancel_at_period_end: true,
+        });
+        logger.info('PayPal subscription cancelled, will downgrade at period end', {
+          userId: subscription.user_id,
+          paypalSubscriptionId,
+          current_period_end: subscription.current_period_end,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to handle PayPal subscription cancelled', { paypalSubscriptionId, error });
+    }
+  }
+
+  /**
    * Downgrade subscription tier
    */
   static async downgradeSubscription(
     userId: string,
-    targetTier: 'free' | 'premium' | 'pro',
+    targetTier: 'free' | 'starter' | 'premium' | 'pro',
     immediate: boolean = false
   ): Promise<Database.Subscription | null> {
     try {
@@ -528,6 +920,71 @@ export class SubscriptionService {
     } catch (error) {
       logger.error('Failed to downgrade subscription:', error);
       return null;
+    }
+  }
+
+  /**
+   * Send 7-day payment reminders for upcoming renewals.
+   * Should be called daily by the renewal job.
+   */
+  static async processRenewalReminders(): Promise<void> {
+    try {
+      const { supabaseAdmin } = await import('../config/database');
+      const { getPricing } = await import('../constants/pricing');
+      const { EmailService } = await import('./email.service');
+
+      const now = new Date();
+      const minEnd = new Date(now.getTime() + 6.5 * 24 * 60 * 60 * 1000);
+      const maxEnd = new Date(now.getTime() + 7.5 * 24 * 60 * 60 * 1000);
+
+      const { data: subscriptions, error } = await supabaseAdmin
+        .from('subscriptions')
+        .select('*')
+        .eq('status', 'active')
+        .neq('tier', 'free')
+        .eq('cancel_at_period_end', false)
+        .gte('current_period_end', minEnd.toISOString())
+        .lte('current_period_end', maxEnd.toISOString());
+
+      if (error) {
+        logger.error('Failed to fetch subscriptions for renewal reminders:', error);
+        return;
+      }
+      if (!subscriptions || subscriptions.length === 0) {
+        return;
+      }
+
+      for (const sub of subscriptions as Database.Subscription[]) {
+        try {
+          const user = await DatabaseService.getUserProfile(sub.user_id);
+          if (!user) continue;
+
+          let currency: 'UGX' | 'USD' = 'UGX';
+          const payments = await DatabaseService.getUserPayments(sub.user_id, 20);
+          const lastForTier = payments.find(
+            (p) => p.tier === sub.tier && p.status === 'completed' && (p.currency === 'UGX' || p.currency === 'USD')
+          );
+          if (lastForTier?.currency === 'USD' || lastForTier?.currency === 'UGX') {
+            currency = lastForTier.currency;
+          }
+
+          const bp = (sub as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
+          const amount = getPricing(sub.tier as 'starter' | 'premium' | 'pro', currency, bp as 'monthly' | 'annual');
+          const paymentMethod = lastForTier?.payment_method?.trim() || undefined;
+          await EmailService.sendRenewalReminderEmail(
+            user.email,
+            user.full_name || user.email,
+            sub,
+            7,
+            { amount, currency, paymentMethod }
+          );
+          logger.info('Renewal reminder sent', { userId: sub.user_id, tier: sub.tier });
+        } catch (e) {
+          logger.error('Failed to send renewal reminder', { subscriptionId: sub.id, error: e });
+        }
+      }
+    } catch (err) {
+      logger.error('processRenewalReminders failed:', err);
     }
   }
 
@@ -588,11 +1045,18 @@ export class SubscriptionService {
           fromTier: oldTier,
           toTier: targetTier,
         });
-          } else if (subscription.tier !== 'free' && subscription.auto_renew !== false) {
-            // Auto-renew paid subscriptions (if auto_renew is enabled)
+          } else if (
+            subscription.tier !== 'free' &&
+            subscription.auto_renew !== false &&
+            !(subscription as Database.Subscription).paypal_subscription_id
+          ) {
+            // Auto-renew paid subscriptions (if auto_renew is enabled).
+            // Skip PayPal subscriptions: renewal is handled by PayPal webhook (PAYMENT.SALE.COMPLETED).
             const now = new Date();
             const periodEnd = new Date(now);
-            periodEnd.setDate(periodEnd.getDate() + 30); // 30 days from now
+            const bp = (subscription as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
+            const days = bp === 'annual' ? 365 : 30;
+            periodEnd.setDate(periodEnd.getDate() + days);
 
             const oldPeriodEnd = subscription.current_period_end;
             await DatabaseService.updateSubscription(subscription.user_id, {
@@ -614,6 +1078,43 @@ export class SubscriptionService {
               userId: subscription.user_id,
               tier: subscription.tier,
             });
+
+            // Send renewal confirmation email
+            try {
+              const { getPricing } = await import('../constants/pricing');
+              const { EmailService } = await import('./email.service');
+              const user = await DatabaseService.getUserProfile(subscription.user_id);
+              if (user) {
+                let currency: 'UGX' | 'USD' = 'UGX';
+                const payments = await DatabaseService.getUserPayments(subscription.user_id, 20);
+                const lastForTier = payments.find(
+                  (p: Database.Payment) =>
+                    p.tier === subscription.tier &&
+                    p.status === 'completed' &&
+                    (p.currency === 'UGX' || p.currency === 'USD')
+                );
+                if (lastForTier?.currency === 'USD' || lastForTier?.currency === 'UGX') {
+                  currency = lastForTier.currency as 'UGX' | 'USD';
+                }
+                const amount = getPricing(
+                  subscription.tier as 'starter' | 'premium' | 'pro',
+                  currency,
+                  bp as 'monthly' | 'annual'
+                );
+                await EmailService.sendRenewalConfirmationEmail(
+                  user.email,
+                  user.full_name || user.email,
+                  { ...subscription, current_period_start: now.toISOString(), current_period_end: periodEnd.toISOString() } as Database.Subscription,
+                  now,
+                  periodEnd,
+                  amount,
+                  currency
+                );
+                logger.info('Renewal confirmation email sent', { userId: subscription.user_id, tier: subscription.tier });
+              }
+            } catch (e) {
+              logger.error('Failed to send renewal confirmation email', { subscriptionId: subscription.id, error: e });
+            }
           }
         } catch (error) {
           logger.error('Failed to process renewal for subscription:', {
@@ -624,6 +1125,98 @@ export class SubscriptionService {
       }
     } catch (error) {
       logger.error('Failed to process renewals:', error);
+    }
+  }
+
+  /**
+   * Send 3-day expiration warnings for cancel_at_period_end subscriptions.
+   * Should be called daily by the renewal job.
+   */
+  static async processExpirationWarnings(): Promise<void> {
+    try {
+      const { supabaseAdmin } = await import('../config/database');
+      const { EmailService } = await import('./email.service');
+
+      const now = new Date();
+      const minEnd = new Date(now.getTime() + 2.5 * 24 * 60 * 60 * 1000);
+      const maxEnd = new Date(now.getTime() + 3.5 * 24 * 60 * 60 * 1000);
+
+      const { data: subscriptions, error } = await supabaseAdmin
+        .from('subscriptions')
+        .select('*')
+        .eq('status', 'active')
+        .eq('cancel_at_period_end', true)
+        .neq('tier', 'free')
+        .gte('current_period_end', minEnd.toISOString())
+        .lte('current_period_end', maxEnd.toISOString());
+
+      if (error) {
+        logger.error('Failed to fetch subscriptions for expiration warnings:', error);
+        return;
+      }
+      if (!subscriptions || subscriptions.length === 0) return;
+
+      for (const sub of subscriptions as Database.Subscription[]) {
+        try {
+          const user = await DatabaseService.getUserProfile(sub.user_id);
+          if (!user) continue;
+          await EmailService.sendExpirationWarningEmail(
+            user.email,
+            user.full_name || user.email,
+            sub,
+            3
+          );
+          logger.info('Expiration warning sent', { userId: sub.user_id, tier: sub.tier });
+        } catch (e) {
+          logger.error('Failed to send expiration warning', { subscriptionId: sub.id, error: e });
+        }
+      }
+    } catch (err) {
+      logger.error('processExpirationWarnings failed:', err);
+    }
+  }
+
+  /**
+   * Send grace period warnings for subscriptions in grace period.
+   * Run daily; sends when days remaining is 3 or 1 to avoid spam.
+   */
+  static async processGracePeriodWarnings(): Promise<void> {
+    try {
+      const { supabaseAdmin } = await import('../config/database');
+      const { EmailService } = await import('./email.service');
+
+      const now = new Date();
+      const { data: rows, error } = await supabaseAdmin
+        .from('subscriptions')
+        .select('*')
+        .eq('status', 'active')
+        .neq('tier', 'free')
+        .not('grace_period_end', 'is', null);
+
+      if (error || !rows?.length) return;
+
+      for (const sub of rows as Database.Subscription[]) {
+        const end = sub.grace_period_end ? new Date(sub.grace_period_end) : null;
+        if (!end || end <= now) continue;
+        const daysRemaining = Math.ceil((end.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+        if (daysRemaining !== 3 && daysRemaining !== 1) continue;
+
+        try {
+          const user = await DatabaseService.getUserProfile(sub.user_id);
+          if (!user) continue;
+          await EmailService.sendGracePeriodWarningEmail(
+            user.email,
+            user.full_name || user.email,
+            sub,
+            daysRemaining
+          );
+          logger.info('Grace period warning sent', { userId: sub.user_id, daysRemaining });
+        } catch (e) {
+          logger.error('Failed to send grace period warning', { subscriptionId: sub.id, error: e });
+        }
+      }
+    } catch (err) {
+      logger.error('processGracePeriodWarnings failed:', err);
     }
   }
 

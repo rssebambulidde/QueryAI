@@ -9,9 +9,6 @@ export interface DateRange {
   endDate: string;
 }
 
-// Re-export for convenience
-export type { DateRange };
-
 interface DateRangePickerProps {
   value: DateRange;
   onChange: (range: DateRange) => void;

@@ -5,7 +5,7 @@ import { flushSync } from 'react-dom';
 import { ChatMessage, Message } from './chat-message';
 import { ChatInput } from './chat-input';
 import { RAGSourceSelector, RAGSettings } from './rag-source-selector';
-import { aiApi, QuestionRequest, documentApi, conversationApi, topicApi, Topic, Source } from '@/lib/api';
+import { aiApi, QuestionRequest, QuestionResponse, documentApi, conversationApi, topicApi, Topic, Source } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { useFilterStore } from '@/lib/store/filter-store';
@@ -642,13 +642,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                   reranking: metadata.reranking,
                   contextChunks: metadata.contextChunks,
                   selectionReasoning: metadata.selectionReasoning,
-                  usage: lastMessage.usage || metadata.usage,
+                  usage: metadata.usage,
                   cost: metadata.cost,
                 });
                 
                 // Update previous token usage and cost for trend indicators
-                if (metadata.usage || lastMessage.usage) {
-                  const usage = metadata.usage || lastMessage.usage;
+                if (metadata.usage) {
+                  const usage = metadata.usage;
                   if (usage) {
                     setPreviousTokenUsage({ totalTokens: usage.totalTokens });
                   }
@@ -765,12 +765,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                   reranking: metadata.reranking,
                   contextChunks: metadata.contextChunks,
                   selectionReasoning: metadata.selectionReasoning,
-                  usage: lastMessage.usage || metadata.usage,
+                  usage: metadata.usage,
                   cost: metadata.cost,
                 });
                 
-                if (metadata.usage || lastMessage.usage) {
-                  const usage = metadata.usage || lastMessage.usage;
+                if (metadata.usage) {
+                  const usage = metadata.usage;
                   if (usage) {
                     setPreviousTokenUsage({ totalTokens: usage.totalTokens });
                   }
@@ -1081,7 +1081,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                           prompt: lastResponseData.usage?.promptTokens || 0,
                           completion: lastResponseData.usage?.completionTokens || 0,
                           context: lastResponseData.contextChunks.reduce(
-                            (sum, chunk) => sum + chunk.tokens,
+                            (sum: number, chunk: { tokens: number }) => sum + chunk.tokens,
                             0
                           ),
                         }}

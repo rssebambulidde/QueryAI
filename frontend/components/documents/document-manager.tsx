@@ -727,8 +727,6 @@ export const DocumentManager = () => {
               </div>
             );
             })}
-              </div>
-            ))}
           </div>
         )}
       </div>

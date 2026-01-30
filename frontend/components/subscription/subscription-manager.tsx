@@ -4,9 +4,13 @@ import { useEffect, useState } from 'react';
 import { subscriptionApi, usageApi, SubscriptionData, UsageLimit, Payment, BillingHistory, UsageStats, UsageWarnings } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { Check, X, Zap, FileText, Folder, Key, Sparkles, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp } from 'lucide-react';
+import { Check, X, Zap, FileText, Folder, Key, Sparkles, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
+import { getAnnualSavings, getPricing, formatPrice, isEnterpriseTier } from '@/lib/pricing';
+import type { BillingPeriod } from '@/lib/pricing';
+import { enterpriseApi } from '@/lib/api';
+import { Input } from '@/components/ui/input';
 
 export function SubscriptionManager() {
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
@@ -14,13 +18,17 @@ export function SubscriptionManager() {
   const [error, setError] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [selectedTier, setSelectedTier] = useState<'premium' | 'pro' | null>(null);
+  const [selectedTier, setSelectedTier] = useState<'starter' | 'premium' | 'pro' | null>(null);
+  const [paymentDialogInitialBilling, setPaymentDialogInitialBilling] = useState<BillingPeriod | undefined>();
+  const [paymentDialogInitialRecurring, setPaymentDialogInitialRecurring] = useState(false);
   const [billingHistory, setBillingHistory] = useState<BillingHistory | null>(null);
   const [showBillingHistory, setShowBillingHistory] = useState(false);
   const [showCancelOptions, setShowCancelOptions] = useState(false);
   const [showDowngradeOptions, setShowDowngradeOptions] = useState(false);
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [usageWarnings, setUsageWarnings] = useState<UsageWarnings | null>(null);
+  const [paypalStatus, setPaypalStatus] = useState<{ status: string; next_billing_time?: string } | null>(null);
+  const [showEnterpriseSignup, setShowEnterpriseSignup] = useState(false);
 
   useEffect(() => {
     loadSubscriptionData();
@@ -36,6 +44,19 @@ export function SubscriptionManager() {
       const response = await subscriptionApi.get();
       if (response.success && response.data) {
         setSubscriptionData(response.data);
+        if (response.data.subscription?.paypal_subscription_id) {
+          const paypalRes = await subscriptionApi.getPayPalStatus();
+          if (paypalRes.success && paypalRes.data?.paypalStatus) {
+            setPaypalStatus({
+              status: paypalRes.data.paypalStatus.status,
+              next_billing_time: paypalRes.data.paypalStatus.next_billing_time,
+            });
+          } else {
+            setPaypalStatus(null);
+          }
+        } else {
+          setPaypalStatus(null);
+        }
       } else {
         setError(response.error?.message || 'Failed to load subscription data');
       }
@@ -79,18 +100,28 @@ export function SubscriptionManager() {
     }
   };
 
-  const handleUpgrade = (tier: 'premium' | 'pro') => {
-    console.log('[SubscriptionManager] handleUpgrade called with tier:', tier);
+  const handleUpgrade = (tier: 'starter' | 'premium' | 'pro') => {
     setSelectedTier(tier);
+    setPaymentDialogInitialBilling(undefined);
+    setPaymentDialogInitialRecurring(false);
     setShowPaymentDialog(true);
-    console.log('[SubscriptionManager] Payment dialog should now be visible');
+  };
+
+  const handleSwitchBillingPeriod = (targetPeriod: BillingPeriod) => {
+    if (tier === 'free' || !['starter', 'premium', 'pro'].includes(tier)) return;
+    setSelectedTier(tier as 'starter' | 'premium' | 'pro');
+    setPaymentDialogInitialBilling(targetPeriod);
+    setPaymentDialogInitialRecurring(true);
+    setShowPaymentDialog(true);
   };
 
   const handlePaymentSuccess = async () => {
     setShowPaymentDialog(false);
     setSelectedTier(null);
-    // Reload subscription data after payment
+    setPaymentDialogInitialBilling(undefined);
+    setPaymentDialogInitialRecurring(false);
     await loadSubscriptionData();
+    await loadBillingHistory();
   };
 
   const handleCancel = async (immediate: boolean = false) => {
@@ -116,7 +147,7 @@ export function SubscriptionManager() {
     }
   };
 
-  const handleDowngrade = async (targetTier: 'free' | 'premium' | 'pro', immediate: boolean = false) => {
+  const handleDowngrade = async (targetTier: 'free' | 'starter' | 'premium' | 'pro', immediate: boolean = false) => {
     const message = immediate
       ? `Are you sure you want to downgrade to ${targetTier} immediately? You will lose access to current tier features right away.`
       : `Are you sure you want to downgrade to ${targetTier}? The change will take effect at the end of the current period.`;
@@ -201,6 +232,8 @@ export function SubscriptionManager() {
 
   const { subscription, limits, usage } = subscriptionData;
   const tier = subscription.tier;
+  const billingPeriod = (subscription.billing_period ?? 'monthly') as BillingPeriod;
+  const annualSavings = tier !== 'free' ? getAnnualSavings(tier, 'USD') : null;
 
   const formatLimit = (limit: UsageLimit) => {
     if (limit.limit === null) {
@@ -216,10 +249,14 @@ export function SubscriptionManager() {
 
   const getTierColor = (tier: string) => {
     switch (tier) {
+      case 'enterprise':
+        return 'from-indigo-600 to-slate-700';
       case 'pro':
         return 'from-purple-500 to-pink-500';
       case 'premium':
         return 'from-orange-500 to-orange-600';
+      case 'starter':
+        return 'from-blue-500 to-blue-600';
       default:
         return 'from-gray-400 to-gray-600';
     }
@@ -227,10 +264,14 @@ export function SubscriptionManager() {
 
   const getTierName = (tier: string) => {
     switch (tier) {
+      case 'enterprise':
+        return 'Enterprise';
       case 'pro':
         return 'Pro';
       case 'premium':
         return 'Premium';
+      case 'starter':
+        return 'Starter';
       default:
         return 'Free';
     }
@@ -254,6 +295,13 @@ export function SubscriptionManager() {
                   : `Renews on ${new Date(subscription.current_period_end).toLocaleDateString()}`}
               </p>
             )}
+            {tier !== 'free' && (
+              <p className="text-white/80 text-sm mt-1">
+                Billing: {billingPeriod === 'annual' ? 'Annual' : 'Monthly'}
+                {paypalStatus && ` · Payment: PayPal`}
+                {paypalStatus?.next_billing_time && ` · Next: ${new Date(paypalStatus.next_billing_time).toLocaleDateString()}`}
+              </p>
+            )}
           </div>
           {subscription.cancel_at_period_end && (
             <Button
@@ -266,6 +314,218 @@ export function SubscriptionManager() {
           )}
         </div>
       </div>
+
+      {/* Payment method */}
+      {tier !== 'free' && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-gray-600" />
+            Payment method
+          </h3>
+          {(subscription.paypal_subscription_id || paypalStatus) ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium text-gray-900">PayPal</p>
+                  <p className="text-sm text-gray-600">
+                    Billing: {billingPeriod === 'annual' ? 'Annual' : 'Monthly'}. Managed through PayPal.
+                  </p>
+                </div>
+                <a
+                  href="https://www.paypal.com/myaccount/autopay/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-orange-600 hover:text-orange-700 font-medium text-sm"
+                >
+                  Manage in PayPal
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+              {(billingPeriod === 'monthly' && annualSavings && annualSavings.savingsPercentage > 0) || billingPeriod === 'annual' ? (
+                <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100">
+                  {billingPeriod === 'monthly' && annualSavings && annualSavings.savingsPercentage > 0 ? (
+                    <>
+                      <p className="text-sm text-gray-600">
+                        Switch to annual and save <span className="font-semibold text-green-600">{annualSavings.savingsPercentage}%</span>.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSwitchBillingPeriod('annual')}
+                      >
+                        Switch to annual
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSwitchBillingPeriod('monthly')}
+                    >
+                      Switch to monthly
+                    </Button>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-gray-600 text-sm">Payment method not linked. Upgrade or renew via PayPal to set billing.</p>
+          )}
+        </div>
+      )}
+
+      {/* Tier Comparison Table */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-semibold mb-4">Compare Plans</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left p-3 font-semibold">Feature</th>
+                <th className="text-center p-3 font-semibold">Free</th>
+                <th className="text-center p-3 font-semibold bg-blue-50">Starter</th>
+                <th className="text-center p-3 font-semibold">Premium</th>
+                <th className="text-center p-3 font-semibold">Pro</th>
+                <th className="text-center p-3 font-semibold bg-indigo-50">Enterprise</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b">
+                <td className="p-3">Queries per month</td>
+                <td className="p-3 text-center">50</td>
+                <td className="p-3 text-center bg-blue-50">100</td>
+                <td className="p-3 text-center">500</td>
+                <td className="p-3 text-center">Unlimited</td>
+                <td className="p-3 text-center bg-indigo-50">Unlimited</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3">Document uploads</td>
+                <td className="p-3 text-center">
+                  <X className="w-4 h-4 text-gray-400 mx-auto" />
+                </td>
+                <td className="p-3 text-center bg-blue-50">3</td>
+                <td className="p-3 text-center">10</td>
+                <td className="p-3 text-center">Unlimited</td>
+                <td className="p-3 text-center bg-indigo-50">Unlimited</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3">Topics</td>
+                <td className="p-3 text-center">
+                  <X className="w-4 h-4 text-gray-400 mx-auto" />
+                </td>
+                <td className="p-3 text-center bg-blue-50">1</td>
+                <td className="p-3 text-center">3</td>
+                <td className="p-3 text-center">Unlimited</td>
+                <td className="p-3 text-center bg-indigo-50">Unlimited</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3">Tavily searches</td>
+                <td className="p-3 text-center">5</td>
+                <td className="p-3 text-center bg-blue-50">10</td>
+                <td className="p-3 text-center">50</td>
+                <td className="p-3 text-center">200</td>
+                <td className="p-3 text-center bg-indigo-50">Unlimited</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3">API access</td>
+                <td className="p-3 text-center">
+                  <X className="w-4 h-4 text-gray-400 mx-auto" />
+                </td>
+                <td className="p-3 text-center bg-blue-50">
+                  <X className="w-4 h-4 text-gray-400 mx-auto" />
+                </td>
+                <td className="p-3 text-center">
+                  <X className="w-4 h-4 text-gray-400 mx-auto" />
+                </td>
+                <td className="p-3 text-center">
+                  <Check className="w-4 h-4 text-green-600 mx-auto" />
+                </td>
+                <td className="p-3 text-center bg-indigo-50">
+                  <Check className="w-4 h-4 text-green-600 mx-auto" />
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3">Team collaboration</td>
+                <td className="p-3 text-center">
+                  <X className="w-4 h-4 text-gray-400 mx-auto" />
+                </td>
+                <td className="p-3 text-center bg-blue-50">
+                  <X className="w-4 h-4 text-gray-400 mx-auto" />
+                </td>
+                <td className="p-3 text-center">
+                  <X className="w-4 h-4 text-gray-400 mx-auto" />
+                </td>
+                <td className="p-3 text-center">
+                  <X className="w-4 h-4 text-gray-400 mx-auto" />
+                </td>
+                <td className="p-3 text-center bg-indigo-50">
+                  <Check className="w-4 h-4 text-green-600 mx-auto" />
+                </td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 font-semibold">Price (monthly)</td>
+                <td className="p-3 text-center font-semibold">Free</td>
+                <td className="p-3 text-center font-semibold bg-blue-50">{formatPrice(27000, 'UGX')}<br />{formatPrice(9, 'USD')}</td>
+                <td className="p-3 text-center font-semibold">{formatPrice(50000, 'UGX')}<br />{formatPrice(15, 'USD')}</td>
+                <td className="p-3 text-center font-semibold">{formatPrice(150000, 'UGX')}<br />{formatPrice(45, 'USD')}</td>
+                <td className="p-3 text-center font-semibold bg-indigo-50">Contact sales</td>
+              </tr>
+              <tr>
+                <td className="p-3 font-semibold">Price (annual)</td>
+                <td className="p-3 text-center font-semibold">—</td>
+                <td className="p-3 text-center font-semibold bg-blue-50">{formatPrice(getPricing('starter', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('starter', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('starter', 'USD').savingsPercentage}%</span></td>
+                <td className="p-3 text-center font-semibold">{formatPrice(getPricing('premium', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('premium', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('premium', 'USD').savingsPercentage}%</span></td>
+                <td className="p-3 text-center font-semibold">{formatPrice(getPricing('pro', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('pro', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('pro', 'USD').savingsPercentage}%</span></td>
+                <td className="p-3 text-center font-semibold bg-indigo-50">Contact sales</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {tier === 'free' && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              onClick={() => handleUpgrade('starter')}
+              variant="outline"
+              className="flex-1 min-w-[120px]"
+            >
+              Start with Starter
+            </Button>
+            <Button
+              onClick={() => handleUpgrade('premium')}
+              className="flex-1 min-w-[120px]"
+            >
+              Go Premium
+            </Button>
+            <Button
+              onClick={() => setShowEnterpriseSignup(true)}
+              variant="outline"
+              className="flex-1 min-w-[120px] border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+            >
+              Get Enterprise
+            </Button>
+          </div>
+        )}
+        {tier !== 'free' && !isEnterpriseTier(tier as 'free' | 'starter' | 'premium' | 'pro' | 'enterprise') && (
+          <div className="mt-4">
+            <Button
+              onClick={() => setShowEnterpriseSignup(true)}
+              variant="outline"
+              className="border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+            >
+              Contact sales · Enterprise
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {showEnterpriseSignup && (
+        <EnterpriseSignupDialog
+          onClose={() => setShowEnterpriseSignup(false)}
+          onSuccess={() => setShowEnterpriseSignup(false)}
+        />
+      )}
 
       {/* Usage Statistics */}
       <div className="bg-white rounded-lg shadow p-6">
@@ -300,7 +560,10 @@ export function SubscriptionManager() {
                   </Alert>
                   <Button
                     size="sm"
-                    onClick={() => handleUpgrade('premium')}
+                    onClick={() => {
+                      const upgradeTier = tier === 'free' ? 'starter' : tier === 'starter' ? 'premium' : 'premium';
+                      handleUpgrade(upgradeTier);
+                    }}
                     className="mt-2 w-full"
                   >
                     <ArrowUp className="h-3 w-3 mr-1" />
@@ -383,6 +646,43 @@ export function SubscriptionManager() {
                 )}
               </div>
             )}
+
+            {/* Tavily Searches */}
+            {usage.tavilySearches && (
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <div className="flex items-center gap-2">
+                    <Search className="w-4 h-4 text-blue-600" />
+                    <span className="font-medium">Tavily Searches</span>
+                  </div>
+                  <span className="text-sm text-gray-600">{formatLimit(usage.tavilySearches)}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full ${
+                      usage.tavilySearches.remaining === 0 ? 'bg-red-500' : usage.tavilySearches.remaining! < usage.tavilySearches.limit! * 0.2 ? 'bg-yellow-500' : 'bg-blue-500'
+                    }`}
+                    style={{ width: `${getProgressPercentage(usage.tavilySearches)}%` }}
+                  />
+                </div>
+                {usage.tavilySearches.remaining === 0 && (
+                  <div className="mt-2">
+                    <Alert variant="error" className="py-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="ml-2">Tavily search limit reached. Upgrade for more searches.</span>
+                    </Alert>
+                    <Button
+                      size="sm"
+                      onClick={() => handleUpgrade('premium')}
+                      className="mt-2 w-full"
+                    >
+                      <ArrowUp className="h-3 w-3 mr-1" />
+                      Upgrade Now
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -413,12 +713,54 @@ export function SubscriptionManager() {
       {tier !== 'pro' && (
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold mb-4">Upgrade Plan</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {tier === 'free' && (
+              <>
+                <div className="border-2 border-blue-500 rounded-lg p-4">
+                  <h4 className="font-semibold text-lg mb-2">Starter</h4>
+                  <p className="text-gray-600 text-sm mb-4">
+                    100 queries/month, 3 documents, 1 topic, 10 Tavily searches
+                  </p>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleUpgrade('starter');
+                      }}
+                      disabled={upgrading}
+                      className="w-full"
+                    >
+                      Upgrade to Starter - UGX 27,000 / USD 9
+                    </Button>
+                  </div>
+                </div>
+                <div className="border-2 border-orange-500 rounded-lg p-4">
+                  <h4 className="font-semibold text-lg mb-2">Premium</h4>
+                  <p className="text-gray-600 text-sm mb-4">
+                    500 queries/month, 10 documents, 3 topics, 50 Tavily searches
+                  </p>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleUpgrade('premium');
+                      }}
+                      disabled={upgrading}
+                      className="w-full"
+                    >
+                      Upgrade to Premium - UGX 50,000 / USD 15
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+            {tier === 'starter' && (
               <div className="border-2 border-orange-500 rounded-lg p-4">
                 <h4 className="font-semibold text-lg mb-2">Premium</h4>
                 <p className="text-gray-600 text-sm mb-4">
-                  500 queries/month, 10 documents, 3 topics
+                  500 queries/month, 10 documents, 3 topics, 50 Tavily searches
                 </p>
                 <div className="space-y-2">
                   <Button
@@ -435,10 +777,10 @@ export function SubscriptionManager() {
                 </div>
               </div>
             )}
-            <div className={`border-2 ${tier === 'premium' ? 'border-purple-500' : 'border-gray-300'} rounded-lg p-4`}>
+            <div className={`border-2 ${tier === 'premium' || tier === 'starter' ? 'border-purple-500' : 'border-gray-300'} rounded-lg p-4`}>
               <h4 className="font-semibold text-lg mb-2">Pro</h4>
               <p className="text-gray-600 text-sm mb-4">
-                Unlimited queries, unlimited documents, unlimited topics, API access
+                Unlimited queries, unlimited documents, unlimited topics, 200 Tavily searches, API access
               </p>
               <Button
                 onClick={(e) => {
@@ -487,9 +829,41 @@ export function SubscriptionManager() {
                   >
                     Downgrade to Premium (immediate)
                   </Button>
+                  <Button
+                    onClick={() => handleDowngrade('starter', false)}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Downgrade to Starter (at period end)
+                  </Button>
+                  <Button
+                    onClick={() => handleDowngrade('starter', true)}
+                    variant="outline"
+                    className="w-full border-blue-500 text-blue-600"
+                  >
+                    Downgrade to Starter (immediate)
+                  </Button>
                 </>
               )}
-              {(tier === 'pro' || tier === 'premium') && (
+              {tier === 'premium' && (
+                <>
+                  <Button
+                    onClick={() => handleDowngrade('starter', false)}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Downgrade to Starter (at period end)
+                  </Button>
+                  <Button
+                    onClick={() => handleDowngrade('starter', true)}
+                    variant="outline"
+                    className="w-full border-blue-500 text-blue-600"
+                  >
+                    Downgrade to Starter (immediate)
+                  </Button>
+                </>
+              )}
+              {(tier === 'pro' || tier === 'premium' || tier === 'starter') && (
                 <>
                   <Button
                     onClick={() => handleDowngrade('free', false)}
@@ -560,32 +934,66 @@ export function SubscriptionManager() {
           <div className="mt-4">
             {billingHistory && billingHistory.payments.length > 0 ? (
               <div className="space-y-3">
-                {billingHistory.payments.map((payment: Payment) => (
-                  <div
-                    key={payment.id}
-                    className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <div className="font-medium">
-                        {payment.tier.toUpperCase()} - {payment.currency} {payment.amount.toLocaleString()}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-2 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-2">
+                  <div className="md:col-span-4">Description</div>
+                  <div className="md:col-span-2">Provider</div>
+                  <div className="md:col-span-2">Date</div>
+                  <div className="md:col-span-2">Status</div>
+                  <div className="md:col-span-2 text-right">Invoice</div>
+                </div>
+                {billingHistory.payments.map((payment: Payment) => {
+                  const providerLabel =
+                    payment.payment_provider === 'paypal' ||
+                    payment.paypal_order_id ||
+                    payment.paypal_payment_id ||
+                    payment.paypal_subscription_id
+                      ? 'PayPal'
+                      : payment.payment_method || '—';
+                  return (
+                    <div
+                      key={payment.id}
+                      className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50/50"
+                    >
+                      <div className="md:col-span-4 min-w-0">
+                        <div className="font-medium">
+                          {payment.tier.toUpperCase()} — {payment.currency} {payment.amount.toLocaleString()}
+                        </div>
+                        {payment.payment_description && (
+                          <div className="text-xs text-gray-500 truncate">{payment.payment_description}</div>
+                        )}
                       </div>
-                      <div className="text-sm text-gray-600">
-                        {new Date(payment.created_at).toLocaleDateString()} • {payment.status}
+                      <div className="text-sm text-gray-600 md:col-span-2">{providerLabel}</div>
+                      <div className="text-sm text-gray-600 md:col-span-2">
+                        {new Date(payment.created_at).toLocaleDateString()}
+                      </div>
+                      <div className="text-sm md:col-span-2">
+                        <span
+                          className={
+                            payment.status === 'completed'
+                              ? 'text-green-600'
+                              : payment.status === 'failed' || payment.status === 'cancelled'
+                                ? 'text-red-600'
+                                : 'text-amber-600'
+                          }
+                        >
+                          {payment.status}
+                        </span>
+                      </div>
+                      <div className="md:col-span-2 md:text-right">
+                        {payment.status === 'completed' && (
+                          <Button
+                            onClick={() => handleDownloadInvoice(payment.id)}
+                            variant="outline"
+                            size="sm"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Invoice
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    {payment.status === 'completed' && (
-                      <Button
-                        onClick={() => handleDownloadInvoice(payment.id)}
-                        variant="outline"
-                        size="sm"
-                        className="ml-4"
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        Invoice
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="text-gray-600 text-center py-4">No billing history found</p>
@@ -601,10 +1009,131 @@ export function SubscriptionManager() {
           onClose={() => {
             setShowPaymentDialog(false);
             setSelectedTier(null);
+            setPaymentDialogInitialBilling(undefined);
+            setPaymentDialogInitialRecurring(false);
           }}
           onSuccess={handlePaymentSuccess}
+          initialBillingPeriod={paymentDialogInitialBilling}
+          initialRecurring={paymentDialogInitialRecurring}
         />
       )}
+    </div>
+  );
+}
+
+function EnterpriseSignupDialog({
+  onClose,
+  onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [company, setCompany] = useState('');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!name.trim() || !email.trim()) {
+      setError('Name and email are required.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await enterpriseApi.submitInquiry({
+        name: name.trim(),
+        email: email.trim(),
+        company: company.trim() || undefined,
+        message: message.trim() || undefined,
+      });
+      if (res.success) {
+        setDone(true);
+        setTimeout(() => onSuccess(), 2000);
+      } else {
+        setError(res.error?.message || 'Failed to submit. Please try again.');
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to submit. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-bold">Contact Sales · Enterprise</h2>
+          <p className="text-gray-600 text-sm mt-1">
+            Tell us about your needs and we&apos;ll get back to you with custom pricing.
+          </p>
+        </div>
+        {done ? (
+          <div className="p-6">
+            <p className="text-green-600 font-medium">Thank you. We&apos;ll contact you soon.</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            {error && (
+              <Alert variant="error">{error}</Alert>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                disabled={loading}
+                placeholder="Your name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading}
+                placeholder="you@company.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Company (optional)</label>
+              <Input
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                disabled={loading}
+                placeholder="Acme Inc."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Message (optional)</label>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                disabled={loading}
+                rows={3}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                placeholder="Team size, use case, etc."
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button type="submit" disabled={loading} className="flex-1">
+                {loading ? 'Sending…' : 'Submit'}
+              </Button>
+              <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

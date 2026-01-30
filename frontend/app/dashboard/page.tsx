@@ -18,6 +18,7 @@ import { useConversationStore } from '@/lib/store/conversation-store';
 import { BottomNavigation } from '@/components/mobile/bottom-navigation';
 import { MobileSidebar, HamburgerMenu } from '@/components/mobile/mobile-sidebar';
 import { useMobile } from '@/lib/hooks/use-mobile';
+import { useToast } from '@/lib/hooks/use-toast';
 
 type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'subscription';
 
@@ -25,6 +26,7 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading, logout, checkAuth } = useAuthStore();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -57,6 +59,31 @@ function DashboardContent() {
       setActiveTab(tabParam as TabType);
     }
   }, [searchParams]);
+
+  // Handle PayPal redirect query params (payment=success | cancelled | failed | error | pending)
+  useEffect(() => {
+    const payment = searchParams.get('payment');
+    if (!payment) return;
+
+    if (payment === 'success') {
+      toast.success('Payment completed. Your subscription has been updated.');
+      setActiveTab('subscription');
+      router.replace('/dashboard?tab=subscription', { scroll: false });
+      checkAuth().catch(() => {});
+    } else if (payment === 'cancelled') {
+      toast.info('Payment was cancelled.');
+      router.replace('/dashboard', { scroll: false });
+    } else if (payment === 'failed') {
+      toast.error('Payment failed. Please try again or contact support.');
+      router.replace('/dashboard?tab=subscription', { scroll: false });
+    } else if (payment === 'error') {
+      toast.error('Something went wrong. Please try again or contact support.');
+      router.replace('/dashboard?tab=subscription', { scroll: false });
+    } else if (payment === 'pending') {
+      toast.info('Payment is pending. Your subscription will update when payment completes.');
+      router.replace('/dashboard?tab=subscription', { scroll: false });
+    }
+  }, [searchParams, toast, router, checkAuth]);
 
   // Listen for navigation to subscription tab from chat errors
   useEffect(() => {

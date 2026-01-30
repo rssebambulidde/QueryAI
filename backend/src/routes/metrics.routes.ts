@@ -10,6 +10,9 @@ import { MetricsService, MetricsQuery } from '../services/metrics.service';
 import { LatencyTrackerService, LatencyQuery, OperationType } from '../services/latency-tracker.service';
 import { ErrorTrackerService, ErrorQuery, ServiceType, ErrorCategory } from '../services/error-tracker.service';
 import { QualityMetricsService, QualityQuery, QualityMetricType } from '../services/quality-metrics.service';
+import { SearchService } from '../services/search.service';
+import { AIService } from '../services/ai.service';
+import { RedisCacheService } from '../services/redis-cache.service';
 import { apiLimiter } from '../middleware/rateLimiter';
 import logger from '../config/logger';
 
@@ -100,7 +103,7 @@ router.post(
         }
       );
 
-      res.json({
+      return res.json({
         success: true,
         data: metrics,
       });
@@ -109,7 +112,7 @@ router.post(
         error: error.message,
         userId,
       });
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: 'Failed to collect metrics',
         error: error.message,
@@ -184,7 +187,7 @@ router.get(
       (interval as 'hour' | 'day' | 'week') || 'day'
     );
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         trends,
@@ -310,7 +313,7 @@ router.get(
       (interval as 'hour' | 'day' | 'week') || 'day'
     );
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         trends,
@@ -439,7 +442,7 @@ router.get(
       (interval as 'hour' | 'day' | 'week') || 'day'
     );
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         trends,
@@ -448,6 +451,49 @@ router.get(
         dateRange: {
           start: startDate,
           end: endDate,
+        },
+      },
+    });
+  })
+);
+
+/**
+ * GET /api/metrics/cache/stats
+ * Get cache statistics (Tavily, LLM, Redis)
+ */
+router.get(
+  '/cache/stats',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const tavilyStats = SearchService.getTavilyCacheStats();
+    const llmStats = AIService.getLLMCacheStats();
+    const redisStats = RedisCacheService.getStats();
+    const redisHealth = await RedisCacheService.healthCheck();
+
+    res.json({
+      success: true,
+      data: {
+        tavily: {
+          ...tavilyStats,
+          cacheTTL: 86400, // 24 hours
+        },
+        llm: {
+          ...llmStats,
+          cacheTTL: 3600, // 1 hour
+        },
+        redis: {
+          ...redisStats,
+          healthy: redisHealth.healthy,
+          configured: redisHealth.configured,
+          embeddingStats: RedisCacheService.getEmbeddingStats(),
+          ragStats: RedisCacheService.getRAGStats(),
+        },
+        summary: {
+          totalHits: tavilyStats.hits + llmStats.hits + redisStats.hits,
+          totalMisses: tavilyStats.misses + llmStats.misses + redisStats.misses,
+          overallHitRate: (tavilyStats.hits + llmStats.hits + redisStats.hits) / 
+            (tavilyStats.hits + llmStats.hits + redisStats.hits + tavilyStats.misses + llmStats.misses + redisStats.misses) * 100,
         },
       },
     });

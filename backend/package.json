@@ -14,7 +14,13 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "migrate-embeddings": "tsx src/scripts/migrate-embeddings.ts"
+    "test:unit": "jest --testPathPatterns=__tests__",
+    "test:integration": "jest --testPathPatterns=integration",
+    "test:performance": "jest --testPathPatterns=performance",
+    "migrate-embeddings": "tsx src/scripts/migrate-embeddings.ts",
+    "identify-pesapal-users": "tsx src/scripts/identify-pesapal-users.ts",
+    "migrate-pesapal-to-paypal": "tsx src/scripts/migrate-pesapal-to-paypal.ts",
+    "send-migration-emails": "tsx src/scripts/send-migration-emails.ts"
   },
   "keywords": [
     "ai",
@@ -30,10 +36,12 @@
     "npm": ">=9.0.0"
   },
   "dependencies": {
+    "@paypal/paypal-server-sdk": "^2.2.0",
     "@pinecone-database/pinecone": "^6.1.3",
     "@supabase/supabase-js": "^2.90.1",
     "@tavily/core": "^0.6.4",
     "@types/pdfkit": "^0.17.4",
+    "bullmq": "^5.25.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
@@ -41,7 +49,6 @@
     "helmet": "^8.1.0",
     "mammoth": "^1.11.0",
     "multer": "^1.4.5-lts.1",
-    "bullmq": "^5.25.0",
     "openai": "^6.16.0",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.17.2",

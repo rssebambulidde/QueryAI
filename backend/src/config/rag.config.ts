@@ -144,6 +144,7 @@ export class RAGConfig {
     // Step 1: Analyze query complexity
     let complexity: QueryComplexity | undefined;
     let complexityMultiplier = 1.0;
+    let budget: TokenBudget | undefined;
 
     if (config.useComplexityAdjustments) {
       try {
@@ -166,7 +167,7 @@ export class RAGConfig {
     let baseWebResults = config.defaultWebResults;
 
     if (config.useTokenBudgetLimits) {
-      let budget: TokenBudget | undefined = tokenBudget;
+      budget = tokenBudget;
 
       // Calculate token budget if not provided
       if (!budget && tokenBudgetOptions) {

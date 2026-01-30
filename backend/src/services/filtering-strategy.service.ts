@@ -187,7 +187,7 @@ export class FilteringStrategyService {
         filteringPenalties: { timeRange: penalty },
         filteringScore,
       };
-    }).filter((r): r is FilteringResult => r !== null);
+    }).filter((r) => r != null) as FilteringResult[];
   }
 
   /**
@@ -233,7 +233,7 @@ export class FilteringStrategyService {
         },
         filteringScore,
       };
-    }).filter((r): r is FilteringResult => r !== null);
+    }).filter((r) => r != null) as FilteringResult[];
   }
 
   /**
@@ -279,7 +279,7 @@ export class FilteringStrategyService {
         },
         filteringScore,
       };
-    }).filter((r): r is FilteringResult => r !== null);
+    }).filter((r) => r != null) as FilteringResult[];
   }
 
   /**
@@ -325,7 +325,7 @@ export class FilteringStrategyService {
         },
         filteringScore,
       };
-    }).filter((r): r is FilteringResult => r !== null);
+    }).filter((r) => r != null) as FilteringResult[];
   }
 
   /**
@@ -382,7 +382,7 @@ export class FilteringStrategyService {
     if (diversityRatio < minDiversity && filtered.length > 0) {
       // Add more diverse results if needed
       const remaining = results.filter(r => !filtered.includes(r));
-      const needed = Math.ceil(filtered.length * minDiversity) - uniqueDomains.size;
+      let needed = Math.ceil(filtered.length * minDiversity) - uniqueDomains.size;
 
       for (const result of remaining) {
         if (needed <= 0) break;

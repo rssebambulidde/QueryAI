@@ -155,7 +155,7 @@ router.post(
       logger.warn('Failed to log query usage', { error: usageError?.message });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Question answered successfully',
       data: result,
@@ -538,7 +538,7 @@ router.post(
 
     const summary = await AIService.summarizeResponse(originalResponse, keyword, sources);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: { summary },
     });
@@ -562,7 +562,7 @@ router.post(
 
     const essay = await AIService.writeEssay(originalResponse, keyword, sources);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: { essay },
     });
@@ -586,7 +586,7 @@ router.post(
 
     const report = await AIService.generateDetailedReport(originalResponse, keyword, sources);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: { report },
     });
@@ -615,7 +615,7 @@ router.post(
 
     const summary = await AIService.generateResearchSessionSummary(conversationId, userId, topicName);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: { summary },
     });
@@ -644,7 +644,7 @@ router.get(
 
     const starters = await AIService.generateSuggestedStarters(topicId, userId);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: { starters },
     });
@@ -741,7 +741,7 @@ router.post(
       },
     });
 
-    res.status(202).json({
+    return res.status(202).json({
       success: true,
       message: 'Request queued successfully',
       data: {
@@ -762,7 +762,7 @@ router.get(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { jobId } = req.params;
+    const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -787,7 +787,7 @@ router.get(
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: status,
     });
@@ -803,7 +803,7 @@ router.delete(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { jobId } = req.params;
+    const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -828,7 +828,7 @@ router.delete(
 
     const cancelled = await RequestQueueService.cancelJob(jobId);
 
-    res.json({
+    return res.json({
       success: cancelled,
       message: cancelled ? 'Job cancelled successfully' : 'Failed to cancel job',
     });
@@ -849,7 +849,7 @@ router.get(
     const { RAGWorker } = await import('../workers/rag-worker');
     const workerStatus = RAGWorker.getWorkerStatus();
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         stats,
@@ -890,7 +890,7 @@ router.get(
     // Filter by user ID
     const userJobs = jobs.filter(job => job.data.userId === userId);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         jobs: userJobs.map(job => ({

@@ -220,6 +220,11 @@ export class CitationValidatorService {
       errors,
       warnings,
       suggestions,
+      matchedCitations: 0,
+      unmatchedCitations: 0,
+      missingSources: [],
+      invalidUrls: [],
+      invalidDocumentIds: [],
     };
   }
 
@@ -231,12 +236,10 @@ export class CitationValidatorService {
     webCitations: string[];
     allCitations: string[];
   } {
-    const documentCitations = (text.match(CITATION_PATTERNS.documentCitation) || []).concat(
-      text.match(CITATION_PATTERNS.documentCitationWithUrl) || []
-    );
-    
-    const webCitations = text.match(CITATION_PATTERNS.webCitation) || [];
-    
+    const doc1 = text.match(CITATION_PATTERNS.documentCitation) ?? [];
+    const doc2 = text.match(CITATION_PATTERNS.documentCitationWithUrl) ?? [];
+    const documentCitations = [...doc1, ...doc2];
+    const webCitations = [...(text.match(CITATION_PATTERNS.webCitation) ?? [])];
     const allCitations = [...documentCitations, ...webCitations];
 
     return {
@@ -527,9 +530,10 @@ export class CitationValidatorService {
             }
           } else if (citation.name) {
             // Check by name (fuzzy match)
-            const matchingSource = sources.find(
-              s => s.type === 'web' && (s.title?.toLowerCase().includes(citation.name!.toLowerCase()) || s.url?.includes(citation.name))
-            );
+            const name = citation.name;
+            const matchingSource = name ? sources.find(
+              s => s.type === 'web' && (s.title?.toLowerCase().includes(name.toLowerCase()) || (s.url != null && name && s.url.includes(name)))
+            ) : undefined;
             if (matchingSource) {
               matched = true;
               matchedCount++;
@@ -553,7 +557,7 @@ export class CitationValidatorService {
         }
 
         // Additional format validation
-        const formatValidation = this.validateCitationFormat(citation.format);
+        const formatValidation = this.validateSingleCitationFormat(citation.format);
         if (!formatValidation.isValid) {
           errors.push(...formatValidation.errors.map(e => `Citation ${citation.format}: ${e}`));
         }
@@ -649,7 +653,7 @@ export class CitationValidatorService {
   /**
    * Validate single citation format
    */
-  private static validateCitationFormat(citationText: string): { isValid: boolean; errors: string[]; warnings: string[] } {
+  private static validateSingleCitationFormat(citationText: string): { isValid: boolean; errors: string[]; warnings: string[] } {
     const errors: string[] = [];
     const warnings: string[] = [];
 

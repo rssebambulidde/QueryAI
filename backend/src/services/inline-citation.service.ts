@@ -6,14 +6,60 @@
 
 import { ParsedCitation } from './citation-parser.service';
 import { Source } from './ai.service';
-import {
-  InlineCitationData,
-  AnswerSegment,
-  InlineCitation,
-  CitationLinkingOptions,
-  DEFAULT_CITATION_LINKING_OPTIONS,
-} from '../types/citation';
 import logger from '../config/logger';
+
+/** Internal inline citation record (citation + optional source match) */
+interface InlineCitationRecord {
+  citation: ParsedCitation;
+  source?: Source;
+  sourceIndex?: number;
+  confidence: 'exact' | 'fuzzy' | 'unknown';
+  position: { start: number; end: number };
+}
+
+/** Segment of answer with optional citations */
+interface AnswerSegment {
+  text: string;
+  startIndex: number;
+  endIndex: number;
+  citations: InlineCitationRecord[];
+  hasCitation: boolean;
+}
+
+/** Options for linking citations to sources */
+interface CitationLinkingOptions {
+  segmentByParagraphs?: boolean;
+  segmentBySentences?: boolean;
+  minSegmentLength?: number;
+  includeAdjacentCitations?: boolean;
+  citationRange?: number;
+  [key: string]: unknown;
+}
+
+const DEFAULT_CITATION_LINKING_OPTIONS: {
+  segmentByParagraphs: boolean;
+  segmentBySentences: boolean;
+  minSegmentLength: number;
+  includeAdjacentCitations: boolean;
+  citationRange: number;
+} = {
+  segmentByParagraphs: true,
+  segmentBySentences: false,
+  minSegmentLength: 50,
+  includeAdjacentCitations: false,
+  citationRange: 100,
+};
+
+/** Inline citation data result */
+interface InlineCitationData {
+  answer: string;
+  segments: AnswerSegment[];
+  citations: InlineCitationRecord[];
+  citationMap: Map<number, InlineCitationRecord[]>;
+  totalSegments: number;
+  segmentsWithCitations: number;
+  segmentsWithoutCitations: number;
+}
 
 /**
  * Inline Citation Service
@@ -44,8 +90,8 @@ export class InlineCitationService {
       // Build citation map
       const citationMap = this.buildCitationMap(inlineCitations);
 
-      const segmentsWithCitations = segments.filter(s => s.hasCitation).length;
-      const segmentsWithoutCitations = segments.length - segmentsWithCitations;
+      const segmentsWithCitations: number = segments.filter(s => s.hasCitation).length;
+      const segmentsWithoutCitations: number = segments.length - segmentsWithCitations;
 
       const processingTime = Date.now() - startTime;
 
@@ -79,7 +125,7 @@ export class InlineCitationService {
         answer,
         segments: [{ text: answer, startIndex: 0, endIndex: answer.length, citations: [], hasCitation: false }],
         citations: [],
-        citationMap: new Map(),
+        citationMap: new Map<number, InlineCitationRecord[]>(),
         totalSegments: 1,
         segmentsWithCitations: 0,
         segmentsWithoutCitations: 1,
@@ -122,8 +168,8 @@ export class InlineCitationService {
   private static createInlineCitations(
     parsedCitations: ParsedCitation[],
     sourceMap: Map<string, { source: Source; index: number }>
-  ): InlineCitation[] {
-    const inlineCitations: InlineCitation[] = [];
+  ): InlineCitationRecord[] {
+    const inlineCitations: InlineCitationRecord[] = [];
 
     for (const citation of parsedCitations) {
       let matchedSource: { source: Source; index: number } | undefined;
@@ -216,8 +262,8 @@ export class InlineCitationService {
    */
   private static segmentAnswer(
     answer: string,
-    inlineCitations: InlineCitation[],
-    options: Required<CitationLinkingOptions>
+    inlineCitations: InlineCitationRecord[],
+    options: typeof DEFAULT_CITATION_LINKING_OPTIONS
   ): AnswerSegment[] {
     const segments: AnswerSegment[] = [];
 
@@ -332,9 +378,9 @@ export class InlineCitationService {
    * Build citation map for fast lookup
    */
   private static buildCitationMap(
-    inlineCitations: InlineCitation[]
-  ): Map<number, InlineCitation[]> {
-    const map = new Map<number, InlineCitation[]>();
+    inlineCitations: InlineCitationRecord[]
+  ): Map<number, InlineCitationRecord[]> {
+    const map = new Map<number, InlineCitationRecord[]>();
 
     for (const citation of inlineCitations) {
       const position = citation.position.start;
@@ -350,9 +396,9 @@ export class InlineCitationService {
   /**
    * Remove duplicate citations
    */
-  private static deduplicateCitations(citations: InlineCitation[]): InlineCitation[] {
+  private static deduplicateCitations(citations: InlineCitationRecord[]): InlineCitationRecord[] {
     const seen = new Set<string>();
-    const unique: InlineCitation[] = [];
+    const unique: InlineCitationRecord[] = [];
 
     for (const citation of citations) {
       const key = `${citation.citation.position.start}-${citation.citation.position.end}`;
@@ -377,7 +423,7 @@ export class InlineCitationService {
       // Add citation markers if segment has citations
       if (segment.hasCitation && segment.citations.length > 0) {
         const citationMarkers = segment.citations
-          .map((citation, idx) => {
+          .map((citation: InlineCitationRecord, idx: number) => {
             const citationText = citation.citation.format;
             return `[${idx + 1}]${citationText}`;
           })
@@ -398,7 +444,7 @@ export class InlineCitationService {
   static getCitationsAtPosition(
     data: InlineCitationData,
     position: number
-  ): InlineCitation[] {
+  ): InlineCitationRecord[] {
     // Find exact match
     const exactMatch = data.citationMap.get(position);
     if (exactMatch) {
@@ -406,7 +452,7 @@ export class InlineCitationService {
     }
 
     // Find nearest citation
-    let nearestCitation: InlineCitation | null = null;
+    let nearestCitation: InlineCitationRecord | null = null;
     let minDistance = Infinity;
 
     for (const citation of data.citations) {

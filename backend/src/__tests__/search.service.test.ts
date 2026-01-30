@@ -38,6 +38,7 @@ import { CircuitBreakerService } from '../services/circuit-breaker.service';
 describe('SearchService', () => {
   const mockQuery = 'What is artificial intelligence?';
   const mockTopic = 'AI';
+  let client: { search: jest.Mock } = (tavilyClient ?? { search: jest.fn() }) as { search: jest.Mock };
 
   const mockTavilyResult = {
     results: [
@@ -62,8 +63,8 @@ describe('SearchService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Default mock implementations
-    (tavilyClient.search as any).mockResolvedValue(mockTavilyResult);
+    const client = (tavilyClient ?? { search: jest.fn() }) as { search: jest.Mock };
+    client.search.mockResolvedValue(mockTavilyResult as never);
     (RedisCacheService.get as any).mockResolvedValue(null);
     (RedisCacheService.set as any).mockResolvedValue(undefined);
     (CircuitBreakerService.execute as any).mockImplementation(
@@ -104,28 +105,40 @@ describe('SearchService', () => {
       averageQuality: 0.8,
       processingTimeMs: 10,
     });
-    (DomainAuthorityService.scoreResults as any).mockReturnValue({
-      results: mockTavilyResult.results.map((r: any) => ({
-        ...r,
-        authorityScore: 0.7,
-      })),
-      averageAuthority: 0.7,
-      processingTimeMs: 10,
-    });
+    (DomainAuthorityService.scoreResultsWithAuthority as jest.Mock).mockImplementation(
+      (...args: unknown[]) => {
+        const results = (Array.isArray(args[0]) ? args[0] : []) as unknown[];
+        const baseScores = (Array.isArray(args[1]) ? args[1] : []) as number[];
+        return results.map((r, i) => ({
+          result: r,
+          score: baseScores[i] ?? 0.5,
+          authorityScore: 0.7,
+        }));
+      }
+    );
     (WebDeduplicationService.deduplicate as any).mockReturnValue({
       results: mockTavilyResult.results,
       stats: {
-        exactDuplicatesRemoved: 0,
-        nearDuplicatesRemoved: 0,
+        originalCount: mockTavilyResult.results.length,
+        deduplicatedCount: mockTavilyResult.results.length,
+        urlDuplicatesRemoved: 0,
+        contentDuplicatesRemoved: 0,
         totalRemoved: 0,
         processingTimeMs: 10,
+        performanceWarning: false,
       },
     });
-    (FilteringStrategyService.applyFiltering as any).mockReturnValue({
+    (FilteringStrategyService.applyFilteringStrategy as jest.Mock).mockReturnValue({
       results: mockTavilyResult.results,
-      filteredCount: mockTavilyResult.results.length,
-      removedCount: 0,
-      processingTimeMs: 10,
+      stats: {
+        originalCount: mockTavilyResult.results.length,
+        filteredCount: mockTavilyResult.results.length,
+        hardFilteredCount: 0,
+        rankingAdjustedCount: 0,
+        diversityFilteredCount: 0,
+        processingTimeMs: 10,
+        strategy: 'moderate',
+      },
     });
   });
 
@@ -145,7 +158,7 @@ describe('SearchService', () => {
       expect(response.query).toBe(mockQuery);
       expect(response.results).toHaveLength(2);
       expect(response.results[0].title).toBe('AI Wikipedia');
-      expect(tavilyClient.search).toHaveBeenCalled();
+      expect(client.search).toHaveBeenCalled();
     });
 
     it('should throw ValidationError for empty query', async () => {
@@ -179,7 +192,7 @@ describe('SearchService', () => {
       const response = await SearchService.search(request);
 
       expect(response.cached).toBe(true);
-      expect(tavilyClient.search).not.toHaveBeenCalled();
+      expect(client.search).not.toHaveBeenCalled();
     });
 
     it('should return empty results when Tavily is not configured', async () => {
@@ -258,7 +271,7 @@ describe('SearchService', () => {
           score: 0.8,
         },
       ];
-      (tavilyClient.search as any).mockResolvedValueOnce({ results: resultsWithTopic });
+      (client.search as jest.Mock).mockResolvedValueOnce({ results: resultsWithTopic } as never);
 
       const request: SearchRequest = {
         query: mockQuery,
@@ -363,9 +376,9 @@ describe('SearchService', () => {
         score: 0.9,
         published_date: '2025-12-31',
       };
-      (tavilyClient.search as any).mockResolvedValueOnce({
+      (client.search as jest.Mock).mockResolvedValueOnce({
         results: [futureResult, ...mockTavilyResult.results],
-      });
+      } as never);
 
       const request: SearchRequest = {
         query: mockQuery,
@@ -400,7 +413,7 @@ describe('SearchService', () => {
       const response = await SearchService.search(request);
 
       expect(response.country).toBe('US');
-      expect(tavilyClient.search).toHaveBeenCalledWith(
+      expect(client.search).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           country: 'US',
@@ -417,7 +430,7 @@ describe('SearchService', () => {
 
       await SearchService.search(request);
 
-      expect(tavilyClient.search).toHaveBeenCalledWith(
+      expect(client.search).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           country: 'US',
@@ -440,7 +453,7 @@ describe('SearchService', () => {
 
       await SearchService.search(request);
 
-      expect(tavilyClient.search).toHaveBeenCalledWith(
+      expect(client.search).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           includeDomains: ['wikipedia.org', 'example.com'],
@@ -457,7 +470,7 @@ describe('SearchService', () => {
 
       await SearchService.search(request);
 
-      expect(tavilyClient.search).toHaveBeenCalledWith(
+      expect(client.search).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           excludeDomains: ['spam.com', 'ads.com'],
@@ -501,7 +514,7 @@ describe('SearchService', () => {
         rewritingTimeMs: 10,
         cached: false,
       });
-      (tavilyClient.search as any).mockResolvedValue(mockTavilyResult);
+      (client.search as jest.Mock).mockResolvedValue(mockTavilyResult as never);
 
       const request: SearchRequest = {
         query: mockQuery,
@@ -582,18 +595,14 @@ describe('SearchService', () => {
 
       await SearchService.search(request);
 
-      expect(DomainAuthorityService.scoreResults).toHaveBeenCalled();
+      expect(DomainAuthorityService.scoreResultsWithAuthority).toHaveBeenCalled();
     });
 
     it('should filter results by authority score when enabled', async () => {
-      (DomainAuthorityService.scoreResults as any).mockReturnValueOnce({
-        results: [
-          { ...mockTavilyResult.results[0], authorityScore: 0.8 },
-          { ...mockTavilyResult.results[1], authorityScore: 0.3 },
-        ],
-        averageAuthority: 0.55,
-        processingTimeMs: 10,
-      });
+      (DomainAuthorityService.scoreResultsWithAuthority as jest.Mock).mockReturnValueOnce([
+        { result: mockTavilyResult.results[0], score: 0.9, authorityScore: 0.8 },
+        { result: mockTavilyResult.results[1], score: 0.85, authorityScore: 0.3 },
+      ] as never);
 
       const request: SearchRequest = {
         query: mockQuery,
@@ -605,11 +614,9 @@ describe('SearchService', () => {
 
       const response = await SearchService.search(request);
 
-      // Should filter out low authority results
-      response.results.forEach((result: any) => {
-        if (result.authorityScore !== undefined) {
-          expect(result.authorityScore).toBeGreaterThanOrEqual(0.5);
-        }
+      response.results.forEach((r) => {
+        const auth = (r as { authorityScore?: number }).authorityScore;
+        if (auth !== undefined) expect(auth).toBeGreaterThanOrEqual(0.5);
       });
     });
 
@@ -634,7 +641,7 @@ describe('SearchService', () => {
 
       await SearchService.search(request);
 
-      expect(FilteringStrategyService.applyFiltering).toHaveBeenCalled();
+      expect(FilteringStrategyService.applyFilteringStrategy).toHaveBeenCalled();
     });
   });
 
@@ -706,7 +713,7 @@ describe('SearchService', () => {
 
   describe('edge cases', () => {
     it('should handle empty search results', async () => {
-      (tavilyClient.search as any).mockResolvedValueOnce({ results: [] });
+      (client.search as jest.Mock).mockResolvedValueOnce({ results: [] } as never);
 
       const request: SearchRequest = {
         query: mockQuery,
@@ -727,7 +734,7 @@ describe('SearchService', () => {
           score: 0.8,
         },
       ];
-      (tavilyClient.search as any).mockResolvedValueOnce({ results: resultsWithoutDates });
+      (client.search as jest.Mock).mockResolvedValueOnce({ results: resultsWithoutDates } as never);
 
       const request: SearchRequest = {
         query: mockQuery,
@@ -760,7 +767,7 @@ describe('SearchService', () => {
         content: `Content ${i}`,
         score: 0.9 - i * 0.01,
       }));
-      (tavilyClient.search as any).mockResolvedValueOnce({ results: manyResults });
+      (client.search as jest.Mock).mockResolvedValueOnce({ results: manyResults } as never);
 
       const request: SearchRequest = {
         query: mockQuery,

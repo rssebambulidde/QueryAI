@@ -199,16 +199,16 @@ export const MessageHistoryViewer: React.FC<MessageHistoryViewerProps> = ({
                     <div className="flex items-center gap-1">
                       {hasSources && (
                         <div className="flex items-center gap-1 text-xs text-gray-500">
-                          {message.sourceTypes?.documents > 0 && (
+                          {(message.sourceTypes?.documents ?? 0) > 0 && (
                             <span className="flex items-center gap-1">
                               <FileText className="w-3 h-3" />
-                              {message.sourceTypes.documents}
+                              {message.sourceTypes!.documents}
                             </span>
                           )}
-                          {message.sourceTypes?.web > 0 && (
+                          {(message.sourceTypes?.web ?? 0) > 0 && (
                             <span className="flex items-center gap-1">
                               <Globe className="w-3 h-3" />
-                              {message.sourceTypes.web}
+                              {message.sourceTypes!.web}
                             </span>
                           )}
                         </div>

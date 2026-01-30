@@ -809,6 +809,21 @@ export class RAGService {
     options: RAGOptions
   ): Promise<Array<{ title: string; url: string; content: string }>> {
     try {
+      // Check Tavily search limit before performing search
+      const { SubscriptionService } = await import('./subscription.service');
+      const limitCheck = await SubscriptionService.checkTavilySearchLimit(options.userId);
+
+      if (!limitCheck.allowed) {
+        logger.warn('Tavily search limit exceeded, skipping web search', {
+          userId: options.userId,
+          used: limitCheck.used,
+          limit: limitCheck.limit,
+          query: query.substring(0, 100),
+        });
+        // Return empty results instead of throwing error - document search can still work
+        return [];
+      }
+
       const searchRequest: SearchRequest = {
         query,
         topic: options.topic || undefined, // Use topic filter from options
@@ -838,11 +853,19 @@ export class RAGService {
         country: options.country,
         startDate: options.startDate,
         endDate: options.endDate,
+        tavilyLimitRemaining: limitCheck.remaining,
       });
 
       let searchResponse;
       try {
         searchResponse = await SearchService.search(searchRequest);
+        
+        // Track Tavily usage after successful search
+        await SubscriptionService.incrementTavilyUsage(options.userId, {
+          query: query.substring(0, 200),
+          topic: options.topic,
+          resultCount: searchResponse.results?.length || 0,
+        });
       } catch (searchError: any) {
         // Attempt error recovery
         const recoveryConfig: RecoveryConfig = {

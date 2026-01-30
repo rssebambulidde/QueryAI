@@ -16,18 +16,26 @@ interface TierRateLimit {
 /**
  * Rate limits per tier (requests per window)
  */
-const TIER_RATE_LIMITS: Record<'free' | 'premium' | 'pro', TierRateLimit> = {
+const TIER_RATE_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enterprise', TierRateLimit> = {
   free: {
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // 100 requests per 15 minutes (increased from 30)
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+  },
+  starter: {
+    windowMs: 15 * 60 * 1000,
+    max: 200,
   },
   premium: {
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 500, // 500 requests per 15 minutes (increased from 200)
+    windowMs: 15 * 60 * 1000,
+    max: 500,
   },
   pro: {
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 2000, // 2000 requests per 15 minutes (increased from 1000)
+    windowMs: 15 * 60 * 1000,
+    max: 2000,
+  },
+  enterprise: {
+    windowMs: 15 * 60 * 1000,
+    max: 5000,
   },
 };
 
@@ -87,7 +95,7 @@ export const tierRateLimiter = async (
       logger.warn('No subscription found for user, applying free tier rate limits', { userId });
     }
 
-    const tier: 'free' | 'premium' | 'pro' = (subscriptionData?.subscription.tier || 'free') as 'free' | 'premium' | 'pro';
+    const tier: 'free' | 'starter' | 'premium' | 'pro' = (subscriptionData?.subscription.tier || 'free') as 'free' | 'starter' | 'premium' | 'pro';
     const limits = TIER_RATE_LIMITS[tier];
     const key = getRateLimitKey(userId, tier, req.path);
 

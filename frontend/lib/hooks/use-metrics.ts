@@ -2,13 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { metricsApi, RetrievalMetrics, RetrievalMetricsSummary, LatencyStats, LatencyTrends, ErrorStats, ErrorTrends, QualityStats, QualityTrends } from '@/lib/api';
+import type { DateRange } from '@/components/analytics/date-range-picker';
 
-export interface DateRange {
-  startDate: string;
-  endDate: string;
-}
-
-// Re-export for convenience
 export type { DateRange };
 
 export function useMetrics(dateRange?: DateRange) {

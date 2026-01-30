@@ -25,7 +25,7 @@ interface AppSidebarProps {
   onRagSettingsChange: (settings: RAGSettings) => void;
   documentCount: number;
   hasProcessedDocuments: boolean;
-  subscriptionTier?: 'free' | 'premium' | 'pro';
+  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
 }
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({

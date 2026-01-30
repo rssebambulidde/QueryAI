@@ -119,8 +119,8 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
           break;
         case 'date':
         default:
-          const dateA = doc.createdAt ? new Date(a.createdAt).getTime() : 0;
-          const dateB = doc.createdAt ? new Date(b.createdAt).getTime() : 0;
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
           comparison = dateA - dateB;
           break;
       }

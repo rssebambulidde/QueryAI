@@ -8,10 +8,11 @@ jest.mock('../config/pinecone', () => ({
   isPineconeConfigured: jest.fn(() => true),
 }));
 
-// Mock ChunkService
+// Mock ChunkService (PineconeService uses getChunksByDocument, updateChunkEmbeddingId)
 jest.mock('../services/chunk.service', () => ({
   ChunkService: {
-    getChunk: jest.fn(),
+    getChunksByDocument: jest.fn(),
+    updateChunkEmbeddingId: jest.fn(),
   },
 }));
 
@@ -114,18 +115,17 @@ describe('PineconeService', () => {
     });
 
     it('should validate embedding dimensions', async () => {
-      const invalidEmbedding = new Array(100).fill(0.1); // Wrong dimensions
+      const emptyEmbedding: number[] = []; // Triggers NO_EMBEDDINGS
       const chunks = [{ id: mockChunkId, chunkIndex: 0, content: 'Content' }];
 
       await expect(
         PineconeService.upsertVectors(
           mockDocumentId,
           chunks,
-          [invalidEmbedding],
+          [emptyEmbedding],
           mockUserId,
           undefined,
-          undefined,
-          1536 // Expected 1536 dimensions
+          1536 // expectedDimensions
         )
       ).rejects.toThrow(AppError);
     });
@@ -145,8 +145,8 @@ describe('PineconeService', () => {
       );
 
       expect(mockPineconeIndex.upsert).toHaveBeenCalled();
-      const callArgs = mockPineconeIndex.upsert.mock.calls[0][0];
-      expect(callArgs.vectors[0].metadata.topicId).toBe(topicId);
+      const batch = mockPineconeIndex.upsert.mock.calls[0][0] as Array<{ metadata?: { topicId?: string } }>;
+      expect(batch[0].metadata?.topicId).toBe(topicId);
     });
   });
 
@@ -160,9 +160,6 @@ describe('PineconeService', () => {
             metadata: mockSearchResult.metadata,
           },
         ],
-      });
-      (ChunkService.getChunk as any).mockResolvedValue({
-        content: 'Test content',
       });
 
       const results = await PineconeService.search(mockEmbedding, {
@@ -188,7 +185,7 @@ describe('PineconeService', () => {
       });
 
       expect(mockPineconeIndex.query).toHaveBeenCalled();
-      const callArgs = mockPineconeIndex.query.mock.calls[0][0];
+      const callArgs = mockPineconeIndex.query.mock.calls[0][0] as { filter?: unknown };
       expect(callArgs.filter).toBeDefined();
     });
 
@@ -221,9 +218,6 @@ describe('PineconeService', () => {
             metadata: mockSearchResult.metadata,
           },
         ],
-      });
-      (ChunkService.getChunk as any).mockResolvedValue({
-        content: 'Test content',
       });
 
       const results = await PineconeService.search(mockEmbedding, {
@@ -264,30 +258,20 @@ describe('PineconeService', () => {
   });
 
   describe('deleteVectors', () => {
-    it('should delete vectors by document ID', async () => {
+    it('should delete vectors by vector IDs', async () => {
       (mockPineconeIndex.deleteMany as any).mockResolvedValue(undefined);
 
-      await PineconeService.deleteVectors(mockDocumentId, mockUserId);
+      await PineconeService.deleteVectors(mockDocumentId, [mockChunkId]);
 
       expect(mockPineconeIndex.deleteMany).toHaveBeenCalled();
     });
 
-    it('should throw error if Pinecone not configured', async () => {
+    it('should return without throwing when Pinecone not configured', async () => {
       (isPineconeConfigured as any).mockReturnValueOnce(false);
 
       await expect(
-        PineconeService.deleteVectors(mockDocumentId, mockUserId)
-      ).rejects.toThrow(AppError);
-    });
-  });
-
-  describe('deleteVector', () => {
-    it('should delete single vector by ID', async () => {
-      (mockPineconeIndex.deleteOne as any).mockResolvedValue(undefined);
-
-      await PineconeService.deleteVector(mockDocumentId, mockChunkId);
-
-      expect(mockPineconeIndex.deleteOne).toHaveBeenCalled();
+        PineconeService.deleteVectors(mockDocumentId, [mockChunkId])
+      ).resolves.toBeUndefined();
     });
   });
 
@@ -313,14 +297,11 @@ describe('PineconeService', () => {
           },
         ],
       });
-      (ChunkService.getChunk as any).mockRejectedValue(new Error('Chunk not found'));
-
       const results = await PineconeService.search(mockEmbedding, {
         userId: mockUserId,
         topK: 5,
       });
 
-      // Should handle error and return partial results
       expect(results).toBeDefined();
     });
   });

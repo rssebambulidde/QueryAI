@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { UsageService } from '../services/usage.service';
+import { CostTrackingService } from '../services/cost-tracking.service';
 import logger from '../config/logger';
 
 const router = Router();
@@ -83,6 +84,32 @@ router.get(
     res.json({
       success: true,
       data: warnings,
+    });
+  })
+);
+
+/**
+ * GET /api/usage/cost-stats
+ * Get cost statistics for authenticated user
+ * Query params: startDate, endDate (ISO date strings)
+ */
+router.get(
+  '/cost-stats',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const { startDate, endDate } = req.query;
+
+    logger.info('Fetching cost statistics', { userId, startDate, endDate });
+
+    const start = startDate ? new Date(startDate as string) : undefined;
+    const end = endDate ? new Date(endDate as string) : undefined;
+
+    const stats = await CostTrackingService.getUserCostStats(userId, start, end);
+
+    res.json({
+      success: true,
+      data: stats,
     });
   })
 );

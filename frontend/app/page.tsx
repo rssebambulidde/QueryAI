@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/logo';
 import Script from 'next/script';
 
 export default function HomePage() {
@@ -103,7 +104,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <h1 className="text-xl font-bold text-gray-900">QueryAI</h1>
+              <Logo href="/" showName size="sm" />
             </div>
             <div className="flex items-center space-x-4">
               <Link href="/login">
@@ -120,6 +121,9 @@ export default function HomePage() {
       {/* Hero Section */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24">
         <div className="text-center">
+          <p className="text-sm font-medium text-gray-500 mb-2 uppercase tracking-wide">
+            By SamaBrains Solution Company · Kampala, Uganda
+          </p>
           <h1 className="text-5xl md:text-7xl font-extrabold text-gray-900 mb-6 leading-tight">
             Your Fact Research Assistant
           </h1>
@@ -418,7 +422,41 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
+
+        {/* Disclaimer notice */}
+        <div className="mt-12 mx-auto max-w-3xl rounded-lg border border-amber-200 bg-amber-50/80 px-4 py-3 text-center text-sm text-amber-900">
+          <strong>Disclaimer:</strong> QueryAI provides AI-assisted research and source-cited answers. Results are for informational purposes only and do not constitute professional, legal, or medical advice. Always verify critical information with primary sources.{' '}
+          <Link href="/disclaimer" className="underline font-medium hover:text-amber-700">Read full disclaimer</Link>
+        </div>
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-200 bg-white/80 mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-6">
+            <div>
+              <Logo href="/" showName size="sm" className="mb-2" />
+              <p className="text-sm text-gray-600">
+                QueryAI by <strong>SamaBrains Solution Company</strong>
+              </p>
+              <p className="text-sm text-gray-500">
+                Kampala, Uganda
+              </p>
+              <a href="mailto:info@samabrain.com" className="text-sm text-blue-600 hover:underline mt-1 inline-block">
+                info@samabrain.com
+              </a>
+            </div>
+            <div className="flex flex-wrap gap-6 text-sm">
+              <Link href="/privacy" className="text-gray-600 hover:text-gray-900">Privacy Policy</Link>
+              <Link href="/terms" className="text-gray-600 hover:text-gray-900">Terms of Service</Link>
+              <Link href="/disclaimer" className="text-gray-600 hover:text-gray-900">Disclaimer</Link>
+            </div>
+          </div>
+          <p className="mt-8 pt-8 border-t border-gray-100 text-center text-xs text-gray-500">
+            © {new Date().getFullYear()} SamaBrains Solution Company. All rights reserved.
+          </p>
+        </div>
+      </footer>
     </div>
     </>
   );

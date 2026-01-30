@@ -1,6 +1,7 @@
 import { KeywordSearchService } from '../services/keyword-search.service';
 import { ChunkService } from '../services/chunk.service';
 import { DocumentService } from '../services/document.service';
+import { resetBM25Index } from '../services/bm25-index.service';
 
 // Mock dependencies
 jest.mock('../services/chunk.service');
@@ -9,6 +10,7 @@ jest.mock('../services/document.service');
 describe('KeywordSearchService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetBM25Index();
   });
 
   describe('indexDocument', () => {

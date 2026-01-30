@@ -23,6 +23,8 @@ import analyticsRoutes from './routes/analytics.routes';
 import subscriptionRoutes from './routes/subscription.routes';
 import paymentRoutes from './routes/payment.routes';
 import usageRoutes from './routes/usage.routes';
+import billingRoutes from './routes/billing.routes';
+import enterpriseRoutes from './routes/enterprise.routes';
 import testRoutes from './routes/test.routes';
 import debugRoutes from './routes/debug.routes';
 import cacheRoutes from './routes/cache.routes';
@@ -138,6 +140,8 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/usage', usageRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/enterprise', enterpriseRoutes);
 app.use('/api/cache', cacheRoutes);
 app.use('/api/connections', connectionsRoutes);
 app.use('/api/metrics', metricsRoutes);
@@ -148,8 +152,6 @@ if (process.env.NODE_ENV !== 'production') {
 // Renewal job endpoint (can be called by cron)
 app.post('/api/jobs/renewals', async (_req: Request, res: Response) => {
   try {
-    // Optional: Add authentication/authorization for this endpoint
-    // For now, you can protect it with an API key or secret
     const { runRenewalJob } = await import('./jobs/renewal-job');
     await runRenewalJob();
     res.status(200).json({
@@ -161,6 +163,25 @@ app.post('/api/jobs/renewals', async (_req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: 'Renewal job failed',
+      error: error.message,
+    });
+  }
+});
+
+// Email scheduler endpoint (payment/renewal/expiration reminders + queue). Call daily via cron.
+app.post('/api/jobs/email-scheduler', async (_req: Request, res: Response) => {
+  try {
+    const { runEmailScheduler } = await import('./cron/email-scheduler');
+    await runEmailScheduler();
+    res.status(200).json({
+      success: true,
+      message: 'Email scheduler completed successfully',
+    });
+  } catch (error: any) {
+    logger.error('Email scheduler endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Email scheduler failed',
       error: error.message,
     });
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { SearchPreferences } from '@/components/settings/search-preferences';
 import { documentApi } from '@/lib/api';
 
@@ -8,11 +8,7 @@ export default function SearchSettingsPage() {
   const [documentCount, setDocumentCount] = useState(0);
   const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
 
-  useEffect(() => {
-    loadDocumentCount();
-  }, []);
-
-  const loadDocumentCount = async () => {
+  const loadDocumentCount = useCallback(async () => {
     try {
       const response = await documentApi.list();
       if (response.success && response.data) {
@@ -25,7 +21,11 @@ export default function SearchSettingsPage() {
     } catch (error) {
       console.error('Failed to load documents:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadDocumentCount();
+  }, [loadDocumentCount]);
 
   return (
     <div className="min-h-screen bg-gray-50">

@@ -573,10 +573,9 @@ export class ValidationTestSuite {
         enableDocumentSearch: true,
         enableWebSearch: true,
         enableCitationParsing: true,
-        ...options,
       };
 
-      const response = await AIService.answerQuestion(questionRequest);
+      const response = await AIService.answerQuestion(questionRequest, userId);
 
       // Step 3: Validate
       const retrievalQuality = this.validateRetrievalQuality(ragContext, testCase);

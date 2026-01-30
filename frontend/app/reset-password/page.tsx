@@ -82,11 +82,14 @@ export default function ResetPasswordPage() {
       } else {
         setError(response.error?.message || 'Failed to reset password');
       }
-    } catch (err: any) {
-      setError(
-        err.response?.data?.error?.message ||
-          'Failed to reset password. Please try again.'
-      );
+    } catch (err: unknown) {
+      const msg =
+        err &&
+        typeof err === 'object' &&
+        'response' in err
+          ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+          : undefined;
+      setError(msg || 'Failed to reset password. Please try again.');
     } finally {
       setIsLoading(false);
     }

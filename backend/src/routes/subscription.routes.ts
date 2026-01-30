@@ -30,9 +30,12 @@ router.get(
     }
 
     // Get usage statistics
-    const queryLimit = await SubscriptionService.checkQueryLimit(userId);
-    const documentUploadLimit = await SubscriptionService.checkDocumentUploadLimit(userId);
-    const topicLimit = await SubscriptionService.checkTopicLimit(userId);
+    const [queryLimit, documentUploadLimit, topicLimit, tavilySearchLimit] = await Promise.all([
+      SubscriptionService.checkQueryLimit(userId),
+      SubscriptionService.checkDocumentUploadLimit(userId),
+      SubscriptionService.checkTopicLimit(userId),
+      SubscriptionService.checkTavilySearchLimit(userId),
+    ]);
 
     res.status(200).json({
       success: true,
@@ -43,6 +46,7 @@ router.get(
           queries: queryLimit,
           documentUploads: documentUploadLimit,
           topics: topicLimit,
+          tavilySearches: tavilySearchLimit,
         },
       },
     });
@@ -64,10 +68,11 @@ router.put(
 
     const { tier } = req.body;
     
-    if (!tier || !['free', 'premium', 'pro'].includes(tier)) {
-      throw new ValidationError('Invalid tier. Must be: free, premium, or pro');
+    if (!tier || !['free', 'starter', 'premium', 'pro'].includes(tier)) {
+      throw new ValidationError('Invalid tier. Must be: free, starter, premium, or pro');
     }
 
+    const subscriptionBefore = await DatabaseService.getUserSubscription(userId);
     const updated = await SubscriptionService.updateSubscriptionTier(userId, tier);
 
     if (!updated) {
@@ -78,6 +83,26 @@ router.put(
       userId,
       tier,
     });
+
+    try {
+      const { EmailService } = await import('../services/email.service');
+      const { getTierOrder } = await import('../constants/pricing');
+      const userProfile = await DatabaseService.getUserProfile(userId);
+      if (userProfile && subscriptionBefore && getTierOrder(tier as 'free' | 'starter' | 'premium' | 'pro') > getTierOrder(subscriptionBefore.tier as 'free' | 'starter' | 'premium' | 'pro')) {
+        const periodStart = updated.current_period_start ? new Date(updated.current_period_start) : new Date();
+        const periodEnd = updated.current_period_end ? new Date(updated.current_period_end) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await EmailService.sendUpgradeConfirmationEmail(
+          userProfile.email,
+          userProfile.full_name || userProfile.email,
+          tier,
+          periodStart,
+          periodEnd
+        );
+        logger.info('Upgrade confirmation email sent', { userId, tier });
+      }
+    } catch (e) {
+      logger.error('Failed to send upgrade confirmation email', { userId, error: e });
+    }
 
     res.status(200).json({
       success: true,
@@ -104,8 +129,8 @@ router.put(
 
     const { tier, immediate = false } = req.body;
     
-    if (!tier || !['free', 'premium', 'pro'].includes(tier)) {
-      throw new ValidationError('Invalid tier. Must be: free, premium, or pro');
+    if (!tier || !['free', 'starter', 'premium', 'pro'].includes(tier)) {
+      throw new ValidationError('Invalid tier. Must be: free, starter, premium, or pro');
     }
 
     const subscription = await DatabaseService.getUserSubscription(userId);
@@ -114,9 +139,9 @@ router.put(
     }
 
     // Validate downgrade (can't downgrade to same or higher tier)
-    const tierOrder: Record<'free' | 'premium' | 'pro', number> = { free: 0, premium: 1, pro: 2 };
-    const currentTier = subscription.tier as 'free' | 'premium' | 'pro';
-    const targetTier = tier as 'free' | 'premium' | 'pro';
+    const tierOrder: Record<'free' | 'starter' | 'premium' | 'pro', number> = { free: 0, starter: 1, premium: 2, pro: 3 };
+    const currentTier = subscription.tier as 'free' | 'starter' | 'premium' | 'pro';
+    const targetTier = tier as 'free' | 'starter' | 'premium' | 'pro';
     if (tierOrder[targetTier] >= tierOrder[currentTier]) {
       throw new ValidationError('Cannot downgrade to same or higher tier');
     }
@@ -133,6 +158,27 @@ router.put(
       toTier: tier,
       immediate,
     });
+
+    try {
+      const { EmailService } = await import('../services/email.service');
+      const userProfile = await DatabaseService.getUserProfile(userId);
+      if (userProfile) {
+        const effectiveDate = subscription.current_period_end
+          ? new Date(subscription.current_period_end).toLocaleDateString()
+          : 'end of current period';
+        await EmailService.sendDowngradeConfirmationEmail(
+          userProfile.email,
+          userProfile.full_name || userProfile.email,
+          subscription.tier,
+          tier,
+          effectiveDate,
+          immediate
+        );
+        logger.info('Downgrade confirmation email sent', { userId, tier });
+      }
+    } catch (e) {
+      logger.error('Failed to send downgrade confirmation email', { userId, error: e });
+    }
 
     res.status(200).json({
       success: true,
@@ -161,6 +207,7 @@ router.post(
 
     const { immediate = false } = req.body;
 
+    const subscriptionBefore = await DatabaseService.getUserSubscription(userId);
     const cancelled = await SubscriptionService.cancelSubscription(userId, immediate);
 
     if (!cancelled) {
@@ -172,6 +219,22 @@ router.post(
       immediate,
     });
 
+    try {
+      const { EmailService } = await import('../services/email.service');
+      const userProfile = await DatabaseService.getUserProfile(userId);
+      if (userProfile && subscriptionBefore) {
+        await EmailService.sendCancellationEmail(
+          userProfile.email,
+          userProfile.full_name || userProfile.email,
+          subscriptionBefore,
+          immediate
+        );
+        logger.info('Cancellation email sent', { userId, immediate });
+      }
+    } catch (e) {
+      logger.error('Failed to send cancellation email', { userId, error: e });
+    }
+
     res.status(200).json({
       success: true,
       message: immediate
@@ -179,6 +242,49 @@ router.post(
         : 'Subscription will be cancelled at the end of the current period',
       data: {
         subscription: cancelled,
+      },
+    });
+  })
+);
+
+/**
+ * GET /api/subscription/paypal-status
+ * Get PayPal subscription status (for recurring subscriptions with paypal_subscription_id)
+ */
+router.get(
+  '/paypal-status',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const subscription = await DatabaseService.getUserSubscription(userId);
+    if (!subscription) {
+      throw new ValidationError('Subscription not found');
+    }
+    if (!subscription.paypal_subscription_id) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          hasPayPalSubscription: false,
+          subscription,
+          paypalStatus: null,
+        },
+      });
+    }
+
+    const paypalStatus = await SubscriptionService.getPayPalSubscriptionStatus(
+      subscription.paypal_subscription_id
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        hasPayPalSubscription: true,
+        subscription,
+        paypalStatus,
       },
     });
   })
@@ -206,6 +312,21 @@ router.post(
     logger.info('Subscription reactivated', {
       userId,
     });
+
+    try {
+      const { EmailService } = await import('../services/email.service');
+      const userProfile = await DatabaseService.getUserProfile(userId);
+      if (userProfile) {
+        await EmailService.sendReactivationConfirmationEmail(
+          userProfile.email,
+          userProfile.full_name || userProfile.email,
+          reactivated
+        );
+        logger.info('Reactivation confirmation email sent', { userId });
+      }
+    } catch (e) {
+      logger.error('Failed to send reactivation confirmation email', { userId, error: e });
+    }
 
     res.status(200).json({
       success: true,
@@ -285,9 +406,14 @@ router.get(
       throw new ValidationError('User not authenticated');
     }
 
-    const { toTier, currency = 'UGX' } = req.query;
+    const toTierRaw = Array.isArray(req.query.toTier) ? req.query.toTier[0] : req.query.toTier;
+    const toTier = typeof toTierRaw === 'string' ? toTierRaw : undefined;
+    const currencyRaw = Array.isArray(req.query.currency) ? req.query.currency[0] : req.query.currency;
+    const currency = (typeof currencyRaw === 'string' ? currencyRaw : 'UGX') as 'UGX' | 'USD';
+    const toBillingPeriod = req.query.toBillingPeriod;
 
-    if (!toTier || !['free', 'premium', 'pro'].includes(toTier as string)) {
+    const validTiers = ['free', 'starter', 'premium', 'pro', 'enterprise'];
+    if (!toTier || !validTiers.includes(toTier)) {
       throw new ValidationError('Invalid target tier');
     }
 
@@ -296,15 +422,18 @@ router.get(
       throw new ValidationError('Subscription not found');
     }
 
+    const bp = (toBillingPeriod === 'annual' ? 'annual' : toBillingPeriod === 'monthly' ? 'monthly' : undefined) as 'monthly' | 'annual' | undefined;
+
     const { ProratingService } = await import('../services/prorating.service');
     const proratedPricing = ProratingService.getProratedPricing(
       subscription.tier,
-      toTier as 'free' | 'premium' | 'pro',
+      toTier as 'free' | 'starter' | 'premium' | 'pro' | 'enterprise',
       subscription,
-      currency as 'UGX' | 'USD'
+      currency,
+      bp
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: {
         proratedPricing,
@@ -454,10 +583,11 @@ router.get(
       throw new ValidationError('User not authenticated');
     }
 
-    const [queryLimit, documentUploadLimit, topicLimit] = await Promise.all([
+    const [queryLimit, documentUploadLimit, topicLimit, tavilySearchLimit] = await Promise.all([
       SubscriptionService.checkQueryLimit(userId),
       SubscriptionService.checkDocumentUploadLimit(userId),
       SubscriptionService.checkTopicLimit(userId),
+      SubscriptionService.checkTavilySearchLimit(userId),
     ]);
 
     res.status(200).json({
@@ -466,6 +596,63 @@ router.get(
         queries: queryLimit,
         documentUploads: documentUploadLimit,
         topics: topicLimit,
+        tavilySearches: tavilySearchLimit,
+      },
+    });
+  })
+);
+
+/**
+ * GET /api/subscription/email-preferences
+ * Get current user's email preferences
+ */
+router.get(
+  '/email-preferences',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ValidationError('User not authenticated');
+
+    const prefs = await DatabaseService.getEmailPreferences(userId);
+    res.status(200).json({
+      success: true,
+      data: {
+        optOutNonCritical: prefs?.opt_out_non_critical ?? false,
+        optOutReminders: prefs?.opt_out_reminders ?? false,
+        optOutMarketing: prefs?.opt_out_marketing ?? false,
+      },
+    });
+  })
+);
+
+/**
+ * PUT /api/subscription/email-preferences
+ * Update email preferences (opt-out for non-critical, reminders, marketing)
+ */
+router.put(
+  '/email-preferences',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ValidationError('User not authenticated');
+
+    const { optOutNonCritical, optOutReminders, optOutMarketing } = req.body;
+    const existing = await DatabaseService.getEmailPreferences(userId);
+    const updates: { opt_out_non_critical?: boolean; opt_out_reminders?: boolean; opt_out_marketing?: boolean } = {
+      opt_out_non_critical: existing?.opt_out_non_critical ?? false,
+      opt_out_reminders: existing?.opt_out_reminders ?? false,
+      opt_out_marketing: existing?.opt_out_marketing ?? false,
+    };
+    if (typeof optOutNonCritical === 'boolean') updates.opt_out_non_critical = optOutNonCritical;
+    if (typeof optOutReminders === 'boolean') updates.opt_out_reminders = optOutReminders;
+    if (typeof optOutMarketing === 'boolean') updates.opt_out_marketing = optOutMarketing;
+    const updated = await DatabaseService.updateEmailPreferences(userId, updates);
+    res.status(200).json({
+      success: true,
+      data: {
+        optOutNonCritical: updated?.opt_out_non_critical ?? false,
+        optOutReminders: updated?.opt_out_reminders ?? false,
+        optOutMarketing: updated?.opt_out_marketing ?? false,
       },
     });
   })

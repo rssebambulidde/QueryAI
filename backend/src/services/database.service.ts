@@ -305,53 +305,90 @@ export class DatabaseService {
   }
 
   /**
-   * Get payment by merchant reference
+   * Get payment by PayPal order ID (order ID from PayPal create order)
    */
-  static async getPaymentByMerchantReference(merchantReference: string): Promise<Database.Payment | null> {
+  static async getPaymentByPayPalOrderId(paypalOrderId: string): Promise<Database.Payment | null> {
     try {
       const { data, error } = await supabaseAdmin
         .from('payments')
         .select('*')
-        .eq('pesapal_merchant_reference', merchantReference)
+        .eq('paypal_order_id', paypalOrderId)
         .single();
 
       if (error) {
         if (error.code === 'PGRST116') {
           return null; // Not found
         }
-        logger.error('Error getting payment by merchant reference:', error);
+        logger.error('Error getting payment by PayPal order ID:', error);
         throw error;
       }
 
       return data as Database.Payment;
     } catch (error) {
-      logger.error('Failed to get payment by merchant reference:', error);
+      logger.error('Failed to get payment by PayPal order ID:', error);
       return null;
     }
   }
 
   /**
-   * Get payment by order tracking ID
+   * Get payment by PayPal order ID (alias for backward compatibility in routes)
    */
-  static async getPaymentByOrderTrackingId(orderTrackingId: string): Promise<Database.Payment | null> {
+  static async getPaymentByOrderTrackingId(paypalOrderId: string): Promise<Database.Payment | null> {
+    return DatabaseService.getPaymentByPayPalOrderId(paypalOrderId);
+  }
+
+  /**
+   * Get payment by PayPal subscription ID (recurring flow)
+   */
+  static async getPaymentByPayPalSubscriptionId(
+    paypalSubscriptionId: string
+  ): Promise<Database.Payment | null> {
     try {
       const { data, error } = await supabaseAdmin
         .from('payments')
         .select('*')
-        .eq('pesapal_order_tracking_id', orderTrackingId)
+        .eq('paypal_subscription_id', paypalSubscriptionId)
         .single();
 
       if (error) {
         if (error.code === 'PGRST116') {
-          return null; // Not found
+          return null;
         }
-        logger.error('Error getting payment by order tracking ID:', error);
+        logger.error('Error getting payment by PayPal subscription ID:', error);
         throw error;
       }
 
       return data as Database.Payment;
     } catch (error) {
-      logger.error('Failed to get payment by order tracking ID:', error);
+      logger.error('Failed to get payment by PayPal subscription ID:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get subscription by PayPal subscription ID
+   */
+  static async getSubscriptionByPayPalSubscriptionId(
+    paypalSubscriptionId: string
+  ): Promise<Database.Subscription | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('subscriptions')
+        .select('*')
+        .eq('paypal_subscription_id', paypalSubscriptionId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        logger.error('Error getting subscription by PayPal subscription ID:', error);
+        throw error;
+      }
+
+      return data as Database.Subscription;
+    } catch (error) {
+      logger.error('Failed to get subscription by PayPal subscription ID:', error);
       return null;
     }
   }
@@ -448,7 +485,7 @@ export class DatabaseService {
     amount: number;
     currency: string;
     reason?: string;
-    pesapal_refund_id?: string;
+    paypal_refund_id?: string;
     status?: 'pending' | 'completed' | 'failed';
     refund_data?: Record<string, any>;
   }): Promise<Database.Refund | null> {
@@ -547,6 +584,59 @@ export class DatabaseService {
       return data as Database.Payment;
     } catch (error) {
       logger.error('Failed to update payment:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get email preferences for a user. Returns null if none set (defaults = all opted in).
+   */
+  static async getEmailPreferences(userId: string): Promise<Database.EmailPreferences | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('email_preferences')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      if (error) {
+        if (error.code === 'PGRST116') return null;
+        logger.error('Error fetching email preferences:', error);
+        throw error;
+      }
+      return data as Database.EmailPreferences;
+    } catch (error) {
+      logger.error('Failed to get email preferences:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Upsert email preferences for a user.
+   */
+  static async updateEmailPreferences(
+    userId: string,
+    prefs: Partial<Pick<Database.EmailPreferences, 'opt_out_non_critical' | 'opt_out_reminders' | 'opt_out_marketing'>>
+  ): Promise<Database.EmailPreferences | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('email_preferences')
+        .upsert(
+          {
+            user_id: userId,
+            ...prefs,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' }
+        )
+        .select()
+        .single();
+      if (error) {
+        logger.error('Error updating email preferences:', error);
+        throw error;
+      }
+      return data as Database.EmailPreferences;
+    } catch (error) {
+      logger.error('Failed to update email preferences:', error);
       return null;
     }
   }

@@ -78,17 +78,13 @@ describe('AIService', () => {
     (FewShotSelectorService.selectExamples as any).mockResolvedValue('');
 
     (CitationValidatorService.formatCitationGuidelines as any).mockReturnValue('Citation guidelines');
-    (CitationValidatorService.validateCitations as any).mockReturnValue({
+    (CitationValidatorService.validateCitationsAgainstSources as any).mockReturnValue({
       isValid: true,
       errors: [],
       warnings: [],
     });
 
     (AnswerQualityService.formatQualityGuidelines as any).mockReturnValue('Quality guidelines');
-    (AnswerQualityService.evaluateAnswer as any).mockReturnValue({
-      score: 0.9,
-      feedback: 'Good answer',
-    });
 
     (ConflictResolutionService.formatConflictResolutionGuidelines as any).mockReturnValue(
       'Conflict resolution guidelines'
@@ -141,10 +137,9 @@ describe('AIService', () => {
     it('should answer question with basic request', async () => {
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
       };
 
-      const response = await AIService.answerQuestion(request);
+      const response = await AIService.answerQuestion(request, mockUserId);
 
       expect(response).toBeDefined();
       expect(response.answer).toBeDefined();
@@ -154,11 +149,10 @@ describe('AIService', () => {
     it('should include RAG context when document search enabled', async () => {
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
         enableDocumentSearch: true,
       };
 
-      await AIService.answerQuestion(request);
+      await AIService.answerQuestion(request, mockUserId);
 
       expect(RAGService.retrieveContext).toHaveBeenCalled();
       expect(RAGService.formatContextForPrompt).toHaveBeenCalled();
@@ -167,11 +161,10 @@ describe('AIService', () => {
     it('should include web search when enabled', async () => {
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
         enableWebSearch: true,
       };
 
-      await AIService.answerQuestion(request);
+      await AIService.answerQuestion(request, mockUserId);
 
       expect(RAGService.retrieveContext).toHaveBeenCalled();
     });
@@ -179,14 +172,13 @@ describe('AIService', () => {
     it('should include conversation history when provided', async () => {
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
         conversationHistory: [
           { role: 'user', content: 'Hello' },
           { role: 'assistant', content: 'Hi there!' },
         ],
       };
 
-      await AIService.answerQuestion(request);
+      await AIService.answerQuestion(request, mockUserId);
 
       expect(openai.chat.completions.create).toHaveBeenCalled();
       const callArgs = (openai.chat.completions.create as any).mock.calls[0][0];
@@ -196,11 +188,10 @@ describe('AIService', () => {
     it('should use specified model', async () => {
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
         model: 'gpt-4',
       };
 
-      await AIService.answerQuestion(request);
+      await AIService.answerQuestion(request, mockUserId);
 
       expect(openai.chat.completions.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -212,11 +203,10 @@ describe('AIService', () => {
     it('should use specified temperature', async () => {
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
         temperature: 0.7,
       };
 
-      await AIService.answerQuestion(request);
+      await AIService.answerQuestion(request, mockUserId);
 
       expect(openai.chat.completions.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -228,11 +218,10 @@ describe('AIService', () => {
     it('should use specified maxTokens', async () => {
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
         maxTokens: 500,
       };
 
-      await AIService.answerQuestion(request);
+      await AIService.answerQuestion(request, mockUserId);
 
       expect(openai.chat.completions.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -241,14 +230,13 @@ describe('AIService', () => {
       );
     });
 
-    it('should include topic scope when topicName provided', async () => {
+    it('should include topic scope when topicId provided', async () => {
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
-        topicName: 'AI Research',
+        topicId: 'topic-ai-research',
       };
 
-      await AIService.answerQuestion(request);
+      await AIService.answerQuestion(request, mockUserId);
 
       expect(openai.chat.completions.create).toHaveBeenCalled();
       const callArgs = (openai.chat.completions.create as any).mock.calls[0][0];
@@ -256,14 +244,13 @@ describe('AIService', () => {
       expect(systemPrompt).toContain('AI Research');
     });
 
-    it('should perform off-topic check when topicName provided', async () => {
+    it('should perform off-topic check when topicId provided', async () => {
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
-        topicName: 'AI Research',
+        topicId: 'topic-ai-research',
       };
 
-      await AIService.answerQuestion(request);
+      await AIService.answerQuestion(request, mockUserId);
 
       // Off-topic check should be performed
       expect(openai.chat.completions.create).toHaveBeenCalled();
@@ -284,11 +271,10 @@ describe('AIService', () => {
 
       const request: QuestionRequest = {
         question: 'What is the weather?',
-        userId: mockUserId,
-        topicName: 'AI Research',
+        topicId: 'topic-ai-research',
       };
 
-      const response = await AIService.answerQuestion(request);
+      const response = await AIService.answerQuestion(request, mockUserId);
 
       expect(response).toBeDefined();
     });
@@ -326,11 +312,10 @@ describe('AIService', () => {
 
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
       };
 
       const chunks: string[] = [];
-      for await (const chunk of AIService.answerQuestionStream(request)) {
+      for await (const chunk of AIService.answerQuestionStream(request, mockUserId)) {
         chunks.push(chunk);
       }
 
@@ -396,20 +381,18 @@ describe('AIService', () => {
     it('should handle empty question', async () => {
       const request: QuestionRequest = {
         question: '',
-        userId: mockUserId,
       };
 
-      await expect(AIService.answerQuestion(request)).rejects.toThrow();
+      await expect(AIService.answerQuestion(request, mockUserId)).rejects.toThrow();
     });
 
     it('should handle very long question', async () => {
       const longQuestion = 'a '.repeat(1000);
       const request: QuestionRequest = {
         question: longQuestion,
-        userId: mockUserId,
       };
 
-      const response = await AIService.answerQuestion(request);
+      const response = await AIService.answerQuestion(request, mockUserId);
 
       expect(response).toBeDefined();
     });
@@ -421,10 +404,9 @@ describe('AIService', () => {
 
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
       };
 
-      await expect(AIService.answerQuestion(request)).rejects.toThrow();
+      await expect(AIService.answerQuestion(request, mockUserId)).rejects.toThrow();
     });
 
     it('should handle RAG service errors gracefully', async () => {
@@ -434,12 +416,11 @@ describe('AIService', () => {
 
       const request: QuestionRequest = {
         question: mockQuestion,
-        userId: mockUserId,
         enableDocumentSearch: true,
       };
 
       // Should still attempt to answer
-      await expect(AIService.answerQuestion(request)).resolves.toBeDefined();
+      await expect(AIService.answerQuestion(request, mockUserId)).resolves.toBeDefined();
     });
   });
 });

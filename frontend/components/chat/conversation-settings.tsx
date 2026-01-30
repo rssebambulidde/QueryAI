@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, X, Save, FileText, Globe, Folder } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Conversation, Topic, Document } from '@/lib/api';
+import { Conversation, Topic, DocumentItem } from '@/lib/api';
 import { RAGSettings, RAGSourceSelector } from './rag-source-selector';
 import { useToast } from '@/lib/hooks/use-toast';
 import { conversationApi, documentApi, topicApi } from '@/lib/api';
@@ -41,7 +41,7 @@ export const ConversationSettingsPanel: React.FC<ConversationSettingsProps> = ({
   });
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(conversation.topic_id || null);
-  const [availableDocuments, setAvailableDocuments] = useState<Document[]>([]);
+  const [availableDocuments, setAvailableDocuments] = useState<DocumentItem[]>([]);
   const [availableTopics, setAvailableTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -196,30 +196,28 @@ export const ConversationSettingsPanel: React.FC<ConversationSettingsProps> = ({
                 </div>
               ) : (
                 <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                  {availableDocuments.map((doc) => (
-                    <label
-                      key={doc.id}
-                      className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedDocuments.includes(doc.id)}
-                        onChange={() => handleDocumentToggle(doc.id)}
-                        className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
-                      />
-                      <FileText className="w-4 h-4 text-gray-400" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-900 truncate">
-                          {doc.filename || doc.name || 'Untitled Document'}
-                        </div>
-                        {doc.metadata?.description && (
-                          <div className="text-xs text-gray-500 truncate">
-                            {doc.metadata.description}
+                  {availableDocuments.map((doc) => {
+                    const docId = doc.id ?? doc.path;
+                    return (
+                      <label
+                        key={docId}
+                        className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedDocuments.includes(docId)}
+                          onChange={() => handleDocumentToggle(docId)}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                        />
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">
+                            {doc.name || 'Untitled Document'}
                           </div>
-                        )}
-                      </div>
-                    </label>
-                  ))}
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
               )}
               {selectedDocuments.length > 0 && (

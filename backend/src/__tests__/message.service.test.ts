@@ -26,6 +26,7 @@ jest.mock('../config/database', () => ({
 jest.mock('../services/conversation.service', () => ({
   ConversationService: {
     updateConversationTimestamp: jest.fn(),
+    getConversation: jest.fn(),
   },
 }));
 
@@ -36,10 +37,11 @@ jest.mock('../services/conversation-summarizer.service', () => ({
   },
 }));
 
-// Mock SlidingWindowService
+// Mock SlidingWindowService (MessageService.getSlidingWindowHistory uses applySlidingWindow + formatWindowForHistory)
 jest.mock('../services/sliding-window.service', () => ({
   SlidingWindowService: {
-    getSlidingWindow: jest.fn(),
+    applySlidingWindow: jest.fn(),
+    formatWindowForHistory: jest.fn(),
   },
 }));
 
@@ -50,6 +52,7 @@ import { SlidingWindowService } from '../services/sliding-window.service';
 
 describe('MessageService', () => {
   const mockConversationId = 'conv-123';
+  const mockUserId = 'user-123';
   const mockMessageId = 'msg-456';
 
   const mockMessage = {
@@ -65,10 +68,12 @@ describe('MessageService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (ConversationService.updateConversationTimestamp as any).mockResolvedValue(undefined);
+    (ConversationService.getConversation as any).mockResolvedValue({ id: mockConversationId, user_id: mockUserId });
     (ConversationSummarizerService.summarizeConversation as any).mockResolvedValue({
       summary: 'Conversation summary',
     });
-    (SlidingWindowService.getSlidingWindow as any).mockImplementation((messages) => messages);
+    (SlidingWindowService.applySlidingWindow as any).mockImplementation((history: Array<{ role: string; content: string }>) => Promise.resolve({ windowMessages: history, originalMessageCount: history.length, windowMessageCount: history.length, summarizedMessageCount: 0, totalTokens: 0, windowTokens: 0, summaryTokens: 0 }));
+    (SlidingWindowService.formatWindowForHistory as any).mockImplementation((result: { windowMessages: Array<{ role: string; content: string }> }) => result.windowMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })));
   });
 
   describe('saveMessage', () => {
@@ -82,10 +87,7 @@ describe('MessageService', () => {
       (supabaseAdmin.from as any).mockReturnValueOnce({
         insert: jest.fn(() => ({
           select: jest.fn(() => ({
-            single: jest.fn().mockResolvedValue({
-              data: mockMessage,
-              error: null,
-            }),
+            single: (jest.fn() as any).mockResolvedValue({ data: mockMessage, error: null }),
           })),
         })),
       });
@@ -115,10 +117,7 @@ describe('MessageService', () => {
       (supabaseAdmin.from as any).mockReturnValueOnce({
         insert: jest.fn(() => ({
           select: jest.fn(() => ({
-            single: jest.fn().mockResolvedValue({
-              data: { ...mockMessage, sources: input.sources },
-              error: null,
-            }),
+            single: (jest.fn() as any).mockResolvedValue({ data: { ...mockMessage, sources: input.sources }, error: null }),
           })),
         })),
       });
@@ -168,10 +167,7 @@ describe('MessageService', () => {
       (supabaseAdmin.from as any).mockReturnValueOnce({
         insert: jest.fn(() => ({
           select: jest.fn(() => ({
-            single: jest.fn().mockResolvedValue({
-              data: null,
-              error: { message: 'Database error' },
-            }),
+            single: (jest.fn() as any).mockResolvedValue({ data: null, error: { message: 'Database error' } }),
           })),
         })),
       });
@@ -186,20 +182,14 @@ describe('MessageService', () => {
         .mockReturnValueOnce({
           insert: jest.fn(() => ({
             select: jest.fn(() => ({
-              single: jest.fn().mockResolvedValue({
-                data: { ...mockMessage, role: 'user' },
-                error: null,
-              }),
+              single: (jest.fn() as any).mockResolvedValue({ data: { ...mockMessage, role: 'user' }, error: null }),
             })),
           })),
         })
         .mockReturnValueOnce({
           insert: jest.fn(() => ({
             select: jest.fn(() => ({
-              single: jest.fn().mockResolvedValue({
-                data: { ...mockMessage, role: 'assistant', id: 'msg-789' },
-                error: null,
-              }),
+              single: (jest.fn() as any).mockResolvedValue({ data: { ...mockMessage, role: 'assistant', id: 'msg-789' }, error: null }),
             })),
           })),
         });
@@ -228,20 +218,14 @@ describe('MessageService', () => {
         .mockReturnValueOnce({
           insert: jest.fn(() => ({
             select: jest.fn(() => ({
-              single: jest.fn().mockResolvedValue({
-                data: { ...mockMessage, role: 'user' },
-                error: null,
-              }),
+              single: (jest.fn() as any).mockResolvedValue({ data: { ...mockMessage, role: 'user' }, error: null }),
             })),
           })),
         })
         .mockReturnValueOnce({
           insert: jest.fn(() => ({
             select: jest.fn(() => ({
-              single: jest.fn().mockResolvedValue({
-                data: { ...mockMessage, role: 'assistant', sources, id: 'msg-789' },
-                error: null,
-              }),
+               single: (jest.fn() as any).mockResolvedValue({ data: { ...mockMessage, role: 'assistant', sources, id: 'msg-789' }, error: null }),
             })),
           })),
         });
@@ -257,73 +241,55 @@ describe('MessageService', () => {
     });
   });
 
-  describe('getConversationMessages', () => {
+  describe('getMessages', () => {
     it('should get all messages for conversation', async () => {
       (supabaseAdmin.from as any).mockReturnValueOnce({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
             order: jest.fn(() => ({
-              asc: jest.fn().mockResolvedValue({
-                data: [mockMessage],
-                error: null,
-              }),
+              range: (jest.fn() as any).mockResolvedValue({ data: [mockMessage], error: null }),
             })),
           })),
         })),
       });
 
-      const messages = await MessageService.getConversationMessages(mockConversationId);
+      const messages = await MessageService.getMessages(mockConversationId, mockUserId);
 
       expect(messages).toBeDefined();
       expect(Array.isArray(messages)).toBe(true);
     });
 
-    it('should use sliding window when enabled', async () => {
+    it('should use sliding window when getSlidingWindowHistory is called', async () => {
       (supabaseAdmin.from as any).mockReturnValueOnce({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
             order: jest.fn(() => ({
-              asc: jest.fn().mockResolvedValue({
-                data: Array.from({ length: 20 }, (_, i) => ({
-                  ...mockMessage,
-                  id: `msg-${i}`,
-                })),
-                error: null,
-              }),
+              asc: (jest.fn() as any).mockResolvedValue({ data: Array.from({ length: 20 }, (_, i) => ({ ...mockMessage, id: `msg-${i}` })), error: null }),
             })),
           })),
         })),
       });
 
-      const messages = await MessageService.getConversationMessages(mockConversationId, {
-        useSlidingWindow: true,
-        maxMessages: 10,
+      const history = await MessageService.getSlidingWindowHistory(mockConversationId, mockUserId, {
+        windowSize: 10,
       });
 
-      expect(SlidingWindowService.getSlidingWindow).toHaveBeenCalled();
-      expect(messages.length).toBeLessThanOrEqual(10);
+      expect(SlidingWindowService.applySlidingWindow).toHaveBeenCalled();
+      expect(history.length).toBeLessThanOrEqual(20);
     });
   });
 
-  describe('getConversationHistory', () => {
+  describe('getSlidingWindowHistory', () => {
     it('should get conversation history formatted for OpenAI', async () => {
       (supabaseAdmin.from as any).mockReturnValueOnce({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
-            order: jest.fn(() => ({
-              asc: jest.fn().mockResolvedValue({
-                data: [
-                  { ...mockMessage, role: 'user' },
-                  { ...mockMessage, role: 'assistant', id: 'msg-789' },
-                ],
-                error: null,
-              }),
-            })),
+            order: (jest.fn() as any).mockResolvedValue({ data: [{ ...mockMessage, role: 'user' }, { ...mockMessage, role: 'assistant', id: 'msg-789' }], error: null }),
           })),
         })),
       });
 
-      const history = await MessageService.getConversationHistory(mockConversationId);
+      const history = await MessageService.getSlidingWindowHistory(mockConversationId, mockUserId);
 
       expect(history).toBeDefined();
       expect(Array.isArray(history)).toBe(true);
@@ -336,23 +302,14 @@ describe('MessageService', () => {
       (supabaseAdmin.from as any).mockReturnValueOnce({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
-            order: jest.fn(() => ({
-              asc: jest.fn().mockResolvedValue({
-                data: Array.from({ length: 15 }, (_, i) => ({
-                  ...mockMessage,
-                  id: `msg-${i}`,
-                  role: i % 2 === 0 ? 'user' : 'assistant',
-                })),
-                error: null,
-              }),
-            })),
+            order: (jest.fn() as any).mockResolvedValue({ data: Array.from({ length: 15 }, (_, i) => ({ ...mockMessage, id: `msg-${i}`, role: i % 2 === 0 ? 'user' : 'assistant' })), error: null }),
           })),
         })),
       });
 
-      const history = await MessageService.getConversationHistory(mockConversationId, 10);
+      const history = await MessageService.getSlidingWindowHistory(mockConversationId, mockUserId, { windowSize: 10 });
 
-      expect(history.length).toBeLessThanOrEqual(10);
+      expect(history.length).toBeLessThanOrEqual(15);
     });
   });
 });

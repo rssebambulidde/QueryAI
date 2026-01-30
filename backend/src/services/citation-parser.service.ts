@@ -564,7 +564,7 @@ export class CitationParserService {
           metadata: {
             documentId: nextCitation.documentId,
             url: nextCitation.url,
-            name: nextCitation.name,
+            title: nextCitation.name,
           },
         };
 

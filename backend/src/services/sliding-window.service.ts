@@ -5,7 +5,7 @@
  */
 
 import { ConversationSummarizerService, ConversationSummarizationOptions } from './conversation-summarizer.service';
-import { TokenCountService } from './token-count.service';
+import { TokenCountService, type EncodingType } from './token-count.service';
 import logger from '../config/logger';
 
 /**
@@ -216,7 +216,7 @@ export class SlidingWindowService {
    */
   private static countMessageTokens(
     messages: Array<{ role: 'user' | 'assistant'; content: string }>,
-    encodingType: string
+    encodingType: EncodingType
   ): number {
     return messages.reduce((total, msg) => {
       return total + TokenCountService.countTokens(msg.content, encodingType);
@@ -229,7 +229,7 @@ export class SlidingWindowService {
   private static trimToTokenBudget(
     messages: Array<{ role: 'user' | 'assistant'; content: string }>,
     maxTokens: number,
-    encodingType: string
+    encodingType: EncodingType
   ): Array<{ role: 'user' | 'assistant'; content: string }> {
     // Start from most recent and work backwards
     const trimmed: Array<{ role: 'user' | 'assistant'; content: string }> = [];
@@ -256,7 +256,7 @@ export class SlidingWindowService {
   private static truncateToTokenBudget(
     text: string,
     maxTokens: number,
-    encodingType: string
+    encodingType: EncodingType
   ): string {
     const tokens = TokenCountService.countTokens(text, encodingType);
     

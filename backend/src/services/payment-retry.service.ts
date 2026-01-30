@@ -1,6 +1,6 @@
 import { DatabaseService } from './database.service';
 import { SubscriptionService } from './subscription.service';
-import { PesapalService } from './pesapal.service';
+import * as PayPalService from './paypal.service';
 import logger from '../config/logger';
 import { Database } from '../types/database';
 
@@ -85,23 +85,22 @@ export class PaymentRetryService {
       return;
     }
 
-    // Attempt to get latest status from Pesapal
-    if (payment.pesapal_order_tracking_id) {
+    // Attempt to get latest status from PayPal (by order ID)
+    if (payment.paypal_order_id) {
       try {
-        const status = await PesapalService.getTransactionStatus(payment.pesapal_order_tracking_id);
-        const paymentStatus = PesapalService['mapPesapalStatusToPaymentStatus'](status.payment_status);
+        const details = await PayPalService.getPaymentDetails(payment.paypal_order_id);
+        const paymentStatus = this.mapPayPalStatusToPaymentStatus(details.status);
 
         if (paymentStatus === 'completed') {
-          // Payment succeeded on retry
           await DatabaseService.updatePayment(payment.id, {
             status: 'completed',
             completed_at: new Date().toISOString(),
-            payment_method: status.payment_method,
+            paypal_payment_id: details.captureId,
+            callback_data: details as unknown as Record<string, unknown>,
             retry_count: retryCount + 1,
             last_retry_at: now.toISOString(),
           });
 
-          // Update subscription
           await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
 
           logger.info('Payment succeeded on retry', {
@@ -109,24 +108,56 @@ export class PaymentRetryService {
             retryCount: retryCount + 1,
           });
         } else if (paymentStatus === 'failed') {
-          // Still failed, increment retry count
+          const newRetryCount = retryCount + 1;
           await DatabaseService.updatePayment(payment.id, {
-            retry_count: retryCount + 1,
+            retry_count: newRetryCount,
             last_retry_at: now.toISOString(),
           });
 
           logger.info('Payment retry failed, incrementing retry count', {
             paymentId: payment.id,
-            retryCount: retryCount + 1,
+            retryCount: newRetryCount,
           });
+
+          try {
+            const { EmailService } = await import('./email.service');
+            const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+            if (userProfile) {
+              await EmailService.sendPaymentRetryNotificationEmail(
+                userProfile.email,
+                userProfile.full_name || userProfile.email,
+                { ...payment, retry_count: newRetryCount } as Database.Payment,
+                newRetryCount
+              );
+              logger.info('Payment retry notification email sent', {
+                paymentId: payment.id,
+                userId: payment.user_id,
+              });
+            }
+          } catch (emailError) {
+            logger.error('Failed to send payment retry notification email', {
+              paymentId: payment.id,
+              error: emailError,
+            });
+          }
         }
       } catch (error) {
-        logger.error('Failed to check payment status on retry:', {
+        logger.error('Failed to check PayPal payment status on retry:', {
           paymentId: payment.id,
           error,
         });
       }
     }
+  }
+
+  private static mapPayPalStatusToPaymentStatus(
+    status: string
+  ): 'pending' | 'completed' | 'failed' | 'cancelled' {
+    const s = (status || '').toUpperCase();
+    if (s === 'COMPLETED' || s === 'APPROVED') return 'completed';
+    if (s === 'VOIDED' || s === 'CANCELLED') return 'cancelled';
+    if (s === 'DECLINED' || s === 'FAILED') return 'failed';
+    return 'pending';
   }
 
   /**
@@ -143,11 +174,31 @@ export class PaymentRetryService {
     const gracePeriodEnd = new Date(paymentDate);
     gracePeriodEnd.setDate(gracePeriodEnd.getDate() + this.GRACE_PERIOD_DAYS);
 
-    // Update grace period end if not set
+    // Update grace period end if not set; send failed renewal notification
     if (!subscription.grace_period_end) {
       await DatabaseService.updateSubscription(payment.user_id, {
         grace_period_end: gracePeriodEnd.toISOString(),
       });
+      try {
+        const { EmailService } = await import('./email.service');
+        const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+        if (userProfile) {
+          await EmailService.sendFailedRenewalNotificationEmail(
+            userProfile.email,
+            userProfile.full_name || userProfile.email,
+            { ...subscription, grace_period_end: gracePeriodEnd.toISOString() } as Database.Subscription,
+            {
+              daysRemaining: this.GRACE_PERIOD_DAYS,
+              amount: payment.amount,
+              currency: payment.currency,
+              failureReason: payment.webhook_data?.PaymentStatusDescription || undefined,
+            }
+          );
+          logger.info('Failed renewal notification email sent', { paymentId: payment.id, userId: payment.user_id });
+        }
+      } catch (emailError) {
+        logger.error('Failed to send failed renewal notification email', { paymentId: payment.id, error: emailError });
+      }
     }
 
     // Check if grace period has expired

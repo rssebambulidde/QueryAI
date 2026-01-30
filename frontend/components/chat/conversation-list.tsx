@@ -11,8 +11,6 @@ import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Conversation } from '@/lib/api';
-import { ConversationSearch } from './conversation-search';
-import { Conversation } from '@/lib/api';
 
 export const ConversationList: React.FC = () => {
   const {

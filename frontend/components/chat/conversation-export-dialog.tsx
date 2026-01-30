@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Download, FileText, FileJson, FilePdf, Check } from 'lucide-react';
+import { X, Download, FileText, FileJson, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Conversation, Message } from '@/lib/api';
 import { exportConversation, ExportOptions } from '@/lib/utils/export-conversation';
@@ -52,7 +52,7 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
   };
 
   const formats = [
-    { value: 'pdf' as const, label: 'PDF', icon: FilePdf, description: 'Best for printing and sharing' },
+    { value: 'pdf' as const, label: 'PDF', icon: FileText, description: 'Best for printing and sharing' },
     { value: 'markdown' as const, label: 'Markdown', icon: FileText, description: 'Best for documentation' },
     { value: 'json' as const, label: 'JSON', icon: FileJson, description: 'Best for data processing' },
   ];

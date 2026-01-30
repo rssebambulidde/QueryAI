@@ -27,6 +27,12 @@ export interface UsageStats {
     remaining: number | null;
     percentage: number;
   };
+  tavilySearches: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
   apiCalls?: {
     used: number;
     limit: number | null;
@@ -35,7 +41,7 @@ export interface UsageStats {
   };
   periodStart: string;
   periodEnd: string;
-  tier: 'free' | 'premium' | 'pro';
+  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
 }
 
 export interface UsageHistory {
@@ -70,10 +76,11 @@ export class UsageService {
       periodEnd.setHours(23, 59, 59, 999);
 
       // Get usage counts for current month
-      const [queriesUsed, documentUploadsUsed, apiCallsUsed] = await Promise.all([
+      const [queriesUsed, documentUploadsUsed, apiCallsUsed, tavilySearchesUsed] = await Promise.all([
         DatabaseService.getUserUsageCount(userId, 'query', periodStart, periodEnd),
         DatabaseService.getUserUsageCount(userId, 'document_upload', periodStart, periodEnd),
         DatabaseService.getUserUsageCount(userId, 'api_call', periodStart, periodEnd),
+        SubscriptionService.getTavilyUsageCount(userId, periodStart, periodEnd),
       ]);
 
       // Get topic count
@@ -108,6 +115,7 @@ export class UsageService {
         queries: calculateUsage(queriesUsed, limits.queriesPerMonth),
         documentUploads: calculateUsage(documentUploadsUsed, limits.documentUploads),
         topics: calculateUsage(topicsUsed, limits.maxTopics),
+        tavilySearches: calculateUsage(tavilySearchesUsed, limits.tavilySearchesPerMonth),
         apiCalls: calculateUsage(apiCallsUsed, null), // API calls are unlimited for now
         periodStart: periodStart.toISOString(),
         periodEnd: periodEnd.toISOString(),
@@ -183,7 +191,7 @@ export class UsageService {
    */
   static async isApproachingLimits(userId: string): Promise<{
     approaching: boolean;
-    warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics'; percentage: number }>;
+    warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics' | 'tavilySearches'; percentage: number }>;
   }> {
     try {
       const usage = await this.getCurrentUsage(userId);
@@ -191,7 +199,7 @@ export class UsageService {
         return { approaching: false, warnings: [] };
       }
 
-      const warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics'; percentage: number }> = [];
+      const warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics' | 'tavilySearches'; percentage: number }> = [];
 
       if (usage.queries.percentage >= 80 && usage.queries.percentage !== -1) {
         warnings.push({ type: 'queries', percentage: usage.queries.percentage });
@@ -203,6 +211,10 @@ export class UsageService {
 
       if (usage.topics.percentage >= 80 && usage.topics.percentage !== -1) {
         warnings.push({ type: 'topics', percentage: usage.topics.percentage });
+      }
+
+      if (usage.tavilySearches.percentage >= 80 && usage.tavilySearches.percentage !== -1) {
+        warnings.push({ type: 'tavilySearches', percentage: usage.tavilySearches.percentage });
       }
 
       return {
