@@ -252,11 +252,10 @@ function DashboardContent() {
           />
         )}
 
-        {/* Main Content Area */}
+        {/* Main Content Area — chat tab always shows conversation thread (messages + input), not sources */}
         <div className="flex-1 flex flex-col overflow-hidden" style={isMobile ? { paddingBottom: '64px' } : undefined}>
           {activeTab === 'chat' ? (
             <div className="flex-1 overflow-hidden">
-              {/* Chat Interface - Full width now */}
               <ChatInterface ragSettings={ragSettings} />
             </div>
           ) : activeTab === 'documents' ? (

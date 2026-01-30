@@ -186,13 +186,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
-  // Auto-open source panel when sources are available (first time)
+  // Track when we just loaded a conversation so we don't auto-open sources (thread stays primary)
+  const justLoadedConversationRef = useRef(false);
+
+  // Auto-open source panel only when a new response arrives (streaming), not when loading a conversation
   useEffect(() => {
+    if (justLoadedConversationRef.current) {
+      justLoadedConversationRef.current = false;
+      return;
+    }
     const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant' && m.sources && m.sources.length > 0);
     const currentSources = lastAssistantMessage?.sources || [];
-    
     if (currentSources.length > 0 && !isSourcePanelOpen && messages.length > 0) {
-      // Only auto-open if this is a new response (not on initial load)
       const lastMessage = messages[messages.length - 1];
       if (lastMessage && lastMessage.role === 'assistant' && lastMessage.sources) {
         setIsSourcePanelOpen(true);
@@ -224,24 +229,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     prevTopicIdRef.current = nextId;
   }, [selectedTopic]);
 
-  // Load messages and filters when conversation changes
+  // Load messages and filters when conversation changes — always show thread (messages), not sources
   useEffect(() => {
     const loadConversationData = async () => {
       if (currentConversationId) {
+        justLoadedConversationRef.current = true;
+        setIsSourcePanelOpen(false);
         try {
-          // Load messages
           const messagesResponse = await conversationApi.getMessages(currentConversationId);
           if (messagesResponse.success && messagesResponse.data) {
             const uiMessages = mapApiMessagesToUi(messagesResponse.data as ApiMessage[]);
             setMessages(uiMessages);
           }
-          
-          // Load conversation details to get filters from metadata and topic
           const conversationResponse = await conversationApi.get(currentConversationId);
           if (conversationResponse.success && conversationResponse.data) {
             const conversation = conversationResponse.data;
-            
-            // Load topic if conversation has topicId
             let loadedTopic: Topic | null = null;
             if (conversation.topic_id) {
               try {
@@ -257,8 +259,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             } else {
               setSelectedTopic(null);
             }
-            
-            // Convert old conversation filters to unified filters format
             const oldFilters = conversation.metadata?.filters || {};
             setUnifiedFilters({
               topicId: loadedTopic?.id || null,
@@ -280,6 +280,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         setMessages([]);
         setUnifiedFilters({ topicId: null, topic: null });
         setSelectedTopic(null);
+        setIsSourcePanelOpen(false);
       }
     };
 
