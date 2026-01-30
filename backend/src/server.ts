@@ -61,10 +61,10 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // Parse CORS_ORIGIN - support comma-separated origins
+    // Parse CORS_ORIGIN - support comma-separated origins; strip quotes (Railway/env sometimes add them)
     const corsOrigins = config.CORS_ORIGIN
       .split(',')
-      .map(o => o.trim())
+      .map(o => o.trim().replace(/^["']|["']$/g, ''))
       .filter(Boolean);
 
     // Helper to normalize URL: add https if needed, strip trailing slash (browser sends origin without slash)
@@ -229,6 +229,15 @@ app.get('/health', async (_req: Request, res: Response) => {
       connected: dbHealth.connected,
       message: dbHealth.message,
     },
+  });
+});
+
+// CORS check - call from frontend origin to verify CORS allows your site
+app.get('/cors-check', (req: Request, res: Response) => {
+  res.status(200).json({
+    ok: true,
+    message: 'CORS allows this origin',
+    origin: req.headers.origin || '(none)',
   });
 });
 
