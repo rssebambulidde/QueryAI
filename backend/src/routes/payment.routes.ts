@@ -284,27 +284,64 @@ router.post(
 /**
  * GET /api/payment/callback
  * Handle PayPal redirect after user approves. Token = order ID (one-time) or subscription ID (recurring).
+ * PayPal may send token as: token, PayerID, paymentId, or subscription_id
  */
 router.get(
   '/callback',
   asyncHandler(async (req: Request, res: Response) => {
-    const token = req.query.token as string;
     const frontendUrl = getFrontendUrl();
+    
+    // PayPal sends different parameters depending on payment type
+    // Try multiple possible parameter names
+    const token = 
+      (req.query.token as string) || 
+      (req.query.PayerID as string) || 
+      (req.query.paymentId as string) || 
+      (req.query.subscription_id as string) ||
+      (req.query.ba_token as string); // Billing agreement token for subscriptions
+    
+    const orderId = req.query.orderId as string;
+    const subscriptionId = req.query.subscription_id as string;
 
-    logger.info('PayPal callback received', { token: token ? 'present' : 'missing', query: req.query });
+    logger.info('PayPal callback received', { 
+      token: token ? 'present' : 'missing',
+      orderId: orderId ? 'present' : 'missing',
+      subscriptionId: subscriptionId ? 'present' : 'missing',
+      query: req.query,
+      allQueryParams: Object.keys(req.query),
+    });
 
-    if (!token) {
-      logger.warn('PayPal callback missing token');
-      return res.redirect(`${frontendUrl}/dashboard?payment=error`);
+    // Determine which ID to use for lookup
+    let lookupToken = token || orderId || subscriptionId;
+    
+    if (!lookupToken) {
+      logger.warn('PayPal callback missing all token parameters', { query: req.query });
+      return res.redirect(`${frontendUrl}/dashboard?payment=error&reason=missing_token`);
     }
 
-    let payment = await DatabaseService.getPaymentByPayPalOrderId(token);
+    // Try to find payment by order ID or subscription ID
+    let payment = await DatabaseService.getPaymentByPayPalOrderId(lookupToken);
     if (!payment) {
-      payment = await DatabaseService.getPaymentByPayPalSubscriptionId(token);
+      payment = await DatabaseService.getPaymentByPayPalSubscriptionId(lookupToken);
     }
+    // Also try with orderId parameter if different
+    if (!payment && orderId && orderId !== lookupToken) {
+      payment = await DatabaseService.getPaymentByPayPalOrderId(orderId);
+    }
+    // Also try with subscriptionId parameter if different
+    if (!payment && subscriptionId && subscriptionId !== lookupToken) {
+      payment = await DatabaseService.getPaymentByPayPalSubscriptionId(subscriptionId);
+    }
+    
     if (!payment) {
-      logger.warn('Payment not found in callback', { token });
-      return res.redirect(`${frontendUrl}/dashboard?payment=error`);
+      logger.warn('Payment not found in callback', { 
+        lookupToken, 
+        orderId, 
+        subscriptionId,
+        query: req.query 
+      });
+      // Still redirect but with error info
+      return res.redirect(`${frontendUrl}/dashboard?payment=error&reason=payment_not_found`);
     }
 
     const isRecurring = !!payment.paypal_subscription_id;
@@ -313,7 +350,8 @@ router.get(
     if (isRecurring) {
       // Recurring: user approved subscription; sync from PayPal and activate
       try {
-        const subDetails = await PayPalService.getSubscription(token);
+        const subscriptionLookupId = payment.paypal_subscription_id || lookupToken || subscriptionId;
+        const subDetails = await PayPalService.getSubscription(subscriptionLookupId);
         const status = (subDetails.status || '').toUpperCase();
         if (status === 'ACTIVE' || status === 'APPROVAL_PENDING') {
           paymentStatus = 'completed';
@@ -342,7 +380,7 @@ router.get(
           });
 
           await DatabaseService.updateSubscription(payment.user_id, {
-            paypal_subscription_id: token,
+            paypal_subscription_id: subscriptionLookupId,
             tier: payment.tier,
             current_period_start: periodStart.toISOString(),
             current_period_end: periodEnd.toISOString(),
@@ -357,12 +395,17 @@ router.get(
 
           logger.info('PayPal subscription activated', {
             paymentId: payment.id,
-            subscriptionId: token,
+            subscriptionId: payment.paypal_subscription_id || lookupToken,
             tier: payment.tier,
           });
         }
       } catch (subError: unknown) {
-        logger.error('PayPal subscription sync failed', { paymentId: payment.id, token, error: subError });
+        logger.error('PayPal subscription sync failed', { 
+          paymentId: payment.id, 
+          subscriptionId: payment.paypal_subscription_id || lookupToken,
+          lookupToken,
+          error: subError 
+        });
         paymentStatus = 'failed';
         await DatabaseService.updatePayment(payment.id, {
           status: 'failed',
@@ -376,7 +419,8 @@ router.get(
       let callbackData: Record<string, unknown> = {};
 
       try {
-        const result = await PayPalService.executePayment(token);
+        const orderLookupId = payment.paypal_order_id || lookupToken;
+        const result = await PayPalService.executePayment(orderLookupId);
         paymentStatus = 'completed';
         captureId = result.captureId;
         callbackData = {
@@ -397,14 +441,20 @@ router.get(
 
         logger.info('PayPal payment captured', {
           paymentId: payment.id,
-          orderId: token,
+          orderId: orderLookupId,
           captureId,
         });
       } catch (captureError: unknown) {
-        logger.error('PayPal capture failed', { paymentId: payment.id, orderId: token, error: captureError });
+        const orderLookupId = payment.paypal_order_id || lookupToken;
+        logger.error('PayPal capture failed', { 
+          paymentId: payment.id, 
+          orderId: orderLookupId,
+          lookupToken,
+          error: captureError 
+        });
         const err = captureError as { statusCode?: number; message?: string };
         if (err.statusCode === 422 || (err.message && err.message.includes('already captured'))) {
-          const details = await PayPalService.getPaymentDetails(token);
+          const details = await PayPalService.getPaymentDetails(orderLookupId);
           paymentStatus = mapPayPalOrderStatusToPaymentStatus(details.status);
           await DatabaseService.updatePayment(payment.id, {
             status: paymentStatus,
@@ -508,38 +558,58 @@ router.get(
 
 /**
  * GET /api/payment/cancel
- * User cancelled on PayPal; redirect to frontend.
+ * User cancelled on PayPal or encountered an error; redirect to frontend.
+ * PayPal may call this with token, orderId, subscription_id, or no parameters
  */
 router.get(
   '/cancel',
   asyncHandler(async (req: Request, res: Response) => {
     const frontendUrl = getFrontendUrl();
-    const token = req.query.token as string;
+    
+    // PayPal may send different parameters
+    const token = 
+      (req.query.token as string) || 
+      (req.query.orderId as string) || 
+      (req.query.subscription_id as string) ||
+      (req.query.PayerID as string);
+    
+    logger.info('PayPal cancel/return received', { 
+      token: token ? 'present' : 'missing',
+      query: req.query,
+      allQueryParams: Object.keys(req.query),
+    });
+    
     if (token) {
       let payment = await DatabaseService.getPaymentByPayPalOrderId(token);
       if (!payment) {
         payment = await DatabaseService.getPaymentByPayPalSubscriptionId(token);
       }
       if (payment) {
-        await DatabaseService.updatePayment(payment.id, { status: 'cancelled' });
-        try {
-          const { EmailService } = await import('../services/email.service');
-          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-          if (userProfile) {
-            const updated = await DatabaseService.getPaymentById(payment.id);
-            if (updated) {
-              await EmailService.sendPaymentCancellationEmail(
-                userProfile.email,
-                userProfile.full_name || userProfile.email,
-                updated
-              );
+        // Only update to cancelled if still pending
+        if (payment.status === 'pending') {
+          await DatabaseService.updatePayment(payment.id, { status: 'cancelled' });
+          try {
+            const { EmailService } = await import('../services/email.service');
+            const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+            if (userProfile) {
+              const updated = await DatabaseService.getPaymentById(payment.id);
+              if (updated) {
+                await EmailService.sendPaymentCancellationEmail(
+                  userProfile.email,
+                  userProfile.full_name || userProfile.email,
+                  updated
+                );
+              }
             }
+          } catch (emailError) {
+            logger.error('Failed to send cancellation email:', emailError);
           }
-        } catch (emailError) {
-          logger.error('Failed to send cancellation email:', emailError);
         }
       }
     }
+    
+    // Always redirect back to dashboard, even if no token found
+    // This handles cases where PayPal redirects without parameters
     return res.redirect(`${frontendUrl}/dashboard?payment=cancelled`);
   })
 );
@@ -617,6 +687,76 @@ router.post(
           const { SubscriptionService } = await import('../services/subscription.service');
           await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
           logger.info('Payment completed via webhook', { paymentId: payment.id, captureId });
+        }
+      }
+    }
+
+    // Handle subscription activation events
+    if (
+      (eventType === 'BILLING.SUBSCRIPTION.CREATED' || 
+       eventType === 'BILLING.SUBSCRIPTION.ACTIVATED' ||
+       eventType === 'BILLING.SUBSCRIPTION.UPDATED') &&
+      resource
+    ) {
+      const subscriptionId = resource.id as string | undefined;
+      if (subscriptionId) {
+        // Find payment by subscription ID
+        const payment = await DatabaseService.getPaymentByPayPalSubscriptionId(subscriptionId);
+        if (payment && payment.status === 'pending') {
+          try {
+            const subDetails = await PayPalService.getSubscription(subscriptionId);
+            const status = (subDetails.status || '').toUpperCase();
+            
+            if (status === 'ACTIVE' || status === 'APPROVAL_PENDING') {
+              await DatabaseService.updatePayment(payment.id, {
+                status: 'completed',
+                callback_data: subDetails as unknown as Record<string, unknown>,
+                completed_at: new Date().toISOString(),
+              });
+
+              const periodStart = subDetails.start_time
+                ? new Date(subDetails.start_time)
+                : new Date();
+              const periodEnd = subDetails.next_billing_time
+                ? new Date(subDetails.next_billing_time)
+                : new Date(periodStart.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+              const storedBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
+              const billingPeriod = storedBillingPeriod === 'annual' ? 'annual' : 'monthly';
+              const currency = (payment.currency || 'USD') as 'UGX' | 'USD';
+              const { getAnnualDiscountPercent } = await import('../constants/pricing');
+              const annualDiscount = billingPeriod === 'annual'
+                ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro', currency)
+                : 0;
+
+              await DatabaseService.updateSubscription(payment.user_id, {
+                paypal_subscription_id: subscriptionId,
+                tier: payment.tier,
+                current_period_start: periodStart.toISOString(),
+                current_period_end: periodEnd.toISOString(),
+                status: 'active',
+                auto_renew: true,
+                billing_period: billingPeriod,
+                annual_discount: annualDiscount,
+              });
+
+              const { SubscriptionService } = await import('../services/subscription.service');
+              await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+
+              logger.info('PayPal subscription activated via webhook', {
+                paymentId: payment.id,
+                subscriptionId,
+                tier: payment.tier,
+                eventType,
+              });
+            }
+          } catch (subError: unknown) {
+            logger.error('PayPal subscription activation via webhook failed', {
+              subscriptionId,
+              paymentId: payment.id,
+              error: subError,
+            });
+          }
         }
       }
     }

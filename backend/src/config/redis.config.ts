@@ -96,6 +96,8 @@ export async function createRedisClient(): Promise<RedisClientType> {
   }
 
   if (!isRedisConfigured()) {
+    // Redis is optional - don't throw error, just log and return null-like behavior
+    logger.debug('Redis is not configured. Caching will be disabled.');
     throw new Error('Redis is not configured. Set REDIS_URL or REDIS_HOST environment variable.');
   }
 
