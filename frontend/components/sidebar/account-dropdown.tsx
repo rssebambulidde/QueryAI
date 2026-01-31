@@ -24,7 +24,7 @@ interface AccountDropdownProps {
   isOpen: boolean;
   onClose: () => void;
   subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
-  anchorRef?: React.RefObject<HTMLElement>;
+  anchorRef?: React.RefObject<HTMLElement | HTMLButtonElement | null>;
 }
 
 interface MenuGroup {
