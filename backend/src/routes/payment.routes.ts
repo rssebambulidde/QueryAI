@@ -754,7 +754,8 @@ router.post(
         if (!payment) {
           const orderId = (resource as { supplementary_data?: { related_ids?: { order_id?: string } } }).supplementary_data?.related_ids?.order_id;
           if (orderId) {
-            payment = await DatabaseService.getPaymentByPayPalOrderId(orderId);
+            const foundPayment = await DatabaseService.getPaymentByPayPalOrderId(orderId);
+            payment = foundPayment || undefined; // Convert null to undefined
             logger.info('PayPal webhook: Found payment by order ID from capture', {
               captureId,
               orderId,
