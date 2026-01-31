@@ -309,104 +309,103 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   <Edit2 className="w-3.5 h-3.5" />
                 </button>
               )}
+              {/* Ellipsis menu for assistant messages with actions */}
+              {!isUser && onActionResponse && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
+                <AIActionButtons
+                  onSummarize={async () => {
+                    if (!userQuestion) return;
+                    setIsActionLoading(true);
+                    try {
+                      const response = await aiApi.summarize(
+                        message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
+                        userQuestion,
+                        message.sources
+                      );
+                      if (response.success && response.data) {
+                        onActionResponse(response.data.summary, 'summary');
+                      } else {
+                        toast.error(response.message || 'Failed to generate summary');
+                      }
+                    } catch (error: any) {
+                      toast.error(error.message || 'Failed to generate summary');
+                    } finally {
+                      setIsActionLoading(false);
+                    }
+                  }}
+                  onWriteEssay={async () => {
+                    if (!userQuestion) return;
+                    setIsActionLoading(true);
+                    try {
+                      const response = await aiApi.writeEssay(
+                        message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
+                        userQuestion,
+                        message.sources
+                      );
+                      if (response.success && response.data) {
+                        onActionResponse(response.data.essay, 'essay');
+                      } else {
+                        toast.error(response.message || 'Failed to generate essay');
+                      }
+                    } catch (error: any) {
+                      toast.error(error.message || 'Failed to generate essay');
+                    } finally {
+                      setIsActionLoading(false);
+                    }
+                  }}
+                  onDetailedReport={async () => {
+                    if (!userQuestion) return;
+                    setIsActionLoading(true);
+                    try {
+                      const response = await aiApi.generateReport(
+                        message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
+                        userQuestion,
+                        message.sources
+                      );
+                      if (response.success && response.data) {
+                        onActionResponse(response.data.report, 'report');
+                      } else {
+                        toast.error(response.message || 'Failed to generate report');
+                      }
+                    } catch (error: any) {
+                      toast.error(error.message || 'Failed to generate report');
+                    } finally {
+                      setIsActionLoading(false);
+                    }
+                  }}
+                  onExport={() => {
+                    try {
+                      const content = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
+                      exportToPdf({
+                        question: userQuestion ?? '',
+                        answer: content,
+                        sources: message.sources ?? [],
+                      });
+                    } catch {
+                      toast.error('Failed to export PDF');
+                    }
+                  }}
+                  isLoading={isActionLoading}
+                />
+              )}
             </div>
           </div>
         </div>
 
-        {/* Action row: "N sources" pill (Perplexity-style) + Summarize / Essay / Report / Export */}
-        {!isUser && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (hasSources && onOpenSources || onActionResponse) && (
-          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-200 flex-wrap">
-            {hasSources && onOpenSources && (
-              <button
-                type="button"
-                onClick={() => onOpenSources(message.sources!, userQuestion)}
-                className={cn(
-                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium',
-                  'bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors'
-                )}
-                aria-label={`View ${message.sources!.length} sources`}
-              >
-                <Layers className="w-3.5 h-3.5 text-gray-500" />
-                {message.sources!.length} sources
-              </button>
-            )}
-            {onActionResponse && (
-          <AIActionButtons
-            onSummarize={async () => {
-              if (!userQuestion) return;
-              setIsActionLoading(true);
-              try {
-                const response = await aiApi.summarize(
-                  message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
-                  userQuestion,
-                  message.sources
-                );
-                if (response.success && response.data) {
-                  onActionResponse(response.data.summary, 'summary');
-                } else {
-                  toast.error(response.message || 'Failed to generate summary');
-                }
-              } catch (error: any) {
-                toast.error(error.message || 'Failed to generate summary');
-              } finally {
-                setIsActionLoading(false);
-              }
-            }}
-            onWriteEssay={async () => {
-              if (!userQuestion) return;
-              setIsActionLoading(true);
-              try {
-                const response = await aiApi.writeEssay(
-                  message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
-                  userQuestion,
-                  message.sources
-                );
-                if (response.success && response.data) {
-                  onActionResponse(response.data.essay, 'essay');
-                } else {
-                  toast.error(response.message || 'Failed to generate essay');
-                }
-              } catch (error: any) {
-                toast.error(error.message || 'Failed to generate essay');
-              } finally {
-                setIsActionLoading(false);
-              }
-            }}
-            onDetailedReport={async () => {
-              if (!userQuestion) return;
-              setIsActionLoading(true);
-              try {
-                const response = await aiApi.generateReport(
-                  message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
-                  userQuestion,
-                  message.sources
-                );
-                if (response.success && response.data) {
-                  onActionResponse(response.data.report, 'report');
-                } else {
-                  toast.error(response.message || 'Failed to generate report');
-                }
-              } catch (error: any) {
-                toast.error(error.message || 'Failed to generate report');
-              } finally {
-                setIsActionLoading(false);
-              }
-            }}
-            onExport={() => {
-              try {
-                const content = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
-                exportToPdf({
-                  question: userQuestion ?? '',
-                  answer: content,
-                  sources: message.sources ?? [],
-                });
-              } catch {
-                toast.error('Failed to export PDF');
-              }
-            }}
-            isLoading={isActionLoading}
-          />
-            )}
+        {/* "N sources" pill (Perplexity-style) - shown below message */}
+        {!isUser && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && hasSources && onOpenSources && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => onOpenSources(message.sources!, userQuestion)}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium',
+                'bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors'
+              )}
+              aria-label={`View ${message.sources!.length} sources`}
+            >
+              <Layers className="w-3.5 h-3.5 text-gray-500" />
+              {message.sources!.length} sources
+            </button>
           </div>
         )}
 
