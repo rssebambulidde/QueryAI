@@ -269,47 +269,49 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
 
         {/* Menu Items */}
         <div className="py-2 max-h-[420px] overflow-y-auto custom-scrollbar">
-          {getMenuGroups(subscriptionTier).map((group, groupIndex) => (
-            <div key={groupIndex}>
-              {group.items.map((item, itemIndex) => {
-                const Icon = item.icon;
-                const isLastInGroup = itemIndex === group.items.length - 1;
-                return (
-                  <button
-                    key={itemIndex}
-                    onClick={() => handleMenuItemClick(item.href)}
-                    className="w-full flex items-center gap-3.5 px-5 py-3 text-sm text-gray-700 hover:bg-orange-50/50 transition-colors text-left group"
-                  >
-                    <div className={cn(
-                      'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
-                      'bg-gray-50 group-hover:bg-orange-100 border border-gray-100 group-hover:border-orange-200'
-                    )}>
-                      <Icon className="w-4.5 h-4.5 text-gray-600 group-hover:text-orange-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900">{item.label}</span>
-                        {item.badge && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200">
-                            {item.badge}
-                          </span>
-                        )}
+          {(() => {
+            const groups = getMenuGroups(subscriptionTier);
+            return groups.map((group, groupIndex) => (
+              <div key={groupIndex}>
+                {group.items.map((item, itemIndex) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={itemIndex}
+                      onClick={() => handleMenuItemClick(item.href)}
+                      className="w-full flex items-center gap-3.5 px-5 py-3 text-sm text-gray-700 hover:bg-orange-50/50 transition-colors text-left group"
+                    >
+                      <div className={cn(
+                        'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                        'bg-gray-50 group-hover:bg-orange-100 border border-gray-100 group-hover:border-orange-200'
+                      )}>
+                        <Icon className="w-4.5 h-4.5 text-gray-600 group-hover:text-orange-600" />
                       </div>
-                    </div>
-                    {item.shortcut && (
-                      <span className="text-[10px] text-gray-400 font-mono bg-gray-100 px-1.5 py-0.5 rounded">
-                        {item.shortcut}
-                      </span>
-                    )}
-                    <ArrowUpRight className="w-4 h-4 text-gray-300 group-hover:text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-                );
-              })}
-              {groupIndex < menuGroups.length - 1 && (
-                <div className="mx-5 my-1.5 border-t border-gray-100" />
-              )}
-            </div>
-          ))}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">{item.label}</span>
+                          {item.badge && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                              {item.badge}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {item.shortcut && (
+                        <span className="text-[10px] text-gray-400 font-mono bg-gray-100 px-1.5 py-0.5 rounded">
+                          {item.shortcut}
+                        </span>
+                      )}
+                      <ArrowUpRight className="w-4 h-4 text-gray-300 group-hover:text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                  );
+                })}
+                {groupIndex < groups.length - 1 && (
+                  <div className="mx-5 my-1.5 border-t border-gray-100" />
+                )}
+              </div>
+            ));
+          })()}
         </div>
 
         {/* Upgrade CTA */}
