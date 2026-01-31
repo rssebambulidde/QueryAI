@@ -39,10 +39,10 @@ export class InvoiceService {
       doc.text(`Date: ${new Date(payment.created_at).toLocaleDateString()}`, { align: 'right' });
       doc.moveDown();
 
-      doc.fontSize(14).text('QueryAI', 50, 100);
+      doc.fontSize(14).text('Samabrains Solutions', 50, 100);
       doc.fontSize(10);
-      doc.text('Subscription Service Provider');
-      doc.text('Email: support@queryai.com');
+      doc.text('Kampala, Uganda');
+      doc.text('Email: Info@samabrains.com');
       doc.moveDown();
 
       doc.fontSize(14).text('Bill To:', 50, 180);
@@ -92,7 +92,7 @@ export class InvoiceService {
 
       doc.fontSize(8)
         .text('Thank you for your subscription!', 50, 750, { align: 'center' })
-        .text('For support, contact: support@queryai.com', 50, 765, { align: 'center' });
+        .text('For support, contact: Info@samabrains.com', 50, 765, { align: 'center' });
 
       doc.end();
 
