@@ -20,7 +20,7 @@ type TabType = 'chat' | 'collections';
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isAuthenticated, isLoading, logout, checkAuth } = useAuthStore();
+  const { user, isAuthenticated, isLoading, checkAuth } = useAuthStore();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
@@ -170,10 +170,6 @@ function DashboardContent() {
   }, [ragSettings]);
 
 
-  const handleLogout = async () => {
-    await logout();
-    router.push('/login');
-  };
 
   if (isLoading) {
     return (
@@ -200,20 +196,6 @@ function DashboardContent() {
                 <HamburgerMenu onClick={() => setIsMobileSidebarOpen(true)} />
               )}
               <h1 className="text-xl font-bold text-gray-900">QueryAI</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700 hidden sm:inline">
-                {user.full_name || user.email}
-              </span>
-              <Button 
-                variant="outline" 
-                onClick={handleLogout}
-                className="text-sm"
-                style={isMobile ? { minHeight: '44px', minWidth: '44px' } : undefined}
-              >
-                <span className="hidden sm:inline">Logout</span>
-                <span className="sm:hidden">Out</span>
-              </Button>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, TestTube, CheckSquare } from 'lucide-react';
+import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, TestTube, CheckSquare, LogOut, User, ArrowUp, CreditCard } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,7 @@ import { CollectionConversationsList } from './collection-conversations-list';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { isEnterpriseTier } from '@/lib/pricing';
 
 type TabType = 'chat' | 'collections';
 
@@ -48,7 +49,31 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
+
+  const getTierName = (tier: string) => {
+    switch (tier) {
+      case 'enterprise':
+        return 'Enterprise';
+      case 'pro':
+        return 'Pro';
+      case 'premium':
+        return 'Premium';
+      case 'starter':
+        return 'Starter';
+      default:
+        return 'Free';
+    }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    router.push('/login');
+  };
+
+  const handleUpgrade = () => {
+    router.push('/dashboard/settings/subscription');
+  };
   
   // Check if user is admin/internal
   const isAdmin =
@@ -157,7 +182,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         >
           <ChevronRight className="w-5 h-5 text-gray-600" />
         </button>
-        <nav className="flex-1 px-2 py-4 space-y-1">
+        <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
           <button
             onClick={() => onTabChange('chat')}
             className={cn(
@@ -196,6 +221,26 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             <Settings className="w-5 h-5" />
           </button>
         </nav>
+        
+        {/* Bottom Section - Collapsed */}
+        <div className="border-t border-gray-200 p-2 space-y-1">
+          {subscriptionTier !== 'enterprise' && (
+            <button
+              onClick={handleUpgrade}
+              className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-orange-600 hover:bg-orange-50"
+              title={`Upgrade from ${getTierName(subscriptionTier)}`}
+            >
+              <ArrowUp className="w-5 h-5" />
+            </button>
+          )}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
+            title={`Logout (${user?.full_name || user?.email || 'User'})`}
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
       </div>
     );
   }
@@ -408,6 +453,48 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           </button>
         </nav>
 
+      </div>
+
+      {/* Bottom Section - User Info, Plan, Upgrade, Logout */}
+      <div className="border-t border-gray-200 bg-gray-50 p-3 space-y-2 flex-shrink-0">
+        {/* User Info */}
+        <div className="flex items-center gap-2 px-2 py-1.5">
+          <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
+            <User className="w-4 h-4 text-orange-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">
+              {user?.full_name || user?.email || 'User'}
+            </p>
+            <p className="text-xs text-gray-500 truncate">
+              {getTierName(subscriptionTier)} Plan
+            </p>
+          </div>
+        </div>
+
+        {/* Upgrade Button (if not Enterprise) */}
+        {subscriptionTier !== 'enterprise' && (
+          <Button
+            onClick={handleUpgrade}
+            variant="outline"
+            size="sm"
+            className="w-full text-xs h-8 border-orange-300 text-orange-700 hover:bg-orange-50"
+          >
+            <ArrowUp className="w-3 h-3 mr-1.5" />
+            Upgrade Plan
+          </Button>
+        )}
+
+        {/* Logout Button */}
+        <Button
+          onClick={handleLogout}
+          variant="ghost"
+          size="sm"
+          className="w-full text-xs h-8 text-gray-700 hover:bg-gray-100"
+        >
+          <LogOut className="w-3 h-3 mr-1.5" />
+          Logout
+        </Button>
       </div>
 
       {/* Save to Collection Dialog */}

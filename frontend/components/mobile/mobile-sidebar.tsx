@@ -140,7 +140,7 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto h-[calc(100%-64px)]">
+        <div className="flex-1 overflow-hidden flex flex-col">
           {children}
         </div>
       </div>
