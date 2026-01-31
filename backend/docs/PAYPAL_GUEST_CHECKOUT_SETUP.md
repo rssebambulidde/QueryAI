@@ -1,30 +1,39 @@
 # PayPal Guest Checkout Setup Guide
 
+## ⚠️ CRITICAL: This Setting Must Be Enabled
+
+**If users are seeing the PayPal account creation screen instead of card payment form, you MUST enable guest checkout in your PayPal business account settings.**
+
 ## Problem
-Users are being forced to create a PayPal account when trying to pay with a credit/debit card, even when clicking "Pay with Debit or Credit Card".
+Users are being forced to create a PayPal account when trying to pay with a credit/debit card, even when clicking "Pay with Debit or Credit Card". The checkout shows a form asking for password and date of birth to create a PayPal account.
 
 ## Solution
-Enable **Guest Checkout** (PayPal Account Optional) in your PayPal business account settings.
+Enable **Guest Checkout** (PayPal Account Optional) in your PayPal business account settings. This is a **REQUIRED** account-level setting that cannot be bypassed with code alone.
 
 ## Steps to Enable Guest Checkout
 
-1. **Log in to PayPal Business Account**
-   - Go to https://www.paypal.com/businessmanage/account/settings
-   - Or navigate to: Account Settings > Website payments
+### Step 1: Log in to PayPal Business Account
+- Go to https://www.paypal.com/businessmanage/account/settings
+- Or navigate to: **Account Settings** → **Website payments**
 
-2. **Enable PayPal Account Optional**
-   - Click on "Website preferences" or "Website payments"
-   - Find the setting: **"PayPal account optional"**
-   - Set it to **"On"** or **"Enabled"**
-   - Save the changes
+### Step 2: Enable PayPal Account Optional (CRITICAL)
+1. Click on **"Website preferences"** or **"Website payments"**
+2. Find the setting: **"PayPal account optional"**
+3. **Set it to "On" or "Enabled"** (this is the most important step!)
+4. Click **"Save"** or **"Update"**
 
-3. **Verify Email Address**
-   - Ensure your PayPal business account has a **confirmed email address**
-   - This is required for guest checkout to work
+**⚠️ Without this setting enabled, PayPal will ALWAYS show the account creation screen, regardless of code configuration.**
 
-4. **Wait for Changes to Take Effect**
-   - Changes may take a few minutes to propagate
-   - Test the checkout flow after enabling
+### Step 3: Verify Email Address
+- Ensure your PayPal business account has a **confirmed email address**
+- This is required for guest checkout to work
+- Check your email and confirm if needed
+
+### Step 4: Wait for Changes to Take Effect
+- Changes may take **5-15 minutes** to propagate
+- Clear your browser cache/cookies
+- Test the checkout flow after enabling
+- Try in an incognito/private browser window to verify
 
 ## How It Works
 

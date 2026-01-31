@@ -210,6 +210,7 @@ export async function createPayment(
             userAction: OrderApplicationContextUserAction.PayNow, // Required for card payments - shows "Pay Now" button and enables card payment option
             shippingPreference: OrderApplicationContextShippingPreference.NoShipping, // No shipping required for digital goods - allows international billing addresses without restrictions
             locale: 'en-US', // Base locale, but PayPal will detect user's country and show appropriate address fields
+            landingPage: 'BILLING' as any, // Force billing/card form instead of PayPal login screen (requires "PayPal Account Optional" enabled)
           },
         },
         prefer: 'return=representation',
@@ -234,25 +235,22 @@ export async function createPayment(
         status: result.status,
       });
 
-      // If preferCard is true, modify the approval URL to pre-select card payment
+      // Always modify the approval URL to force card payment and guest checkout
+      // This ensures users see the card form directly without PayPal account creation prompt
       let approvalUrl = approveLink.href;
-      if (params.preferCard) {
-        // Add fundingSource=card to the approval URL to pre-select card payment option
-        // Note: Guest checkout (card payment without PayPal account) must be enabled in PayPal business account:
-        // Account Settings > Website payments > Update > "PayPal account optional" = On
-        const url = new URL(approvalUrl);
-        url.searchParams.set('fundingSource', 'card');
-        // Try to encourage guest checkout by adding guest parameter (may not be officially supported)
-        // The primary requirement is enabling "PayPal Account Optional" in PayPal business account settings
-        url.searchParams.set('guest', '1');
-        approvalUrl = url.toString();
-        logger.info('PayPal approval URL modified for card payment preference', {
-          orderId: result.id,
-          originalUrl: approveLink.href,
-          modifiedUrl: approvalUrl,
-          note: 'Guest checkout requires "PayPal Account Optional" enabled in PayPal business account settings',
-        });
-      }
+      const url = new URL(approvalUrl);
+      url.searchParams.set('fundingSource', 'card');
+      // Add guest parameter to encourage guest checkout (card payment without account)
+      url.searchParams.set('guest', '1');
+      // Force billing page instead of login page
+      url.searchParams.set('landingPage', 'billing');
+      approvalUrl = url.toString();
+      logger.info('PayPal approval URL modified for card payment and guest checkout', {
+        orderId: result.id,
+        originalUrl: approveLink.href,
+        modifiedUrl: approvalUrl,
+        note: 'Guest checkout requires "PayPal Account Optional" enabled in PayPal business account settings',
+      });
 
       return {
         orderId: result.id,
