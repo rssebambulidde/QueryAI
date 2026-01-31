@@ -152,6 +152,7 @@ export interface CreatePaymentParams {
   custom_id?: string;
   returnUrl: string;
   cancelUrl: string;
+  preferCard?: boolean; // If true, modify approval URL to prefer card payment
 }
 
 export interface CreatePaymentResult {
@@ -233,9 +234,23 @@ export async function createPayment(
         status: result.status,
       });
 
+      // If preferCard is true, modify the approval URL to pre-select card payment
+      let approvalUrl = approveLink.href;
+      if (params.preferCard) {
+        // Add fundingSource=card to the approval URL to pre-select card payment option
+        const url = new URL(approvalUrl);
+        url.searchParams.set('fundingSource', 'card');
+        approvalUrl = url.toString();
+        logger.info('PayPal approval URL modified for card payment preference', {
+          orderId: result.id,
+          originalUrl: approveLink.href,
+          modifiedUrl: approvalUrl,
+        });
+      }
+
       return {
         orderId: result.id,
-        approvalUrl: approveLink.href,
+        approvalUrl,
         status: result.status,
       };
     } catch (error: unknown) {

@@ -1113,6 +1113,7 @@ export interface PaymentInitiateRequest {
   phoneNumber?: string;
   billing_period?: 'monthly' | 'annual';
   return_url?: string; // URL to redirect to after payment completion
+  prefer_card?: boolean; // If true, PayPal checkout will prefer card payment form
 }
 
 export interface PaymentInitiateResponse {

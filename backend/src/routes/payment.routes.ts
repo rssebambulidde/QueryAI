@@ -71,7 +71,7 @@ router.post(
       throw new ValidationError('User not authenticated');
     }
 
-    const { tier, firstName, lastName, email, recurring = false, billing_period: bp, return_url } = req.body;
+    const { tier, firstName, lastName, email, recurring = false, billing_period: bp, return_url, prefer_card } = req.body;
     
     logger.info('Payment initiate: Parsed request body', {
       userId,
@@ -219,6 +219,7 @@ router.post(
         custom_id: userId,
         returnUrl,
         cancelUrl,
+        preferCard: prefer_card === true, // Pass card preference to PayPal service
       });
       logger.info('PayPal order created successfully', {
         orderId: orderResponse.orderId,
@@ -461,21 +462,68 @@ router.get(
         });
         const err = captureError as { statusCode?: number; message?: string };
         if (err.statusCode === 422 || (err.message && err.message.includes('already captured'))) {
-          const details = await PayPalService.getPaymentDetails(orderLookupId);
-          paymentStatus = mapPayPalOrderStatusToPaymentStatus(details.status);
-          await DatabaseService.updatePayment(payment.id, {
-            status: paymentStatus,
-            paypal_payment_id: details.captureId,
-            callback_data: { ...details },
-            completed_at: paymentStatus === 'completed' ? new Date().toISOString() : undefined,
-          });
+          // Order already captured - check status and update payment
+          try {
+            const details = await PayPalService.getPaymentDetails(orderLookupId);
+            paymentStatus = mapPayPalOrderStatusToPaymentStatus(details.status);
+            await DatabaseService.updatePayment(payment.id, {
+              status: paymentStatus,
+              paypal_payment_id: details.captureId,
+              callback_data: { ...details },
+              completed_at: paymentStatus === 'completed' ? new Date().toISOString() : undefined,
+            });
+            logger.info('PayPal payment status synced after capture error', {
+              paymentId: payment.id,
+              orderId: orderLookupId,
+              status: paymentStatus,
+            });
+          } catch (detailsError) {
+            logger.error('Failed to get payment details after capture error', {
+              paymentId: payment.id,
+              orderId: orderLookupId,
+              error: detailsError,
+            });
+            // Don't fail - webhook will handle it
+            paymentStatus = payment.status; // Keep current status
+          }
         } else {
-          paymentStatus = 'failed';
-          await DatabaseService.updatePayment(payment.id, {
-            status: 'failed',
-            callback_data: { error: (captureError as Error).message },
-          });
-          return res.redirect(`${frontendUrl}/dashboard?payment=failed`);
+          // For other errors, check if order is actually approved/completed
+          try {
+            const orderDetails = await PayPalService.getPaymentDetails(orderLookupId);
+            const orderStatus = (orderDetails.status || '').toUpperCase();
+            if (orderStatus === 'COMPLETED' || orderStatus === 'APPROVED') {
+              // Order is approved/completed but capture failed - try to get capture ID from details
+              paymentStatus = 'completed';
+              await DatabaseService.updatePayment(payment.id, {
+                status: 'completed',
+                paypal_payment_id: orderDetails.captureId,
+                callback_data: { ...orderDetails, captureError: (captureError as Error).message },
+                completed_at: new Date().toISOString(),
+              });
+              logger.info('PayPal payment marked as completed based on order status', {
+                paymentId: payment.id,
+                orderId: orderLookupId,
+                orderStatus,
+              });
+            } else {
+              // Order not yet approved/completed
+              paymentStatus = 'pending';
+              logger.warn('PayPal order not yet completed', {
+                paymentId: payment.id,
+                orderId: orderLookupId,
+                orderStatus,
+              });
+            }
+          } catch (detailsError) {
+            logger.error('Failed to check order status after capture error', {
+              paymentId: payment.id,
+              orderId: orderLookupId,
+              captureError: (captureError as Error).message,
+              detailsError,
+            });
+            // Keep payment as pending - webhook will handle completion
+            paymentStatus = 'pending';
+          }
         }
       }
     }
@@ -693,21 +741,80 @@ router.post(
       const captureId = resource.id as string | undefined;
       if (captureId) {
         const { supabaseAdmin } = await import('../config/database');
-        const { data: payments } = await supabaseAdmin
+        // First, try to find payment by capture ID (if callback already stored it)
+        let { data: payments } = await supabaseAdmin
           .from('payments')
           .select('*')
           .eq('paypal_payment_id', captureId)
           .limit(1);
-        const payment = payments?.[0] as Database.Payment | undefined;
+        let payment = payments?.[0] as Database.Payment | undefined;
+        
+        // If not found by capture ID, try to find by order ID from capture resource
+        // PayPal capture resource may have links or supplementary_data with order reference
+        if (!payment) {
+          const orderId = (resource as { supplementary_data?: { related_ids?: { order_id?: string } } }).supplementary_data?.related_ids?.order_id;
+          if (orderId) {
+            payment = await DatabaseService.getPaymentByPayPalOrderId(orderId);
+            logger.info('PayPal webhook: Found payment by order ID from capture', {
+              captureId,
+              orderId,
+              paymentId: payment?.id,
+            });
+          }
+        }
+        
+        // If still not found, try to find pending payments and match by amount/currency
+        // This is a fallback for cases where order ID isn't in the capture resource
+        if (!payment) {
+          const captureAmount = (resource as { amount?: { value?: string; currency_code?: string } }).amount;
+          if (captureAmount?.value && captureAmount?.currency_code) {
+            const { data: pendingPayments } = await supabaseAdmin
+              .from('payments')
+              .select('*')
+              .eq('status', 'pending')
+              .eq('amount', parseFloat(captureAmount.value))
+              .eq('currency', captureAmount.currency_code.toUpperCase())
+              .is('paypal_payment_id', null) // Only payments without capture ID yet
+              .limit(10);
+            
+            // If multiple matches, we can't be sure - log warning
+            if (pendingPayments && pendingPayments.length > 0) {
+              if (pendingPayments.length === 1) {
+                payment = pendingPayments[0] as Database.Payment;
+                logger.info('PayPal webhook: Found payment by amount/currency match', {
+                  captureId,
+                  paymentId: payment.id,
+                  amount: captureAmount.value,
+                  currency: captureAmount.currency_code,
+                });
+              } else {
+                logger.warn('PayPal webhook: Multiple pending payments match capture amount/currency', {
+                  captureId,
+                  amount: captureAmount.value,
+                  currency: captureAmount.currency_code,
+                  matchCount: pendingPayments.length,
+                });
+              }
+            }
+          }
+        }
+        
         if (payment && payment.status !== 'completed') {
           await DatabaseService.updatePayment(payment.id, {
             status: 'completed',
+            paypal_payment_id: captureId, // Store capture ID if not already stored
             callback_data: resource,
             completed_at: new Date().toISOString(),
           });
           const { SubscriptionService } = await import('../services/subscription.service');
           await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
           logger.info('Payment completed via webhook', { paymentId: payment.id, captureId });
+        } else if (!payment) {
+          logger.warn('PayPal webhook: Payment not found for capture', {
+            captureId,
+            eventType,
+            resourceId: resource.id,
+          });
         }
       }
     }

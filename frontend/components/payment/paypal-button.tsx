@@ -51,7 +51,7 @@ export function PayPalButton({
     [onError]
   );
 
-  const handleInitiateRedirect = useCallback(async () => {
+  const handleInitiateRedirect = useCallback(async (preferCard: boolean = false) => {
     setError(null);
     setLoading(true);
     try {
@@ -67,6 +67,7 @@ export function PayPalButton({
         phoneNumber: phoneNumber?.trim() || undefined,
         billing_period: billingPeriod,
         return_url: returnUrl, // Store where user came from
+        prefer_card: preferCard, // Pass card preference to backend
       };
       if (recurring) request.recurring = true;
 
@@ -113,7 +114,7 @@ export function PayPalButton({
         {/* PayPal Button */}
         <button
           type="button"
-          onClick={handleInitiateRedirect}
+          onClick={() => handleInitiateRedirect(false)}
           disabled={disabled || loading}
           className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors"
           style={{ minHeight: 44 }}
@@ -135,7 +136,7 @@ export function PayPalButton({
         {/* Card Payment Button */}
         <button
           type="button"
-          onClick={handleInitiateRedirect}
+          onClick={() => handleInitiateRedirect(true)}
           disabled={disabled || loading}
           className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition-colors"
           style={{ minHeight: 44 }}
@@ -169,7 +170,7 @@ export function PayPalButton({
   // One-time: Use redirect flow for better international address support
   // PayPal's embedded card form validates ZIP/phone before country selection
   // Redirect flow ensures users select country first on PayPal's hosted checkout
-  const handleOneTimeRedirect = useCallback(async () => {
+  const handleOneTimeRedirect = useCallback(async (preferCard: boolean = false) => {
     setError(null);
     setLoading(true);
     try {
@@ -181,6 +182,7 @@ export function PayPalButton({
         email: email.trim(),
         phoneNumber: phoneNumber?.trim() || undefined,
         billing_period: billingPeriod,
+        prefer_card: preferCard, // Pass card preference to backend
       };
       const response = await paymentApi.initiate(request);
 
@@ -222,7 +224,7 @@ export function PayPalButton({
       {/* PayPal Button */}
       <button
         type="button"
-        onClick={handleOneTimeRedirect}
+        onClick={() => handleOneTimeRedirect(false)}
         disabled={disabled || loading}
         className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors"
         style={{ minHeight: 44 }}
@@ -242,7 +244,7 @@ export function PayPalButton({
       {/* Card Payment Button */}
       <button
         type="button"
-        onClick={handleOneTimeRedirect}
+        onClick={() => handleOneTimeRedirect(true)}
         disabled={disabled || loading}
         className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition-colors"
         style={{ minHeight: 44 }}
