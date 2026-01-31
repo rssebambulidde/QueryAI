@@ -54,12 +54,35 @@ router.post(
   '/initiate',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
+    // Log incoming request for debugging
+    logger.info('Payment initiate request received', {
+      body: req.body,
+      headers: {
+        'content-type': req.headers['content-type'],
+        'authorization': req.headers.authorization ? 'present' : 'missing',
+      },
+      path: req.path,
+      method: req.method,
+    });
+
     const userId = req.user?.id;
     if (!userId) {
+      logger.error('Payment initiate: User not authenticated', { userId: req.user });
       throw new ValidationError('User not authenticated');
     }
 
     const { tier, firstName, lastName, email, recurring = false, billing_period: bp } = req.body;
+    
+    logger.info('Payment initiate: Parsed request body', {
+      userId,
+      tier,
+      firstName: firstName ? 'provided' : 'missing',
+      lastName: lastName ? 'provided' : 'missing',
+      email: email ? 'provided' : 'missing',
+      recurring,
+      billing_period: bp,
+      currency: req.body.currency,
+    });
 
     if (!tier || !['starter', 'premium', 'pro', 'enterprise'].includes(tier)) {
       throw new ValidationError('Invalid tier. Must be "starter", "premium", "pro", or "enterprise"');
@@ -173,14 +196,52 @@ router.post(
 
     // One-time: PayPal Orders (capture after approval)
     // Note: Card payments are automatically enabled when userAction: 'PAY_NOW' is set in createPayment
-    const orderResponse = await PayPalService.createPayment({
+    logger.info('Creating PayPal order for one-time payment', {
+      userId,
+      tier,
       amount,
       currency: normalizedCurrency,
-      description: `QueryAI ${tier} subscription (${billingPeriod})`,
-      custom_id: userId,
+      billingPeriod,
       returnUrl,
       cancelUrl,
     });
+    
+    let orderResponse;
+    try {
+      orderResponse = await PayPalService.createPayment({
+        amount,
+        currency: normalizedCurrency,
+        description: `QueryAI ${tier} subscription (${billingPeriod})`,
+        custom_id: userId,
+        returnUrl,
+        cancelUrl,
+      });
+      logger.info('PayPal order created successfully', {
+        orderId: orderResponse.orderId,
+        approvalUrl: orderResponse.approvalUrl,
+      });
+    } catch (paypalError: unknown) {
+      const error = paypalError as { statusCode?: number; message?: string; body?: unknown };
+      logger.error('PayPal order creation failed', {
+        userId,
+        tier,
+        amount,
+        currency: normalizedCurrency,
+        billingPeriod,
+        error: {
+          statusCode: error.statusCode,
+          message: error.message,
+          body: error.body,
+          stack: (paypalError as Error)?.stack,
+        },
+        requestParams: {
+          returnUrl,
+          cancelUrl,
+          description: `QueryAI ${tier} subscription (${billingPeriod})`,
+        },
+      });
+      throw paypalError;
+    }
 
     const payment = await DatabaseService.createPayment({
       user_id: userId,

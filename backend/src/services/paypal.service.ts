@@ -237,21 +237,88 @@ export async function createPayment(
       };
     } catch (error: unknown) {
       // Enhanced error logging for debugging 400 errors
-      const apiError = error as { statusCode?: number; message?: string; body?: unknown };
-      if (apiError.statusCode === 400) {
-        logger.error('PayPal create order 400 error', {
-          statusCode: apiError.statusCode,
-          message: apiError.message,
-          body: apiError.body,
-          requestParams: {
-            amount: value,
-            currency: currencyCode,
-            description: params.description,
-            returnUrl: params.returnUrl,
-            cancelUrl: params.cancelUrl,
-          },
+      let statusCode: number | undefined;
+      let errorMessage: string | undefined;
+      let errorBody: unknown;
+      
+      // Check if it's a PayPal SDK ApiError
+      if (error instanceof ApiError) {
+        statusCode = error.statusCode;
+        errorMessage = error.message;
+        // ApiError from PayPal SDK has a result property with error details
+        errorBody = (error as any).result || (error as any).body;
+        
+        logger.error('PayPal SDK ApiError caught', {
+          statusCode,
+          message: errorMessage,
+          result: errorBody,
+          errorName: error.name,
+          stack: error.stack,
+        });
+      } else {
+        // Try to extract error details from generic error
+        const genericError = error as { statusCode?: number; message?: string; body?: unknown; result?: unknown; response?: { body?: unknown } };
+        statusCode = genericError.statusCode;
+        errorMessage = genericError.message;
+        errorBody = genericError.body || genericError.result || genericError.response?.body;
+        
+        logger.error('PayPal create order generic error', {
+          statusCode,
+          message: errorMessage,
+          body: errorBody,
+          errorType: error instanceof Error ? error.constructor.name : typeof error,
+          stack: error instanceof Error ? error.stack : undefined,
         });
       }
+      
+      // Log request parameters for debugging
+      logger.error('PayPal create order error - request context', {
+        requestParams: {
+          amount: value,
+          currency: currencyCode,
+          description: params.description,
+          returnUrl: params.returnUrl,
+          cancelUrl: params.cancelUrl,
+        },
+      });
+      
+      // Re-throw with more context if it's a 400 error
+      if (statusCode === 400) {
+        const message = errorMessage || 'PayPal API returned 400 Bad Request';
+        
+        // Try to extract detailed error information from PayPal API response
+        let detailedError = message;
+        if (errorBody) {
+          try {
+            const bodyStr = typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody, null, 2);
+            detailedError = `${message}. PayPal API Response: ${bodyStr}`;
+            
+            // Try to extract specific error details if it's a PayPal error response
+            if (typeof errorBody === 'object' && errorBody !== null) {
+              const paypalError = errorBody as { details?: Array<{ field?: string; issue?: string; description?: string }>; name?: string; message?: string };
+              if (paypalError.details && Array.isArray(paypalError.details)) {
+                const issues = paypalError.details.map(d => `${d.field || 'unknown'}: ${d.issue || d.description || 'unknown issue'}`).join('; ');
+                detailedError = `${message}. Issues: ${issues}`;
+              } else if (paypalError.name || paypalError.message) {
+                detailedError = `${message}. ${paypalError.name || ''}: ${paypalError.message || ''}`;
+              }
+            }
+          } catch (e) {
+            detailedError = `${message}. PayPal API Response: ${String(errorBody)}`;
+          }
+        }
+        
+        logger.error('PayPal 400 error - final details', {
+          detailedError,
+          errorBody: typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody, null, 2),
+        });
+        
+        // Create a ValidationError so it returns 400 status code
+        const { ValidationError } = await import('../types/error');
+        throw new ValidationError(detailedError);
+      }
+      
+      // Re-throw the original error for non-400 errors
       throw error;
     }
   }, 'createPayment');
