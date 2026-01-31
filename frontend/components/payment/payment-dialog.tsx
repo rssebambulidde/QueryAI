@@ -177,6 +177,11 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               />
               Subscribe (recurring billing)
             </label>
+            {recurring && (
+              <Alert variant="info" className="text-sm">
+                Recurring subscriptions require a PayPal account to manage billing. For card-only payment without creating an account, use one-time payment instead.
+              </Alert>
+            )}
           </div>
 
           {error && (

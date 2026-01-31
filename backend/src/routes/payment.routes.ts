@@ -148,13 +148,31 @@ router.post(
 
     if (recurring) {
       // Recurring: PayPal Subscriptions (plan-based billing)
-      const subscriptionResponse = await PayPalService.createSubscription({
-        tier: tier as 'starter' | 'premium' | 'pro' | 'enterprise',
-        returnUrl,
-        cancelUrl,
-        customId: userId,
-        billing_period: billingPeriod,
-      });
+      // Note: PayPal Subscriptions API does NOT support guest checkout - requires PayPal account
+      let subscriptionResponse;
+      try {
+        subscriptionResponse = await PayPalService.createSubscription({
+          tier: tier as 'starter' | 'premium' | 'pro' | 'enterprise',
+          returnUrl,
+          cancelUrl,
+          customId: userId,
+          billing_period: billingPeriod,
+        });
+      } catch (subError: unknown) {
+        const err = subError as { statusCode?: number; message?: string; result?: { details?: { description?: string }[] }; body?: unknown };
+        const detailMsg = err.result?.details?.[0]?.description || err.message;
+        logger.error('PayPal create subscription failed', {
+          userId,
+          tier,
+          billingPeriod,
+          error: detailMsg,
+          statusCode: err.statusCode,
+        });
+        // Surface actual error instead of generic Internal server error
+        throw new ValidationError(
+          detailMsg || 'Failed to create recurring subscription. Please verify PayPal plan IDs are configured and try one-time payment if recurring fails.'
+        );
+      }
 
       const payment = await DatabaseService.createPayment({
         user_id: userId,
@@ -722,7 +740,7 @@ router.post(
       try {
         const subDetails = await PayPalService.getSubscription(subId);
         const status = (subDetails.status || '').toUpperCase();
-        if (status !== 'ACTIVE' && status !== 'APPROVAL_PENDING') continue;
+        if (!['ACTIVE', 'APPROVAL_PENDING', 'APPROVED'].includes(status)) continue;
 
         // Update payment to completed
         await DatabaseService.updatePayment(payment.id, {

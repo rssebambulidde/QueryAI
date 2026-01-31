@@ -160,12 +160,21 @@ When "PayPal Account Optional" is enabled:
 | Setting | Recommended Value | Reason |
 |---------|------------------|--------|
 | **PayPal Account Optional** | **ON** | Required for guest checkout (card payments without account) |
-| **Auto Return** | **ON** | Redirects users back to your site after payment |
-| **Return URL** | `https://your-backend-domain.com/api/payment/callback` | Your payment callback endpoint |
-| **Payment Data Transfer** | **ON** | Receives payment notifications (requires Auto Return) |
+| **Auto Return** | **OFF** | If guest checkout still shows account creation, turn OFF. Some users report this fixes the issue. |
+| **Express Checkout settings** | **OFF** | If guest checkout still shows account creation, turn OFF. Some users report this fixes the issue. |
+| **Return URL** | (if Auto Return ON) Your callback URL | Used when Auto Return is enabled |
+| **Payment Data Transfer** | (optional) | Requires Auto Return; may not be needed for Orders API |
 | **Encrypted Website Payments** | **OFF** | Doesn't apply to Orders API v2 (we use secure API calls) |
-| **Support giropay and bank transfer** | **ON** (optional) | Enables additional payment methods for international customers |
+| **Support giropay and bank transfer** | **OFF** (if guest checkout issues) | Turning OFF may help guest checkout work |
 | **Contact Telephone** | **On (optional)** or **Off** | Matches our optional phone field |
+
+### If One-Time Card Payment Still Asks to Create PayPal Account
+
+1. **Turn OFF "Auto return for website payments"** – Some users report guest checkout only works when this is OFF.
+2. **Turn OFF "Express Checkout settings"** (giropay, bank transfer) – Can interfere with guest checkout.
+3. **Confirm "PayPal Account Optional" is ON** – Required; changes may take 5–15 minutes to apply.
+4. **Clear browser cookies/cache** – Or test in incognito/private window.
+5. **PayPal risk assessment** – PayPal may still require account creation based on buyer history, location, or card usage limits. This cannot be overridden in code.
 
 ## Support
 
