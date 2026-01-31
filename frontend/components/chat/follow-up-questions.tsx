@@ -21,7 +21,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
     <div className={cn('mt-4 pt-4 border-t border-gray-200', className)}>
       <div className="flex items-center gap-2 mb-2.5">
         <MessageSquare className="w-4 h-4 text-gray-500 shrink-0" />
-        <span className="text-sm font-medium text-gray-700">Suggested follow-ups:</span>
+        <span className="text-sm font-medium text-gray-700">Related questions:</span>
       </div>
       <div className="flex flex-wrap gap-2">
         {questions.map((question, index) => (

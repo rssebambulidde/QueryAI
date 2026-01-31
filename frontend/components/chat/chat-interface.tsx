@@ -406,6 +406,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     setError(null);
 
     try {
+      // Build conversation history - includes all previous messages for context
+      // This ensures follow-up questions have full conversation context
       const conversationHistory = isResend && options?.resendHistory
         ? options.resendHistory
         : messages.map((msg) => ({ role: msg.role, content: msg.content }));
@@ -432,6 +434,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       // Add empty assistant message for streaming
       setMessages((prev) => [...prev, assistantMessage]);
 
+      // Build request with same RAG settings and filters for all questions (including follow-ups)
+      // This ensures follow-up questions use the exact same RAG flow as original messages:
+      // - Same document search, web search, and citation logic
+      // - Same filters (topic, timeRange, country, etc.)
+      // - Same advanced features (query expansion, reranking)
       const request: QuestionRequest = {
         question: content,
         conversationHistory,
@@ -999,6 +1006,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                   previousResponseTime={previousResponseTime}
                   onEdit={handleEditMessage}
                   onFollowUpClick={(question) => {
+                    // Related questions use the exact same RAG flow and citation requirements as original messages:
+                    // - Same API endpoint (aiApi.askStream)
+                    // - Same conversation history (includes all previous messages)
+                    // - Same RAG settings (enableDocumentSearch, enableWebSearch, documentIds, etc.)
+                    // - Same filters (topic, timeRange, country, etc.)
+                    // - Same citation requirements (backend enforces inline source hyperlinks for all responses)
+                    // - Same response formatting and styling (rendered via ChatMessage component with sources)
+                    // Backend ensures all responses (including related questions) include inline source citations
                     handleSend(question);
                   }}
                   userQuestion={userQuestion}
