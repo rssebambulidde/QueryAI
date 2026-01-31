@@ -389,7 +389,7 @@ export async function refundPayment(
 // --- Subscriptions ---
 
 function getPlanIdForTier(
-  tier: 'starter' | 'premium' | 'pro',
+  tier: 'starter' | 'premium' | 'pro' | 'enterprise',
   billingPeriod: 'monthly' | 'annual' = 'monthly'
 ): string | undefined {
   if (billingPeriod === 'annual') {
@@ -397,6 +397,7 @@ function getPlanIdForTier(
       starter: config.PAYPAL_PLAN_ID_STARTER_ANNUAL,
       premium: config.PAYPAL_PLAN_ID_PREMIUM_ANNUAL,
       pro: config.PAYPAL_PLAN_ID_PRO_ANNUAL,
+      enterprise: config.PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL,
     };
     const id = annualMap[tier]?.trim();
     if (id) return id;
@@ -406,12 +407,13 @@ function getPlanIdForTier(
     starter: config.PAYPAL_PLAN_ID_STARTER,
     premium: config.PAYPAL_PLAN_ID_PREMIUM,
     pro: config.PAYPAL_PLAN_ID_PRO,
+    enterprise: config.PAYPAL_PLAN_ID_ENTERPRISE,
   };
   return monthlyMap[tier]?.trim() || undefined;
 }
 
 export interface CreateSubscriptionParams {
-  tier: 'starter' | 'premium' | 'pro';
+  tier: 'starter' | 'premium' | 'pro' | 'enterprise';
   returnUrl: string;
   cancelUrl: string;
   customId?: string;

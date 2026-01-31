@@ -67,9 +67,18 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
       // Upload avatar if changed
       let avatarUrl = avatar;
       if (avatarFile) {
-        // Note: Avatar upload endpoint may need to be implemented
-        // For now, we'll use the data URL
-        // In a real implementation: avatarUrl = await uploadAvatar(avatarFile);
+        try {
+          const uploadResponse = await authApi.uploadAvatar(avatarFile);
+          if (uploadResponse.success && uploadResponse.data) {
+            avatarUrl = uploadResponse.data.avatar_url;
+          } else {
+            throw new Error(uploadResponse.message || 'Failed to upload avatar');
+          }
+        } catch (uploadError: any) {
+          toast.error(uploadError.message || 'Failed to upload avatar');
+          setIsSaving(false);
+          return;
+        }
       }
 
       const response = await authApi.updateProfile({

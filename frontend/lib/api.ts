@@ -317,6 +317,17 @@ export const authApi = {
     return response.data;
   },
 
+  uploadAvatar: async (file: File): Promise<ApiResponse<{ avatar_url: string }>> => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    const response = await apiClient.post('/api/auth/profile/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
   updateProfile: async (data: { full_name?: string; avatar_url?: string }): Promise<ApiResponse<{ user: User }>> => {
     const response = await apiClient.put('/api/auth/profile', data);
     return response.data;

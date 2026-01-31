@@ -9,14 +9,13 @@ export type BillingPeriod = 'monthly' | 'annual';
 
 /**
  * Monthly pricing for each tier in different currencies.
- * Enterprise is contact-for-pricing (0).
  */
 export const MONTHLY_PRICING: Record<Tier, Record<Currency, number>> = {
   free: { UGX: 0, USD: 0 },
   starter: { UGX: 27000, USD: 9 },
   premium: { UGX: 50000, USD: 15 },
   pro: { UGX: 150000, USD: 45 },
-  enterprise: { UGX: 0, USD: 0 }, // Contact for pricing
+  enterprise: { UGX: 300000, USD: 99 }, // Fixed pricing for self-enrollment
 };
 
 /**
@@ -39,7 +38,6 @@ export function getPricing(
   currency: Currency = 'UGX',
   period: BillingPeriod = 'monthly'
 ): number {
-  if (tier === 'enterprise') return 0;
   return period === 'annual' ? ANNUAL_PRICING[tier][currency] : MONTHLY_PRICING[tier][currency];
 }
 
@@ -73,8 +71,6 @@ export function getAnnualSavings(
   savings: number;
   savingsPercentage: number;
 } {
-  if (tier === 'enterprise')
-    return { monthlyTotal: 0, annualPrice: 0, savings: 0, savingsPercentage: 0 };
   const monthlyTotal = MONTHLY_PRICING[tier][currency] * 12;
   const annualPrice = ANNUAL_PRICING[tier][currency];
   const savings = monthlyTotal - annualPrice;

@@ -61,11 +61,8 @@ router.post(
 
     const { tier, firstName, lastName, email, recurring = false, billing_period: bp } = req.body;
 
-    if (!tier || !['starter', 'premium', 'pro'].includes(tier)) {
-      if (tier === 'enterprise') {
-        throw new ValidationError('Enterprise is contact-for-pricing. Use the Enterprise contact form to reach sales.');
-      }
-      throw new ValidationError('Invalid tier. Must be "starter", "premium", or "pro"');
+    if (!tier || !['starter', 'premium', 'pro', 'enterprise'].includes(tier)) {
+      throw new ValidationError('Invalid tier. Must be "starter", "premium", "pro", or "enterprise"');
     }
 
     if (!firstName || !lastName || !email) {
@@ -88,7 +85,7 @@ router.post(
 
     const { getPricing } = await import('../constants/pricing');
     const amount = getPricing(
-      tier as 'starter' | 'premium' | 'pro',
+      tier as 'starter' | 'premium' | 'pro' | 'enterprise',
       currency as 'UGX' | 'USD',
       billingPeriod
     );
@@ -108,7 +105,7 @@ router.post(
     if (recurring) {
       // Recurring: PayPal Subscriptions (plan-based billing)
       const subscriptionResponse = await PayPalService.createSubscription({
-        tier: tier as 'starter' | 'premium' | 'pro',
+        tier: tier as 'starter' | 'premium' | 'pro' | 'enterprise',
         returnUrl,
         cancelUrl,
         customId: userId,

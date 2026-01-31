@@ -9,7 +9,6 @@ import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
 import { getAnnualSavings, getPricing, formatPrice, isEnterpriseTier } from '@/lib/pricing';
 import type { BillingPeriod } from '@/lib/pricing';
-import { enterpriseApi } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 
 export function SubscriptionManager() {
@@ -18,7 +17,7 @@ export function SubscriptionManager() {
   const [error, setError] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [selectedTier, setSelectedTier] = useState<'starter' | 'premium' | 'pro' | null>(null);
+  const [selectedTier, setSelectedTier] = useState<'starter' | 'premium' | 'pro' | 'enterprise' | null>(null);
   const [paymentDialogInitialBilling, setPaymentDialogInitialBilling] = useState<BillingPeriod | undefined>();
   const [paymentDialogInitialRecurring, setPaymentDialogInitialRecurring] = useState(false);
   const [billingHistory, setBillingHistory] = useState<BillingHistory | null>(null);
@@ -28,7 +27,6 @@ export function SubscriptionManager() {
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [usageWarnings, setUsageWarnings] = useState<UsageWarnings | null>(null);
   const [paypalStatus, setPaypalStatus] = useState<{ status: string; next_billing_time?: string } | null>(null);
-  const [showEnterpriseSignup, setShowEnterpriseSignup] = useState(false);
 
   useEffect(() => {
     loadSubscriptionData();
@@ -452,7 +450,7 @@ export function SubscriptionManager() {
                 <td className="p-3 text-center font-semibold bg-blue-50">{formatPrice(27000, 'UGX')}<br />{formatPrice(9, 'USD')}</td>
                 <td className="p-3 text-center font-semibold">{formatPrice(50000, 'UGX')}<br />{formatPrice(15, 'USD')}</td>
                 <td className="p-3 text-center font-semibold">{formatPrice(150000, 'UGX')}<br />{formatPrice(45, 'USD')}</td>
-                <td className="p-3 text-center font-semibold bg-indigo-50">Contact sales</td>
+                <td className="p-3 text-center font-semibold bg-indigo-50">{formatPrice(getPricing('enterprise', 'UGX', 'monthly'), 'UGX')}<br />{formatPrice(getPricing('enterprise', 'USD', 'monthly'), 'USD')}</td>
               </tr>
               <tr>
                 <td className="p-3 font-semibold">Price (annual)</td>
@@ -460,7 +458,7 @@ export function SubscriptionManager() {
                 <td className="p-3 text-center font-semibold bg-blue-50">{formatPrice(getPricing('starter', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('starter', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('starter', 'USD').savingsPercentage}%</span></td>
                 <td className="p-3 text-center font-semibold">{formatPrice(getPricing('premium', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('premium', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('premium', 'USD').savingsPercentage}%</span></td>
                 <td className="p-3 text-center font-semibold">{formatPrice(getPricing('pro', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('pro', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('pro', 'USD').savingsPercentage}%</span></td>
-                <td className="p-3 text-center font-semibold bg-indigo-50">Contact sales</td>
+                <td className="p-3 text-center font-semibold bg-indigo-50">{formatPrice(getPricing('enterprise', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('enterprise', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('enterprise', 'USD').savingsPercentage}%</span></td>
               </tr>
             </tbody>
           </table>
@@ -481,7 +479,7 @@ export function SubscriptionManager() {
               Go Premium
             </Button>
             <Button
-              onClick={() => setShowEnterpriseSignup(true)}
+              onClick={() => handleUpgrade('enterprise')}
               variant="outline"
               className="flex-1 min-w-[120px] border-indigo-300 text-indigo-700 hover:bg-indigo-50"
             >
@@ -492,22 +490,16 @@ export function SubscriptionManager() {
         {tier !== 'free' && !isEnterpriseTier(tier as 'free' | 'starter' | 'premium' | 'pro' | 'enterprise') && (
           <div className="mt-4">
             <Button
-              onClick={() => setShowEnterpriseSignup(true)}
+              onClick={() => handleUpgrade('enterprise')}
               variant="outline"
               className="border-indigo-300 text-indigo-700 hover:bg-indigo-50"
             >
-              Contact sales · Enterprise
+              Upgrade to Enterprise
             </Button>
           </div>
         )}
       </div>
 
-      {showEnterpriseSignup && (
-        <EnterpriseSignupDialog
-          onClose={() => setShowEnterpriseSignup(false)}
-          onSuccess={() => setShowEnterpriseSignup(false)}
-        />
-      )}
 
       {/* Usage Statistics */}
       <div className="bg-white rounded-lg shadow p-6">
@@ -1004,123 +996,6 @@ export function SubscriptionManager() {
           initialRecurring={paymentDialogInitialRecurring}
         />
       )}
-    </div>
-  );
-}
-
-function EnterpriseSignupDialog({
-  onClose,
-  onSuccess,
-}: {
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [company, setCompany] = useState('');
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (!name.trim() || !email.trim()) {
-      setError('Name and email are required.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await enterpriseApi.submitInquiry({
-        name: name.trim(),
-        email: email.trim(),
-        company: company.trim() || undefined,
-        message: message.trim() || undefined,
-      });
-      if (res.success) {
-        setDone(true);
-        setTimeout(() => onSuccess(), 2000);
-      } else {
-        setError(res.error?.message || 'Failed to submit. Please try again.');
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to submit. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold">Contact Sales · Enterprise</h2>
-          <p className="text-gray-600 text-sm mt-1">
-            Tell us about your needs and we&apos;ll get back to you with custom pricing.
-          </p>
-        </div>
-        {done ? (
-          <div className="p-6">
-            <p className="text-green-600 font-medium">Thank you. We&apos;ll contact you soon.</p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="p-6 space-y-4">
-            {error && (
-              <Alert variant="error">{error}</Alert>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                disabled={loading}
-                placeholder="Your name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
-                placeholder="you@company.com"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Company (optional)</label>
-              <Input
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                disabled={loading}
-                placeholder="Acme Inc."
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Message (optional)</label>
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                disabled={loading}
-                rows={3}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                placeholder="Team size, use case, etc."
-              />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={loading} className="flex-1">
-                {loading ? 'Sending…' : 'Submit'}
-              </Button>
-              <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        )}
-      </div>
     </div>
   );
 }

@@ -68,8 +68,8 @@ router.put(
 
     const { tier } = req.body;
     
-    if (!tier || !['free', 'starter', 'premium', 'pro'].includes(tier)) {
-      throw new ValidationError('Invalid tier. Must be: free, starter, premium, or pro');
+    if (!tier || !['free', 'starter', 'premium', 'pro', 'enterprise'].includes(tier)) {
+      throw new ValidationError('Invalid tier. Must be: free, starter, premium, pro, or enterprise');
     }
 
     const subscriptionBefore = await DatabaseService.getUserSubscription(userId);

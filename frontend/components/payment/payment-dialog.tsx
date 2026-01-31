@@ -10,7 +10,7 @@ import { getPricing, getAnnualSavings, formatPrice } from '@/lib/pricing';
 import type { BillingPeriod } from '@/lib/pricing';
 
 interface PaymentDialogProps {
-  tier: 'starter' | 'premium' | 'pro';
+  tier: 'starter' | 'premium' | 'pro' | 'enterprise';
   onClose: () => void;
   onSuccess?: () => void;
   /** When opening for "switch billing period", preselect monthly or annual. */
@@ -68,7 +68,7 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
         {/* Header - Fixed */}
         <div className="flex-shrink-0 p-6 border-b border-gray-200">
           <h2 className="text-xl font-bold mb-2">
-            Upgrade to {tier === 'starter' ? 'Starter' : tier === 'premium' ? 'Premium' : 'Pro'}
+            Upgrade to {tier === 'starter' ? 'Starter' : tier === 'premium' ? 'Premium' : tier === 'pro' ? 'Pro' : 'Enterprise'}
           </h2>
           <p className="text-gray-600 text-sm">
             Pay with PayPal or Visa —{' '}

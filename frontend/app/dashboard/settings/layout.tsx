@@ -3,8 +3,9 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { User, Search, FileText, Settings as SettingsIcon, CreditCard, Folder, Tag } from 'lucide-react';
+import { User, Search, FileText, Settings as SettingsIcon, CreditCard, Folder, Tag, ArrowLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 const settingsNav = [
   { href: '/dashboard/settings/profile', label: 'Profile', icon: User },
@@ -23,10 +24,47 @@ export default function SettingsLayout({
 }) {
   const pathname = usePathname();
 
+  // Get current page label for breadcrumb
+  const currentPage = settingsNav.find(item => item.href === pathname);
+  const currentPageLabel = currentPage?.label || 'Settings';
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Back to Dashboard Button */}
+        <div className="mb-6">
+          <Link href="/dashboard?tab=chat">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-gray-600 hover:text-gray-900 mb-4"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Dashboard
+            </Button>
+          </Link>
+        </div>
+
+        {/* Header with Breadcrumbs */}
         <div className="mb-8">
+          {/* Breadcrumb Navigation */}
+          <nav className="flex items-center gap-2 text-sm text-gray-500 mb-3">
+            <Link
+              href="/dashboard?tab=chat"
+              className="hover:text-gray-900 transition-colors"
+            >
+              Dashboard
+            </Link>
+            <ChevronRight className="w-4 h-4" />
+            <span className="text-gray-900 font-medium">Settings</span>
+            {currentPage && currentPageLabel !== 'Settings' && (
+              <>
+                <ChevronRight className="w-4 h-4" />
+                <span className="text-gray-900 font-medium">{currentPageLabel}</span>
+              </>
+            )}
+          </nav>
+
           <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
           <p className="text-sm text-gray-500 mt-1">Manage your account and preferences</p>
         </div>

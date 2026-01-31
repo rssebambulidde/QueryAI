@@ -1,9 +1,12 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import { AuthService, SignupData, LoginData } from '../services/auth.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
 import { authLimiter } from '../middleware/rateLimiter';
 import { ValidationError } from '../types/error';
+import { StorageService } from '../services/storage.service';
+import { DatabaseService } from '../services/database.service';
 
 const router = Router();
 
@@ -185,7 +188,6 @@ router.get(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     // User is attached by authenticate middleware
-    const { DatabaseService } = await import('../services/database.service');
     const profile = await DatabaseService.getUserProfile(req.user!.id);
     const subscription = await DatabaseService.getUserSubscription(req.user!.id);
 
@@ -195,7 +197,101 @@ router.get(
         user: {
           id: req.user!.id,
           email: req.user!.email,
-          fullName: profile?.full_name,
+          full_name: profile?.full_name,
+          avatar_url: profile?.avatar_url,
+          subscriptionTier: subscription?.tier || 'free',
+        },
+      },
+    });
+  })
+);
+
+/**
+ * POST /api/auth/profile/avatar
+ * Upload profile avatar image (requires authentication)
+ */
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new ValidationError('File must be an image'));
+    }
+  },
+});
+
+router.post(
+  '/profile/avatar',
+  authenticate,
+  avatarUpload.single('avatar'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const logger = (await import('../config/logger')).default;
+
+    if (!req.file) {
+      throw new ValidationError('Avatar file is required');
+    }
+
+    const avatarUrl = await StorageService.uploadAvatar(userId, req.file);
+
+    logger.info('Avatar uploaded', { userId, avatarUrl });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        avatar_url: avatarUrl,
+      },
+    });
+  })
+);
+
+/**
+ * PUT /api/auth/profile
+ * Update user profile (requires authentication)
+ */
+router.put(
+  '/profile',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const logger = (await import('../config/logger')).default;
+    const { full_name, avatar_url } = req.body;
+
+    const updates: Partial<import('../types/database').Database.UserProfile> = {};
+    
+    if (full_name !== undefined) {
+      updates.full_name = full_name?.trim() || null;
+    }
+    
+    if (avatar_url !== undefined) {
+      updates.avatar_url = avatar_url?.trim() || null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      throw new ValidationError('No fields to update');
+    }
+
+    const updatedProfile = await DatabaseService.updateUserProfile(userId, updates);
+
+    if (!updatedProfile) {
+      throw new ValidationError('Failed to update profile');
+    }
+
+    // Get subscription for response
+    const subscription = await DatabaseService.getUserSubscription(userId);
+
+    logger.info('Profile updated', { userId, updates });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: updatedProfile.id,
+          email: updatedProfile.email,
+          full_name: updatedProfile.full_name,
+          avatar_url: updatedProfile.avatar_url,
           subscriptionTier: subscription?.tier || 'free',
         },
       },

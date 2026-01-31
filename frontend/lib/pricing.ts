@@ -11,7 +11,7 @@ const MONTHLY: Record<Tier, Record<Currency, number>> = {
   starter: { UGX: 27000, USD: 9 },
   premium: { UGX: 50000, USD: 15 },
   pro: { UGX: 150000, USD: 45 },
-  enterprise: { UGX: 0, USD: 0 },
+  enterprise: { UGX: 300000, USD: 99 },
 };
 
 const ANNUAL: Record<Tier, Record<Currency, number>> = {
@@ -19,7 +19,7 @@ const ANNUAL: Record<Tier, Record<Currency, number>> = {
   starter: { UGX: 270000, USD: 90 },
   premium: { UGX: 500000, USD: 150 },
   pro: { UGX: 1500000, USD: 450 },
-  enterprise: { UGX: 0, USD: 0 },
+  enterprise: { UGX: 3000000, USD: 999 },
 };
 
 export function getPricing(
@@ -27,7 +27,6 @@ export function getPricing(
   currency: Currency,
   period: BillingPeriod = 'monthly'
 ): number {
-  if (tier === 'enterprise') return 0;
   return period === 'annual' ? ANNUAL[tier][currency] : MONTHLY[tier][currency];
 }
 
@@ -35,8 +34,6 @@ export function getAnnualSavings(
   tier: Tier,
   currency: Currency
 ): { monthlyTotal: number; annualPrice: number; savings: number; savingsPercentage: number } {
-  if (tier === 'enterprise')
-    return { monthlyTotal: 0, annualPrice: 0, savings: 0, savingsPercentage: 0 };
   const monthlyTotal = MONTHLY[tier][currency] * 12;
   const annualPrice = ANNUAL[tier][currency];
   const savings = monthlyTotal - annualPrice;

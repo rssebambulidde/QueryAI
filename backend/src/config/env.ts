@@ -55,10 +55,12 @@ interface EnvConfig {
   PAYPAL_PLAN_ID_STARTER?: string;
   PAYPAL_PLAN_ID_PREMIUM?: string;
   PAYPAL_PLAN_ID_PRO?: string;
+  PAYPAL_PLAN_ID_ENTERPRISE?: string;
   /** Optional plan IDs for annual subscriptions. When set, annual billing uses these. */
   PAYPAL_PLAN_ID_STARTER_ANNUAL?: string;
   PAYPAL_PLAN_ID_PREMIUM_ANNUAL?: string;
   PAYPAL_PLAN_ID_PRO_ANNUAL?: string;
+  PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL?: string;
 
   // Frontend URL (for payment redirects)
   FRONTEND_URL?: string;
@@ -171,9 +173,11 @@ const config: EnvConfig = {
   PAYPAL_PLAN_ID_STARTER: getEnvVar('PAYPAL_PLAN_ID_STARTER') || undefined,
   PAYPAL_PLAN_ID_PREMIUM: getEnvVar('PAYPAL_PLAN_ID_PREMIUM') || undefined,
   PAYPAL_PLAN_ID_PRO: getEnvVar('PAYPAL_PLAN_ID_PRO') || undefined,
+  PAYPAL_PLAN_ID_ENTERPRISE: getEnvVar('PAYPAL_PLAN_ID_ENTERPRISE') || undefined,
   PAYPAL_PLAN_ID_STARTER_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_STARTER_ANNUAL') || undefined,
   PAYPAL_PLAN_ID_PREMIUM_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_PREMIUM_ANNUAL') || undefined,
   PAYPAL_PLAN_ID_PRO_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_PRO_ANNUAL') || undefined,
+  PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL') || undefined,
 
   // Frontend URL (for payment redirects) - Optional
   FRONTEND_URL: getEnvVar('FRONTEND_URL') || undefined,
