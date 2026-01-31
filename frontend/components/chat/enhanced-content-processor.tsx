@@ -227,7 +227,7 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
       ...getMarkdownComponents(isUser),
       // Custom link renderer that detects citation links
       a: ({ node, href, title, children, ...props }: any) => {
-        // Check if this is a citation link
+        // Check if this is a citation link (from parseCitations)
         if (title && title.startsWith('citation:')) {
           const citationIdx = parseInt(title.replace('citation:', ''), 10);
           const citation = citations[citationIdx];
@@ -262,6 +262,72 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
             }
           }
         }
+        
+        // Detect citation patterns in link text (e.g., "Web Source 4", "Document 2")
+        // This handles citations that were converted to markdown links by processContentWithSources
+        if (sources && sources.length > 0) {
+          const linkText = typeof children === 'string' ? children : 
+                          (Array.isArray(children) && children.length === 1 && typeof children[0] === 'string' ? children[0] : '');
+          
+          if (linkText) {
+            // First, try to match explicit citation patterns like "Web Source 4" or "Document 2"
+            const citationMatch = linkText.match(/^(Web Source|Document)\s+(\d+)$/i);
+            if (citationMatch) {
+              const [, type, number] = citationMatch;
+              const sourceIndex = parseInt(number) - 1;
+              
+              // Find the matching source
+              let source: Source | undefined;
+              if (type.toLowerCase() === 'web source') {
+                const webSources = sources.filter(s => s.type === 'web');
+                source = webSources[sourceIndex];
+              } else if (type.toLowerCase() === 'document') {
+                const docSources = sources.filter(s => s.type === 'document');
+                source = docSources[sourceIndex];
+              }
+              
+              if (source) {
+                // Always render as InlineCitation component with hover tooltip
+                return (
+                  <InlineCitation
+                    source={source}
+                    citationNumber={parseInt(number)}
+                    totalCitations={sources.length}
+                    isExpanded={expandedCitation === source}
+                    onExpand={(src) => setExpandedCitation(src === expandedCitation ? null : src)}
+                  />
+                );
+              }
+            }
+            
+            // Second, try to match by URL (for links that were converted to source titles)
+            // This handles cases where processContentWithSources replaced "Web Source 4" with the actual source title
+            // Only match if URL exactly matches a source URL to avoid false positives
+            if (href && href !== '#') {
+              const matchingSource = sources.find(s => s.url && s.url === href);
+              
+              if (matchingSource) {
+                // Find the citation number for this source
+                // For web sources, count only web sources; for documents, count only documents
+                const sameTypeSources = sources.filter(s => s.type === matchingSource.type);
+                const sourceIndex = sameTypeSources.indexOf(matchingSource);
+                const citationNumber = sourceIndex + 1;
+                
+                // Always render as InlineCitation component with hover tooltip
+                return (
+                  <InlineCitation
+                    source={matchingSource}
+                    citationNumber={citationNumber}
+                    totalCitations={sameTypeSources.length}
+                    isExpanded={expandedCitation === matchingSource}
+                    onExpand={(src) => setExpandedCitation(src === expandedCitation ? null : src)}
+                  />
+                );
+              }
+            }
+          }
+        }
+        
         // Regular link
         return (
           <a
