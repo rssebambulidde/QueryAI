@@ -210,7 +210,9 @@ export async function createPayment(
             brandName: 'QueryAI',
             userAction: OrderApplicationContextUserAction.PayNow, // Required for card payments - shows "Pay Now" button and enables card payment option
             shippingPreference: OrderApplicationContextShippingPreference.NoShipping, // No shipping required for digital goods - allows international billing addresses without restrictions
-            locale: 'en-US', // Base locale, but PayPal will detect user's country and show appropriate address fields
+            // Remove locale to let PayPal auto-detect user's country and show appropriate address fields
+            // Setting locale to 'en-US' was causing PayPal to restrict addresses to USA states
+            // PayPal will automatically detect user's location and show correct address format
             landingPage: 'BILLING' as any, // Force billing/card form instead of PayPal login screen (requires "PayPal Account Optional" enabled)
           },
         },
@@ -245,6 +247,9 @@ export async function createPayment(
       url.searchParams.set('guest', '1');
       // Force billing page instead of login page
       url.searchParams.set('landingPage', 'billing');
+      // Remove any locale restrictions to allow international addresses
+      // PayPal will auto-detect user's country and show appropriate address fields
+      url.searchParams.delete('locale');
       approvalUrl = url.toString();
       logger.info('PayPal approval URL modified for card payment and guest checkout', {
         orderId: result.id,
@@ -584,6 +589,8 @@ export async function createSubscription(
         returnUrl: params.returnUrl,
         cancelUrl: params.cancelUrl,
         brandName: 'QueryAI',
+        // Don't set locale - let PayPal auto-detect user's country for international address support
+        // PayPal will automatically show appropriate address fields based on user's location
       },
       autoRenewal: false,
     },

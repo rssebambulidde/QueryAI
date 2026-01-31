@@ -179,6 +179,24 @@ When "PayPal Account Optional" is enabled:
 - Setting this to "On (optional field)" or "Off" both work fine
 - Avoid "On (required field)" as it may reduce conversion
 
+## International Address Support
+
+### Billing Address Restrictions
+
+**Problem:** PayPal may restrict billing addresses to USA states if locale is hardcoded.
+
+**Solution:** Our implementation:
+- ✅ Removes hardcoded locale - PayPal auto-detects user's country
+- ✅ Sets `shippingPreference: NoShipping` for digital goods
+- ✅ Allows PayPal to show appropriate address fields based on user's location
+- ✅ Supports international addresses automatically
+
+**If you still see USA-only addresses:**
+1. Check PayPal business account country settings
+2. Verify your PayPal account is set up for international payments
+3. Ensure "PayPal Account Optional" is enabled
+4. Contact PayPal support if issue persists
+
 ## Summary of Recommended Settings
 
 | Setting | Recommended Value | Reason |
@@ -191,6 +209,7 @@ When "PayPal Account Optional" is enabled:
 | **Encrypted Website Payments** | **OFF** | Doesn't apply to Orders API v2 (we use secure API calls) |
 | **Support giropay and bank transfer** | **OFF** (if guest checkout issues) | Turning OFF may help guest checkout work |
 | **Contact Telephone** | **On (optional)** or **Off** | Matches our optional phone field |
+| **Business Account Country** | Set to your actual business location | Affects address format and payment methods available |
 
 ### If One-Time Card Payment Still Asks to Create PayPal Account
 

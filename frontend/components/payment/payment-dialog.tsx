@@ -25,6 +25,8 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<'UGX' | 'USD'>('USD');
+  // Default to one-time payment (false) unless explicitly set to recurring
+  // This reduces friction - users can pay with card without PayPal account
   const [recurring, setRecurring] = useState(!!initialRecurring);
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>(initialBillingPeriod ?? 'monthly');
   const [formData, setFormData] = useState({
@@ -170,21 +172,70 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-gray-600">
-              <input
-                type="checkbox"
-                checked={recurring}
-                onChange={(e) => setRecurring(e.target.checked)}
-                disabled={loading}
-                className="rounded border-gray-300"
-              />
-              Subscribe (recurring billing)
-            </label>
-            {recurring && (
-              <Alert variant="info" className="text-sm">
-                Recurring subscriptions require a PayPal account to manage billing. For card-only payment without creating an account, use one-time payment instead.
-              </Alert>
-            )}
+            <div className="space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50">
+              <label className="flex items-start gap-3 text-sm cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={recurring}
+                  onChange={(e) => setRecurring(e.target.checked)}
+                  disabled={loading}
+                  className="mt-0.5 rounded border-gray-300 focus:ring-orange-500 focus:ring-2"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-semibold text-gray-900 group-hover:text-orange-600">
+                      Subscribe for automatic renewal
+                    </span>
+                    {recurring && (
+                      <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded">
+                        Recommended
+                      </span>
+                    )}
+                  </div>
+                  {recurring ? (
+                    <div className="space-y-2">
+                      <ul className="text-xs text-gray-600 space-y-1 ml-0">
+                        <li className="flex items-center gap-1.5">
+                          <span className="text-green-600">✓</span>
+                          <span>Never lose access - automatic renewal</span>
+                        </li>
+                        <li className="flex items-center gap-1.5">
+                          <span className="text-green-600">✓</span>
+                          <span>Save time - no need to remember renewal dates</span>
+                        </li>
+                        <li className="flex items-center gap-1.5">
+                          <span className="text-green-600">✓</span>
+                          <span>Cancel anytime from your account</span>
+                        </li>
+                      </ul>
+                      <Alert variant="info" className="text-xs border-blue-200 bg-blue-50 mt-2">
+                        <div className="flex items-start gap-2">
+                          <svg className="w-3.5 h-3.5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div>
+                            <p className="font-medium text-blue-900 text-xs mb-0.5">PayPal account required for automatic renewal</p>
+                            <p className="text-blue-800 text-xs leading-relaxed">
+                              Don't have PayPal? Uncheck this box to pay once with your card. You can set up automatic renewal anytime later.
+                            </p>
+                          </div>
+                        </div>
+                      </Alert>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <p className="flex items-center gap-1.5">
+                        <span className="text-blue-600">💳</span>
+                        <span>Pay once with your card (no PayPal account needed)</span>
+                      </p>
+                      <p className="text-gray-500 ml-5">
+                        You'll receive email reminders before your plan expires
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </label>
+            </div>
           </div>
 
           {error && (
