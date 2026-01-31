@@ -81,10 +81,38 @@ export function getRedisConfig(): RedisConfig {
 }
 
 /**
- * Check if Redis is configured
+ * Check if Redis is configured and reachable (not localhost in production).
+ * In production (e.g. Railway), avoid connecting to localhost:6379 when Redis
+ * is not actually provided, which causes ECONNREFUSED and log noise.
  */
 export function isRedisConfigured(): boolean {
-  return !!(process.env.REDIS_URL || process.env.REDIS_HOST);
+  const url = process.env.REDIS_URL;
+  const host = process.env.REDIS_HOST;
+  if (url) {
+    // In production, treat redis://localhost or redis://127.0.0.1 as not configured
+    const isProduction =
+      process.env.NODE_ENV === 'production' ||
+      process.env.RAILWAY_ENVIRONMENT === 'production' ||
+      !!process.env.RAILWAY_PUBLIC_DOMAIN;
+    if (isProduction && url) {
+      try {
+        const u = new URL(url);
+        if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return false;
+      } catch {
+        // ignore
+      }
+    }
+    return true;
+  }
+  if (host) {
+    const isProduction =
+      process.env.NODE_ENV === 'production' ||
+      process.env.RAILWAY_ENVIRONMENT === 'production' ||
+      !!process.env.RAILWAY_PUBLIC_DOMAIN;
+    if (isProduction && (host === 'localhost' || host === '127.0.0.1')) return false;
+    return true;
+  }
+  return false;
 }
 
 /**
