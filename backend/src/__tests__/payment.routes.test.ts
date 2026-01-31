@@ -287,7 +287,7 @@ describe('Payment routes – webhook', () => {
         resource: { id: 'CAP-123' },
       }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403); // Gap 7: Webhook verification failures return 403 Forbidden
     const data = (await res.json()) as { success: boolean; data?: Record<string, unknown>; message?: string };
     expect(data.success).toBe(false);
     expect(data.message).toContain('verification');

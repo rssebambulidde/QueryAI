@@ -88,7 +88,15 @@ function DashboardContent() {
       toast.error('Payment failed. Please try again or contact support.');
       router.replace('/dashboard/settings/subscription', { scroll: false });
     } else if (payment === 'error') {
-      toast.error('Something went wrong. Please try again or contact support.');
+      const reason = searchParams.get('reason');
+      if (reason === 'payment_not_found') {
+        toast.error(
+          "We couldn't find your payment record. Click 'Sync billing status' in Subscription settings to retry, or contact support.",
+          { duration: 8000 } // Longer duration for this important message
+        );
+      } else {
+        toast.error('Something went wrong. Please try again or contact support.');
+      }
       router.replace('/dashboard/settings/subscription', { scroll: false });
     } else if (payment === 'pending') {
       // Try syncing - sometimes callback doesn't run but PayPal has activated the subscription

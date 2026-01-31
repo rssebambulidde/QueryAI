@@ -564,11 +564,13 @@ export class SubscriptionService {
 
   /**
    * Update subscription tier with optional prorating
+   * @param billingPeriod - Optional billing period from payment (for one-time payments where subscription may lack it)
    */
   static async updateSubscriptionTier(
     userId: string,
     tier: Database.SubscriptionTier,
-    shouldProrate: boolean = false
+    shouldProrate: boolean = false,
+    billingPeriod?: 'monthly' | 'annual'
   ): Promise<Database.Subscription | null> {
     try {
       const subscription = await DatabaseService.getUserSubscription(userId);
@@ -589,7 +591,10 @@ export class SubscriptionService {
         // Keep same period end for prorated changes
       } else {
         // Full period reset
-        const bp = (subscription as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
+        // Use billingPeriod from payment if provided, otherwise from subscription, default to monthly
+        const bp = billingPeriod ?? 
+          ((subscription as Database.Subscription & { billing_period?: string }).billing_period as 'monthly' | 'annual' | undefined) ?? 
+          'monthly';
         const days = bp === 'annual' ? 365 : 30;
         periodStart = now;
         periodEnd = new Date(now);
@@ -869,6 +874,55 @@ export class SubscriptionService {
       }
     } catch (error) {
       logger.error('Failed to handle PayPal subscription cancelled', { paypalSubscriptionId, error });
+    }
+  }
+
+  /**
+   * Handle PayPal subscription expired (called from webhook).
+   * Marks subscription as expired and downgrades to free tier.
+   */
+  static async handlePayPalSubscriptionExpired(
+    paypalSubscriptionId: string,
+    reason?: string
+  ): Promise<void> {
+    try {
+      const subscription = await DatabaseService.getSubscriptionByPayPalSubscriptionId(
+        paypalSubscriptionId
+      );
+      if (!subscription) {
+        logger.warn('Subscription not found for PayPal expired event', { paypalSubscriptionId });
+        return;
+      }
+
+      const now = new Date();
+
+      // Mark subscription as expired and downgrade to free
+      await DatabaseService.updateSubscription(subscription.user_id, {
+        tier: 'free',
+        status: 'expired',
+        cancel_at_period_end: false,
+        paypal_subscription_id: undefined,
+        current_period_end: now.toISOString(),
+        auto_renew: false,
+      });
+
+      // Log subscription history
+      await DatabaseService.logSubscriptionHistory(
+        subscription.id,
+        subscription.user_id,
+        'status_change',
+        { tier: subscription.tier, status: subscription.status, paypal_subscription_id: paypalSubscriptionId },
+        { tier: 'free', status: 'expired' },
+        reason || 'PayPal subscription expired'
+      );
+
+      logger.info('PayPal subscription expired, downgraded to free', {
+        userId: subscription.user_id,
+        paypalSubscriptionId,
+        previousTier: subscription.tier,
+      });
+    } catch (error) {
+      logger.error('Failed to handle PayPal subscription expired', { paypalSubscriptionId, error });
     }
   }
 

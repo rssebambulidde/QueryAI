@@ -278,6 +278,7 @@ router.post(
       payment_description: `QueryAI ${tier} subscription (${billingPeriod})`,
       callback_data: {
         return_url: return_url || undefined, // Store return URL for redirect after payment
+        billing_period: billingPeriod, // Store billing period for one-time payments (needed for subscription period_end calculation)
       },
     });
 
@@ -309,62 +310,59 @@ router.post(
 
 /**
  * GET /api/payment/callback
- * Handle PayPal redirect after user approves. Token = order ID (one-time) or subscription ID (recurring).
- * PayPal may send token as: token, PayerID, paymentId, or subscription_id
+ * Handle PayPal redirect after user approves.
+ *
+ * One-time (Orders): PayPal sends token (order ID) or orderId.
+ * Recurring (Subscriptions): PayPal adds subscription_id (I-xxx), ba_token (BA-xxx), and token (approval token).
+ * We store paypal_subscription_id (I-xxx) — only subscription_id maps to our payment; token/ba_token cannot.
  */
 router.get(
   '/callback',
   asyncHandler(async (req: Request, res: Response) => {
     const frontendUrl = getFrontendUrl();
-    
-    // PayPal sends different parameters depending on payment type
-    // Try multiple possible parameter names
-    const token = 
-      (req.query.token as string) || 
-      (req.query.PayerID as string) || 
-      (req.query.paymentId as string) || 
-      (req.query.subscription_id as string) ||
-      (req.query.ba_token as string); // Billing agreement token for subscriptions
-    
-    const orderId = req.query.orderId as string;
-    const subscriptionId = req.query.subscription_id as string;
+    const q = req.query as Record<string, string | undefined>;
 
-    logger.info('PayPal callback received', { 
+    // Extract all possible param names (PayPal may use snake_case or camelCase)
+    const token = q.token || q.PayerID || q.paymentId;
+    const orderId = q.orderId || q.order_id;
+    const subscriptionId = q.subscription_id || q.subscriptionId || q.subscriptionID;
+    const baToken = q.ba_token || q.baToken;
+
+    logger.info('PayPal callback received', {
       token: token ? 'present' : 'missing',
       orderId: orderId ? 'present' : 'missing',
       subscriptionId: subscriptionId ? 'present' : 'missing',
-      query: req.query,
+      baToken: baToken ? 'present' : 'missing',
       allQueryParams: Object.keys(req.query),
     });
 
-    // Determine which ID to use for lookup
-    let lookupToken = token || orderId || subscriptionId;
-    
-    if (!lookupToken) {
-      logger.warn('PayPal callback missing all token parameters', { query: req.query });
-      return res.redirect(`${frontendUrl}/dashboard?payment=error&reason=missing_token`);
-    }
+    let payment: Database.Payment | null = null;
 
-    // Try to find payment by order ID or subscription ID
-    let payment = await DatabaseService.getPaymentByPayPalOrderId(lookupToken);
-    if (!payment) {
-      payment = await DatabaseService.getPaymentByPayPalSubscriptionId(lookupToken);
-    }
-    // Also try with orderId parameter if different
-    if (!payment && orderId && orderId !== lookupToken) {
-      payment = await DatabaseService.getPaymentByPayPalOrderId(orderId);
-    }
-    // Also try with subscriptionId parameter if different
-    if (!payment && subscriptionId && subscriptionId !== lookupToken) {
+    // For subscriptions: subscription_id (I-xxx) is the only usable identifier — we store it.
+    // token/ba_token are approval tokens (BA-xxx) and cannot be used to find our payment.
+    if (subscriptionId) {
       payment = await DatabaseService.getPaymentByPayPalSubscriptionId(subscriptionId);
     }
+
+    // For one-time: order ID (token or orderId) maps to paypal_order_id
+    if (!payment && (orderId || token)) {
+      const orderLookup = orderId || token!;
+      payment = await DatabaseService.getPaymentByPayPalOrderId(orderLookup);
+    }
+    if (!payment && token && token !== orderId) {
+      payment = await DatabaseService.getPaymentByPayPalOrderId(token);
+    }
+
+    // Fallback: if we only have ba_token, we cannot resolve — no API to map approval token to subscription ID.
+    // User should use sync-subscription from dashboard.
     
     if (!payment) {
-      logger.warn('Payment not found in callback', { 
-        lookupToken, 
-        orderId, 
-        subscriptionId,
-        query: req.query 
+      logger.warn('Payment not found in callback', {
+        token: token ? 'present' : 'missing',
+        orderId: orderId ? 'present' : 'missing',
+        subscriptionId: subscriptionId ? 'present' : 'missing',
+        baToken: baToken ? 'present' : 'missing',
+        hint: !subscriptionId && baToken ? 'Only ba_token present; use sync-subscription from dashboard' : undefined,
       });
       // Still redirect but with error info
       return res.redirect(`${frontendUrl}/dashboard?payment=error&reason=payment_not_found`);
@@ -372,11 +370,26 @@ router.get(
 
     const isRecurring = !!payment.paypal_subscription_id;
     let paymentStatus: 'pending' | 'completed' | 'failed' | 'cancelled' = payment.status;
+    let tierAlreadyUpdated = false; // Track if updateSubscriptionTier was already called (for recurring)
+    
+    // Idempotency check: if payment is already completed, skip processing but still redirect to success
+    const isAlreadyCompleted = payment.status === 'completed';
 
-    if (isRecurring) {
+    if (isAlreadyCompleted) {
+      logger.info('Payment already completed, skipping duplicate processing', {
+        paymentId: payment.id,
+        currentStatus: payment.status,
+      });
+      paymentStatus = 'completed';
+      // Still need to check if tier was updated (in case webhook completed it)
+      const existingSubscription = await DatabaseService.getUserSubscription(payment.user_id);
+      if (existingSubscription?.tier === payment.tier) {
+        tierAlreadyUpdated = true;
+      }
+    } else if (isRecurring) {
       // Recurring: user approved subscription; sync from PayPal and activate
+      const subscriptionLookupId = payment.paypal_subscription_id || subscriptionId || '';
       try {
-        const subscriptionLookupId = payment.paypal_subscription_id || lookupToken || subscriptionId;
         const subDetails = await PayPalService.getSubscription(subscriptionLookupId);
         const status = (subDetails.status || '').toUpperCase();
         if (['ACTIVE', 'APPROVAL_PENDING', 'APPROVED'].includes(status)) {
@@ -417,20 +430,20 @@ router.get(
           });
 
           const { SubscriptionService } = await import('../services/subscription.service');
-          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, billingPeriod);
+          tierAlreadyUpdated = true; // Mark as already updated to avoid duplicate call
 
           logger.info('PayPal subscription activated', {
             paymentId: payment.id,
-            subscriptionId: payment.paypal_subscription_id || lookupToken,
+            subscriptionId: subscriptionLookupId,
             tier: payment.tier,
           });
         }
       } catch (subError: unknown) {
-        logger.error('PayPal subscription sync failed', { 
-          paymentId: payment.id, 
-          subscriptionId: payment.paypal_subscription_id || lookupToken,
-          lookupToken,
-          error: subError 
+        logger.error('PayPal subscription sync failed', {
+          paymentId: payment.id,
+          subscriptionId: subscriptionLookupId,
+          error: subError,
         });
         paymentStatus = 'failed';
         await DatabaseService.updatePayment(payment.id, {
@@ -444,8 +457,8 @@ router.get(
       let captureId: string | undefined;
       let callbackData: Record<string, unknown> = {};
 
+      const orderLookupId = payment.paypal_order_id || orderId || token || '';
       try {
-        const orderLookupId = payment.paypal_order_id || lookupToken;
         const result = await PayPalService.executePayment(orderLookupId);
         paymentStatus = 'completed';
         captureId = result.captureId;
@@ -460,7 +473,10 @@ router.get(
         await DatabaseService.updatePayment(payment.id, {
           status: 'completed',
           paypal_payment_id: captureId,
-          callback_data: callbackData,
+          callback_data: {
+            ...(typeof payment.callback_data === 'object' && payment.callback_data ? payment.callback_data : {}),
+            ...callbackData, // Merge capture result with existing callback_data (preserves billing_period)
+          },
           payment_method: result.payerEmail ? 'paypal' : undefined,
           completed_at: new Date().toISOString(),
         });
@@ -471,12 +487,10 @@ router.get(
           captureId,
         });
       } catch (captureError: unknown) {
-        const orderLookupId = payment.paypal_order_id || lookupToken;
-        logger.error('PayPal capture failed', { 
-          paymentId: payment.id, 
+        logger.error('PayPal capture failed', {
+          paymentId: payment.id,
           orderId: orderLookupId,
-          lookupToken,
-          error: captureError 
+          error: captureError,
         });
         const err = captureError as { statusCode?: number; message?: string };
         if (err.statusCode === 422 || (err.message && err.message.includes('already captured'))) {
@@ -558,54 +572,68 @@ router.get(
     if (paymentStatus === 'completed') {
       const { SubscriptionService } = await import('../services/subscription.service');
       const subscriptionBefore = await DatabaseService.getUserSubscription(payment.user_id);
-      await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+      
+      // Only update subscription tier if not already updated (recurring subscriptions update it earlier)
+      if (!tierAlreadyUpdated) {
+        // Extract billing_period from payment callback_data if available (for one-time payments)
+        const paymentBillingPeriod = (updatedPayment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
+        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod);
+      }
+      
       const subscriptionAfter = await DatabaseService.getUserSubscription(payment.user_id);
 
-      try {
-        const { EmailService } = await import('../services/email.service');
-        const { getTierOrder } = await import('../constants/pricing');
-        const userProfile = await DatabaseService.getUserProfile(payment.user_id);
-        if (userProfile) {
-          await EmailService.sendPaymentSuccessEmail(
-            userProfile.email,
-            userProfile.full_name || userProfile.email,
-            updatedPayment
-          );
-          await EmailService.sendInvoiceEmail(
-            userProfile.email,
-            userProfile.full_name || userProfile.email,
-            updatedPayment
-          );
-          const oldTier = subscriptionBefore?.tier ?? 'free';
-          const newTier = payment.tier;
-          if (oldTier === 'free' && newTier !== 'free') {
-            await EmailService.sendWelcomeEmail(
+      // Idempotency: Only send emails if payment was not already completed (prevents duplicate emails from callback + webhook)
+      if (!isAlreadyCompleted) {
+        try {
+          const { EmailService } = await import('../services/email.service');
+          const { getTierOrder } = await import('../constants/pricing');
+          const userProfile = await DatabaseService.getUserProfile(payment.user_id);
+          if (userProfile) {
+            await EmailService.sendPaymentSuccessEmail(
               userProfile.email,
               userProfile.full_name || userProfile.email,
-              newTier
+              updatedPayment
             );
-          } else if (
-            getTierOrder(newTier as 'free' | 'starter' | 'premium' | 'pro') >
-            getTierOrder(oldTier as 'free' | 'starter' | 'premium' | 'pro')
-          ) {
-            const periodStart = subscriptionAfter?.current_period_start
-              ? new Date(subscriptionAfter.current_period_start)
-              : new Date();
-            const periodEnd = subscriptionAfter?.current_period_end
-              ? new Date(subscriptionAfter.current_period_end)
-              : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-            await EmailService.sendUpgradeConfirmationEmail(
+            await EmailService.sendInvoiceEmail(
               userProfile.email,
               userProfile.full_name || userProfile.email,
-              newTier,
-              periodStart,
-              periodEnd,
-              { proratedAmount: updatedPayment.amount, currency: updatedPayment.currency }
+              updatedPayment
             );
+            const oldTier = subscriptionBefore?.tier ?? 'free';
+            const newTier = payment.tier;
+            if (oldTier === 'free' && newTier !== 'free') {
+              await EmailService.sendWelcomeEmail(
+                userProfile.email,
+                userProfile.full_name || userProfile.email,
+                newTier
+              );
+            } else if (
+              getTierOrder(newTier as 'free' | 'starter' | 'premium' | 'pro') >
+              getTierOrder(oldTier as 'free' | 'starter' | 'premium' | 'pro')
+            ) {
+              const periodStart = subscriptionAfter?.current_period_start
+                ? new Date(subscriptionAfter.current_period_start)
+                : new Date();
+              const periodEnd = subscriptionAfter?.current_period_end
+                ? new Date(subscriptionAfter.current_period_end)
+                : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+              await EmailService.sendUpgradeConfirmationEmail(
+                userProfile.email,
+                userProfile.full_name || userProfile.email,
+                newTier,
+                periodStart,
+                periodEnd,
+                { proratedAmount: updatedPayment.amount, currency: updatedPayment.currency }
+              );
+            }
           }
+        } catch (emailError) {
+          logger.error('Failed to send payment emails:', emailError);
         }
-      } catch (emailError) {
-        logger.error('Failed to send payment emails:', emailError);
+      } else {
+        logger.info('Skipping email sends - payment already completed (idempotency)', {
+          paymentId: payment.id,
+        });
       }
 
       // Redirect to original page or dashboard with success message
@@ -838,7 +866,13 @@ router.post(
     const transmissionSig = req.headers['paypal-transmission-sig'] as string;
     const transmissionTime = req.headers['paypal-transmission-time'] as string;
 
-    if (authAlgo && certUrl && transmissionId && transmissionSig && transmissionTime) {
+    const hasVerificationHeaders = !!(authAlgo && certUrl && transmissionId && transmissionSig && transmissionTime);
+    const isProduction = config.NODE_ENV === 'production' || 
+                         process.env.RAILWAY_ENVIRONMENT === 'production' || 
+                         !!process.env.RAILWAY_PUBLIC_DOMAIN;
+
+    // Verify webhook signature if headers are present
+    if (hasVerificationHeaders) {
       const isValid = await PayPalService.verifyWebhookSignature({
         authAlgo,
         certUrl,
@@ -849,12 +883,47 @@ router.post(
         webhookEvent,
       });
       if (!isValid) {
-        logger.warn('PayPal webhook verification failed');
-        res.status(200).json({ success: false, message: 'Webhook verification failed' });
-        return;
+        logger.error('PayPal webhook verification failed - rejecting webhook', {
+          event_type: eventType,
+          webhook_id: webhookEvent.id,
+          transmissionId,
+        });
+        // Return 403 Forbidden when verification fails - do not process webhook
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Webhook verification failed' 
+        });
       }
+      logger.debug('PayPal webhook signature verified', {
+        event_type: eventType,
+        webhook_id: webhookEvent.id,
+      });
     } else {
-      logger.warn('PayPal webhook missing verification headers');
+      // Missing verification headers
+      if (isProduction) {
+        // In production, reject webhooks without verification headers (security risk)
+        logger.error('PayPal webhook missing verification headers in production - rejecting', {
+          event_type: eventType,
+          webhook_id: webhookEvent.id,
+          headers: {
+            'paypal-auth-algo': authAlgo ? 'present' : 'missing',
+            'paypal-cert-url': certUrl ? 'present' : 'missing',
+            'paypal-transmission-id': transmissionId ? 'present' : 'missing',
+            'paypal-transmission-sig': transmissionSig ? 'present' : 'missing',
+            'paypal-transmission-time': transmissionTime ? 'present' : 'missing',
+          },
+        });
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Webhook verification headers required' 
+        });
+      } else {
+        // In development/sandbox, log as warning but allow (for testing)
+        logger.warn('PayPal webhook missing verification headers (development mode - allowing)', {
+          event_type: eventType,
+          webhook_id: webhookEvent.id,
+        });
+      }
     }
 
     if (eventType === 'PAYMENT.CAPTURE.COMPLETED' && resource) {
@@ -924,11 +993,16 @@ router.post(
           await DatabaseService.updatePayment(payment.id, {
             status: 'completed',
             paypal_payment_id: captureId, // Store capture ID if not already stored
-            callback_data: resource,
+            callback_data: {
+              ...(typeof payment.callback_data === 'object' && payment.callback_data ? payment.callback_data : {}),
+              ...(resource as Record<string, unknown>), // Merge webhook resource with existing callback_data (preserves billing_period)
+            },
             completed_at: new Date().toISOString(),
           });
           const { SubscriptionService } = await import('../services/subscription.service');
-          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+          // Extract billing_period from payment callback_data if available (for one-time payments)
+          const paymentBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod);
           logger.info('Payment completed via webhook', { paymentId: payment.id, captureId });
         } else if (!payment) {
           logger.warn('PayPal webhook: Payment not found for capture', {
@@ -1011,13 +1085,177 @@ router.post(
     }
 
     if (eventType === 'PAYMENT.SALE.COMPLETED' && resource) {
-      const billingAgreementId = resource.billing_agreement_id as string | undefined;
-      if (billingAgreementId) {
-        const { SubscriptionService } = await import('../services/subscription.service');
-        await SubscriptionService.handlePayPalSubscriptionRenewal(billingAgreementId, resource);
-        logger.info('PayPal subscription renewal processed via webhook', {
-          paypalSubscriptionId: billingAgreementId,
+      // PayPal Subscriptions API v1: billing_agreement_id IS the subscription ID (I-xxx format)
+      // PayPal may also send subscription_id or other fields - try multiple sources
+      const subscriptionId =
+        (resource.billing_agreement_id as string | undefined) ||
+        (resource.subscription_id as string | undefined) ||
+        (resource.subscriptionId as string | undefined) ||
+        // Check if resource.id is a subscription ID (I-xxx format) - unlikely but possible
+        (typeof resource.id === 'string' && resource.id.startsWith('I-') ? resource.id : undefined);
+
+      if (subscriptionId) {
+        try {
+          const { SubscriptionService } = await import('../services/subscription.service');
+          await SubscriptionService.handlePayPalSubscriptionRenewal(subscriptionId, resource);
+          logger.info('PayPal subscription renewal processed via webhook', {
+            paypalSubscriptionId: subscriptionId,
+            source: resource.billing_agreement_id ? 'billing_agreement_id' : 
+                    resource.subscription_id ? 'subscription_id' :
+                    resource.subscriptionId ? 'subscriptionId' : 'id',
+          });
+        } catch (renewalError) {
+          logger.error('PayPal subscription renewal via webhook failed', {
+            subscriptionId,
+            error: renewalError,
+            resourceFields: Object.keys(resource),
+          });
+        }
+      } else {
+        // Not a subscription renewal - might be a one-time payment sale
+        logger.debug('PAYMENT.SALE.COMPLETED webhook: No subscription ID found, skipping renewal processing', {
+          resourceId: resource.id,
+          hasBillingAgreementId: !!resource.billing_agreement_id,
         });
+      }
+    }
+
+    if (eventType === 'BILLING.SUBSCRIPTION.PAYMENT.FAILED' && resource) {
+      const subscriptionId = resource.id as string | undefined;
+      if (subscriptionId) {
+        try {
+          const subscription = await DatabaseService.getSubscriptionByPayPalSubscriptionId(subscriptionId);
+          if (!subscription) {
+            logger.warn('Subscription not found for PAYMENT.FAILED webhook', { subscriptionId });
+            return res.status(200).json({ success: true, message: 'Webhook received' });
+          }
+
+          const now = new Date();
+          const gracePeriodEnd = new Date(now);
+          gracePeriodEnd.setDate(gracePeriodEnd.getDate() + 7); // 7 days grace period
+
+          // Set grace period if not already set
+          if (!subscription.grace_period_end) {
+            await DatabaseService.updateSubscription(subscription.user_id, {
+              grace_period_end: gracePeriodEnd.toISOString(),
+            });
+          }
+
+          // Extract failure details from resource
+          const failureReason = (resource as { failure_reason?: string; reason?: string }).failure_reason ||
+                                (resource as { failure_reason?: string; reason?: string }).reason ||
+                                'Payment method declined or insufficient funds';
+          const resourceAmount = (resource as { amount?: { value?: string; currency_code?: string } }).amount;
+          let amountValue = resourceAmount?.value ? parseFloat(resourceAmount.value) : undefined;
+          const currency = (resourceAmount?.currency_code || 'USD') as 'UGX' | 'USD';
+
+          // If amount not in resource, calculate from subscription tier and billing period
+          if (!amountValue) {
+            const billingPeriod = (subscription as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
+            const { getPricing } = await import('../constants/pricing');
+            amountValue = getPricing(
+              subscription.tier as 'starter' | 'premium' | 'pro' | 'enterprise',
+              currency,
+              billingPeriod as 'monthly' | 'annual'
+            );
+          }
+
+          // Check for existing pending or failed payment for this renewal attempt
+          const existingPayments = await DatabaseService.getUserPayments(subscription.user_id, 10);
+          const recentPayment = existingPayments.find(
+            (p) => p.paypal_subscription_id === subscriptionId &&
+                   (p.status === 'pending' || p.status === 'failed') &&
+                   new Date(p.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Within last 7 days
+          );
+
+          if (recentPayment) {
+            // Update existing payment to failed status
+            await DatabaseService.updatePayment(recentPayment.id, {
+              status: 'failed',
+              callback_data: {
+                ...(typeof recentPayment.callback_data === 'object' && recentPayment.callback_data ? recentPayment.callback_data : {}),
+                ...(resource as Record<string, unknown>),
+                failure_reason: failureReason,
+                webhook_event: 'BILLING.SUBSCRIPTION.PAYMENT.FAILED',
+              },
+              webhook_data: resource as Record<string, unknown>,
+            });
+            logger.info('Updated existing payment to failed status', {
+              paymentId: recentPayment.id,
+              subscriptionId,
+            });
+          } else {
+            // Create new failed payment record for this renewal attempt
+            await DatabaseService.createPayment({
+              user_id: subscription.user_id,
+              subscription_id: subscription.id,
+              payment_provider: 'paypal',
+              paypal_subscription_id: subscriptionId,
+              tier: subscription.tier,
+              amount: amountValue,
+              currency,
+              status: 'failed',
+              payment_description: `QueryAI ${subscription.tier} subscription renewal (failed)`,
+              callback_data: {
+                ...(resource as Record<string, unknown>),
+                failure_reason: failureReason,
+                webhook_event: 'BILLING.SUBSCRIPTION.PAYMENT.FAILED',
+              },
+              webhook_data: resource as Record<string, unknown>,
+            });
+            logger.info('Created new failed payment record', {
+              subscriptionId,
+              userId: subscription.user_id,
+            });
+          }
+
+          // Send failure notification email
+          try {
+            const { EmailService } = await import('../services/email.service');
+            const userProfile = await DatabaseService.getUserProfile(subscription.user_id);
+            if (userProfile) {
+              const updatedSubscription = await DatabaseService.getUserSubscription(subscription.user_id);
+              if (updatedSubscription) {
+                await EmailService.sendFailedRenewalNotificationEmail(
+                  userProfile.email,
+                  userProfile.full_name || userProfile.email,
+                  updatedSubscription,
+                  {
+                    failureReason,
+                    amount: amountValue,
+                    currency,
+                    daysRemaining: 7,
+                  }
+                );
+                logger.info('Failed renewal notification email sent', {
+                  subscriptionId,
+                  userId: subscription.user_id,
+                });
+              }
+            }
+          } catch (emailError) {
+            logger.error('Failed to send payment failure email', {
+              subscriptionId,
+              error: emailError,
+            });
+          }
+
+          // Optionally trigger payment retry service (it will handle retries based on schedule)
+          // Note: PaymentRetryService.processFailedPayments() is typically called by a scheduled job
+          // We don't call it here to avoid blocking the webhook response
+
+          logger.info('PayPal subscription payment failure processed via webhook', {
+            paypalSubscriptionId: subscriptionId,
+            userId: subscription.user_id,
+            gracePeriodEnd: gracePeriodEnd.toISOString(),
+            failureReason,
+          });
+        } catch (error) {
+          logger.error('PayPal subscription payment failure webhook processing failed', {
+            subscriptionId,
+            error,
+          });
+        }
       }
     }
 
@@ -1039,12 +1277,35 @@ router.post(
       }
     }
 
+    // Handle subscription expired event
+    if (eventType === 'BILLING.SUBSCRIPTION.EXPIRED' && resource) {
+      const subscriptionId = resource.id as string | undefined;
+      if (subscriptionId) {
+        try {
+          const { SubscriptionService } = await import('../services/subscription.service');
+          await SubscriptionService.handlePayPalSubscriptionExpired(
+            subscriptionId,
+            'PayPal subscription expired'
+          );
+          logger.info('PayPal subscription expired processed via webhook', {
+            paypalSubscriptionId: subscriptionId,
+            eventType,
+          });
+        } catch (expiredError) {
+          logger.error('PayPal subscription expired webhook handler failed', {
+            subscriptionId,
+            error: expiredError,
+          });
+        }
+      }
+    }
+
     const result = PayPalService.processWebhook(eventType || '', resource || {});
     if (!result.handled) {
       logger.debug('PayPal webhook event not handled', { event_type: eventType });
     }
 
-    res.status(200).json({ success: true, message: 'Webhook received' });
+    return res.status(200).json({ success: true, message: 'Webhook received' });
   })
 );
 
@@ -1080,13 +1341,19 @@ router.get(
       if (payment.status !== paymentStatus) {
         await DatabaseService.updatePayment(payment.id, {
           status: paymentStatus,
-          callback_data: details as unknown as Record<string, unknown>,
+          callback_data: {
+            ...(typeof payment.callback_data === 'object' && payment.callback_data ? payment.callback_data : {}),
+            ...(details as unknown as Record<string, unknown>), // Merge payment details with existing callback_data (preserves billing_period)
+          },
           paypal_payment_id: details.captureId,
           completed_at: paymentStatus === 'completed' ? new Date().toISOString() : undefined,
         });
         if (paymentStatus === 'completed') {
           const { SubscriptionService } = await import('../services/subscription.service');
-          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+          // Extract billing_period from payment callback_data if available (for one-time payments)
+          const updatedPayment = await DatabaseService.getPaymentById(payment.id);
+          const paymentBillingPeriod = updatedPayment ? (updatedPayment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined : undefined;
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod);
         }
       }
 
