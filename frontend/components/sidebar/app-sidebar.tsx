@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, FileText, Tag, Key, Bot, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, CreditCard, Settings, TestTube, CheckSquare } from 'lucide-react';
+import { MessageSquare, FileText, Tag, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, CreditCard, Settings, TestTube, CheckSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { SidebarTopicFilters } from './sidebar-topic-filters';
@@ -16,7 +16,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'subscription';
+type TabType = 'chat' | 'documents' | 'topics' | 'collections' | 'subscription';
 
 interface AppSidebarProps {
   activeTab: TabType;
@@ -195,30 +195,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             title="Topics"
           >
             <Tag className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => onTabChange('api-keys')}
-            className={cn(
-              'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
-              activeTab === 'api-keys'
-                ? 'bg-orange-50 text-orange-700'
-                : 'text-gray-700 hover:bg-gray-50'
-            )}
-            title="API Keys"
-          >
-            <Key className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => onTabChange('embeddings')}
-            className={cn(
-              'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
-              activeTab === 'embeddings'
-                ? 'bg-orange-50 text-orange-700'
-                : 'text-gray-700 hover:bg-gray-50'
-            )}
-            title="Embeddings"
-          >
-            <Bot className="w-5 h-5" />
           </button>
           <button
             onClick={() => onTabChange('subscription')}
@@ -471,30 +447,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </div>
             )}
           </div>
-          <button
-            onClick={() => onTabChange('api-keys')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              activeTab === 'api-keys'
-                ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-            )}
-          >
-            <Key className="w-5 h-5" />
-            API Keys
-          </button>
-          <button
-            onClick={() => onTabChange('embeddings')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              activeTab === 'embeddings'
-                ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-            )}
-          >
-            <Bot className="w-5 h-5" />
-            Embeddings
-          </button>
           <button
             onClick={() => onTabChange('collections')}
             className={cn(

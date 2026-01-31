@@ -7,8 +7,6 @@ import { Button } from '@/components/ui/button';
 import { ChatInterface } from '@/components/chat/chat-interface';
 import { DocumentManager } from '@/components/documents/document-manager';
 import { TopicManager } from '@/components/topics/topic-manager';
-import { ApiKeyManager } from '@/components/api-keys/api-key-manager';
-import { EmbeddingManager } from '@/components/embeddings/embedding-manager';
 import { CollectionManager } from '@/components/collections/collection-manager';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { SubscriptionManager } from '@/components/subscription/subscription-manager';
@@ -20,7 +18,7 @@ import { MobileSidebar, HamburgerMenu } from '@/components/mobile/mobile-sidebar
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { useToast } from '@/lib/hooks/use-toast';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'subscription';
+type TabType = 'chat' | 'documents' | 'topics' | 'collections' | 'subscription';
 
 function DashboardContent() {
   const router = useRouter();
@@ -55,7 +53,7 @@ function DashboardContent() {
   // Read tab from URL query parameter on mount and when it changes
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['chat', 'documents', 'topics', 'api-keys', 'embeddings', 'collections', 'subscription'].includes(tabParam)) {
+    if (tabParam && ['chat', 'documents', 'topics', 'collections', 'subscription'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     }
   }, [searchParams]);
@@ -266,15 +264,7 @@ function DashboardContent() {
             <div className="flex-1 overflow-y-auto p-6">
               <TopicManager />
             </div>
-          ) : activeTab === 'api-keys' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <ApiKeyManager />
-            </div>
-          ) : activeTab === 'embeddings' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <EmbeddingManager />
-            </div>
-           ) : activeTab === 'collections' ? (
+          ) : activeTab === 'collections' ? (
              <div className="flex-1 overflow-y-auto p-6">
                <CollectionManager 
                  onConversationSelect={(conversationId) => {

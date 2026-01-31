@@ -12,13 +12,9 @@ import authRoutes from './routes/auth.routes';
 import aiRoutes from './routes/ai.routes';
 import searchRoutes from './routes/search.routes';
 import documentsRoutes from './routes/documents.routes';
-import embeddingConfigsRoutes from './routes/embeddings.routes';
-import embedRoutes from './routes/embed.routes';
 import conversationsRoutes from './routes/conversations.routes';
 import topicsRoutes from './routes/topics.routes';
-import apiKeysRoutes from './routes/api-keys.routes';
 import collectionsRoutes from './routes/collections.routes';
-import customApiRoutes from './routes/custom-api.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import subscriptionRoutes from './routes/subscription.routes';
 import paymentRoutes from './routes/payment.routes';
@@ -115,14 +111,8 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Request logging
 app.use(requestLogger);
 
-// Rate limiting (exclude embed routes as they're public)
-app.use('/api/', (req, res, next) => {
-  // Skip rate limiting for public embed routes
-  if (req.path.startsWith('/embed/')) {
-    return next();
-  }
-  return apiLimiter(req, res, next);
-});
+// Rate limiting
+app.use('/api/', apiLimiter);
 
 // API Routes
 app.use('/api/test', testRoutes);
@@ -132,12 +122,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/topics', topicsRoutes);
-app.use('/api/api-keys', apiKeysRoutes);
 app.use('/api/collections', collectionsRoutes);
-app.use('/api/embeddings', embeddingConfigsRoutes);
-// Mount embed routes separately for public access
-app.use('/api/embed', embedRoutes);
-app.use('/api/v1', customApiRoutes); // Custom API with API key auth
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/payment', paymentRoutes);

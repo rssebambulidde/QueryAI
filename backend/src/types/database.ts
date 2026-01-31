@@ -110,45 +110,6 @@ export namespace Database {
     created_at: string;
   }
 
-  export interface ApiKey {
-    id: string;
-    user_id: string;
-    topic_id?: string;
-    key_hash: string;
-    key_prefix: string;
-    name: string;
-    description?: string;
-    rate_limit_per_hour: number;
-    rate_limit_per_day: number;
-    is_active: boolean;
-    last_used_at?: string;
-    expires_at?: string;
-    created_at: string;
-    updated_at: string;
-  }
-
-  export interface EmbeddingConfig {
-    id: string;
-    user_id: string;
-    topic_id: string;
-    name: string;
-    embed_code?: string;
-    customization?: Record<string, any>;
-    is_active: boolean;
-    created_at: string;
-    updated_at: string;
-  }
-
-  export interface ApiKeyUsage {
-    id: string;
-    api_key_id: string;
-    endpoint: string;
-    method: string;
-    status_code?: number;
-    response_time_ms?: number;
-    created_at: string;
-  }
-
   export interface Collection {
     id: string;
     user_id: string;
