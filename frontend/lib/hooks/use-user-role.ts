@@ -1,13 +1,13 @@
 'use client';
 
-import { useAuth } from '@/lib/store/auth-store';
+import { useAuthStore } from '@/lib/store/auth-store';
 
 /**
  * Hook to check user role and permissions
  * Returns utilities for role-based access control
  */
 export function useUserRole() {
-  const { user } = useAuth();
+  const { user } = useAuthStore();
 
   const role = user?.role || 'user';
   

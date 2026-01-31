@@ -19,9 +19,9 @@ export function AdminOnly({
   requireOwner = false,
   fallback = null,
 }: AdminOnlyProps) {
-  const { isAdmin, isOwner, hasOwnerAccess } = useUserRole();
+  const { isAdmin, isSuperAdmin, hasSuperAdminAccess } = useUserRole();
 
-  const hasAccess = requireOwner ? hasOwnerAccess() : isAdmin;
+  const hasAccess = requireOwner ? hasSuperAdminAccess() : isAdmin;
 
   if (!hasAccess) {
     return <>{fallback}</>;

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/store/auth-store';
+import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
 
 interface AdminGuardProps {
@@ -26,8 +26,8 @@ export function AdminGuard({
   showLoading = true,
 }: AdminGuardProps) {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
-  const { isAdmin, isOwner, hasOwnerAccess } = useUserRole();
+  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAdmin, isSuperAdmin, hasSuperAdminAccess } = useUserRole();
 
   useEffect(() => {
     if (isLoading) return;
@@ -37,12 +37,12 @@ export function AdminGuard({
       return;
     }
 
-    const hasAccess = requireOwner ? hasOwnerAccess() : isAdmin;
+    const hasAccess = requireOwner ? hasSuperAdminAccess() : isAdmin;
     
     if (!hasAccess) {
       router.push(redirectTo);
     }
-  }, [isAuthenticated, isLoading, isAdmin, isOwner, requireOwner, hasOwnerAccess, router, redirectTo]);
+  }, [isAuthenticated, isLoading, isAdmin, isSuperAdmin, requireOwner, hasSuperAdminAccess, router, redirectTo]);
 
   if (isLoading && showLoading) {
     return (
@@ -59,7 +59,7 @@ export function AdminGuard({
     return null;
   }
 
-  const hasAccess = requireOwner ? hasOwnerAccess() : isAdmin;
+  const hasAccess = requireOwner ? hasSuperAdminAccess() : isAdmin;
   
   if (!hasAccess) {
     return null;
