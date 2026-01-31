@@ -48,13 +48,13 @@ export function SubscriptionManager() {
     loadBillingHistory();
     loadUsageStats();
     loadUsageWarnings();
-    // Sync pending recurring payments from PayPal (callback may not run when Auto return OFF)
-    paymentApi.syncSubscription().then((r) => {
-      if (r.success && r.data?.synced) {
-        loadSubscriptionData();
-        loadBillingHistory();
-      }
-    }).catch(() => {});
+    // Auto-sync disabled - user can manually sync using the "Sync billing status" button
+    // paymentApi.syncSubscription().then((r) => {
+    //   if (r.success && r.data?.synced) {
+    //     loadSubscriptionData();
+    //     loadBillingHistory();
+    //   }
+    // }).catch(() => {});
   }, []);
 
   const loadSubscriptionData = async () => {
@@ -146,70 +146,70 @@ export function SubscriptionManager() {
     }
   };
 
-  // Auto-retry sync for pending payments after 5 minutes
-  useEffect(() => {
-    const pendingPayments = billingHistory?.payments.filter((p) => p.status === 'pending');
-    if (!pendingPayments || pendingPayments.length === 0) return;
-    if (syncingBilling) return; // Don't auto-sync if already syncing
+  // Auto-retry sync for pending payments after 5 minutes - DISABLED
+  // useEffect(() => {
+  //   const pendingPayments = billingHistory?.payments.filter((p) => p.status === 'pending');
+  //   if (!pendingPayments || pendingPayments.length === 0) return;
+  //   if (syncingBilling) return; // Don't auto-sync if already syncing
 
-    // Check if any pending payment is older than 5 minutes
-    const now = Date.now();
-    const hasOldPendingPayment = pendingPayments.some((payment) => {
-      const paymentAge = now - new Date(payment.created_at).getTime();
-      return paymentAge > 5 * 60 * 1000; // 5 minutes
-    });
+  //   // Check if any pending payment is older than 5 minutes
+  //   const now = Date.now();
+  //   const hasOldPendingPayment = pendingPayments.some((payment) => {
+  //     const paymentAge = now - new Date(payment.created_at).getTime();
+  //     return paymentAge > 5 * 60 * 1000; // 5 minutes
+  //   });
 
-    if (!hasOldPendingPayment) return;
+  //   if (!hasOldPendingPayment) return;
 
-    // Auto-retry sync if last sync was more than 5 minutes ago or never synced
-    const shouldAutoSync = !lastSyncTime || (now - lastSyncTime.getTime() > 5 * 60 * 1000);
+  //   // Auto-retry sync if last sync was more than 5 minutes ago or never synced
+  //   const shouldAutoSync = !lastSyncTime || (now - lastSyncTime.getTime() > 5 * 60 * 1000);
 
-    if (shouldAutoSync) {
-      const autoSyncTimer = setTimeout(async () => {
-        try {
-          setSyncingBilling(true);
-          const r = await paymentApi.syncSubscription();
-          setLastSyncTime(new Date());
-          if (r.success && r.data?.synced) {
-            await loadSubscriptionData();
-            await loadBillingHistory();
-          }
-        } catch (err) {
-          // Silently fail for auto-sync
-        } finally {
-          setSyncingBilling(false);
-        }
-      }, 1000); // Wait 1 second to avoid immediate sync on mount
+  //   if (shouldAutoSync) {
+  //     const autoSyncTimer = setTimeout(async () => {
+  //       try {
+  //         setSyncingBilling(true);
+  //         const r = await paymentApi.syncSubscription();
+  //         setLastSyncTime(new Date());
+  //         if (r.success && r.data?.synced) {
+  //           await loadSubscriptionData();
+  //           await loadBillingHistory();
+  //         }
+  //       } catch (err) {
+  //         // Silently fail for auto-sync
+  //       } finally {
+  //         setSyncingBilling(false);
+  //       }
+  //     }, 1000); // Wait 1 second to avoid immediate sync on mount
 
-      return () => clearTimeout(autoSyncTimer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [billingHistory, lastSyncTime, syncingBilling]);
+  //     return () => clearTimeout(autoSyncTimer);
+  //   }
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [billingHistory, lastSyncTime, syncingBilling]);
 
-  // Real-time polling for pending payments (every 30 seconds)
-  useEffect(() => {
-    const pendingPayments = billingHistory?.payments.filter((p) => p.status === 'pending');
-    if (!pendingPayments || pendingPayments.length === 0) {
-      // No pending payments, stop polling
-      return;
-    }
+  // Real-time polling for pending payments (every 30 seconds) - DISABLED
+  // useEffect(() => {
+  //   const pendingPayments = billingHistory?.payments.filter((p) => p.status === 'pending');
+  //   if (!pendingPayments || pendingPayments.length === 0) {
+  //     // No pending payments, stop polling
+  //     return;
+  //   }
 
-    // Poll every 30 seconds
-    const interval = setInterval(async () => {
-      try {
-        // Refresh billing history (will auto-refresh subscription data if payment completed)
-        const hadCompletedPayment = await loadBillingHistory();
-        // Always refresh subscription data to ensure it's up to date
-        await loadSubscriptionData();
-      } catch (err) {
-        // Silently fail for polling - don't spam errors
-        console.debug('Payment status polling error:', err);
-      }
-    }, 30000); // Poll every 30 seconds
+  //   // Poll every 30 seconds
+  //   const interval = setInterval(async () => {
+  //     try {
+  //       // Refresh billing history (will auto-refresh subscription data if payment completed)
+  //       const hadCompletedPayment = await loadBillingHistory();
+  //       // Always refresh subscription data to ensure it's up to date
+  //       await loadSubscriptionData();
+  //     } catch (err) {
+  //       // Silently fail for polling - don't spam errors
+  //       console.debug('Payment status polling error:', err);
+  //     }
+  //   }, 30000); // Poll every 30 seconds
 
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [billingHistory]);
+  //   return () => clearInterval(interval);
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, [billingHistory]);
 
   // Grace period countdown timer - must be before early returns
   useEffect(() => {

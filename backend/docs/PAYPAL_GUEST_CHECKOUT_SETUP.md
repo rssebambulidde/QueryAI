@@ -37,13 +37,28 @@ Enable **Guest Checkout** (PayPal Account Optional) in your PayPal business acco
 
 ## How It Works
 
+### One-Time Payments (Guest Checkout Supported)
 When "PayPal Account Optional" is enabled:
-- Users can pay with credit/debit cards without creating a PayPal account
+- Users can pay with credit/debit cards **without creating a PayPal account**
 - The checkout page will show a "Pay with Debit or Credit Card" option
 - Users can enter card details directly without PayPal account creation
+- Works for **one-time payments only**
+
+### Recurring Subscriptions (PayPal Account Required)
+**⚠️ IMPORTANT:** Recurring subscriptions **REQUIRE a PayPal account**:
+- PayPal's Subscriptions API does **NOT support guest checkout**
+- Cards can be used, but must be saved to a PayPal account
+- Users must create or log in to a PayPal account to set up recurring billing
+- This is a PayPal API limitation, not a code configuration issue
+
+**Why?** PayPal needs to:
+- Store payment methods securely for recurring charges
+- Manage subscription lifecycle (cancellations, updates, renewals)
+- Handle payment failures and retries automatically
 
 ## Important Notes
 
+### One-Time Payments
 - **Risk Assessment**: PayPal may still require account creation for some transactions based on:
   - Buyer's purchase history
   - Location/IP address
@@ -51,6 +66,15 @@ When "PayPal Account Optional" is enabled:
   - Credit assessment
   
 - **Not All Transactions**: Guest checkout may not be available for all transactions due to PayPal's risk assessment
+
+### Recurring Subscriptions
+- **PayPal Account Required**: Recurring subscriptions **always require** a PayPal account
+- **Card Payments**: Cards can be used, but must be saved to a PayPal account
+- **No Guest Checkout**: PayPal's Subscriptions API does not support guest checkout
+- **Alternative**: For card-only recurring payments without PayPal account, consider:
+  - Using one-time payments and manual renewal reminders
+  - Integrating PayPal Payment Method Tokens API (separate integration)
+  - Using a different payment provider that supports card-based recurring billing
 
 - **API Integration**: Our code already includes:
   - `fundingSource=card` parameter to pre-select card payment
