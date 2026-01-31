@@ -63,28 +63,42 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full my-auto max-h-[95vh] flex flex-col">
         {/* Header - Fixed */}
         <div className="flex-shrink-0 p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold mb-2">
-            Upgrade to {tier === 'starter' ? 'Starter' : tier === 'premium' ? 'Premium' : tier === 'pro' ? 'Pro' : 'Enterprise'}
-          </h2>
-          <p className="text-gray-600 text-sm">
-            Pay with PayPal or Visa —{' '}
-            <span className="font-semibold text-orange-600">{formatPrice(amount, currency)}</span>
-            {billingPeriod === 'annual' && ' /year'}
-            {recurring && ' (recurring)'}
-          </p>
-          {billingPeriod === 'annual' && annualSavings.savingsPercentage > 0 && (
-            <p className="text-green-600 text-sm mt-1">
-              Save {annualSavings.savingsPercentage}% with annual billing
-            </p>
-          )}
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h2 className="text-xl font-bold mb-2">
+                Upgrade to {tier === 'starter' ? 'Starter' : tier === 'premium' ? 'Premium' : tier === 'pro' ? 'Pro' : 'Enterprise'}
+              </h2>
+              <p className="text-gray-600 text-sm">
+                Pay with PayPal or Visa —{' '}
+                <span className="font-semibold text-orange-600">{formatPrice(amount, currency)}</span>
+                {billingPeriod === 'annual' && ' /year'}
+                {recurring && ' (recurring)'}
+              </p>
+              {billingPeriod === 'annual' && annualSavings.savingsPercentage > 0 && (
+                <p className="text-green-600 text-sm mt-1">
+                  Save {annualSavings.savingsPercentage}% with annual billing
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="ml-4 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Close"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        {/* Scrollable Content - Includes PayPal buttons */}
+        <div className="flex-1 overflow-y-auto p-6 min-h-0 pb-8">
           {/* Currency Selection */}
           <div className="mb-4 space-y-2">
             <label className="block text-sm font-medium text-gray-700">
@@ -225,35 +239,39 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
           </div>
 
           </form>
+
+          {/* PayPal Payment Section - Inside scrollable area */}
+          <div className="mt-6 pt-6 border-t border-gray-200 space-y-3 pb-4">
+            <p className="text-sm text-gray-600 text-center mb-1">Pay with PayPal or use your Visa card via PayPal.</p>
+            <div className="w-full">
+              <PayPalButton
+                tier={tier}
+                currency={currency}
+                firstName={formData.firstName}
+                lastName={formData.lastName}
+                email={formData.email}
+                phoneNumber={formData.phoneNumber || undefined}
+                recurring={recurring}
+                billingPeriod={billingPeriod}
+                disabled={loading}
+                onError={handlePayPalError}
+                onRedirect={() => setLoading(true)}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Footer with buttons - Fixed */}
-        <div className="flex-shrink-0 p-6 border-t border-gray-200 bg-gray-50 space-y-3">
-          <p className="text-sm text-gray-600 text-center mb-1">Pay with PayPal or use your Visa card via PayPal.</p>
-          <PayPalButton
-            tier={tier}
-            currency={currency}
-            firstName={formData.firstName}
-            lastName={formData.lastName}
-            email={formData.email}
-            phoneNumber={formData.phoneNumber || undefined}
-            recurring={recurring}
-            billingPeriod={billingPeriod}
+        {/* Footer with Cancel button - Fixed */}
+        <div className="flex-shrink-0 p-6 border-t border-gray-200 bg-gray-50">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
             disabled={loading}
-            onError={handlePayPalError}
-            onRedirect={() => setLoading(true)}
-          />
-          <div className="flex gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={loading}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-          </div>
+            className="w-full"
+          >
+            Cancel
+          </Button>
         </div>
       </div>
     </div>

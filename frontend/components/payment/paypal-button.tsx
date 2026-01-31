@@ -130,15 +130,16 @@ export function PayPalButton({
 
   // One-time: SDK PayPalButtons (createOrder + onApprove redirect)
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 w-full">
       {error && (
         <Alert variant="error" className="text-sm">
           {error}
         </Alert>
       )}
+      <div className="w-full" style={{ minHeight: '200px' }}>
         <PayPalButtons
-        style={{ layout: 'vertical', label: 'pay' }}
-        disabled={disabled}
+          style={{ layout: 'vertical', label: 'pay' }}
+          disabled={disabled}
         createOrder={async () => {
           const request: PaymentInitiateRequest = {
             tier,
@@ -175,10 +176,11 @@ export function PayPalButton({
           setError(msg);
           onError?.(msg);
         }}
-        onCancel={() => {
-          setError(null);
-        }}
-      />
+          onCancel={() => {
+            setError(null);
+          }}
+        />
+      </div>
     </div>
   );
 }
