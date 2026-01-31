@@ -17,6 +17,8 @@ import { isEnterpriseTier } from '@/lib/pricing';
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import { ConversationSkeleton, CollectionSkeleton } from './skeleton-loader';
 import { AccountDropdown } from './account-dropdown';
+import { ConversationHoverPreview } from './conversation-hover-preview';
+import { CollectionHoverPreview } from './collection-hover-preview';
 
 type TabType = 'chat' | 'collections';
 
@@ -43,7 +45,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [pinnedConversations, setPinnedConversations] = useState<Set<string>>(new Set());
   const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
+  const [showConversationPreview, setShowConversationPreview] = useState(false);
+  const [showCollectionPreview, setShowCollectionPreview] = useState(false);
   const accountButtonRef = React.useRef<HTMLButtonElement>(null);
+  const conversationButtonRef = React.useRef<HTMLButtonElement>(null);
+  const collectionButtonRef = React.useRef<HTMLButtonElement>(null);
   const { toast } = useToast();
   const router = useRouter();
   const { user, logout } = useAuthStore();
@@ -343,13 +349,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </button>
             </>
           )}
-          <button
-            onClick={() => router.push('/dashboard/settings/profile')}
-            className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
-            title="Settings"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
         </nav>
         
         {/* Bottom Section - Collapsed - Account Button */}
@@ -404,7 +403,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
         <nav className="px-2 py-4 space-y-1">
           {/* Query Assistant Tab */}
           <div>
@@ -424,12 +423,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
             {/* Collapsible Conversations Section */}
             {activeTab === 'chat' && (
-              <div className="mt-2">
+              <div className="mt-2 relative">
                 <button
+                  ref={conversationButtonRef}
                   onClick={() => setShowConversations(!showConversations)}
+                  onMouseEnter={() => setShowConversationPreview(true)}
+                  onMouseLeave={() => setShowConversationPreview(false)}
                   className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-1">
                     <MessageSquare className="w-4 h-4" />
                     <span>Conversations</span>
                     {debouncedSearchQuery ? (
@@ -439,6 +441,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     ) : conversations.length > 0 ? (
                       <span className="text-xs text-gray-500">({conversations.length})</span>
                     ) : null}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleNewConversation();
+                      }}
+                      className="ml-auto p-1 hover:bg-gray-100 rounded transition-colors"
+                      title="New Conversation"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-gray-500" />
+                    </button>
                   </div>
                   {showConversations ? (
                     <ChevronUp className="w-4 h-4" />
@@ -476,21 +488,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                       </div>
                     </div>
 
-                    {/* New Conversation Button */}
-                    <div className="px-3 mb-2">
-                      <Button
-                        onClick={handleNewConversation}
-                        size="sm"
-                        variant="outline"
-                        className="w-full h-8 text-xs"
-                      >
-                        <Plus className="w-3 h-3 mr-1" />
-                        New Chat
-                      </Button>
-                    </div>
 
                     {/* Conversation List - Scrollable */}
-                    <div className="max-h-[400px] overflow-y-auto px-1">
+                    <div className="max-h-[400px] overflow-y-auto px-1" style={{ scrollbarWidth: 'thin' }}>
                       {isLoading ? (
                         <ConversationSkeleton count={5} />
                       ) : filteredConversations.length === 0 ? (
@@ -512,40 +512,44 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                       ) : (
                         <div className="space-y-1">
                           {filteredConversations.map((conversation) => (
-                            <div key={conversation.id} className="group relative">
-                              {pinnedConversations.has(conversation.id) && (
-                                <div className="absolute left-1 top-2 z-10">
-                                  <Pin className="w-3 h-3 text-orange-500 fill-orange-500" />
-                                </div>
-                              )}
-                              <ConversationItemComponent
-                                conversation={conversation}
-                                isActive={conversation.id === currentConversationId}
-                                onSelect={() => selectConversation(conversation.id)}
-                                onDelete={(e) => handleDeleteConversation(conversation.id, e)}
-                                onSaveToCollection={(conversationId) => {
-                                  setSelectedConversationForCollection(conversationId);
-                                  setShowSaveDialog(true);
-                                }}
-                                formatTime={formatTime}
-                              />
-                              <button
-                                onClick={(e) => handleTogglePin(conversation.id, e)}
-                                className={cn(
-                                  'absolute right-2 top-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10',
-                                  pinnedConversations.has(conversation.id)
-                                    ? 'opacity-100 text-orange-500'
-                                    : 'text-gray-400 hover:text-orange-500'
-                                )}
-                                title={pinnedConversations.has(conversation.id) ? 'Unpin conversation' : 'Pin conversation'}
-                              >
-                                <Pin className={cn('w-3 h-3', pinnedConversations.has(conversation.id) && 'fill-current')} />
-                              </button>
-                            </div>
+                            <ConversationItemComponent
+                              key={conversation.id}
+                              conversation={conversation}
+                              isActive={conversation.id === currentConversationId}
+                              onSelect={() => selectConversation(conversation.id)}
+                              onDelete={(e) => handleDeleteConversation(conversation.id, e)}
+                              onSaveToCollection={(conversationId) => {
+                                setSelectedConversationForCollection(conversationId);
+                                setShowSaveDialog(true);
+                              }}
+                              onPin={(conversationId) => {
+                                handleTogglePin(conversationId, { stopPropagation: () => {} } as React.MouseEvent);
+                              }}
+                              isPinned={pinnedConversations.has(conversation.id)}
+                              formatTime={formatTime}
+                            />
                           ))}
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+                {/* Conversation Hover Preview */}
+                {showConversationPreview && conversations.length > 0 && (
+                  <div
+                    onMouseEnter={() => setShowConversationPreview(true)}
+                    onMouseLeave={() => setShowConversationPreview(false)}
+                  >
+                    <ConversationHoverPreview
+                      conversations={conversations}
+                      currentConversationId={currentConversationId}
+                      onSelect={(id) => {
+                        selectConversation(id);
+                        setShowConversationPreview(false);
+                      }}
+                      pinnedConversations={pinnedConversations}
+                      formatTime={formatTime}
+                    />
                   </div>
                 )}
               </div>
@@ -556,9 +560,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           <div className="my-2 border-t border-gray-200" />
 
           {/* Collections Tab */}
-          <div>
+          <div className="relative">
             <button
+              ref={collectionButtonRef}
               onClick={() => onTabChange('collections')}
+              onMouseEnter={() => setShowCollectionPreview(true)}
+              onMouseLeave={() => setShowCollectionPreview(false)}
               className={cn(
                 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative',
                 activeTab === 'collections'
@@ -572,6 +579,26 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 <span className="ml-auto text-xs text-gray-500">({collections.length})</span>
               )}
             </button>
+            {/* Collection Hover Preview */}
+            {showCollectionPreview && collections.length > 0 && (
+              <div
+                onMouseEnter={() => setShowCollectionPreview(true)}
+                onMouseLeave={() => setShowCollectionPreview(false)}
+              >
+                <CollectionHoverPreview
+                  collections={collections}
+                  onSelect={(id) => {
+                    handleCollectionClick(id);
+                    onTabChange('collections');
+                    setShowCollectionPreview(false);
+                  }}
+                  onCreateNew={() => {
+                    router.push('/dashboard?tab=collections');
+                    setShowCollectionPreview(false);
+                  }}
+                />
+              </div>
+            )}
 
             {/* Collapsible Collections Section */}
             {activeTab === 'collections' && (
@@ -700,21 +727,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </div>
             )}
           </div>
-
-          {/* Divider */}
-          <div className="my-2 border-t border-gray-200" />
-          {/* Settings */}
-          <button
-            onClick={() => router.push('/dashboard/settings/profile')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-            )}
-            title="Settings (⌘,)"
-          >
-            <Settings className="w-5 h-5" />
-            Settings
-          </button>
 
           {/* Admin Section */}
           {isAdmin && (

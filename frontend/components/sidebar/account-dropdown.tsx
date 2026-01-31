@@ -6,15 +6,17 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
 import {
   User,
-  Sliders,
-  Palette,
-  Bot,
+  Search,
+  FileText,
+  Settings as SettingsIcon,
+  CreditCard,
+  Folder,
+  Tag,
+  Users,
   Keyboard,
   Bell,
-  Database,
   Code,
   Sparkles,
-  Settings,
   ArrowUpRight,
   LogOut,
   Shield,
@@ -40,31 +42,17 @@ interface MenuItem {
   shortcut?: string;
 }
 
-const getMenuGroups = (subscriptionTier: string): MenuGroup[] => [
+const getMenuGroups = (subscriptionTier: string, isEnterprise: boolean): MenuGroup[] => [
   {
     items: [
-      { label: 'My Profile', icon: User, href: '/dashboard/settings/profile' },
-      { label: 'Search Preferences', icon: Sliders, href: '/dashboard/settings/search' },
-      { label: 'Appearance', icon: Palette, href: '/dashboard/settings/citations' },
-    ],
-  },
-  {
-    items: [
-      { label: 'AI Assistant', icon: Bot, href: '/dashboard/settings/advanced' },
-      { label: 'Keyboard Shortcuts', icon: Keyboard, href: '/dashboard/settings/search', shortcut: 'Ctrl K' },
-      { label: 'Notifications', icon: Bell, href: '/dashboard/settings/notifications' },
-    ],
-  },
-  {
-    items: [
-      { label: 'Documents & Sources', icon: Database, href: '/dashboard/settings/documents' },
-      { label: 'API Access', icon: Code, href: '/dashboard/settings/api' },
-      { label: 'Subscription', icon: Sparkles, href: '/dashboard/settings/subscription', badge: subscriptionTier === 'free' ? 'Upgrade' : undefined },
-    ],
-  },
-  {
-    items: [
-      { label: 'All Settings', icon: Settings, href: '/dashboard/settings/profile' },
+      { label: 'Profile', icon: User, href: '/dashboard/settings/profile' },
+      { label: 'Search', icon: Search, href: '/dashboard/settings/search' },
+      { label: 'Citations', icon: FileText, href: '/dashboard/settings/citations' },
+      { label: 'Advanced RAG', icon: SettingsIcon, href: '/dashboard/settings/advanced' },
+      { label: 'Subscription', icon: CreditCard, href: '/dashboard/settings/subscription' },
+      { label: 'Documents', icon: Folder, href: '/dashboard/settings/documents' },
+      { label: 'Topics', icon: Tag, href: '/dashboard/settings/topics' },
+      ...(isEnterprise ? [{ label: 'Team Collaboration', icon: Users, href: '/dashboard/settings/team' }] : []),
     ],
   },
 ];
@@ -270,7 +258,8 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
         {/* Menu Items */}
         <div className="py-2 max-h-[420px] overflow-y-auto custom-scrollbar">
           {(() => {
-            const groups = getMenuGroups(subscriptionTier);
+            const isEnterprise = subscriptionTier === 'enterprise';
+            const groups = getMenuGroups(subscriptionTier, isEnterprise);
             return groups.map((group, groupIndex) => (
               <div key={groupIndex}>
                 {group.items.map((item, itemIndex) => {
