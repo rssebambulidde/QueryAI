@@ -91,7 +91,7 @@ export interface User {
   email: string;
   full_name?: string;
   avatar_url?: string;
-  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro';
+  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
 }
 
 export interface Session {
@@ -1093,7 +1093,7 @@ export interface Payment {
   paypal_payment_id?: string;
   paypal_subscription_id?: string;
   payment_provider?: 'paypal';
-  tier: 'free' | 'starter' | 'premium' | 'pro';
+  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
   amount: number;
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'cancelled';
@@ -1105,7 +1105,7 @@ export interface Payment {
 }
 
 export interface PaymentInitiateRequest {
-  tier: 'starter' | 'premium' | 'pro';
+  tier: 'starter' | 'premium' | 'pro' | 'enterprise';
   currency: 'UGX' | 'USD';
   firstName: string;
   lastName: string;
@@ -1117,7 +1117,7 @@ export interface PaymentInitiateRequest {
 export interface PaymentInitiateResponse {
   payment: {
     id: string;
-    tier: 'starter' | 'premium' | 'pro';
+    tier: 'starter' | 'premium' | 'pro' | 'enterprise';
     amount: number;
     currency: string;
     status: string;

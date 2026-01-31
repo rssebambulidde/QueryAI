@@ -9,7 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || '';
 
 export interface PayPalButtonProps {
-  tier: 'starter' | 'premium' | 'pro';
+  tier: 'starter' | 'premium' | 'pro' | 'enterprise';
   currency: 'UGX' | 'USD';
   firstName: string;
   lastName: string;
