@@ -214,10 +214,6 @@ function DashboardContent() {
                 setActiveTab(tab);
                 setIsMobileSidebarOpen(false);
               }}
-              ragSettings={ragSettings}
-              onRagSettingsChange={setRagSettings}
-              documentCount={documentCount}
-              hasProcessedDocuments={hasProcessedDocuments}
               subscriptionTier={user?.subscriptionTier || 'free'}
             />
           </MobileSidebar>
@@ -228,10 +224,6 @@ function DashboardContent() {
           <AppSidebar
             activeTab={activeTab}
             onTabChange={setActiveTab}
-            ragSettings={ragSettings}
-            onRagSettingsChange={setRagSettings}
-            documentCount={documentCount}
-            hasProcessedDocuments={hasProcessedDocuments}
             subscriptionTier={user?.subscriptionTier || 'free'}
           />
         )}

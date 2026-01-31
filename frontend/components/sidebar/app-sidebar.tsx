@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, TestTube, CheckSquare, LogOut, User, ArrowUp, CreditCard } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, TestTube, CheckSquare, LogOut, User, ArrowUp, CreditCard, Star, Pin } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
-import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { ConversationItem as ConversationItemComponent } from '@/components/chat/conversation-item';
 import { SaveToCollectionDialog } from '@/components/collections/save-to-collection-dialog';
@@ -15,30 +14,23 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { isEnterpriseTier } from '@/lib/pricing';
+import { useDebounce } from '@/lib/hooks/use-debounce';
+import { ConversationSkeleton, CollectionSkeleton } from './skeleton-loader';
 
 type TabType = 'chat' | 'collections';
 
 interface AppSidebarProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
-  ragSettings: RAGSettings;
-  onRagSettingsChange: (settings: RAGSettings) => void;
-  documentCount: number;
-  hasProcessedDocuments: boolean;
   subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
 }
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({
   activeTab,
   onTabChange,
-  ragSettings,
-  onRagSettingsChange,
-  documentCount,
-  hasProcessedDocuments,
   subscriptionTier = 'free',
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [showSourceSelection, setShowSourceSelection] = useState(false);
   const [showConversations, setShowConversations] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -100,9 +92,43 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     }
   }, [activeTab, loadConversations]);
 
-  // Load collections when chat tab is active
+  // Keyboard shortcuts
   useEffect(() => {
-    if (activeTab === 'chat') {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + K to focus search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        if (activeTab === 'chat' && showConversations) {
+          const searchInput = document.querySelector('input[placeholder*="Search conversations"]') as HTMLInputElement;
+          searchInput?.focus();
+        } else if (activeTab === 'collections' && showCollections) {
+          const searchInput = document.querySelector('input[placeholder*="Search collections"]') as HTMLInputElement;
+          searchInput?.focus();
+        }
+      }
+      // Cmd/Ctrl + N for new conversation
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n' && !e.shiftKey) {
+        e.preventDefault();
+        if (activeTab === 'chat') {
+          handleNewConversation();
+        }
+      }
+      // Escape to clear search
+      if (e.key === 'Escape') {
+        if (document.activeElement?.tagName === 'INPUT') {
+          setSearchQuery('');
+          setCollectionSearchQuery('');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, showConversations, showCollections]);
+
+  // Load collections when collections tab is active
+  useEffect(() => {
+    if (activeTab === 'collections') {
       loadCollections();
     }
   }, [activeTab]);
@@ -129,10 +155,32 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     }
   };
 
-  const filteredConversations = conversations.filter((conv) =>
-    conv.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    conv.lastMessage?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter and sort conversations
+  const filteredConversations = useMemo(() => {
+    let filtered = conversations.filter((conv) =>
+      conv.title?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      conv.lastMessage?.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+    );
+
+    // Separate pinned and unpinned
+    const pinned = filtered.filter((conv) => pinnedConversations.has(conv.id));
+    const unpinned = filtered.filter((conv) => !pinnedConversations.has(conv.id));
+
+    // Sort by updated_at (newest first)
+    pinned.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+    unpinned.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+
+    return [...pinned, ...unpinned];
+  }, [conversations, debouncedSearchQuery, pinnedConversations]);
+
+  // Filter collections
+  const filteredCollections = useMemo(() => {
+    if (!debouncedCollectionSearchQuery) return collections;
+    return collections.filter((col) =>
+      col.name?.toLowerCase().includes(debouncedCollectionSearchQuery.toLowerCase()) ||
+      col.description?.toLowerCase().includes(debouncedCollectionSearchQuery.toLowerCase())
+    );
+  }, [collections, debouncedCollectionSearchQuery]);
 
   const handleNewConversation = async () => {
     try {
@@ -186,14 +234,36 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           <button
             onClick={() => onTabChange('chat')}
             className={cn(
-              'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
+              'w-full flex items-center justify-center p-2 rounded-lg transition-colors relative',
               activeTab === 'chat'
                 ? 'bg-orange-50 text-orange-700'
                 : 'text-gray-700 hover:bg-gray-50'
             )}
-            title="Query Assistant"
+            title={`Query Assistant${conversations.length > 0 ? ` (${conversations.length})` : ''}`}
           >
             <MessageSquare className="w-5 h-5" />
+            {conversations.length > 0 && (
+              <span className="absolute top-0 right-0 w-4 h-4 bg-orange-500 text-white text-[10px] rounded-full flex items-center justify-center">
+                {conversations.length > 9 ? '9+' : conversations.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => onTabChange('collections')}
+            className={cn(
+              'w-full flex items-center justify-center p-2 rounded-lg transition-colors relative',
+              activeTab === 'collections'
+                ? 'bg-orange-50 text-orange-700'
+                : 'text-gray-700 hover:bg-gray-50'
+            )}
+            title={`Collections${collections.length > 0 ? ` (${collections.length})` : ''}`}
+          >
+            <Folder className="w-5 h-5" />
+            {collections.length > 0 && (
+              <span className="absolute top-0 right-0 w-4 h-4 bg-orange-500 text-white text-[10px] rounded-full flex items-center justify-center">
+                {collections.length > 9 ? '9+' : collections.length}
+              </span>
+            )}
           </button>
           {isAdmin && (
             <>
@@ -266,48 +336,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             <button
               onClick={() => onTabChange('chat')}
               className={cn(
-                'w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative',
                 activeTab === 'chat'
-                  ? 'bg-orange-50 text-orange-700 border border-orange-200'
+                  ? 'bg-orange-50 text-orange-700 border-l-4 border-l-orange-600'
                   : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
               )}
+              title="Query Assistant (⌘K to search)"
             >
-              <div className="flex items-center gap-3">
-                <MessageSquare className="w-5 h-5" />
-                Query Assistant
-              </div>
-              {activeTab === 'chat' && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowSourceSelection(!showSourceSelection);
-                  }}
-                  className="p-1 hover:bg-orange-100 rounded transition-colors"
-                >
-                  {showSourceSelection ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                </button>
-              )}
+              <MessageSquare className="w-5 h-5" />
+              Query Assistant
             </button>
-            
-            {/* Collapsible Source Selection */}
-            {activeTab === 'chat' && showSourceSelection && (
-              <div className="mt-2 ml-11 mr-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                <div className="mb-2">
-                  <span className="text-xs font-medium text-gray-700">Source Selection:</span>
-                </div>
-                <RAGSourceSelector
-                  settings={ragSettings}
-                  onChange={onRagSettingsChange}
-                  documentCount={documentCount}
-                  hasProcessedDocuments={hasProcessedDocuments}
-                  className="flex-col gap-2"
-                />
-              </div>
-            )}
 
             {/* Collapsible Conversations Section */}
             {activeTab === 'chat' && (
@@ -319,9 +357,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   <div className="flex items-center gap-2">
                     <MessageSquare className="w-4 h-4" />
                     <span>Conversations</span>
-                    {conversations.length > 0 && (
+                    {debouncedSearchQuery ? (
+                      <span className="text-xs text-gray-500">
+                        ({filteredConversations.length} of {conversations.length})
+                      </span>
+                    ) : conversations.length > 0 ? (
                       <span className="text-xs text-gray-500">({conversations.length})</span>
-                    )}
+                    ) : null}
                   </div>
                   {showConversations ? (
                     <ChevronUp className="w-4 h-4" />
@@ -338,9 +380,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                         <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400" />
                         <Input
                           type="text"
-                          placeholder="Search..."
+                          placeholder="Search conversations..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              setSearchQuery('');
+                            }
+                          }}
                           className="pl-7 pr-7 h-8 text-xs"
                         />
                         {searchQuery && (
@@ -370,30 +417,56 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     {/* Conversation List - Scrollable */}
                     <div className="max-h-[400px] overflow-y-auto px-1">
                       {isLoading ? (
-                        <div className="px-3 py-2 text-xs text-gray-500 text-center">
-                          Loading...
-                        </div>
+                        <ConversationSkeleton count={5} />
                       ) : filteredConversations.length === 0 ? (
                         <div className="px-3 py-2 text-center">
                           <p className="text-xs text-gray-500 mb-2">
-                            {searchQuery ? 'No conversations found' : 'No conversations yet'}
+                            {debouncedSearchQuery ? `No conversations found for "${debouncedSearchQuery}"` : 'No conversations yet'}
                           </p>
+                          {debouncedSearchQuery && (
+                            <Button
+                              onClick={() => setSearchQuery('')}
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-xs"
+                            >
+                              Clear search
+                            </Button>
+                          )}
                         </div>
                       ) : (
                         <div className="space-y-1">
                           {filteredConversations.map((conversation) => (
-                            <ConversationItemComponent
-                              key={conversation.id}
-                              conversation={conversation}
-                              isActive={conversation.id === currentConversationId}
-                              onSelect={() => selectConversation(conversation.id)}
-                              onDelete={(e) => handleDeleteConversation(conversation.id, e)}
-                              onSaveToCollection={(conversationId) => {
-                                setSelectedConversationForCollection(conversationId);
-                                setShowSaveDialog(true);
-                              }}
-                              formatTime={formatTime}
-                            />
+                            <div key={conversation.id} className="group relative">
+                              {pinnedConversations.has(conversation.id) && (
+                                <div className="absolute left-1 top-2 z-10">
+                                  <Pin className="w-3 h-3 text-orange-500 fill-orange-500" />
+                                </div>
+                              )}
+                              <ConversationItemComponent
+                                conversation={conversation}
+                                isActive={conversation.id === currentConversationId}
+                                onSelect={() => selectConversation(conversation.id)}
+                                onDelete={(e) => handleDeleteConversation(conversation.id, e)}
+                                onSaveToCollection={(conversationId) => {
+                                  setSelectedConversationForCollection(conversationId);
+                                  setShowSaveDialog(true);
+                                }}
+                                formatTime={formatTime}
+                              />
+                              <button
+                                onClick={(e) => handleTogglePin(conversation.id, e)}
+                                className={cn(
+                                  'absolute right-2 top-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10',
+                                  pinnedConversations.has(conversation.id)
+                                    ? 'opacity-100 text-orange-500'
+                                    : 'text-gray-400 hover:text-orange-500'
+                                )}
+                                title={pinnedConversations.has(conversation.id) ? 'Unpin conversation' : 'Pin conversation'}
+                              >
+                                <Pin className={cn('w-3 h-3', pinnedConversations.has(conversation.id) && 'fill-current')} />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       )}
@@ -404,21 +477,177 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             )}
           </div>
 
-          {/* Other Navigation Items */}
+          {/* Divider */}
+          <div className="my-2 border-t border-gray-200" />
+
+          {/* Collections Tab */}
+          <div>
+            <button
+              onClick={() => onTabChange('collections')}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative',
+                activeTab === 'collections'
+                  ? 'bg-orange-50 text-orange-700 border-l-4 border-l-orange-600'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+              )}
+            >
+              <Folder className="w-5 h-5" />
+              Collections
+              {collections.length > 0 && (
+                <span className="ml-auto text-xs text-gray-500">({collections.length})</span>
+              )}
+            </button>
+
+            {/* Collapsible Collections Section */}
+            {activeTab === 'collections' && (
+              <div className="mt-2">
+                <button
+                  onClick={() => setShowCollections(!showCollections)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Folder className="w-4 h-4" />
+                    <span>My Collections</span>
+                    {debouncedCollectionSearchQuery ? (
+                      <span className="text-xs text-gray-500">
+                        ({filteredCollections.length} of {collections.length})
+                      </span>
+                    ) : collections.length > 0 ? (
+                      <span className="text-xs text-gray-500">({collections.length})</span>
+                    ) : null}
+                  </div>
+                  {showCollections ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                </button>
+
+                {showCollections && (
+                  <div className="mt-2 space-y-1">
+                    {/* Collection Search */}
+                    <div className="px-3 mb-2">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400" />
+                        <Input
+                          type="text"
+                          placeholder="Search collections..."
+                          value={collectionSearchQuery}
+                          onChange={(e) => setCollectionSearchQuery(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              setCollectionSearchQuery('');
+                            }
+                          }}
+                          className="pl-7 pr-7 h-8 text-xs"
+                        />
+                        {collectionSearchQuery && (
+                          <button
+                            onClick={() => setCollectionSearchQuery('')}
+                            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* New Collection Button */}
+                    <div className="px-3 mb-2">
+                      <Button
+                        onClick={() => router.push('/dashboard?tab=collections')}
+                        size="sm"
+                        variant="outline"
+                        className="w-full h-8 text-xs"
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        New Collection
+                      </Button>
+                    </div>
+
+                    {/* Collections List */}
+                    <div className="max-h-[400px] overflow-y-auto px-1">
+                      {isLoadingCollections ? (
+                        <CollectionSkeleton count={5} />
+                      ) : filteredCollections.length === 0 ? (
+                        <div className="px-3 py-2 text-center">
+                          <p className="text-xs text-gray-500 mb-2">
+                            {debouncedCollectionSearchQuery ? `No collections found for "${debouncedCollectionSearchQuery}"` : 'No collections yet'}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          {filteredCollections.map((collection) => (
+                            <div key={collection.id}>
+                              <button
+                                onClick={() => handleCollectionClick(collection.id)}
+                                className={cn(
+                                  'w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors text-left',
+                                  expandedCollectionId === collection.id && 'bg-gray-50'
+                                )}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <FolderOpen className={cn(
+                                    'w-4 h-4 flex-shrink-0',
+                                    expandedCollectionId === collection.id ? 'text-orange-600' : 'text-gray-500'
+                                  )} />
+                                  <span className="truncate">{collection.name || 'Unnamed Collection'}</span>
+                                  {collection.conversation_count !== undefined && collection.conversation_count > 0 && (
+                                    <span className="text-xs text-gray-500 ml-auto">
+                                      ({collection.conversation_count})
+                                    </span>
+                                  )}
+                                </div>
+                                {expandedCollectionId === collection.id ? (
+                                  <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                )}
+                              </button>
+                              {expandedCollectionId === collection.id && (
+                                <div className="ml-4 mt-1">
+                                  <CollectionConversationsList
+                                    collectionId={collection.id}
+                                    onConversationSelect={(conversationId) => {
+                                      selectConversation(conversationId);
+                                      onTabChange('chat');
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="my-2 border-t border-gray-200" />
+          {/* Settings */}
           <button
-            onClick={() => onTabChange('collections')}
+            onClick={() => router.push('/dashboard/settings/profile')}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              activeTab === 'collections'
-                ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+              'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
             )}
+            title="Settings (⌘,)"
           >
-            <Folder className="w-5 h-5" />
-            Collections
+            <Settings className="w-5 h-5" />
+            Settings
           </button>
+
+          {/* Admin Section */}
           {isAdmin && (
             <>
+              <div className="my-2 border-t border-gray-200" />
+              <div className="px-3 py-1">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Admin</span>
+              </div>
               <button
                 onClick={() => router.push('/dashboard/ab-testing')}
                 className={cn(
@@ -441,16 +670,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </button>
             </>
           )}
-          <button
-            onClick={() => router.push('/dashboard/settings/profile')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-            )}
-          >
-            <Settings className="w-5 h-5" />
-            Settings
-          </button>
         </nav>
 
       </div>
@@ -459,9 +678,17 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       <div className="border-t border-gray-200 bg-gray-50 p-3 space-y-2 flex-shrink-0">
         {/* User Info */}
         <div className="flex items-center gap-2 px-2 py-1.5">
-          <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
-            <User className="w-4 h-4 text-orange-600" />
-          </div>
+          {user?.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt={user?.full_name || user?.email || 'User'}
+              className="w-8 h-8 rounded-full flex-shrink-0 object-cover"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold">
+              {getUserInitials()}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-gray-900 truncate">
               {user?.full_name || user?.email || 'User'}
