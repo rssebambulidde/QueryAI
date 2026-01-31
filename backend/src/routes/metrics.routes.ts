@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
+import { requireAdmin } from '../middleware/authorization.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { MetricsService, MetricsQuery } from '../services/metrics.service';
 import { LatencyTrackerService, LatencyQuery, OperationType } from '../services/latency-tracker.service';

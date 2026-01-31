@@ -60,14 +60,15 @@ router.get(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const userId = Array.isArray(id) ? id[0] : id;
 
-    const profile = await DatabaseService.getUserProfile(id);
+    const profile = await DatabaseService.getUserProfile(userId);
     if (!profile) {
       throw new ValidationError('User not found');
     }
 
     // Get subscription info
-    const subscription = await DatabaseService.getUserSubscription(id);
+    const subscription = await DatabaseService.getUserSubscription(userId);
 
     res.json({
       success: true,
@@ -98,6 +99,7 @@ router.put(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
+    const userId = Array.isArray(id) ? id[0] : id;
     const { role } = req.body;
 
     if (!role || !['user', 'admin', 'super_admin'].includes(role)) {
@@ -105,14 +107,14 @@ router.put(
     }
 
     // Prevent changing own role (security measure)
-    if (req.user?.id === id && role !== 'super_admin') {
+    if (req.user?.id === userId && role !== 'super_admin') {
       throw new AuthorizationError('Cannot change your own role');
     }
 
     const { data, error } = await supabaseAdmin
       .from('user_profiles')
       .update({ role })
-      .eq('id', id)
+      .eq('id', userId)
       .select()
       .single();
 
@@ -121,7 +123,7 @@ router.put(
       throw new ValidationError('Failed to update user role');
     }
 
-    logger.info(`User role updated by ${req.user?.id}: ${id} -> ${role}`);
+    logger.info(`User role updated by ${req.user?.id}: ${userId} -> ${role}`);
 
     res.json({
       success: true,
@@ -148,6 +150,7 @@ router.put(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { email } = req.params;
+    const userEmail = Array.isArray(email) ? email[0] : email;
     const { role } = req.body;
 
     if (!role || !['user', 'admin', 'super_admin'].includes(role)) {
@@ -158,7 +161,7 @@ router.put(
     const { data: profile, error: findError } = await supabaseAdmin
       .from('user_profiles')
       .select('id')
-      .eq('email', email)
+      .eq('email', userEmail)
       .single();
 
     if (findError || !profile) {
@@ -182,7 +185,7 @@ router.put(
       throw new ValidationError('Failed to update user role');
     }
 
-    logger.info(`User role updated by ${req.user?.id}: ${email} (${profile.id}) -> ${role}`);
+    logger.info(`User role updated by ${req.user?.id}: ${userEmail} (${profile.id}) -> ${role}`);
 
     res.json({
       success: true,
