@@ -14,6 +14,7 @@ import {
   CheckoutPaymentIntent,
   PatchOp,
   ApiError,
+  OrderApplicationContextUserAction,
 } from '@paypal/paypal-server-sdk';
 import config from '../config/env';
 import logger from '../config/logger';
@@ -204,7 +205,7 @@ export async function createPayment(
             returnUrl: params.returnUrl,
             cancelUrl: params.cancelUrl,
             brandName: 'QueryAI',
-            userAction: 'PAY_NOW', // Required for card payments - shows "Pay Now" button and enables card payment option
+            userAction: OrderApplicationContextUserAction.PayNow, // Required for card payments - shows "Pay Now" button and enables card payment option
           },
         },
         prefer: 'return=representation',
