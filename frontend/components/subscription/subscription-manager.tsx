@@ -1,19 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { subscriptionApi, usageApi, SubscriptionData, UsageLimit, Payment, BillingHistory, UsageStats, UsageWarnings } from '@/lib/api';
+import { subscriptionApi, usageApi, paymentApi, SubscriptionData, UsageLimit, Payment, BillingHistory, UsageStats, UsageWarnings } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { Check, X, Zap, FileText, Folder, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink } from 'lucide-react';
+import { Check, X, Zap, FileText, Folder, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
 import { getAnnualSavings, getPricing, formatPrice, isEnterpriseTier } from '@/lib/pricing';
 import type { BillingPeriod } from '@/lib/pricing';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/lib/hooks/use-toast';
 
 export function SubscriptionManager() {
+  const { toast } = useToast();
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncingBilling, setSyncingBilling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -33,6 +36,13 @@ export function SubscriptionManager() {
     loadBillingHistory();
     loadUsageStats();
     loadUsageWarnings();
+    // Sync pending recurring payments from PayPal (callback may not run when Auto return OFF)
+    paymentApi.syncSubscription().then((r) => {
+      if (r.success && r.data?.synced) {
+        loadSubscriptionData();
+        loadBillingHistory();
+      }
+    }).catch(() => {});
   }, []);
 
   const loadSubscriptionData = async () => {
@@ -73,6 +83,24 @@ export function SubscriptionManager() {
       }
     } catch (err: any) {
       console.error('Failed to load billing history:', err);
+    }
+  };
+
+  const handleSyncBillingStatus = async () => {
+    try {
+      setSyncingBilling(true);
+      const r = await paymentApi.syncSubscription();
+      if (r.success && r.data?.synced) {
+        toast.success('Subscription synced. Your plan has been updated.');
+        await loadSubscriptionData();
+        await loadBillingHistory();
+      } else {
+        toast.info(r.data?.message || 'No pending payments to sync.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to sync billing status');
+    } finally {
+      setSyncingBilling(false);
     }
   };
 
@@ -1094,15 +1122,34 @@ export function SubscriptionManager() {
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Billing History</h3>
-          <button
-            onClick={() => setShowBillingHistory(!showBillingHistory)}
-            className="text-orange-600 hover:text-orange-700"
-          >
-            {showBillingHistory ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </button>
+          <div className="flex items-center gap-2">
+            {billingHistory?.payments.some((p) => p.status === 'pending') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSyncBillingStatus}
+                disabled={syncingBilling}
+                className="text-orange-600 border-orange-200 hover:bg-orange-50"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${syncingBilling ? 'animate-spin' : ''}`} />
+                {syncingBilling ? 'Syncing...' : 'Sync billing status'}
+              </Button>
+            )}
+            <button
+              onClick={() => setShowBillingHistory(!showBillingHistory)}
+              className="text-orange-600 hover:text-orange-700"
+            >
+              {showBillingHistory ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
         {showBillingHistory && (
           <div className="mt-4">
+            {billingHistory?.payments.some((p) => p.status === 'pending') && (
+              <Alert variant="info" className="mb-4">
+                Pending recurring payments detected. If you completed payment on PayPal, click &quot;Sync billing status&quot; above to update your plan.
+              </Alert>
+            )}
             {billingHistory && billingHistory.payments.length > 0 ? (
               <div className="space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-2 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-2">
