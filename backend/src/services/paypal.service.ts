@@ -166,51 +166,93 @@ export async function createPayment(
 ): Promise<CreatePaymentResult> {
   return withRetry(async () => {
     const value = params.amount.toFixed(2);
-    const response = await orders().createOrder({
-      body: {
-        intent: CheckoutPaymentIntent.Capture,
-        purchaseUnits: [
-          {
-            amount: {
-              currencyCode: params.currency,
-              value,
-            },
-            description: params.description ?? undefined,
-            customId: params.custom_id ?? undefined,
-          },
-        ],
-        applicationContext: {
-          returnUrl: params.returnUrl,
-          cancelUrl: params.cancelUrl,
-          brandName: 'QueryAI',
-        },
-      },
-      prefer: 'return=representation',
-    });
-
-    const result = response.result as {
-      id: string;
-      status: string;
-      links?: { rel: string; href: string }[];
-    };
-
-    const approveLink = result.links?.find((l) => l.rel === 'approve');
-    if (!approveLink?.href) {
-      logger.error('PayPal create order missing approve link', { result });
-      throw new Error('PayPal create order: missing approval URL');
+    
+    // Validate amount is greater than 0
+    if (parseFloat(value) <= 0) {
+      logger.error('PayPal create order: Invalid amount', { amount: params.amount, value });
+      throw new Error('Payment amount must be greater than 0');
     }
-
-    logger.info('PayPal order created', {
-      orderId: result.id,
+    
+    // Validate currency code (must be uppercase and valid)
+    const currencyCode = params.currency.toUpperCase();
+    if (!currencyCode || currencyCode.length !== 3) {
+      logger.error('PayPal create order: Invalid currency', { currency: params.currency });
+      throw new Error('Invalid currency code');
+    }
+    
+    logger.info('PayPal creating order', {
       amount: value,
-      currency: params.currency,
+      currency: currencyCode,
+      description: params.description,
     });
+    
+    try {
+      const response = await orders().createOrder({
+        body: {
+          intent: CheckoutPaymentIntent.Capture,
+          purchaseUnits: [
+            {
+              amount: {
+                currencyCode,
+                value,
+              },
+              description: params.description ?? undefined,
+              customId: params.custom_id ?? undefined,
+            },
+          ],
+          applicationContext: {
+            returnUrl: params.returnUrl,
+            cancelUrl: params.cancelUrl,
+            brandName: 'QueryAI',
+            userAction: 'PAY_NOW', // Required for card payments - shows "Pay Now" button and enables card payment option
+          },
+        },
+        prefer: 'return=representation',
+      });
 
-    return {
-      orderId: result.id,
-      approvalUrl: approveLink.href,
-      status: result.status,
-    };
+      const result = response.result as {
+        id: string;
+        status: string;
+        links?: { rel: string; href: string }[];
+      };
+
+      const approveLink = result.links?.find((l) => l.rel === 'approve');
+      if (!approveLink?.href) {
+        logger.error('PayPal create order missing approve link', { result });
+        throw new Error('PayPal create order: missing approval URL');
+      }
+
+      logger.info('PayPal order created successfully', {
+        orderId: result.id,
+        amount: value,
+        currency: currencyCode,
+        status: result.status,
+      });
+
+      return {
+        orderId: result.id,
+        approvalUrl: approveLink.href,
+        status: result.status,
+      };
+    } catch (error: unknown) {
+      // Enhanced error logging for debugging 400 errors
+      const apiError = error as { statusCode?: number; message?: string; body?: unknown };
+      if (apiError.statusCode === 400) {
+        logger.error('PayPal create order 400 error', {
+          statusCode: apiError.statusCode,
+          message: apiError.message,
+          body: apiError.body,
+          requestParams: {
+            amount: value,
+            currency: currencyCode,
+            description: params.description,
+            returnUrl: params.returnUrl,
+            cancelUrl: params.cancelUrl,
+          },
+        });
+      }
+      throw error;
+    }
   }, 'createPayment');
 }
 

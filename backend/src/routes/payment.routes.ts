@@ -79,16 +79,36 @@ router.post(
     const subscription = await DatabaseService.getUserSubscription(userId);
 
     const currency = (req.body.currency || 'USD') as string;
-    if (!['USD', 'UGX'].includes(currency)) {
+    if (!['USD', 'UGX'].includes(currency.toUpperCase())) {
       throw new ValidationError('Invalid currency. Must be "USD" or "UGX"');
     }
+    
+    const normalizedCurrency = currency.toUpperCase() as 'UGX' | 'USD';
 
     const { getPricing } = await import('../constants/pricing');
     const amount = getPricing(
       tier as 'starter' | 'premium' | 'pro' | 'enterprise',
-      currency as 'UGX' | 'USD',
+      normalizedCurrency,
       billingPeriod
     );
+    
+    // Validate amount is greater than 0
+    if (amount <= 0) {
+      logger.error('Invalid payment amount', { tier, currency: normalizedCurrency, billingPeriod, amount });
+      throw new ValidationError(`Invalid payment amount for tier "${tier}". Please contact support.`);
+    }
+    
+    logger.info('Payment initiation request', {
+      userId,
+      tier,
+      currency: normalizedCurrency,
+      billingPeriod,
+      amount,
+      recurring,
+      firstName: firstName ? 'provided' : 'missing',
+      lastName: lastName ? 'provided' : 'missing',
+      email: email ? 'provided' : 'missing',
+    });
 
     const baseUrl = getBaseUrl();
     const returnUrl = `${baseUrl}/api/payment/callback`;
@@ -119,7 +139,7 @@ router.post(
         paypal_subscription_id: subscriptionResponse.subscriptionId,
         tier,
         amount,
-        currency: currency as 'UGX' | 'USD',
+        currency: normalizedCurrency,
         status: 'pending',
         payment_description: `QueryAI ${tier} subscription (${billingPeriod}, recurring)`,
         callback_data: { billing_period: billingPeriod },
@@ -152,9 +172,10 @@ router.post(
     }
 
     // One-time: PayPal Orders (capture after approval)
+    // Note: Card payments are automatically enabled when userAction: 'PAY_NOW' is set in createPayment
     const orderResponse = await PayPalService.createPayment({
       amount,
-      currency,
+      currency: normalizedCurrency,
       description: `QueryAI ${tier} subscription (${billingPeriod})`,
       custom_id: userId,
       returnUrl,
@@ -168,7 +189,7 @@ router.post(
       paypal_order_id: orderResponse.orderId,
       tier,
       amount,
-      currency: currency as 'UGX' | 'USD',
+      currency: normalizedCurrency,
       status: 'pending',
       payment_description: `QueryAI ${tier} subscription (${billingPeriod})`,
     });
