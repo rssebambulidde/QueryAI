@@ -41,6 +41,7 @@ export function SubscriptionManager() {
   const [paypalStatus, setPaypalStatus] = useState<{ status: string; next_billing_time?: string } | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [previousPaymentStatuses, setPreviousPaymentStatuses] = useState<Map<string, string>>(new Map());
+  const [gracePeriodTimeRemaining, setGracePeriodTimeRemaining] = useState<string>('');
 
   useEffect(() => {
     loadSubscriptionData();
@@ -209,6 +210,41 @@ export function SubscriptionManager() {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billingHistory]);
+
+  // Grace period countdown timer - must be before early returns
+  useEffect(() => {
+    if (!subscriptionData?.subscription?.grace_period_end) {
+      setGracePeriodTimeRemaining('');
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = new Date();
+      const end = new Date(subscriptionData.subscription.grace_period_end!);
+      const diff = end.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setGracePeriodTimeRemaining('Expired');
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (days > 0) {
+        setGracePeriodTimeRemaining(`${days} day${days !== 1 ? 's' : ''} ${hours} hour${hours !== 1 ? 's' : ''} remaining`);
+      } else if (hours > 0) {
+        setGracePeriodTimeRemaining(`${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''} remaining`);
+      } else {
+        setGracePeriodTimeRemaining(`${minutes} minute${minutes !== 1 ? 's' : ''} remaining`);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, [subscriptionData?.subscription?.grace_period_end]);
 
   const loadUsageStats = async () => {
     try {
@@ -407,47 +443,40 @@ export function SubscriptionManager() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading subscription data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !subscriptionData) {
+    return (
+      <div className="p-4">
+        <Alert variant="error">{error}</Alert>
+        <Button onClick={loadSubscriptionData} className="mt-4">
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  if (!subscriptionData) {
+    return (
+      <div className="p-4">
+        <Alert variant="error">No subscription data available</Alert>
+      </div>
+    );
+  }
+
   const { subscription, limits, usage } = subscriptionData;
   const tier = subscription.tier;
   const billingPeriod = (subscription.billing_period ?? 'monthly') as BillingPeriod;
   const annualSavings = tier !== 'free' ? getAnnualSavings(tier, 'USD') : null;
-
-  // Grace period countdown timer
-  const [gracePeriodTimeRemaining, setGracePeriodTimeRemaining] = useState<string>('');
-  
-  useEffect(() => {
-    if (!subscription.grace_period_end) {
-      setGracePeriodTimeRemaining('');
-      return;
-    }
-
-    const updateTimer = () => {
-      const now = new Date();
-      const end = new Date(subscription.grace_period_end!);
-      const diff = end.getTime() - now.getTime();
-
-      if (diff <= 0) {
-        setGracePeriodTimeRemaining('Expired');
-        return;
-      }
-
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-      if (days > 0) {
-        setGracePeriodTimeRemaining(`${days} day${days !== 1 ? 's' : ''} ${hours} hour${hours !== 1 ? 's' : ''} remaining`);
-      } else if (hours > 0) {
-        setGracePeriodTimeRemaining(`${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''} remaining`);
-      } else {
-        setGracePeriodTimeRemaining(`${minutes} minute${minutes !== 1 ? 's' : ''} remaining`);
-      }
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 60000); // Update every minute
-    return () => clearInterval(interval);
-  }, [subscription.grace_period_end]);
 
   const formatLimit = (limit: UsageLimit) => {
     if (limit.limit === null) {
