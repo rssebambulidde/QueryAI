@@ -71,7 +71,7 @@ router.post(
       throw new ValidationError('User not authenticated');
     }
 
-    const { tier, firstName, lastName, email, recurring = false, billing_period: bp } = req.body;
+    const { tier, firstName, lastName, email, recurring = false, billing_period: bp, return_url } = req.body;
     
     logger.info('Payment initiate: Parsed request body', {
       userId,
@@ -82,6 +82,7 @@ router.post(
       recurring,
       billing_period: bp,
       currency: req.body.currency,
+      return_url: return_url ? 'provided' : 'missing',
     });
 
     if (!tier || !['starter', 'premium', 'pro', 'enterprise'].includes(tier)) {
@@ -165,7 +166,10 @@ router.post(
         currency: normalizedCurrency,
         status: 'pending',
         payment_description: `QueryAI ${tier} subscription (${billingPeriod}, recurring)`,
-        callback_data: { billing_period: billingPeriod },
+        callback_data: { 
+          billing_period: billingPeriod,
+          return_url: return_url || undefined, // Store return URL for redirect after payment
+        },
       });
 
       logger.info('PayPal recurring subscription initiated', {
@@ -253,6 +257,9 @@ router.post(
       currency: normalizedCurrency,
       status: 'pending',
       payment_description: `QueryAI ${tier} subscription (${billingPeriod})`,
+      callback_data: {
+        return_url: return_url || undefined, // Store return URL for redirect after payment
+      },
     });
 
     logger.info('PayPal payment initiated', {
@@ -478,6 +485,10 @@ router.get(
       return res.redirect(`${frontendUrl}/dashboard?payment=error`);
     }
 
+    // Get return URL from payment callback_data or default to dashboard
+    const returnUrl = (updatedPayment.callback_data as { return_url?: string } | null)?.return_url;
+    const redirectBase = returnUrl || `${frontendUrl}/dashboard`;
+
     if (paymentStatus === 'completed') {
       const { SubscriptionService } = await import('../services/subscription.service');
       const subscriptionBefore = await DatabaseService.getUserSubscription(payment.user_id);
@@ -531,7 +542,11 @@ router.get(
         logger.error('Failed to send payment emails:', emailError);
       }
 
-      return res.redirect(`${frontendUrl}/dashboard?payment=success`);
+      // Redirect to original page or dashboard with success message
+      const successUrl = returnUrl 
+        ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}payment=success`
+        : `${frontendUrl}/dashboard?payment=success`;
+      return res.redirect(successUrl);
     }
 
     if (paymentStatus === 'failed') {
@@ -549,10 +564,16 @@ router.get(
       } catch (emailError) {
         logger.error('Failed to send payment failure email:', emailError);
       }
-      return res.redirect(`${frontendUrl}/dashboard?payment=failed`);
+      const failedUrl = returnUrl 
+        ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}payment=failed`
+        : `${frontendUrl}/dashboard?payment=failed`;
+      return res.redirect(failedUrl);
     }
 
-    return res.redirect(`${frontendUrl}/dashboard?payment=pending`);
+    const pendingUrl = returnUrl 
+      ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}payment=pending`
+      : `${frontendUrl}/dashboard?payment=pending`;
+    return res.redirect(pendingUrl);
   })
 );
 

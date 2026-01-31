@@ -792,8 +792,47 @@ export function SubscriptionManager() {
           </div>
           {showDowngradeOptions && (
             <div className="space-y-3 mt-4">
+              {tier === 'enterprise' && (
+                <>
+                  <Button
+                    onClick={() => handleUpgrade('pro')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Change to Pro
+                  </Button>
+                  <Button
+                    onClick={() => handleDowngrade('pro', false)}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Downgrade to Pro (at period end)
+                  </Button>
+                  <Button
+                    onClick={() => handleDowngrade('premium', false)}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Downgrade to Premium (at period end)
+                  </Button>
+                  <Button
+                    onClick={() => handleDowngrade('starter', false)}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Downgrade to Starter (at period end)
+                  </Button>
+                </>
+              )}
               {tier === 'pro' && (
                 <>
+                  <Button
+                    onClick={() => handleUpgrade('enterprise')}
+                    variant="outline"
+                    className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                  >
+                    Upgrade to Enterprise
+                  </Button>
                   <Button
                     onClick={() => handleDowngrade('premium', false)}
                     variant="outline"
@@ -827,6 +866,20 @@ export function SubscriptionManager() {
               {tier === 'premium' && (
                 <>
                   <Button
+                    onClick={() => handleUpgrade('pro')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Upgrade to Pro
+                  </Button>
+                  <Button
+                    onClick={() => handleUpgrade('enterprise')}
+                    variant="outline"
+                    className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                  >
+                    Upgrade to Enterprise
+                  </Button>
+                  <Button
                     onClick={() => handleDowngrade('starter', false)}
                     variant="outline"
                     className="w-full"
@@ -842,8 +895,34 @@ export function SubscriptionManager() {
                   </Button>
                 </>
               )}
-              {(tier === 'pro' || tier === 'premium' || tier === 'starter') && (
+              {tier === 'starter' && (
                 <>
+                  <Button
+                    onClick={() => handleUpgrade('premium')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Upgrade to Premium
+                  </Button>
+                  <Button
+                    onClick={() => handleUpgrade('pro')}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Upgrade to Pro
+                  </Button>
+                  <Button
+                    onClick={() => handleUpgrade('enterprise')}
+                    variant="outline"
+                    className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                  >
+                    Upgrade to Enterprise
+                  </Button>
+                </>
+              )}
+              {(tier === 'pro' || tier === 'premium' || tier === 'starter' || tier === 'enterprise') && (
+                <>
+                  <div className="border-t my-3"></div>
                   <Button
                     onClick={() => handleDowngrade('free', false)}
                     variant="outline"

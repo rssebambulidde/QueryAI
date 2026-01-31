@@ -55,6 +55,9 @@ export function PayPalButton({
     setError(null);
     setLoading(true);
     try {
+      // Store the current page URL to redirect back after payment
+      const returnUrl = typeof window !== 'undefined' ? window.location.href : undefined;
+      
       const request: PaymentInitiateRequest & { recurring?: boolean } = {
         tier,
         currency,
@@ -63,6 +66,7 @@ export function PayPalButton({
         email: email.trim(),
         phoneNumber: phoneNumber?.trim() || undefined,
         billing_period: billingPeriod,
+        return_url: returnUrl, // Store where user came from
       };
       if (recurring) request.recurring = true;
 

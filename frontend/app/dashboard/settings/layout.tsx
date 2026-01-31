@@ -3,11 +3,21 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { User, Search, FileText, Settings as SettingsIcon, CreditCard, Folder, Tag, ArrowLeft, ChevronRight } from 'lucide-react';
+import { User, Search, FileText, Settings as SettingsIcon, CreditCard, Folder, Tag, ArrowLeft, ChevronRight, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { subscriptionApi } from '@/lib/api';
+import { useEffect, useState } from 'react';
 
-const settingsNav = [
+interface SettingsNavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  requiresEnterprise?: boolean;
+}
+
+const settingsNav: SettingsNavItem[] = [
   { href: '/dashboard/settings/profile', label: 'Profile', icon: User },
   { href: '/dashboard/settings/search', label: 'Search', icon: Search },
   { href: '/dashboard/settings/citations', label: 'Citations', icon: FileText },
@@ -15,6 +25,7 @@ const settingsNav = [
   { href: '/dashboard/settings/subscription', label: 'Subscription', icon: CreditCard },
   { href: '/dashboard/settings/documents', label: 'Documents', icon: Folder },
   { href: '/dashboard/settings/topics', label: 'Topics', icon: Tag },
+  { href: '/dashboard/settings/team', label: 'Team Collaboration', icon: Users, requiresEnterprise: true },
 ];
 
 export default function SettingsLayout({
@@ -23,9 +34,30 @@ export default function SettingsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { user } = useAuthStore();
+  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'starter' | 'premium' | 'pro' | 'enterprise'>('free');
+
+  // Load subscription tier
+  useEffect(() => {
+    const loadSubscription = async () => {
+      try {
+        const response = await subscriptionApi.get();
+        if (response.success && response.data?.subscription?.tier) {
+          setSubscriptionTier(response.data.subscription.tier);
+        }
+      } catch (error) {
+        console.error('Failed to load subscription:', error);
+      }
+    };
+    loadSubscription();
+  }, []);
+
+  // Filter nav items based on subscription tier
+  const isEnterprise = subscriptionTier === 'enterprise';
+  const visibleNav = settingsNav.filter(item => !item.requiresEnterprise || isEnterprise);
 
   // Get current page label for breadcrumb
-  const currentPage = settingsNav.find(item => item.href === pathname);
+  const currentPage = visibleNav.find(item => item.href === pathname);
   const currentPageLabel = currentPage?.label || 'Settings';
 
   return (
@@ -73,7 +105,7 @@ export default function SettingsLayout({
           {/* Sidebar Navigation */}
           <aside className="w-64 flex-shrink-0">
             <nav className="space-y-1">
-              {settingsNav.map((item) => {
+              {visibleNav.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
                 return (

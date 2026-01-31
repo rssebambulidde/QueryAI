@@ -77,12 +77,17 @@ export class EmailService {
     try {
       const client = this.getBrevoClient();
       if (!client) {
+        // In sandbox/dev, log email details instead of sending
         logger.info('Email would be sent (Brevo not configured)', {
           to,
           toName,
           subject,
-          htmlContent: htmlContent.substring(0, 100) + '...',
+          hasAttachments: attachments && attachments.length > 0,
+          attachmentCount: attachments?.length || 0,
+          htmlContent: htmlContent.substring(0, 200) + '...',
         });
+        // In development/sandbox, still return true to not block payment flow
+        // Emails will be sent when BREVO_API_KEY is configured in production
         return true;
       }
 

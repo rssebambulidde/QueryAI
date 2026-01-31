@@ -1112,6 +1112,7 @@ export interface PaymentInitiateRequest {
   email: string;
   phoneNumber?: string;
   billing_period?: 'monthly' | 'annual';
+  return_url?: string; // URL to redirect to after payment completion
 }
 
 export interface PaymentInitiateResponse {
