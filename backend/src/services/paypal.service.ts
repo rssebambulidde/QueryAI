@@ -15,6 +15,7 @@ import {
   PatchOp,
   ApiError,
   OrderApplicationContextUserAction,
+  OrderApplicationContextShippingPreference,
 } from '@paypal/paypal-server-sdk';
 import config from '../config/env';
 import logger from '../config/logger';
@@ -206,7 +207,7 @@ export async function createPayment(
             cancelUrl: params.cancelUrl,
             brandName: 'QueryAI',
             userAction: OrderApplicationContextUserAction.PayNow, // Required for card payments - shows "Pay Now" button and enables card payment option
-            shippingPreference: 'NO_SHIPPING', // No shipping required for digital goods - allows international billing addresses without restrictions
+            shippingPreference: OrderApplicationContextShippingPreference.NoShipping, // No shipping required for digital goods - allows international billing addresses without restrictions
             locale: 'en-US', // Base locale, but PayPal will detect user's country and show appropriate address fields
           },
         },
