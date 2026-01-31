@@ -219,7 +219,7 @@ router.post(
         custom_id: userId,
         returnUrl,
         cancelUrl,
-        preferCard: prefer_card === true, // Pass card preference to PayPal service
+        preferCard: true, // Always prefer card payment (PayPal account option removed)
       });
       logger.info('PayPal order created successfully', {
         orderId: orderResponse.orderId,

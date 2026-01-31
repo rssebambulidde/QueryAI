@@ -111,34 +111,12 @@ export function PayPalButton({
           </Alert>
         )}
         
-        {/* PayPal Button */}
-        <button
-          type="button"
-          onClick={() => handleInitiateRedirect(false)}
-          disabled={disabled || loading}
-          className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors"
-          style={{ minHeight: 44 }}
-        >
-          {loading ? (
-            <span className="animate-pulse">Redirecting...</span>
-          ) : (
-            <>
-              <span>Pay with PayPal</span>
-              {recurring && (
-                <span className="text-xs opacity-90">
-                  (Subscription{billingPeriod === 'annual' ? ', annual' : ''})
-                </span>
-              )}
-            </>
-          )}
-        </button>
-
-        {/* Card Payment Button */}
+        {/* Card Payment Button Only */}
         <button
           type="button"
           onClick={() => handleInitiateRedirect(true)}
           disabled={disabled || loading}
-          className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition-colors"
+          className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors shadow-md"
           style={{ minHeight: 44 }}
         >
           {loading ? (
@@ -152,7 +130,7 @@ export function PayPalButton({
               </svg>
               <span>Pay with Debit or Credit Card</span>
               {recurring && (
-                <span className="text-xs opacity-70">
+                <span className="text-xs opacity-90">
                   (Subscription{billingPeriod === 'annual' ? ', annual' : ''})
                 </span>
               )}
@@ -161,7 +139,7 @@ export function PayPalButton({
         </button>
 
         <p className="text-xs text-gray-500 text-center">
-          Both options redirect to secure checkout where you can pay with PayPal account or enter your card details.
+          Secure checkout powered by PayPal. Enter your card details to complete payment.
           <span className="block mt-1 text-gray-400">
             Note: Guest checkout (card payment without PayPal account) requires "PayPal Account Optional" enabled in PayPal business settings.
           </span>
@@ -224,32 +202,12 @@ export function PayPalButton({
         </Alert>
       )}
       
-      {/* PayPal Button */}
-      <button
-        type="button"
-        onClick={() => handleOneTimeRedirect(false)}
-        disabled={disabled || loading}
-        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors"
-        style={{ minHeight: 44 }}
-      >
-        {loading ? (
-          <span className="animate-pulse">Redirecting...</span>
-        ) : (
-          <>
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
-            </svg>
-            <span>Pay with PayPal</span>
-          </>
-        )}
-      </button>
-
-      {/* Card Payment Button */}
+      {/* Card Payment Button Only */}
       <button
         type="button"
         onClick={() => handleOneTimeRedirect(true)}
         disabled={disabled || loading}
-        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition-colors"
+        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors shadow-md"
         style={{ minHeight: 44 }}
       >
         {loading ? (
@@ -267,7 +225,7 @@ export function PayPalButton({
       </button>
 
       <p className="text-xs text-gray-500 text-center">
-        Both options redirect to secure checkout where you can pay with PayPal account or enter your card details.
+        Secure checkout powered by PayPal. Enter your card details to complete payment.
         <span className="block mt-1 text-gray-400">
           Note: Guest checkout (card payment without PayPal account) requires "PayPal Account Optional" enabled in PayPal business settings.
         </span>
