@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { subscriptionApi, usageApi, paymentApi, SubscriptionData, UsageLimit, Payment, BillingHistory, UsageStats, UsageWarnings } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { Check, X, Zap, FileText, Folder, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
@@ -11,6 +12,7 @@ import { getAnnualSavings, getPricing, formatPrice, isEnterpriseTier } from '@/l
 import type { BillingPeriod } from '@/lib/pricing';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
+import { getPaymentErrorMessage } from '@/lib/utils';
 
 export function SubscriptionManager() {
   const { toast } = useToast();
@@ -27,9 +29,18 @@ export function SubscriptionManager() {
   const [showBillingHistory, setShowBillingHistory] = useState(false);
   const [showCancelOptions, setShowCancelOptions] = useState(false);
   const [showDowngradeOptions, setShowDowngradeOptions] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelImmediate, setCancelImmediate] = useState(false);
+  const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
+  const [downgradeTargetTier, setDowngradeTargetTier] = useState<'free' | 'starter' | 'premium' | 'pro' | null>(null);
+  const [downgradeImmediate, setDowngradeImmediate] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [downgrading, setDowngrading] = useState(false);
   const [usageStats, setUsageStats] = useState<UsageStats | null>(null);
   const [usageWarnings, setUsageWarnings] = useState<UsageWarnings | null>(null);
   const [paypalStatus, setPaypalStatus] = useState<{ status: string; next_billing_time?: string } | null>(null);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [previousPaymentStatuses, setPreviousPaymentStatuses] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     loadSubscriptionData();
@@ -75,14 +86,42 @@ export function SubscriptionManager() {
     }
   };
 
-  const loadBillingHistory = async () => {
+  const loadBillingHistory = async (showNotifications: boolean = true): Promise<boolean> => {
     try {
       const response = await subscriptionApi.getBillingHistory();
       if (response.success && response.data) {
+        // Detect status changes and show notifications
+        const newStatuses = new Map<string, string>();
+        let hasCompletedPayment = false;
+        
+        response.data.payments.forEach((payment: Payment) => {
+          newStatuses.set(payment.id, payment.status);
+          
+          // Check if status changed
+          const previousStatus = previousPaymentStatuses.get(payment.id);
+          if (previousStatus && previousStatus !== payment.status && showNotifications) {
+            if (previousStatus === 'pending' && payment.status === 'completed') {
+              toast.success(`Payment completed! Your ${payment.tier} subscription is now active.`);
+              hasCompletedPayment = true;
+            } else if (previousStatus === 'pending' && payment.status === 'failed') {
+              const errorMessage = getPaymentErrorMessage(
+                payment.callback_data?.failure_reason || payment.callback_data?.failed_payment_reason || 'Payment failed',
+                payment
+              );
+              toast.error(errorMessage);
+            }
+          }
+        });
+        
+        setPreviousPaymentStatuses(newStatuses);
         setBillingHistory(response.data);
+        
+        return hasCompletedPayment;
       }
+      return false;
     } catch (err: any) {
       console.error('Failed to load billing history:', err);
+      return false;
     }
   };
 
@@ -90,19 +129,86 @@ export function SubscriptionManager() {
     try {
       setSyncingBilling(true);
       const r = await paymentApi.syncSubscription();
+      setLastSyncTime(new Date()); // Track last sync time
       if (r.success && r.data?.synced) {
-        toast.success('Subscription synced. Your plan has been updated.');
+        toast.success('Subscription synced successfully. Your plan has been updated.');
         await loadSubscriptionData();
         await loadBillingHistory();
       } else {
-        toast.info(r.data?.message || 'No pending payments to sync.');
+        toast.info(r.data?.message || 'No pending payments to sync. Your subscription is up to date.');
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to sync billing status');
+      const errorMessage = err.message || 'Failed to sync billing status';
+      toast.error(`Sync failed: ${errorMessage}. Please try again.`);
     } finally {
       setSyncingBilling(false);
     }
   };
+
+  // Auto-retry sync for pending payments after 5 minutes
+  useEffect(() => {
+    const pendingPayments = billingHistory?.payments.filter((p) => p.status === 'pending');
+    if (!pendingPayments || pendingPayments.length === 0) return;
+    if (syncingBilling) return; // Don't auto-sync if already syncing
+
+    // Check if any pending payment is older than 5 minutes
+    const now = Date.now();
+    const hasOldPendingPayment = pendingPayments.some((payment) => {
+      const paymentAge = now - new Date(payment.created_at).getTime();
+      return paymentAge > 5 * 60 * 1000; // 5 minutes
+    });
+
+    if (!hasOldPendingPayment) return;
+
+    // Auto-retry sync if last sync was more than 5 minutes ago or never synced
+    const shouldAutoSync = !lastSyncTime || (now - lastSyncTime.getTime() > 5 * 60 * 1000);
+
+    if (shouldAutoSync) {
+      const autoSyncTimer = setTimeout(async () => {
+        try {
+          setSyncingBilling(true);
+          const r = await paymentApi.syncSubscription();
+          setLastSyncTime(new Date());
+          if (r.success && r.data?.synced) {
+            await loadSubscriptionData();
+            await loadBillingHistory();
+          }
+        } catch (err) {
+          // Silently fail for auto-sync
+        } finally {
+          setSyncingBilling(false);
+        }
+      }, 1000); // Wait 1 second to avoid immediate sync on mount
+
+      return () => clearTimeout(autoSyncTimer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billingHistory, lastSyncTime, syncingBilling]);
+
+  // Real-time polling for pending payments (every 30 seconds)
+  useEffect(() => {
+    const pendingPayments = billingHistory?.payments.filter((p) => p.status === 'pending');
+    if (!pendingPayments || pendingPayments.length === 0) {
+      // No pending payments, stop polling
+      return;
+    }
+
+    // Poll every 30 seconds
+    const interval = setInterval(async () => {
+      try {
+        // Refresh billing history (will auto-refresh subscription data if payment completed)
+        const hadCompletedPayment = await loadBillingHistory();
+        // Always refresh subscription data to ensure it's up to date
+        await loadSubscriptionData();
+      } catch (err) {
+        // Silently fail for polling - don't spam errors
+        console.debug('Payment status polling error:', err);
+      }
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billingHistory]);
 
   const loadUsageStats = async () => {
     try {
@@ -150,49 +256,68 @@ export function SubscriptionManager() {
     await loadBillingHistory();
   };
 
-  const handleCancel = async (immediate: boolean = false) => {
-    const message = immediate
-      ? 'Are you sure you want to cancel your subscription immediately? You will lose access to premium features right away.'
-      : 'Are you sure you want to cancel your subscription? It will remain active until the end of the current period.';
-    
-    if (!confirm(message)) {
-      return;
-    }
+  const handleCancelClick = (immediate: boolean) => {
+    setCancelImmediate(immediate);
+    setShowCancelConfirm(true);
+  };
 
+  const handleCancel = async () => {
     try {
+      setCancelling(true);
       setError(null);
-      const response = await subscriptionApi.cancel(immediate);
+      const response = await subscriptionApi.cancel(cancelImmediate);
       if (response.success) {
+        toast.success(
+          cancelImmediate
+            ? 'Subscription cancelled immediately. You have been downgraded to the free tier.'
+            : 'Subscription will be cancelled at the end of the current period.'
+        );
         await loadSubscriptionData();
         setShowCancelOptions(false);
+        setShowCancelConfirm(false);
       } else {
         setError(response.error?.message || 'Failed to cancel subscription');
+        setShowCancelConfirm(false);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to cancel subscription');
+      setShowCancelConfirm(false);
+    } finally {
+      setCancelling(false);
     }
   };
 
-  const handleDowngrade = async (targetTier: 'free' | 'starter' | 'premium' | 'pro', immediate: boolean = false) => {
-    const message = immediate
-      ? `Are you sure you want to downgrade to ${targetTier} immediately? You will lose access to current tier features right away.`
-      : `Are you sure you want to downgrade to ${targetTier}? The change will take effect at the end of the current period.`;
-    
-    if (!confirm(message)) {
-      return;
-    }
+  const handleDowngradeClick = (targetTier: 'free' | 'starter' | 'premium' | 'pro', immediate: boolean = false) => {
+    setDowngradeTargetTier(targetTier);
+    setDowngradeImmediate(immediate);
+    setShowDowngradeConfirm(true);
+  };
+
+  const handleDowngrade = async () => {
+    if (!downgradeTargetTier) return;
 
     try {
+      setDowngrading(true);
       setError(null);
-      const response = await subscriptionApi.downgrade(targetTier, immediate);
+      const response = await subscriptionApi.downgrade(downgradeTargetTier, downgradeImmediate);
       if (response.success) {
+        toast.success(
+          downgradeImmediate
+            ? `Downgraded to ${downgradeTargetTier} tier immediately.`
+            : `Downgrade to ${downgradeTargetTier} tier scheduled for end of current period.`
+        );
         await loadSubscriptionData();
         setShowDowngradeOptions(false);
+        setShowDowngradeConfirm(false);
       } else {
         setError(response.error?.message || 'Failed to downgrade subscription');
+        setShowDowngradeConfirm(false);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to downgrade subscription');
+      setShowDowngradeConfirm(false);
+    } finally {
+      setDowngrading(false);
     }
   };
 
@@ -224,6 +349,32 @@ export function SubscriptionManager() {
     } catch (err: any) {
       setError(err.message || 'Failed to reactivate subscription');
     }
+  };
+
+  const handleUpdatePaymentMethod = () => {
+    // Open payment dialog to update payment method
+    // For recurring subscriptions, this will allow updating the payment method
+    if (subscriptionData?.subscription && subscriptionData.subscription.tier !== 'free') {
+      const sub = subscriptionData.subscription;
+      setSelectedTier(sub.tier as 'starter' | 'premium' | 'pro' | 'enterprise');
+      setPaymentDialogInitialBilling(sub.billing_period || 'monthly');
+      setPaymentDialogInitialRecurring(!!sub.paypal_subscription_id);
+      setShowPaymentDialog(true);
+    }
+  };
+
+  const handleRetryPayment = (paymentId: string) => {
+    // Find the failed payment and pre-fill payment dialog with its details
+    const payment = billingHistory?.payments.find((p) => p.id === paymentId);
+    if (!payment || payment.status !== 'failed') return;
+
+    // Pre-fill payment dialog with failed payment details
+    setSelectedTier(payment.tier as 'starter' | 'premium' | 'pro' | 'enterprise');
+    setPaymentDialogInitialBilling(
+      (payment.callback_data?.billing_period as BillingPeriod) || 'monthly'
+    );
+    setPaymentDialogInitialRecurring(!!payment.paypal_subscription_id);
+    setShowPaymentDialog(true);
   };
 
   if (loading) {
@@ -260,6 +411,43 @@ export function SubscriptionManager() {
   const tier = subscription.tier;
   const billingPeriod = (subscription.billing_period ?? 'monthly') as BillingPeriod;
   const annualSavings = tier !== 'free' ? getAnnualSavings(tier, 'USD') : null;
+
+  // Grace period countdown timer
+  const [gracePeriodTimeRemaining, setGracePeriodTimeRemaining] = useState<string>('');
+  
+  useEffect(() => {
+    if (!subscription.grace_period_end) {
+      setGracePeriodTimeRemaining('');
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = new Date();
+      const end = new Date(subscription.grace_period_end!);
+      const diff = end.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setGracePeriodTimeRemaining('Expired');
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (days > 0) {
+        setGracePeriodTimeRemaining(`${days} day${days !== 1 ? 's' : ''} ${hours} hour${hours !== 1 ? 's' : ''} remaining`);
+      } else if (hours > 0) {
+        setGracePeriodTimeRemaining(`${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''} remaining`);
+      } else {
+        setGracePeriodTimeRemaining(`${minutes} minute${minutes !== 1 ? 's' : ''} remaining`);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, [subscription.grace_period_end]);
 
   const formatLimit = (limit: UsageLimit) => {
     if (limit.limit === null) {
@@ -307,6 +495,88 @@ export function SubscriptionManager() {
     <div className="space-y-6">
       {error && (
         <Alert variant="error">{error}</Alert>
+      )}
+
+      {/* Grace Period Banner */}
+      {subscription.grace_period_end && (
+        <Alert variant="warning" className="border-amber-300 bg-amber-50">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-semibold text-amber-900 mb-1">
+                Payment Failed — Grace Period Active
+              </div>
+              <p className="text-sm text-amber-800 mb-3">
+                Your payment failed and your subscription will expire{' '}
+                {gracePeriodTimeRemaining ? `in ${gracePeriodTimeRemaining}` : `on ${new Date(subscription.grace_period_end).toLocaleDateString()}`}.
+                Please update your payment method to avoid service interruption.
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  onClick={handleUpdatePaymentMethod}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  Update Payment Method
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSyncBillingStatus}
+                  disabled={syncingBilling}
+                  className={`flex items-center gap-1 border-amber-300 text-amber-800 hover:bg-amber-100 ${
+                    syncingBilling ? 'opacity-75 cursor-not-allowed' : ''
+                  }`}
+                  title={syncingBilling ? 'Syncing subscription...' : 'Sync subscription status'}
+                >
+                  <RefreshCw className={`w-3 h-3 ${syncingBilling ? 'animate-spin' : ''}`} />
+                  {syncingBilling ? 'Syncing...' : 'Sync Status'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Alert>
+      )}
+
+      {/* Expired Subscription Banner */}
+      {subscription.status === 'expired' && (
+        <Alert variant="error" className="border-red-300 bg-red-50">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <div className="font-semibold text-red-900 mb-1">
+                Subscription Expired
+              </div>
+              <p className="text-sm text-red-800 mb-3">
+                Your subscription has expired and you've been downgraded to the free tier. 
+                Reactivate your subscription to regain access to premium features.
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                {(() => {
+                  // Find the last paid tier from billing history
+                  const lastPaidPayment = billingHistory?.payments
+                    .filter((p) => p.status === 'completed' && p.tier !== 'free')
+                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+                  
+                  const previousTier = lastPaidPayment?.tier || 'starter';
+                  
+                  return (
+                    <Button
+                      size="sm"
+                      onClick={() => handleUpgrade(previousTier as 'starter' | 'premium' | 'pro' | 'enterprise')}
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      Reactivate {getTierName(previousTier)} Plan
+                    </Button>
+                  );
+                })()}
+              </div>
+              <p className="text-xs text-red-700 mt-2">
+                Or choose a different plan from the upgrade options below.
+              </p>
+            </div>
+          </div>
+        </Alert>
       )}
 
       {/* Current Subscription Card */}
@@ -943,21 +1213,21 @@ export function SubscriptionManager() {
                     Change to Pro
                   </Button>
                   <Button
-                    onClick={() => handleDowngrade('pro', false)}
+                    onClick={() => handleDowngradeClick('pro', false)}
                     variant="outline"
                     className="w-full"
                   >
                     Downgrade to Pro (at period end)
                   </Button>
                   <Button
-                    onClick={() => handleDowngrade('premium', false)}
+                    onClick={() => handleDowngradeClick('premium', false)}
                     variant="outline"
                     className="w-full"
                   >
                     Downgrade to Premium (at period end)
                   </Button>
                   <Button
-                    onClick={() => handleDowngrade('starter', false)}
+                    onClick={() => handleDowngradeClick('starter', false)}
                     variant="outline"
                     className="w-full"
                   >
@@ -975,28 +1245,28 @@ export function SubscriptionManager() {
                     Upgrade to Enterprise
                   </Button>
                   <Button
-                    onClick={() => handleDowngrade('premium', false)}
+                    onClick={() => handleDowngradeClick('premium', false)}
                     variant="outline"
                     className="w-full"
                   >
                     Downgrade to Premium (at period end)
                   </Button>
                   <Button
-                    onClick={() => handleDowngrade('premium', true)}
+                    onClick={() => handleDowngradeClick('premium', true)}
                     variant="outline"
                     className="w-full border-orange-500 text-orange-600"
                   >
                     Downgrade to Premium (immediate)
                   </Button>
                   <Button
-                    onClick={() => handleDowngrade('starter', false)}
+                    onClick={() => handleDowngradeClick('starter', false)}
                     variant="outline"
                     className="w-full"
                   >
                     Downgrade to Starter (at period end)
                   </Button>
                   <Button
-                    onClick={() => handleDowngrade('starter', true)}
+                    onClick={() => handleDowngradeClick('starter', true)}
                     variant="outline"
                     className="w-full border-blue-500 text-blue-600"
                   >
@@ -1021,14 +1291,14 @@ export function SubscriptionManager() {
                     Upgrade to Enterprise
                   </Button>
                   <Button
-                    onClick={() => handleDowngrade('starter', false)}
+                    onClick={() => handleDowngradeClick('starter', false)}
                     variant="outline"
                     className="w-full"
                   >
                     Downgrade to Starter (at period end)
                   </Button>
                   <Button
-                    onClick={() => handleDowngrade('starter', true)}
+                    onClick={() => handleDowngradeClick('starter', true)}
                     variant="outline"
                     className="w-full border-blue-500 text-blue-600"
                   >
@@ -1065,14 +1335,14 @@ export function SubscriptionManager() {
                 <>
                   <div className="border-t my-3"></div>
                   <Button
-                    onClick={() => handleDowngrade('free', false)}
+                    onClick={() => handleDowngradeClick('free', false)}
                     variant="outline"
                     className="w-full"
                   >
                     Downgrade to Free (at period end)
                   </Button>
                   <Button
-                    onClick={() => handleDowngrade('free', true)}
+                    onClick={() => handleDowngradeClick('free', true)}
                     variant="outline"
                     className="w-full border-red-500 text-red-600 hover:bg-red-50"
                   >
@@ -1100,14 +1370,14 @@ export function SubscriptionManager() {
           {showCancelOptions && (
             <div className="space-y-3 mt-4">
               <Button
-                onClick={() => handleCancel(false)}
+                onClick={() => handleCancelClick(false)}
                 variant="outline"
                 className="w-full border-red-500 text-red-600 hover:bg-red-50"
               >
                 Cancel at Period End
               </Button>
               <Button
-                onClick={() => handleCancel(true)}
+                onClick={() => handleCancelClick(true)}
                 variant="outline"
                 className="w-full border-red-600 bg-red-50 text-red-700 hover:bg-red-100"
               >
@@ -1129,10 +1399,13 @@ export function SubscriptionManager() {
                 size="sm"
                 onClick={handleSyncBillingStatus}
                 disabled={syncingBilling}
-                className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                className={`flex items-center gap-2 text-orange-600 border-orange-200 hover:bg-orange-50 ${
+                  syncingBilling ? 'opacity-75 cursor-not-allowed' : ''
+                }`}
+                title={syncingBilling ? 'Syncing subscription with PayPal...' : 'Sync billing status with PayPal'}
               >
-                <RefreshCw className={`w-4 h-4 mr-2 ${syncingBilling ? 'animate-spin' : ''}`} />
-                {syncingBilling ? 'Syncing...' : 'Sync billing status'}
+                <RefreshCw className={`w-4 h-4 ${syncingBilling ? 'animate-spin' : ''}`} />
+                {syncingBilling ? 'Syncing subscription...' : 'Sync billing status'}
               </Button>
             )}
             <button
@@ -1146,9 +1419,52 @@ export function SubscriptionManager() {
         {showBillingHistory && (
           <div className="mt-4">
             {billingHistory?.payments.some((p) => p.status === 'pending') && (
-              <Alert variant="info" className="mb-4">
-                Pending recurring payments detected. If you completed payment on PayPal, click &quot;Sync billing status&quot; above to update your plan.
-              </Alert>
+              <>
+                <Alert variant="info" className="mb-4">
+                  Pending recurring payments detected. If you completed payment on PayPal, click &quot;Sync billing status&quot; above to update your plan.
+                  {lastSyncTime && (
+                    <span className="block mt-1 text-xs">
+                      Last synced: {Math.floor((Date.now() - lastSyncTime.getTime()) / 60000)} minutes ago
+                    </span>
+                  )}
+                </Alert>
+                {billingHistory.payments
+                  .filter((p) => p.status === 'pending')
+                  .map((payment) => {
+                    const timeSincePayment = payment.created_at
+                      ? Math.floor((Date.now() - new Date(payment.created_at).getTime()) / 60000)
+                      : 0;
+                    
+                    if (timeSincePayment > 5) {
+                      return (
+                        <Alert key={payment.id} variant="warning" className="mb-4">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="text-sm">
+                                Payment has been pending for {timeSincePayment} minutes.
+                                {timeSincePayment > 10 && ' This may indicate a payment issue.'}
+                              </p>
+                              <Button
+                                size="sm"
+                                onClick={handleSyncBillingStatus}
+                                disabled={syncingBilling}
+                                className={`flex items-center gap-1 mt-2 bg-amber-600 hover:bg-amber-700 text-white ${
+                                  syncingBilling ? 'opacity-75 cursor-not-allowed' : ''
+                                }`}
+                                title={syncingBilling ? 'Syncing subscription...' : 'Retry syncing subscription status'}
+                              >
+                                <RefreshCw className={`w-3 h-3 ${syncingBilling ? 'animate-spin' : ''}`} />
+                                {syncingBilling ? 'Syncing...' : 'Sync Again'}
+                              </Button>
+                            </div>
+                          </div>
+                        </Alert>
+                      );
+                    }
+                    return null;
+                  })}
+              </>
             )}
             {billingHistory && billingHistory.payments.length > 0 ? (
               <div className="space-y-3">
@@ -1160,13 +1476,33 @@ export function SubscriptionManager() {
                   <div className="md:col-span-2 text-right">Invoice</div>
                 </div>
                 {billingHistory.payments.map((payment: Payment) => {
-                  const providerLabel =
-                    payment.payment_provider === 'paypal' ||
+                  // Determine payment method and details
+                  const isPayPal = payment.payment_provider === 'paypal' ||
                     payment.paypal_order_id ||
                     payment.paypal_payment_id ||
-                    payment.paypal_subscription_id
-                      ? 'PayPal'
-                      : payment.payment_method || '—';
+                    payment.paypal_subscription_id ||
+                    payment.payment_method === 'paypal';
+                  
+                  const paypalEmail = payment.callback_data?.payerEmail || payment.callback_data?.payer_email;
+                  const cardLast4 = payment.callback_data?.last4 || payment.callback_data?.last_4;
+                  const cardBrand = payment.callback_data?.card_brand || payment.callback_data?.cardBrand;
+                  
+                  // Build payment method display
+                  let paymentMethodDisplay = '—';
+                  if (isPayPal) {
+                    paymentMethodDisplay = paypalEmail ? `PayPal • ${paypalEmail}` : 'PayPal';
+                  } else if (cardLast4) {
+                    const brand = cardBrand ? `${cardBrand} ` : '';
+                    paymentMethodDisplay = `Card • ${brand}•••• ${cardLast4}`;
+                  } else if (payment.payment_method) {
+                    paymentMethodDisplay = payment.payment_method;
+                  }
+                  
+                  // Calculate time since payment creation
+                  const timeSincePayment = payment.created_at
+                    ? Math.floor((Date.now() - new Date(payment.created_at).getTime()) / 60000)
+                    : 0;
+                  
                   return (
                     <div
                       key={payment.id}
@@ -1179,10 +1515,52 @@ export function SubscriptionManager() {
                         {payment.payment_description && (
                           <div className="text-xs text-gray-500 truncate">{payment.payment_description}</div>
                         )}
+                        {payment.status === 'failed' && (
+                          <div className="text-xs text-red-600 mt-1">
+                            <AlertCircle className="w-3 h-3 inline mr-1" />
+                            {getPaymentErrorMessage(
+                              payment.callback_data?.failure_reason || payment.callback_data?.failed_payment_reason || 'Payment failed',
+                              payment
+                            )}
+                          </div>
+                        )}
+                        {payment.status === 'pending' && timeSincePayment > 0 && (
+                          <div className="text-xs text-amber-600 mt-1">
+                            Pending for {timeSincePayment} {timeSincePayment === 1 ? 'minute' : 'minutes'}
+                          </div>
+                        )}
                       </div>
-                      <div className="text-sm text-gray-600 md:col-span-2">{providerLabel}</div>
+                      <div className="text-sm text-gray-600 md:col-span-2">
+                        <div className="flex items-center gap-1.5">
+                          {isPayPal ? (
+                            <>
+                              <span className="text-orange-600 font-semibold text-xs">PayPal</span>
+                              {paypalEmail && (
+                                <span className="text-gray-500 text-xs truncate" title={paypalEmail}>
+                                  • {paypalEmail}
+                                </span>
+                              )}
+                            </>
+                          ) : cardLast4 ? (
+                            <>
+                              <CreditCard className="w-4 h-4 text-gray-500" />
+                              <span className="text-xs">
+                                {cardBrand && <span className="capitalize">{cardBrand} </span>}
+                                •••• {cardLast4}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-xs">{paymentMethodDisplay}</span>
+                          )}
+                        </div>
+                      </div>
                       <div className="text-sm text-gray-600 md:col-span-2">
                         {new Date(payment.created_at).toLocaleDateString()}
+                        {payment.status === 'pending' && (
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {new Date(payment.created_at).toLocaleTimeString()}
+                          </div>
+                        )}
                       </div>
                       <div className="text-sm md:col-span-2">
                         <span
@@ -1196,6 +1574,11 @@ export function SubscriptionManager() {
                         >
                           {payment.status}
                         </span>
+                        {payment.status === 'pending' && lastSyncTime && (
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            Last synced: {Math.floor((Date.now() - lastSyncTime.getTime()) / 60000)}m ago
+                          </div>
+                        )}
                       </div>
                       <div className="md:col-span-2 md:text-right">
                         {payment.status === 'completed' && (
@@ -1207,6 +1590,26 @@ export function SubscriptionManager() {
                             <Download className="w-4 h-4 mr-2" />
                             Invoice
                           </Button>
+                        )}
+                        {payment.status === 'failed' && (
+                          <div className="flex flex-col gap-2 items-end">
+                            <Button
+                              onClick={() => handleRetryPayment(payment.id)}
+                              variant="outline"
+                              size="sm"
+                              className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                            >
+                              Retry Payment
+                            </Button>
+                            {(payment.callback_data?.failure_reason || payment.callback_data?.failed_payment_reason) && (
+                              <span className="text-xs text-red-600 max-w-[200px] text-right">
+                                {getPaymentErrorMessage(
+                                  payment.callback_data?.failure_reason || payment.callback_data?.failed_payment_reason || 'Payment failed',
+                                  payment
+                                )}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1235,6 +1638,45 @@ export function SubscriptionManager() {
           initialRecurring={paymentDialogInitialRecurring}
         />
       )}
+
+      {/* Cancel Subscription Confirmation Modal */}
+      <ConfirmationModal
+        open={showCancelConfirm}
+        title="Cancel Subscription"
+        message={
+          cancelImmediate
+            ? 'Are you sure you want to cancel your subscription immediately? You will lose access to premium features right away and be downgraded to the free tier.'
+            : 'Are you sure you want to cancel your subscription? It will remain active until the end of the current period, and then you will be downgraded to the free tier.'
+        }
+        confirmText={cancelImmediate ? 'Cancel Immediately' : 'Cancel at Period End'}
+        cancelText="Keep Subscription"
+        onConfirm={handleCancel}
+        onCancel={() => setShowCancelConfirm(false)}
+        variant="danger"
+        isLoading={cancelling}
+      />
+
+      {/* Downgrade Confirmation Modal */}
+      <ConfirmationModal
+        open={showDowngradeConfirm && downgradeTargetTier !== null}
+        title={`Downgrade to ${downgradeTargetTier ? getTierName(downgradeTargetTier) : ''}`}
+        message={
+          downgradeTargetTier && downgradeImmediate
+            ? `Are you sure you want to downgrade to ${getTierName(downgradeTargetTier)} immediately? You will lose access to current tier features right away.`
+            : downgradeTargetTier
+              ? `Are you sure you want to downgrade to ${getTierName(downgradeTargetTier)}? The change will take effect at the end of the current period.`
+              : ''
+        }
+        confirmText={downgradeImmediate ? 'Downgrade Immediately' : 'Downgrade at Period End'}
+        cancelText="Keep Current Plan"
+        onConfirm={handleDowngrade}
+        onCancel={() => {
+          setShowDowngradeConfirm(false);
+          setDowngradeTargetTier(null);
+        }}
+        variant="warning"
+        isLoading={downgrading}
+      />
     </div>
   );
 }

@@ -799,6 +799,7 @@ export interface Subscription {
   paypal_subscription_id?: string;
   billing_period?: 'monthly' | 'annual';
   annual_discount?: number;
+  grace_period_end?: string;
   created_at: string;
   updated_at: string;
 }
@@ -1099,6 +1100,8 @@ export interface Payment {
   status: 'pending' | 'completed' | 'failed' | 'cancelled';
   payment_method?: string;
   payment_description?: string;
+  callback_data?: Record<string, any>;
+  webhook_data?: Record<string, any>;
   created_at: string;
   updated_at: string;
   completed_at?: string;

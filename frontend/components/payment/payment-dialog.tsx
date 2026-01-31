@@ -8,6 +8,7 @@ import { Alert } from '@/components/ui/alert';
 import { PayPalButton } from '@/components/payment/paypal-button';
 import { getPricing, getAnnualSavings, formatPrice } from '@/lib/pricing';
 import type { BillingPeriod } from '@/lib/pricing';
+import { getPaymentErrorMessage } from '@/lib/utils';
 
 interface PaymentDialogProps {
   tier: 'starter' | 'premium' | 'pro' | 'enterprise';
@@ -58,7 +59,9 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
   const annualSavings = getAnnualSavings(tier, currency);
 
   const handlePayPalError = (message: string) => {
-    setError(message);
+    // Use enhanced error message parser
+    const enhancedMessage = getPaymentErrorMessage(message);
+    setError(enhancedMessage);
     setLoading(false);
   };
 
@@ -186,7 +189,22 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
 
           {error && (
             <Alert variant="error" className="mb-4">
-              {error}
+              <div className="text-sm">
+                {error}
+                <div className="mt-2 text-xs text-gray-600">
+                  {(() => {
+                    const errorLower = error.toLowerCase();
+                    if (errorLower.includes('insufficient')) return 'Error code: INSUFFICIENT_FUNDS';
+                    if (errorLower.includes('expired')) return 'Error code: EXPIRED_CARD';
+                    if (errorLower.includes('declined')) return 'Error code: DECLINED';
+                    if (errorLower.includes('invalid card')) return 'Error code: INVALID_CARD';
+                    if (errorLower.includes('cvv') || errorLower.includes('security code')) return 'Error code: INVALID_CVV';
+                    if (errorLower.includes('zip') || errorLower.includes('billing address')) return 'Error code: INVALID_BILLING_ADDRESS';
+                    if (errorLower.includes('network') || errorLower.includes('timeout')) return 'Error code: NETWORK_ERROR';
+                    return 'Error code: PAYMENT_ERROR';
+                  })()}
+                </div>
+              </div>
             </Alert>
           )}
 
