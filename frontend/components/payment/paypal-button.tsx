@@ -96,6 +96,7 @@ export function PayPalButton({
   }, [tier, currency, firstName, lastName, email, phoneNumber, recurring, billingPeriod, showError, onRedirect]);
 
   // Recurring or no client ID: redirect flow (no SDK approval popup)
+  // For better international support, we use redirect flow which allows proper country selection
   if (recurring || !PAYPAL_CLIENT_ID) {
     return (
       <div className="space-y-2">
@@ -128,7 +129,51 @@ export function PayPalButton({
     );
   }
 
-  // One-time: SDK PayPalButtons (createOrder + onApprove redirect)
+  // One-time: Use redirect flow for better international address support
+  // PayPal's embedded card form validates ZIP/phone before country selection
+  // Redirect flow ensures users select country first on PayPal's hosted checkout
+  const handleOneTimeRedirect = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const request: PaymentInitiateRequest = {
+        tier,
+        currency,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phoneNumber: phoneNumber?.trim() || undefined,
+        billing_period: billingPeriod,
+      };
+      const response = await paymentApi.initiate(request);
+
+      if (!response.success || !response.data) {
+        showError(response.error?.message || 'Failed to create order');
+        return;
+      }
+
+      const data = response.data;
+      const redirectUrl = data.redirect_url;
+      if (!redirectUrl) {
+        showError('No redirect URL from server');
+        return;
+      }
+
+      onRedirect?.();
+      window.location.href = redirectUrl;
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+          : err instanceof Error
+            ? err.message
+            : 'Failed to initiate payment';
+      showError(message ?? 'Failed to initiate payment');
+    } finally {
+      setLoading(false);
+    }
+  }, [tier, currency, firstName, lastName, email, phoneNumber, billingPeriod, showError, onRedirect]);
+
   return (
     <div className="space-y-2 w-full">
       {error && (
@@ -136,51 +181,27 @@ export function PayPalButton({
           {error}
         </Alert>
       )}
-      <div className="w-full" style={{ minHeight: '200px' }}>
-        <PayPalButtons
-          style={{ layout: 'vertical', label: 'pay' }}
-          disabled={disabled}
-        createOrder={async () => {
-          const request: PaymentInitiateRequest = {
-            tier,
-            currency,
-            firstName: firstName.trim(),
-            lastName: lastName.trim(),
-            email: email.trim(),
-            phoneNumber: phoneNumber?.trim() || undefined,
-            billing_period: billingPeriod,
-          };
-          const response = await paymentApi.initiate(request);
-
-          if (!response.success || !response.data) {
-            throw new Error(response.error?.message || 'Failed to create order');
-          }
-
-          const orderId = response.data.order_id ?? response.data.order_tracking_id;
-          if (!orderId) {
-            throw new Error('No order ID from server');
-          }
-
-          return orderId;
-        }}
-        onApprove={async (data) => {
-          if (!data.orderID) return;
-          onRedirect?.();
-          const callbackUrl = `${API_URL.replace(/\/$/, '')}/api/payment/callback?token=${encodeURIComponent(data.orderID)}`;
-          window.location.href = callbackUrl;
-        }}
-        onError={(err: { message?: string } | unknown) => {
-          const msg = (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: string }).message === 'string')
-            ? (err as { message: string }).message
-            : 'PayPal error';
-          setError(msg);
-          onError?.(msg);
-        }}
-          onCancel={() => {
-            setError(null);
-          }}
-        />
-      </div>
+      <button
+        type="button"
+        onClick={handleOneTimeRedirect}
+        disabled={disabled || loading}
+        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-[#0070ba] hover:bg-[#005ea6] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors"
+        style={{ minHeight: 44 }}
+      >
+        {loading ? (
+          <span className="animate-pulse">Redirecting to PayPal...</span>
+        ) : (
+          <>
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+            </svg>
+            <span>Pay with PayPal or Card</span>
+          </>
+        )}
+      </button>
+      <p className="text-xs text-gray-500 text-center mt-2">
+        You'll be redirected to PayPal's secure checkout where you can select your country and enter your billing address.
+      </p>
     </div>
   );
 }

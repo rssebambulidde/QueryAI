@@ -22,17 +22,26 @@ export function PayPalProvider({ children }: PayPalProviderProps) {
     return <>{children}</>;
   }
 
+  // Detect user's locale/country for better international support
+  const getUserLocale = () => {
+    // Try to detect from browser
+    if (typeof window === 'undefined') return 'en_US';
+    const browserLocale = navigator.language || 'en_US';
+    // Convert browser locale to PayPal format (e.g., 'en-US' -> 'en_US')
+    return browserLocale.replace('-', '_');
+  };
+
   return (
     <PayPalScriptProvider
       options={{
         clientId: paypalClientId,
         intent: 'capture',
         vault: false,
-        components: 'buttons,card-fields',
+        components: 'buttons', // Use buttons only - PayPal will redirect for card payments
         currency: 'USD',
-        locale: 'en_US', // Base locale, but PayPal will detect user's country
-        enableFunding: 'card', // Enable card payments
-        // Allow international addresses - PayPal will show country selector
+        locale: getUserLocale(), // Use browser-detected locale for better country detection
+        enableFunding: 'card', // Enable card payments - PayPal will redirect to hosted checkout
+        // PayPal's redirect flow properly handles international addresses and country selection
         dataNamespace: 'paypal_sdk',
       }}
     >
