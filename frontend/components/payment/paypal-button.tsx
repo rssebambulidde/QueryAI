@@ -51,6 +51,7 @@ export function PayPalButton({
     [onError]
   );
 
+  // Define all hooks/callbacks BEFORE any conditional returns to avoid React hooks error
   const handleInitiateRedirect = useCallback(async (preferCard: boolean = false) => {
     setError(null);
     setLoading(true);
@@ -100,6 +101,52 @@ export function PayPalButton({
     }
   }, [tier, currency, firstName, lastName, email, phoneNumber, recurring, billingPeriod, showError, onRedirect]);
 
+  // One-time: Use redirect flow for better international address support
+  // PayPal's embedded card form validates ZIP/phone before country selection
+  // Redirect flow ensures users select country first on PayPal's hosted checkout
+  const handleOneTimeRedirect = useCallback(async (preferCard: boolean = false) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const request: PaymentInitiateRequest = {
+        tier,
+        currency,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phoneNumber: phoneNumber?.trim() || undefined,
+        billing_period: billingPeriod,
+        prefer_card: preferCard, // Pass card preference to backend
+      };
+      const response = await paymentApi.initiate(request);
+
+      if (!response.success || !response.data) {
+        showError(response.error?.message || 'Failed to create order');
+        return;
+      }
+
+      const data = response.data;
+      const redirectUrl = data.redirect_url;
+      if (!redirectUrl) {
+        showError('No redirect URL from server');
+        return;
+      }
+
+      onRedirect?.();
+      window.location.href = redirectUrl;
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+          : err instanceof Error
+            ? err.message
+            : 'Failed to initiate payment';
+      showError(message ?? 'Failed to initiate payment');
+    } finally {
+      setLoading(false);
+    }
+  }, [tier, currency, firstName, lastName, email, phoneNumber, billingPeriod, showError, onRedirect]);
+
   // Recurring or no client ID: redirect flow (no SDK approval popup)
   // For better international support, we use redirect flow which allows proper country selection
   if (recurring || !PAYPAL_CLIENT_ID) {
@@ -147,52 +194,6 @@ export function PayPalButton({
       </div>
     );
   }
-
-  // One-time: Use redirect flow for better international address support
-  // PayPal's embedded card form validates ZIP/phone before country selection
-  // Redirect flow ensures users select country first on PayPal's hosted checkout
-  const handleOneTimeRedirect = useCallback(async (preferCard: boolean = false) => {
-    setError(null);
-    setLoading(true);
-    try {
-      const request: PaymentInitiateRequest = {
-        tier,
-        currency,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: email.trim(),
-        phoneNumber: phoneNumber?.trim() || undefined,
-        billing_period: billingPeriod,
-        prefer_card: preferCard, // Pass card preference to backend
-      };
-      const response = await paymentApi.initiate(request);
-
-      if (!response.success || !response.data) {
-        showError(response.error?.message || 'Failed to create order');
-        return;
-      }
-
-      const data = response.data;
-      const redirectUrl = data.redirect_url;
-      if (!redirectUrl) {
-        showError('No redirect URL from server');
-        return;
-      }
-
-      onRedirect?.();
-      window.location.href = redirectUrl;
-    } catch (err: unknown) {
-      const message =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
-          : err instanceof Error
-            ? err.message
-            : 'Failed to initiate payment';
-      showError(message ?? 'Failed to initiate payment');
-    } finally {
-      setLoading(false);
-    }
-  }, [tier, currency, firstName, lastName, email, phoneNumber, billingPeriod, showError, onRedirect]);
 
   return (
     <div className="space-y-3 w-full">

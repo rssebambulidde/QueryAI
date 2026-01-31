@@ -688,11 +688,12 @@ export function SubscriptionManager() {
         </div>
       </div>
 
-      {/* Upgrade Options */}
-      {tier !== 'pro' && (
+      {/* Upgrade Options - Always show exactly 3 upgrade options based on current tier */}
+      {tier !== 'enterprise' && (
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold mb-4">Upgrade Plan</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Free tier: Show Starter, Premium, Pro */}
             {tier === 'free' && (
               <>
                 <div className="border-2 border-blue-500 rounded-lg p-4">
@@ -700,48 +701,23 @@ export function SubscriptionManager() {
                   <p className="text-gray-600 text-sm mb-4">
                     100 queries/month, 3 documents, 1 topic, 10 web searches
                   </p>
-                  <div className="space-y-2">
-                    <Button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleUpgrade('starter');
-                      }}
-                      disabled={upgrading}
-                      className="w-full"
-                    >
-                      Upgrade to Starter - UGX 27,000 / USD 9
-                    </Button>
-                  </div>
+                  <Button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUpgrade('starter');
+                    }}
+                    disabled={upgrading}
+                    className="w-full"
+                  >
+                    Upgrade to Starter - UGX 27,000 / USD 9
+                  </Button>
                 </div>
                 <div className="border-2 border-orange-500 rounded-lg p-4">
                   <h4 className="font-semibold text-lg mb-2">Premium</h4>
                   <p className="text-gray-600 text-sm mb-4">
                     500 queries/month, 10 documents, 3 topics, 50 web searches
                   </p>
-                  <div className="space-y-2">
-                    <Button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleUpgrade('premium');
-                      }}
-                      disabled={upgrading}
-                      className="w-full"
-                    >
-                      Upgrade to Premium - UGX 50,000 / USD 15
-                    </Button>
-                  </div>
-                </div>
-              </>
-            )}
-            {tier === 'starter' && (
-              <div className="border-2 border-orange-500 rounded-lg p-4">
-                <h4 className="font-semibold text-lg mb-2">Premium</h4>
-                <p className="text-gray-600 text-sm mb-4">
-                  500 queries/month, 10 documents, 3 topics, 50 web searches
-                </p>
-                <div className="space-y-2">
                   <Button
                     onClick={(e) => {
                       e.preventDefault();
@@ -754,26 +730,163 @@ export function SubscriptionManager() {
                     Upgrade to Premium - UGX 50,000 / USD 15
                   </Button>
                 </div>
-              </div>
+                <div className="border-2 border-purple-500 rounded-lg p-4">
+                  <h4 className="font-semibold text-lg mb-2">Pro</h4>
+                  <p className="text-gray-600 text-sm mb-4">
+                    Unlimited queries, unlimited documents, unlimited topics, 200 web searches
+                  </p>
+                  <Button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUpgrade('pro');
+                    }}
+                    disabled={upgrading}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Upgrade to Pro - UGX 150,000 / USD 45
+                  </Button>
+                </div>
+              </>
             )}
-            <div className={`border-2 ${tier === 'premium' || tier === 'starter' ? 'border-purple-500' : 'border-gray-300'} rounded-lg p-4`}>
-              <h4 className="font-semibold text-lg mb-2">Pro</h4>
-              <p className="text-gray-600 text-sm mb-4">
-                Unlimited queries, unlimited documents, unlimited topics, 200 web searches
-              </p>
-              <Button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleUpgrade('pro');
-                }}
-                disabled={upgrading}
-                variant={tier === 'premium' ? 'default' : 'outline'}
-                className="w-full"
-              >
-                Upgrade to Pro - UGX 150,000 / USD 45
-              </Button>
-            </div>
+            {/* Starter tier: Show Premium, Pro, Enterprise */}
+            {tier === 'starter' && (
+              <>
+                <div className="border-2 border-orange-500 rounded-lg p-4">
+                  <h4 className="font-semibold text-lg mb-2">Premium</h4>
+                  <p className="text-gray-600 text-sm mb-4">
+                    500 queries/month, 10 documents, 3 topics, 50 web searches
+                  </p>
+                  <Button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUpgrade('premium');
+                    }}
+                    disabled={upgrading}
+                    className="w-full"
+                  >
+                    Upgrade to Premium - UGX 50,000 / USD 15
+                  </Button>
+                </div>
+                <div className="border-2 border-purple-500 rounded-lg p-4">
+                  <h4 className="font-semibold text-lg mb-2">Pro</h4>
+                  <p className="text-gray-600 text-sm mb-4">
+                    Unlimited queries, unlimited documents, unlimited topics, 200 web searches
+                  </p>
+                  <Button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUpgrade('pro');
+                    }}
+                    disabled={upgrading}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Upgrade to Pro - UGX 150,000 / USD 45
+                  </Button>
+                </div>
+                <div className="border-2 border-gray-500 rounded-lg p-4">
+                  <h4 className="font-semibold text-lg mb-2">Enterprise</h4>
+                  <p className="text-gray-600 text-sm mb-4">
+                    Unlimited everything, team collaboration, priority support
+                  </p>
+                  <Button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUpgrade('enterprise');
+                    }}
+                    disabled={upgrading}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Upgrade to Enterprise - UGX 300,000 / USD 99
+                  </Button>
+                </div>
+              </>
+            )}
+            {/* Premium tier: Show Pro, Enterprise (only 2 higher tiers, add placeholder or show 3 with Pro highlighted) */}
+            {tier === 'premium' && (
+              <>
+                <div className="border-2 border-purple-500 rounded-lg p-4">
+                  <h4 className="font-semibold text-lg mb-2">Pro</h4>
+                  <p className="text-gray-600 text-sm mb-4">
+                    Unlimited queries, unlimited documents, unlimited topics, 200 web searches
+                  </p>
+                  <Button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUpgrade('pro');
+                    }}
+                    disabled={upgrading}
+                    className="w-full"
+                  >
+                    Upgrade to Pro - UGX 150,000 / USD 45
+                  </Button>
+                </div>
+                <div className="border-2 border-gray-500 rounded-lg p-4">
+                  <h4 className="font-semibold text-lg mb-2">Enterprise</h4>
+                  <p className="text-gray-600 text-sm mb-4">
+                    Unlimited everything, team collaboration, priority support
+                  </p>
+                  <Button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUpgrade('enterprise');
+                    }}
+                    disabled={upgrading}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Upgrade to Enterprise - UGX 300,000 / USD 99
+                  </Button>
+                </div>
+                {/* Empty placeholder to maintain 3-column grid */}
+                <div className="border-2 border-transparent rounded-lg p-4 opacity-0 pointer-events-none">
+                  <h4 className="font-semibold text-lg mb-2">Placeholder</h4>
+                  <p className="text-gray-600 text-sm mb-4">Placeholder</p>
+                  <Button disabled className="w-full">Placeholder</Button>
+                </div>
+              </>
+            )}
+            {/* Pro tier: Show Enterprise only (add 2 placeholders to maintain 3-column grid) */}
+            {tier === 'pro' && (
+              <>
+                <div className="border-2 border-gray-500 rounded-lg p-4">
+                  <h4 className="font-semibold text-lg mb-2">Enterprise</h4>
+                  <p className="text-gray-600 text-sm mb-4">
+                    Unlimited everything, team collaboration, priority support
+                  </p>
+                  <Button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUpgrade('enterprise');
+                    }}
+                    disabled={upgrading}
+                    className="w-full"
+                  >
+                    Upgrade to Enterprise - UGX 300,000 / USD 99
+                  </Button>
+                </div>
+                {/* Empty placeholders to maintain 3-column grid */}
+                <div className="border-2 border-transparent rounded-lg p-4 opacity-0 pointer-events-none">
+                  <h4 className="font-semibold text-lg mb-2">Placeholder</h4>
+                  <p className="text-gray-600 text-sm mb-4">Placeholder</p>
+                  <Button disabled className="w-full">Placeholder</Button>
+                </div>
+                <div className="border-2 border-transparent rounded-lg p-4 opacity-0 pointer-events-none">
+                  <h4 className="font-semibold text-lg mb-2">Placeholder</h4>
+                  <p className="text-gray-600 text-sm mb-4">Placeholder</p>
+                  <Button disabled className="w-full">Placeholder</Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

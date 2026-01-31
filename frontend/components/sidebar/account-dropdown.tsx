@@ -304,6 +304,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
         </div>
 
         {/* Upgrade CTA */}
+        {/* Only show upgrade button for free, starter, and premium users - hide for pro and enterprise */}
         {subscriptionTier !== 'enterprise' && subscriptionTier !== 'pro' && (
           <>
             <div className="border-t border-gray-100" />
@@ -318,7 +319,11 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
                   </div>
                   <div className="text-left">
                     <p className="text-sm font-semibold text-gray-900">Upgrade Plan</p>
-                    <p className="text-xs text-gray-600">Unlock premium features</p>
+                    <p className="text-xs text-gray-600">
+                      {subscriptionTier === 'free' && 'Unlock premium features'}
+                      {subscriptionTier === 'starter' && 'Upgrade to Premium, Pro, or Enterprise'}
+                      {subscriptionTier === 'premium' && 'Upgrade to Pro or Enterprise'}
+                    </p>
                   </div>
                 </div>
                 <ArrowUpRight className="w-4 h-4 text-orange-600 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
