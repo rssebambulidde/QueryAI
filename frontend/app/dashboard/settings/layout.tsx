@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { User, Search, FileText, Settings as SettingsIcon } from 'lucide-react';
+import { User, Search, FileText, Settings as SettingsIcon, CreditCard, Folder, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const settingsNav = [
@@ -11,6 +11,9 @@ const settingsNav = [
   { href: '/dashboard/settings/search', label: 'Search', icon: Search },
   { href: '/dashboard/settings/citations', label: 'Citations', icon: FileText },
   { href: '/dashboard/settings/advanced', label: 'Advanced RAG', icon: SettingsIcon },
+  { href: '/dashboard/settings/subscription', label: 'Subscription', icon: CreditCard },
+  { href: '/dashboard/settings/documents', label: 'Documents', icon: Folder },
+  { href: '/dashboard/settings/topics', label: 'Topics', icon: Tag },
 ];
 
 export default function SettingsLayout({

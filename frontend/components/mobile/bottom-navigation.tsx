@@ -5,9 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import {
   MessageSquare,
   FileText,
-  Tag,
   Settings,
-  CreditCard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
@@ -28,22 +26,10 @@ const navItems: BottomNavItem[] = [
     href: '/dashboard?tab=chat',
   },
   {
-    id: 'documents',
-    label: 'Documents',
+    id: 'collections',
+    label: 'Collections',
     icon: FileText,
-    href: '/dashboard?tab=documents',
-  },
-  {
-    id: 'topics',
-    label: 'Topics',
-    icon: Tag,
-    href: '/dashboard?tab=topics',
-  },
-  {
-    id: 'subscription',
-    label: 'Subscription',
-    icon: CreditCard,
-    href: '/dashboard?tab=subscription',
+    href: '/dashboard?tab=collections',
   },
   {
     id: 'settings',

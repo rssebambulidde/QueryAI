@@ -382,7 +382,7 @@ export const DocumentManager = () => {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-base font-semibold text-gray-900">
-            Your Documents
+            Documents
             {documents.length > 0 && (
               <span className="ml-2 text-sm font-normal text-gray-500">
                 ({documents.length} {documents.length === 1 ? 'document' : 'documents'})

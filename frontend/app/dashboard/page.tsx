@@ -5,11 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { ChatInterface } from '@/components/chat/chat-interface';
-import { DocumentManager } from '@/components/documents/document-manager';
-import { TopicManager } from '@/components/topics/topic-manager';
 import { CollectionManager } from '@/components/collections/collection-manager';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
-import { SubscriptionManager } from '@/components/subscription/subscription-manager';
 import { RAGSettings } from '@/components/chat/rag-source-selector';
 import { documentApi } from '@/lib/api';
 import { useConversationStore } from '@/lib/store/conversation-store';
@@ -18,7 +15,7 @@ import { MobileSidebar, HamburgerMenu } from '@/components/mobile/mobile-sidebar
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { useToast } from '@/lib/hooks/use-toast';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'collections' | 'subscription';
+type TabType = 'chat' | 'collections';
 
 function DashboardContent() {
   const router = useRouter();
@@ -53,8 +50,17 @@ function DashboardContent() {
   // Read tab from URL query parameter on mount and when it changes
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['chat', 'documents', 'topics', 'collections', 'subscription'].includes(tabParam)) {
+    if (tabParam && ['chat', 'collections'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
+    } else if (tabParam === 'documents') {
+      // Redirect to settings/documents
+      router.replace('/dashboard/settings/documents');
+    } else if (tabParam === 'topics') {
+      // Redirect to settings/topics
+      router.replace('/dashboard/settings/topics');
+    } else if (tabParam === 'subscription') {
+      // Redirect to settings/subscription
+      router.replace('/dashboard/settings/subscription');
     }
   }, [searchParams]);
 
@@ -65,30 +71,28 @@ function DashboardContent() {
 
     if (payment === 'success') {
       toast.success('Payment completed. Your subscription has been updated.');
-      setActiveTab('subscription');
-      router.replace('/dashboard?tab=subscription', { scroll: false });
+      router.replace('/dashboard/settings/subscription', { scroll: false });
       checkAuth().catch(() => {});
     } else if (payment === 'cancelled') {
       toast.info('Payment was cancelled.');
       router.replace('/dashboard', { scroll: false });
     } else if (payment === 'failed') {
       toast.error('Payment failed. Please try again or contact support.');
-      router.replace('/dashboard?tab=subscription', { scroll: false });
+      router.replace('/dashboard/settings/subscription', { scroll: false });
     } else if (payment === 'error') {
       toast.error('Something went wrong. Please try again or contact support.');
-      router.replace('/dashboard?tab=subscription', { scroll: false });
+      router.replace('/dashboard/settings/subscription', { scroll: false });
     } else if (payment === 'pending') {
       toast.info('Payment is pending. Your subscription will update when payment completes.');
-      router.replace('/dashboard?tab=subscription', { scroll: false });
+      router.replace('/dashboard/settings/subscription', { scroll: false });
     }
   }, [searchParams, toast, router, checkAuth]);
 
   // Listen for navigation to subscription tab from chat errors
   useEffect(() => {
     const handleNavigateToSubscription = () => {
-      setActiveTab('subscription');
-      // Update URL without causing a page reload
-      router.push('/dashboard?tab=subscription', { scroll: false });
+      // Navigate to settings subscription page
+      router.push('/dashboard/settings/subscription', { scroll: false });
     };
     
     window.addEventListener('navigateToSubscription', handleNavigateToSubscription);
@@ -256,14 +260,6 @@ function DashboardContent() {
             <div className="flex-1 overflow-hidden">
               <ChatInterface ragSettings={ragSettings} />
             </div>
-          ) : activeTab === 'documents' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <DocumentManager />
-            </div>
-          ) : activeTab === 'topics' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <TopicManager />
-            </div>
           ) : activeTab === 'collections' ? (
              <div className="flex-1 overflow-y-auto p-6">
                <CollectionManager 
@@ -274,10 +270,6 @@ function DashboardContent() {
                  }}
                />
              </div>
-          ) : activeTab === 'subscription' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <SubscriptionManager />
-            </div>
           ) : null}
         </div>
       </main>

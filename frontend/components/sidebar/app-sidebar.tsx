@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, FileText, Tag, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, CreditCard, Settings, TestTube, CheckSquare } from 'lucide-react';
+import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, TestTube, CheckSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { SidebarTopicFilters } from './sidebar-topic-filters';
 import { cn } from '@/lib/utils';
 import { RAGSourceSelector, RAGSettings } from '@/components/chat/rag-source-selector';
 import { useConversationStore } from '@/lib/store/conversation-store';
@@ -16,7 +15,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-type TabType = 'chat' | 'documents' | 'topics' | 'collections' | 'subscription';
+type TabType = 'chat' | 'collections';
 
 interface AppSidebarProps {
   activeTab: TabType;
@@ -47,7 +46,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isLoadingCollections, setIsLoadingCollections] = useState(false);
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
-  const [showTopicsFilters, setShowTopicsFilters] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
   const { user } = useAuthStore();
@@ -171,42 +169,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             title="Query Assistant"
           >
             <MessageSquare className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => onTabChange('documents')}
-            className={cn(
-              'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
-              activeTab === 'documents'
-                ? 'bg-orange-50 text-orange-700'
-                : 'text-gray-700 hover:bg-gray-50'
-            )}
-            title="Your Documents"
-          >
-            <FileText className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => onTabChange('topics')}
-            className={cn(
-              'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
-              activeTab === 'topics'
-                ? 'bg-orange-50 text-orange-700'
-                : 'text-gray-700 hover:bg-gray-50'
-            )}
-            title="Topics"
-          >
-            <Tag className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => onTabChange('subscription')}
-            className={cn(
-              'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
-              activeTab === 'subscription'
-                ? 'bg-orange-50 text-orange-700'
-                : 'text-gray-700 hover:bg-gray-50'
-            )}
-            title="Subscription"
-          >
-            <CreditCard className="w-5 h-5" />
           </button>
           {isAdmin && (
             <>
@@ -399,55 +361,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
           {/* Other Navigation Items */}
           <button
-            onClick={() => onTabChange('documents')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              activeTab === 'documents'
-                ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-            )}
-          >
-            <FileText className="w-5 h-5" />
-            Your Documents
-          </button>
-          <div>
-            <button
-              onClick={() => onTabChange('topics')}
-              className={cn(
-                'w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                activeTab === 'topics'
-                  ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <Tag className="w-5 h-5" />
-                Topics
-              </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowTopicsFilters(!showTopicsFilters);
-                }}
-                className="p-1 hover:bg-orange-100 rounded transition-colors"
-                title={showTopicsFilters ? 'Collapse filters' : 'Expand topic & filters'}
-              >
-                {showTopicsFilters ? (
-                  <ChevronUp className="w-4 h-4" />
-                ) : (
-                  <ChevronDown className="w-4 h-4" />
-                )}
-              </button>
-            </button>
-
-            {showTopicsFilters && (
-              <div className="mt-2">
-                <SidebarTopicFilters />
-              </div>
-            )}
-          </div>
-          <button
             onClick={() => onTabChange('collections')}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
@@ -458,18 +371,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Folder className="w-5 h-5" />
             Collections
-          </button>
-          <button
-            onClick={() => onTabChange('subscription')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              activeTab === 'subscription'
-                ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-            )}
-          >
-            <CreditCard className="w-5 h-5" />
-            Subscription
           </button>
           {isAdmin && (
             <>
