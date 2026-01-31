@@ -19,6 +19,7 @@ import {
 } from '@paypal/paypal-server-sdk';
 import config from '../config/env';
 import logger from '../config/logger';
+import { ValidationError } from '../types/error';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
@@ -570,8 +571,8 @@ export async function createSubscription(
   const planId = getPlanIdForTier(params.tier, period);
   if (!planId) {
     const key = period === 'annual' ? `PAYPAL_PLAN_ID_${params.tier.toUpperCase()}_ANNUAL` : `PAYPAL_PLAN_ID_${params.tier.toUpperCase()}`;
-    throw new Error(
-      `PayPal plan ID for tier "${params.tier}" (${period}) is not configured. Set ${key} or create plans in PayPal Dashboard.`
+    throw new ValidationError(
+      `Recurring subscription is not configured for ${params.tier} (${period}). Administrator must set ${key} in environment and create a subscription plan in PayPal Dashboard.`
     );
   }
 
