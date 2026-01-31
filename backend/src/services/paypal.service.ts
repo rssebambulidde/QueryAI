@@ -626,27 +626,32 @@ export interface SubscriptionDetails {
 
 /**
  * Get subscription details.
+ * Handles both snake_case (PayPal REST API) and camelCase (SDK) response formats.
  */
 export async function getSubscription(
   subscriptionId: string
 ): Promise<SubscriptionDetails> {
   const response = await subscriptions().getSubscription({ id: subscriptionId });
-  const data = response.result as {
-    id: string;
-    status: string;
-    planId?: string;
-    startTime?: string;
-    billingInfo?: { nextBillingTime?: string };
-    customId?: string;
-  };
+  const data = response.result as Record<string, unknown>;
+
+  // PayPal REST API returns snake_case; SDK may return camelCase
+  const startTime =
+    (data.start_time as string) ?? (data.startTime as string) ?? undefined;
+  const billingInfo = data.billing_info ?? data.billingInfo;
+  const nextBillingTime =
+    (billingInfo && typeof billingInfo === 'object' && (billingInfo as Record<string, unknown>).next_billing_time as string) ??
+    (billingInfo && typeof billingInfo === 'object' && (billingInfo as Record<string, unknown>).nextBillingTime as string) ??
+    undefined;
+  const planId = (data.plan_id ?? data.planId) as string | undefined;
+  const customId = (data.custom_id ?? data.customId) as string | undefined;
 
   return {
-    subscriptionId: data.id,
-    status: data.status,
-    plan_id: data.planId,
-    start_time: data.startTime,
-    next_billing_time: data.billingInfo?.nextBillingTime,
-    custom_id: data.customId,
+    subscriptionId: (data.id ?? subscriptionId) as string,
+    status: (data.status ?? '') as string,
+    plan_id: planId,
+    start_time: startTime,
+    next_billing_time: nextBillingTime,
+    custom_id: customId,
   };
 }
 

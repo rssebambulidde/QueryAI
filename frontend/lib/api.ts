@@ -1175,6 +1175,13 @@ export const paymentApi = {
     const response = await apiClient.post('/api/payment/refund', data);
     return response.data;
   },
+
+  syncSubscription: async (subscriptionId?: string): Promise<ApiResponse<{ synced: boolean; message: string }>> => {
+    const response = await apiClient.post('/api/payment/sync-subscription', {
+      subscription_id: subscriptionId,
+    });
+    return response.data;
+  },
 };
 
 // Metrics API Types

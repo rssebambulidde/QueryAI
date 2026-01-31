@@ -361,7 +361,7 @@ router.get(
         const subscriptionLookupId = payment.paypal_subscription_id || lookupToken || subscriptionId;
         const subDetails = await PayPalService.getSubscription(subscriptionLookupId);
         const status = (subDetails.status || '').toUpperCase();
-        if (status === 'ACTIVE' || status === 'APPROVAL_PENDING') {
+        if (['ACTIVE', 'APPROVAL_PENDING', 'APPROVED'].includes(status)) {
           paymentStatus = 'completed';
           const periodStart = subDetails.start_time
             ? new Date(subDetails.start_time)
@@ -684,6 +684,108 @@ router.get(
 );
 
 /**
+ * POST /api/payment/sync-subscription
+ * Sync pending subscription payments from PayPal (fallback when callback doesn't run or fails).
+ * Call when user returns from PayPal but payment/tier didn't update (e.g. Auto return OFF).
+ */
+router.post(
+  '/sync-subscription',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { subscription_id: subscriptionId } = req.body;
+
+    // Find pending payments for this user with paypal_subscription_id
+    const payments = subscriptionId
+      ? [(await DatabaseService.getPaymentByPayPalSubscriptionId(subscriptionId))].filter(Boolean) as Database.Payment[]
+      : (await DatabaseService.getUserPayments(userId, 20)).filter(
+          (p) => p.status === 'pending' && p.paypal_subscription_id
+        );
+
+    if (payments.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: { synced: false, message: 'No pending subscription payments to sync' },
+      });
+    }
+
+    let synced = false;
+    for (const payment of payments) {
+      if (payment.user_id !== userId) continue;
+      const subId = payment.paypal_subscription_id;
+      if (!subId) continue;
+
+      try {
+        const subDetails = await PayPalService.getSubscription(subId);
+        const status = (subDetails.status || '').toUpperCase();
+        if (status !== 'ACTIVE' && status !== 'APPROVAL_PENDING') continue;
+
+        // Update payment to completed
+        await DatabaseService.updatePayment(payment.id, {
+          status: 'completed',
+          callback_data: {
+            ...(typeof payment.callback_data === 'object' && payment.callback_data ? payment.callback_data : {}),
+            ...(subDetails as unknown as Record<string, unknown>),
+          } as Record<string, unknown>,
+          completed_at: new Date().toISOString(),
+        });
+
+        // Update subscription
+        const periodStart = subDetails.start_time
+          ? new Date(subDetails.start_time)
+          : new Date();
+        const periodEnd = subDetails.next_billing_time
+          ? new Date(subDetails.next_billing_time)
+          : new Date(periodStart.getTime() + 30 * 24 * 60 * 60 * 1000);
+        const storedBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
+        const billingPeriod = storedBillingPeriod === 'annual' ? 'annual' : 'monthly';
+        const currency = (payment.currency || 'USD') as 'UGX' | 'USD';
+        const { getAnnualDiscountPercent } = await import('../constants/pricing');
+        const annualDiscount = billingPeriod === 'annual'
+          ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro', currency)
+          : 0;
+
+        await DatabaseService.updateSubscription(payment.user_id, {
+          paypal_subscription_id: subId,
+          tier: payment.tier,
+          current_period_start: periodStart.toISOString(),
+          current_period_end: periodEnd.toISOString(),
+          status: 'active',
+          auto_renew: true,
+          billing_period: billingPeriod,
+          annual_discount: annualDiscount,
+        });
+
+        const { SubscriptionService } = await import('../services/subscription.service');
+        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+
+        logger.info('Subscription synced via sync-subscription endpoint', {
+          paymentId: payment.id,
+          subscriptionId: subId,
+          tier: payment.tier,
+        });
+        synced = true;
+      } catch (err) {
+        logger.warn('Sync subscription failed for payment', {
+          paymentId: payment.id,
+          subscriptionId: subId,
+          error: err,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: { synced, message: synced ? 'Subscription synced' : 'No updates needed' },
+    });
+  })
+);
+
+/**
  * GET /api/payment/webhook - reject GET
  */
 router.get(
@@ -836,7 +938,7 @@ router.post(
             const subDetails = await PayPalService.getSubscription(subscriptionId);
             const status = (subDetails.status || '').toUpperCase();
             
-            if (status === 'ACTIVE' || status === 'APPROVAL_PENDING') {
+            if (['ACTIVE', 'APPROVAL_PENDING', 'APPROVED'].includes(status)) {
               await DatabaseService.updatePayment(payment.id, {
                 status: 'completed',
                 callback_data: subDetails as unknown as Record<string, unknown>,

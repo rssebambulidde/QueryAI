@@ -70,6 +70,14 @@ function DashboardContent() {
     if (!payment) return;
 
     if (payment === 'success') {
+      // Sync subscription from PayPal (handles case where callback didn't run, e.g. Auto return OFF)
+      import('@/lib/api').then(({ paymentApi }) => {
+        paymentApi.syncSubscription().then((r) => {
+          if (r.success && r.data?.synced) {
+            checkAuth().catch(() => {});
+          }
+        }).catch(() => {});
+      });
       toast.success('Payment completed. Your subscription has been updated.');
       router.replace('/dashboard/settings/subscription', { scroll: false });
       checkAuth().catch(() => {});
@@ -83,7 +91,16 @@ function DashboardContent() {
       toast.error('Something went wrong. Please try again or contact support.');
       router.replace('/dashboard/settings/subscription', { scroll: false });
     } else if (payment === 'pending') {
-      toast.info('Payment is pending. Your subscription will update when payment completes.');
+      // Try syncing - sometimes callback doesn't run but PayPal has activated the subscription
+      import('@/lib/api').then(({ paymentApi }) => {
+        paymentApi.syncSubscription().then((r) => {
+          if (r.success && r.data?.synced) {
+            toast.success('Subscription synced. Your plan has been updated.');
+            checkAuth().catch(() => {});
+          }
+        }).catch(() => {});
+      });
+      toast.info('Payment is pending. Syncing with PayPal...');
       router.replace('/dashboard/settings/subscription', { scroll: false });
     }
   }, [searchParams, toast, router, checkAuth]);
