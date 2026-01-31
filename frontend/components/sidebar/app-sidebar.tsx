@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, TestTube, CheckSquare, LogOut, User, ArrowUp, CreditCard, Star, Pin } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { isEnterpriseTier } from '@/lib/pricing';
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import { ConversationSkeleton, CollectionSkeleton } from './skeleton-loader';
+import { AccountDropdown } from './account-dropdown';
 
 type TabType = 'chat' | 'collections';
 
@@ -41,6 +42,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
   const [pinnedConversations, setPinnedConversations] = useState<Set<string>>(new Set());
   const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
+  const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
+  const accountButtonRef = React.useRef<HTMLButtonElement>(null);
   const { toast } = useToast();
   const router = useRouter();
   const { user, logout } = useAuthStore();
@@ -349,24 +352,39 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           </button>
         </nav>
         
-        {/* Bottom Section - Collapsed */}
-        <div className="border-t border-gray-200 p-2 space-y-1">
-          {subscriptionTier !== 'enterprise' && (
-            <button
-              onClick={handleUpgrade}
-              className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-orange-600 hover:bg-orange-50"
-              title={`Upgrade from ${getTierName(subscriptionTier)}`}
-            >
-              <ArrowUp className="w-5 h-5" />
-            </button>
-          )}
+        {/* Bottom Section - Collapsed - Account Button */}
+        <div className="border-t border-gray-200 p-2 relative">
           <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
-            title={`Logout (${user?.full_name || user?.email || 'User'})`}
+            ref={accountButtonRef}
+            onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
+            className={cn(
+              'w-full flex items-center justify-center p-2 rounded-lg transition-colors',
+              isAccountDropdownOpen
+                ? 'bg-gray-100'
+                : 'hover:bg-gray-50'
+            )}
+            title={`Account (${user?.full_name || user?.email || 'User'})`}
           >
-            <LogOut className="w-5 h-5" />
+            {user?.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={user?.full_name || user?.email || 'User'}
+                className="w-8 h-8 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-xs font-semibold">
+                {getUserInitials()}
+              </div>
+            )}
           </button>
+
+          {/* Account Dropdown for Collapsed Sidebar */}
+          <AccountDropdown
+            isOpen={isAccountDropdownOpen}
+            onClose={() => setIsAccountDropdownOpen(false)}
+            subscriptionTier={subscriptionTier}
+            anchorRef={accountButtonRef}
+          />
         </div>
       </div>
     );
@@ -731,10 +749,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
       </div>
 
-      {/* Bottom Section - User Info, Plan, Upgrade, Logout */}
-      <div className="border-t border-gray-200 bg-gray-50 p-3 space-y-2 flex-shrink-0">
-        {/* User Info */}
-        <div className="flex items-center gap-2 px-2 py-1.5">
+      {/* Bottom Section - Account Button */}
+      <div className="border-t border-gray-200 p-2 flex-shrink-0 relative">
+        <button
+          ref={accountButtonRef}
+          onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
+          className={cn(
+            'w-full flex items-center gap-2 px-2 py-2 rounded-lg transition-colors',
+            isAccountDropdownOpen
+              ? 'bg-gray-100'
+              : 'hover:bg-gray-50'
+          )}
+        >
           {user?.avatar_url ? (
             <img
               src={user.avatar_url}
@@ -746,7 +772,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               {getUserInitials()}
             </div>
           )}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 text-left">
             <p className="text-sm font-medium text-gray-900 truncate">
               {user?.full_name || user?.email || 'User'}
             </p>
@@ -754,31 +780,19 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               {getTierName(subscriptionTier)} Plan
             </p>
           </div>
-        </div>
+          <ChevronDown className={cn(
+            'w-4 h-4 text-gray-500 flex-shrink-0 transition-transform',
+            isAccountDropdownOpen && 'rotate-180'
+          )} />
+        </button>
 
-        {/* Upgrade Button (if not Enterprise) */}
-        {subscriptionTier !== 'enterprise' && (
-          <Button
-            onClick={handleUpgrade}
-            variant="outline"
-            size="sm"
-            className="w-full text-xs h-8 border-orange-300 text-orange-700 hover:bg-orange-50"
-          >
-            <ArrowUp className="w-3 h-3 mr-1.5" />
-            Upgrade Plan
-          </Button>
-        )}
-
-        {/* Logout Button */}
-        <Button
-          onClick={handleLogout}
-          variant="ghost"
-          size="sm"
-          className="w-full text-xs h-8 text-gray-700 hover:bg-gray-100"
-        >
-          <LogOut className="w-3 h-3 mr-1.5" />
-          Logout
-        </Button>
+        {/* Account Dropdown */}
+        <AccountDropdown
+          isOpen={isAccountDropdownOpen}
+          onClose={() => setIsAccountDropdownOpen(false)}
+          subscriptionTier={subscriptionTier}
+          anchorRef={accountButtonRef}
+        />
       </div>
 
       {/* Save to Collection Dialog */}
