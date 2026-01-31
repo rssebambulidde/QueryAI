@@ -39,9 +39,66 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isLoadingCollections, setIsLoadingCollections] = useState(false);
   const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(null);
+  const [pinnedConversations, setPinnedConversations] = useState<Set<string>>(new Set());
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
   const { toast } = useToast();
   const router = useRouter();
   const { user, logout } = useAuthStore();
+
+  // Debounce search query
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const debouncedCollectionSearchQuery = useDebounce(collectionSearchQuery, 300);
+
+  // Load pinned conversations from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pinnedConversations');
+      if (saved) {
+        try {
+          setPinnedConversations(new Set(JSON.parse(saved)));
+        } catch (e) {
+          console.error('Failed to load pinned conversations:', e);
+        }
+      }
+    }
+  }, []);
+
+  // Save pinned conversations to localStorage
+  const savePinnedConversations = (pinned: Set<string>) => {
+    setPinnedConversations(pinned);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pinnedConversations', JSON.stringify(Array.from(pinned)));
+    }
+  };
+
+  // Toggle pin conversation
+  const handleTogglePin = (conversationId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newPinned = new Set(pinnedConversations);
+    if (newPinned.has(conversationId)) {
+      newPinned.delete(conversationId);
+      toast.success('Conversation unpinned');
+    } else {
+      newPinned.add(conversationId);
+      toast.success('Conversation pinned');
+    }
+    savePinnedConversations(newPinned);
+  };
+
+  // Get user initials for avatar
+  const getUserInitials = (): string => {
+    if (user?.full_name) {
+      const names = user.full_name.split(' ');
+      if (names.length >= 2) {
+        return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+      }
+      return user.full_name.substring(0, 2).toUpperCase();
+    }
+    if (user?.email) {
+      return user.email.substring(0, 2).toUpperCase();
+    }
+    return 'U';
+  };
 
   const getTierName = (tier: string) => {
     switch (tier) {
