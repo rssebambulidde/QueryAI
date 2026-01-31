@@ -590,7 +590,9 @@ export async function createSubscription(
         cancelUrl: params.cancelUrl,
         brandName: 'QueryAI',
         // Don't set locale - let PayPal auto-detect user's country for international address support
-        // PayPal will automatically show appropriate address fields based on user's location
+        // PayPal determines locale from: shipping address country, locale code, or logged-in user's country
+        // By not setting locale, PayPal will use user's browser/IP location to determine country
+        // This allows international users to enter addresses in their country's format
       },
       autoRenewal: false,
     },
@@ -609,6 +611,34 @@ export async function createSubscription(
     throw new Error('PayPal create subscription: missing approval URL');
   }
 
+  // Modify approval URL to support international addresses
+  // PayPal may default to business account country (USA) - we need to let it detect user's country
+  let approvalUrl = approveLink.href;
+  try {
+    const url = new URL(approvalUrl);
+    // Remove any locale/country restrictions that force USA address format
+    url.searchParams.delete('locale');
+    url.searchParams.delete('country.x');
+    url.searchParams.delete('country_code');
+    // Remove any state/ZIP restrictions
+    url.searchParams.delete('state');
+    url.searchParams.delete('zip');
+    // PayPal will use IP geolocation, browser settings, or user's PayPal account country
+    // to determine the appropriate address format
+    url.searchParams.set('useraction', 'commit'); // Shows "Pay Now" button
+    approvalUrl = url.toString();
+    
+    logger.info('PayPal subscription approval URL modified for international addresses', {
+      subscriptionId: data.id,
+      originalUrl: approveLink.href,
+      modifiedUrl: approvalUrl,
+      note: 'PayPal will auto-detect user country from IP/browser/PayPal account settings',
+    });
+  } catch (err) {
+    // If URL parsing fails, use original URL
+    logger.warn('Failed to modify subscription approval URL', { error: err, url: approveLink.href });
+  }
+
   logger.info('PayPal subscription created', {
     subscriptionId: data.id,
     tier: params.tier,
@@ -617,7 +647,7 @@ export async function createSubscription(
 
   return {
     subscriptionId: data.id,
-    approvalUrl: approveLink.href,
+    approvalUrl,
     status: data.status,
   };
 }

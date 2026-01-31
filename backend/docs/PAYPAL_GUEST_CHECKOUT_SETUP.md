@@ -183,19 +183,53 @@ When "PayPal Account Optional" is enabled:
 
 ### Billing Address Restrictions
 
-**Problem:** PayPal may restrict billing addresses to USA states if locale is hardcoded.
+**Problem:** PayPal may restrict billing addresses to USA states, especially for recurring subscriptions.
 
 **Solution:** Our implementation:
 - ✅ Removes hardcoded locale - PayPal auto-detects user's country
 - ✅ Sets `shippingPreference: NoShipping` for digital goods
+- ✅ Removes locale/country parameters from approval URLs
 - ✅ Allows PayPal to show appropriate address fields based on user's location
 - ✅ Supports international addresses automatically
 
-**If you still see USA-only addresses:**
-1. Check PayPal business account country settings
-2. Verify your PayPal account is set up for international payments
-3. Ensure "PayPal Account Optional" is enabled
-4. Contact PayPal support if issue persists
+**If you still see USA-only addresses (especially for subscriptions):**
+
+#### For Recurring Subscriptions:
+⚠️ **This is a PayPal business account/plan configuration issue, not a code issue.**
+
+**See detailed guide:** [`PAYPAL_INTERNATIONAL_SUBSCRIPTION_SETUP.md`](./PAYPAL_INTERNATIONAL_SUBSCRIPTION_SETUP.md)
+
+**Quick fixes:**
+1. **Check PayPal Business Account Country:**
+   - Go to PayPal Business Account → Account Settings → Business Information
+   - Verify your business country is set correctly (not USA if you're international)
+   - PayPal uses business account country as default for subscription plans
+
+2. **Check Subscription Plan Settings:**
+   - Go to PayPal Dashboard → Products & Services → Subscriptions
+   - Edit each subscription plan
+   - Verify plan is set up for international use
+   - Check if plan has country restrictions
+
+3. **PayPal Account Country Detection:**
+   - If user has PayPal account, PayPal uses account's country
+   - If user is creating account during subscription, PayPal may use business account country
+   - PayPal also uses IP geolocation and browser settings
+
+4. **Workaround:**
+   - Users can manually change country in PayPal address form (if available)
+   - Or use one-time payment instead (supports international addresses better)
+
+#### For One-Time Payments:
+- Should work automatically with our fixes
+- If still seeing USA restrictions, check "PayPal Account Optional" is enabled
+- Clear browser cookies and try again
+
+#### Additional Steps:
+1. Verify your PayPal account is set up for international payments
+2. Ensure "PayPal Account Optional" is enabled
+3. Contact PayPal support to verify account settings for international billing
+4. Consider creating subscription plans specifically for international markets
 
 ## Summary of Recommended Settings
 
