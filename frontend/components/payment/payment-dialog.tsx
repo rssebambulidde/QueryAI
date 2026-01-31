@@ -240,9 +240,9 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
 
           </form>
 
-          {/* PayPal Payment Section - Inside scrollable area */}
+          {/* Payment Section - Inside scrollable area */}
           <div className="mt-6 pt-6 border-t border-gray-200 space-y-3 pb-4">
-            <p className="text-sm text-gray-600 text-center mb-1">Pay with PayPal or use your Visa card via PayPal.</p>
+            <p className="text-sm font-medium text-gray-700 text-center mb-2">Choose Payment Method</p>
             <div className="w-full">
               <PayPalButton
                 tier={tier}

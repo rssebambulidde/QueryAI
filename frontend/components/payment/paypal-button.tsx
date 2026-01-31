@@ -103,12 +103,14 @@ export function PayPalButton({
   // For better international support, we use redirect flow which allows proper country selection
   if (recurring || !PAYPAL_CLIENT_ID) {
     return (
-      <div className="space-y-2">
+      <div className="space-y-3">
         {error && (
           <Alert variant="error" className="text-sm">
             {error}
           </Alert>
         )}
+        
+        {/* PayPal Button */}
         <button
           type="button"
           onClick={handleInitiateRedirect}
@@ -117,7 +119,7 @@ export function PayPalButton({
           style={{ minHeight: 44 }}
         >
           {loading ? (
-            <span className="animate-pulse">Redirecting to PayPal...</span>
+            <span className="animate-pulse">Redirecting...</span>
           ) : (
             <>
               <span>Pay with PayPal</span>
@@ -129,6 +131,37 @@ export function PayPalButton({
             </>
           )}
         </button>
+
+        {/* Card Payment Button */}
+        <button
+          type="button"
+          onClick={handleInitiateRedirect}
+          disabled={disabled || loading}
+          className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition-colors"
+          style={{ minHeight: 44 }}
+        >
+          {loading ? (
+            <span className="animate-pulse">Redirecting...</span>
+          ) : (
+            <>
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+                <line x1="1" y1="10" x2="23" y2="10"/>
+                <line x1="5" y1="4" x2="5" y2="10"/>
+              </svg>
+              <span>Pay with Debit or Credit Card</span>
+              {recurring && (
+                <span className="text-xs opacity-70">
+                  (Subscription{billingPeriod === 'annual' ? ', annual' : ''})
+                </span>
+              )}
+            </>
+          )}
+        </button>
+
+        <p className="text-xs text-gray-500 text-center">
+          Both options redirect to secure checkout where you can pay with PayPal account or enter your card details.
+        </p>
       </div>
     );
   }
@@ -179,12 +212,14 @@ export function PayPalButton({
   }, [tier, currency, firstName, lastName, email, phoneNumber, billingPeriod, showError, onRedirect]);
 
   return (
-    <div className="space-y-2 w-full">
+    <div className="space-y-3 w-full">
       {error && (
         <Alert variant="error" className="text-sm">
           {error}
         </Alert>
       )}
+      
+      {/* PayPal Button */}
       <button
         type="button"
         onClick={handleOneTimeRedirect}
@@ -193,18 +228,41 @@ export function PayPalButton({
         style={{ minHeight: 44 }}
       >
         {loading ? (
-          <span className="animate-pulse">Redirecting to PayPal...</span>
+          <span className="animate-pulse">Redirecting...</span>
         ) : (
           <>
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
             </svg>
-            <span>Pay with PayPal or Card</span>
+            <span>Pay with PayPal</span>
           </>
         )}
       </button>
-      <p className="text-xs text-gray-500 text-center mt-2">
-        You'll be redirected to PayPal's secure checkout where you can select your country and enter your billing address.
+
+      {/* Card Payment Button */}
+      <button
+        type="button"
+        onClick={handleOneTimeRedirect}
+        disabled={disabled || loading}
+        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition-colors"
+        style={{ minHeight: 44 }}
+      >
+        {loading ? (
+          <span className="animate-pulse">Redirecting...</span>
+        ) : (
+          <>
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+              <line x1="1" y1="10" x2="23" y2="10"/>
+              <line x1="5" y1="4" x2="5" y2="10"/>
+            </svg>
+            <span>Pay with Debit or Credit Card</span>
+          </>
+        )}
+      </button>
+
+      <p className="text-xs text-gray-500 text-center">
+        Both options redirect to secure checkout where you can pay with PayPal account or enter your card details.
       </p>
     </div>
   );
