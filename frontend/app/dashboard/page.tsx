@@ -14,6 +14,7 @@ import { BottomNavigation } from '@/components/mobile/bottom-navigation';
 import { MobileSidebar, HamburgerMenu } from '@/components/mobile/mobile-sidebar';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { useToast } from '@/lib/hooks/use-toast';
+// import { RoleDebug } from '@/components/debug/role-debug'; // Uncomment to debug role issues
 
 type TabType = 'chat' | 'collections';
 

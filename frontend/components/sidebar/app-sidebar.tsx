@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, TestTube, CheckSquare, LogOut, User, ArrowUp, CreditCard, Star, Pin } from 'lucide-react';
+import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, TestTube, CheckSquare, LogOut, User, ArrowUp, CreditCard, Star, Pin, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -133,11 +133,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     router.push('/dashboard/settings/subscription');
   };
   
-  // Check if user is admin/internal
-  const isAdmin =
-    subscriptionTier === 'pro' ||
-    user?.email?.includes('@admin') ||
-    user?.email?.includes('@internal');
+  // Check if user is admin or super_admin using role
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   
   const {
     conversations,
@@ -755,6 +752,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 <CheckSquare className="w-5 h-5" />
                 Validation Reports
               </button>
+              {user?.role === 'super_admin' && (
+                <button
+                  onClick={() => router.push('/dashboard/admin/users')}
+                  className={cn(
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                    'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  )}
+                >
+                  <ShieldCheck className="w-5 h-5" />
+                  User Management
+                </button>
+              )}
             </>
           )}
         </nav>

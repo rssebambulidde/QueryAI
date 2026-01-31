@@ -234,7 +234,7 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
                   {w.type === 'queries' && 'Queries'}
                   {w.type === 'documentUploads' && 'Document uploads'}
                   {w.type === 'topics' && 'Topics'}
-                  {w.type === 'tavilySearches' && 'Tavily searches'} ({w.percentage}% used)
+                  {w.type === 'tavilySearches' && 'Web searches'} ({w.percentage}% used)
                   {i < warnings.warnings.length - 1 && ', '}
                 </span>
               ))}
@@ -279,7 +279,7 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
                       <li key={i}>
                         {r.metric_type === 'queries' && 'Queries'}
                         {r.metric_type === 'document_upload' && 'Document uploads'}
-                        {r.metric_type === 'tavily_searches' && 'Tavily searches'}: {r.overage_units} over × {formatOverageAmount(r.unit_price, overage!.currency)} = {formatOverageAmount(r.amount_charged, overage!.currency)}
+                        {r.metric_type === 'tavily_searches' && 'Web searches'}: {r.overage_units} over × {formatOverageAmount(r.unit_price, overage!.currency)} = {formatOverageAmount(r.amount_charged, overage!.currency)}
                       </li>
                     ))}
                   </ul>
@@ -345,7 +345,7 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
         />
 
         <UsageItem
-          label="Tavily Searches"
+          label="Web Searches"
           icon={Search}
           used={usage.tavilySearches.used}
           limit={usage.tavilySearches.limit}

@@ -25,6 +25,7 @@ const router = Router();
 router.get(
   '/retrieval',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -55,6 +56,7 @@ router.get(
 router.get(
   '/retrieval/summary',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -75,6 +77,7 @@ router.get(
 router.post(
   '/retrieval/collect',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -128,6 +131,7 @@ router.post(
 router.get(
   '/latency/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -169,6 +173,7 @@ router.get(
 router.get(
   '/latency/trends',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { operationType, startDate, endDate, interval } = req.query;
@@ -233,6 +238,7 @@ router.get(
 router.get(
   '/latency/alerts/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate } = req.query;
@@ -256,6 +262,7 @@ router.get(
 router.get(
   '/errors/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -294,6 +301,7 @@ router.get(
 router.get(
   '/errors/trends',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { serviceType, errorCategory, startDate, endDate, interval } = req.query;
@@ -336,6 +344,7 @@ router.get(
 router.get(
   '/errors/alerts',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { limit } = req.query;
@@ -360,6 +369,7 @@ router.get(
 router.get(
   '/errors/alerts/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate } = req.query;
@@ -383,6 +393,7 @@ router.get(
 router.get(
   '/quality/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -424,6 +435,7 @@ router.get(
 router.get(
   '/quality/trends',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { metricType, startDate, endDate, interval } = req.query;

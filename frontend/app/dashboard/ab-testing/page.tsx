@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useUserRole } from '@/lib/hooks/use-user-role';
 import { useABTesting } from '@/lib/hooks/use-ab-testing';
 import { TestList } from '@/components/ab-testing/test-list';
 import { TestCreationForm } from '@/components/ab-testing/test-creation-form';
@@ -31,11 +32,8 @@ export default function ABTestingPage() {
     selectedTest?.status === 'active'
   );
 
-  // Check if user is admin/internal (pro tier or admin role)
-  const isAdmin =
-    user?.subscriptionTier === 'pro' ||
-    user?.email?.includes('@admin') ||
-    user?.email?.includes('@internal');
+  // Check if user is admin or super_admin using role
+  const { isAdmin } = useUserRole();
 
   useEffect(() => {
     if (!isLoading && (!isAuthenticated || !isAdmin)) {

@@ -26,6 +26,7 @@ import debugRoutes from './routes/debug.routes';
 import cacheRoutes from './routes/cache.routes';
 import connectionsRoutes from './routes/connections.routes';
 import metricsRoutes from './routes/metrics.routes';
+import adminRoutes from './routes/admin.routes';
 
 const app: Express = express();
 
@@ -132,6 +133,7 @@ app.use('/api/enterprise', enterpriseRoutes);
 app.use('/api/cache', cacheRoutes);
 app.use('/api/connections', connectionsRoutes);
 app.use('/api/metrics', metricsRoutes);
+app.use('/api/admin', adminRoutes);
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }

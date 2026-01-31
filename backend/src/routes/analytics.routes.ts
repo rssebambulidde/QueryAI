@@ -5,6 +5,7 @@ import * as AlertService from '../services/alert.service';
 import { MonitoringService, type UsageBucket } from '../services/monitoring.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
+import { requireAdmin } from '../middleware/authorization.middleware';
 import { apiLimiter } from '../middleware/rateLimiter';
 import { ValidationError } from '../types/error';
 import { DatabaseService } from '../services/database.service';
@@ -19,6 +20,7 @@ const router = Router();
 router.get(
   '/cost/summary',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;

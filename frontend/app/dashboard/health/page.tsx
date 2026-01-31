@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useUserRole } from '@/lib/hooks/use-user-role';
 import { useHealthMonitoring } from '@/lib/hooks/use-health-monitoring';
 import { SystemStatus } from '@/components/health/system-status';
 import { ErrorRateDisplay } from '@/components/health/error-rate-display';
@@ -18,11 +19,8 @@ export default function HealthPage() {
   const { user, isAuthenticated, isLoading } = useAuthStore();
   const { healthMetrics, systemHealth, loading, error, loadHealthMetrics } = useHealthMonitoring(true, 5000);
 
-  // Check if user is admin/internal (pro tier or admin role)
-  const isAdmin =
-    user?.subscriptionTier === 'pro' ||
-    user?.email?.includes('@admin') ||
-    user?.email?.includes('@internal');
+  // Check if user is admin or super_admin using role
+  const { isAdmin } = useUserRole();
 
   useEffect(() => {
     if (!isLoading && (!isAuthenticated || !isAdmin)) {

@@ -20,6 +20,7 @@ export interface AuthResponse {
     id: string;
     email: string;
     fullName?: string;
+    role?: 'user' | 'admin' | 'super_admin';
     subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
   };
   session: {
@@ -130,6 +131,7 @@ export class AuthService {
             id: authData.user.id,
             email: authData.user.email!,
             fullName: data.fullName,
+            role: profile?.role || 'user',
             subscriptionTier: subscription?.tier || 'free',
           },
           session: {
@@ -145,6 +147,7 @@ export class AuthService {
           id: authData.user.id,
           email: authData.user.email!,
           fullName: profile?.full_name || data.fullName,
+          role: profile?.role || 'user',
           subscriptionTier: subscription?.tier || 'free',
         },
         session: {
@@ -214,6 +217,7 @@ export class AuthService {
           id: authData.user.id,
           email: authData.user.email!,
           fullName: profile?.full_name,
+          role: profile?.role || 'user',
           subscriptionTier: subscription?.tier || 'free',
         },
         session: {

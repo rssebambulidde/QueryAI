@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useUserRole } from '@/lib/hooks/use-user-role';
 import { useValidation, useTestSuite, useTestRun } from '@/lib/hooks/use-validation';
 import { TestSuiteRunner } from '@/components/validation/test-suite-runner';
 import { TestCaseEditor } from '@/components/validation/test-case-editor';
@@ -27,11 +28,8 @@ export default function ValidationPage() {
   const [currentRun, setCurrentRun] = useState<ValidationRun | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
-  // Check if user is admin/internal (pro tier or admin role)
-  const isAdmin =
-    user?.subscriptionTier === 'pro' ||
-    user?.email?.includes('@admin') ||
-    user?.email?.includes('@internal');
+  // Check if user is admin or super_admin using role
+  const { isAdmin } = useUserRole();
 
   useEffect(() => {
     if (!isLoading && (!isAuthenticated || !isAdmin)) {

@@ -199,6 +199,7 @@ router.get(
           email: req.user!.email,
           full_name: profile?.full_name,
           avatar_url: profile?.avatar_url,
+          role: profile?.role || 'user',
           subscriptionTier: subscription?.tier || 'free',
         },
       },

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useUserRole } from '@/lib/hooks/use-user-role';
 import { DateRangePicker, DateRange } from '@/components/analytics/date-range-picker';
 import { MetricsCards } from '@/components/analytics/metrics-cards';
 import { PerformanceDashboard } from '@/components/analytics/performance-dashboard';
@@ -30,8 +31,8 @@ export default function AnalyticsPage() {
 
   const { retrievalMetrics, retrievalSummary, latencyStats, errorStats, qualityStats, loading, error } = useMetrics(dateRange);
 
-  // Check if user is admin/internal (pro tier or admin role)
-  const isAdmin = user?.subscriptionTier === 'pro' || user?.email?.includes('@admin') || user?.email?.includes('@internal');
+  // Check if user is admin or super_admin using role
+  const { isAdmin } = useUserRole();
 
   useEffect(() => {
     if (!isLoading && (!isAuthenticated || !isAdmin)) {
