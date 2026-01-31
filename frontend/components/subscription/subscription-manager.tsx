@@ -98,7 +98,7 @@ export function SubscriptionManager() {
     }
   };
 
-  const handleUpgrade = (tier: 'starter' | 'premium' | 'pro') => {
+  const handleUpgrade = (tier: 'starter' | 'premium' | 'pro' | 'enterprise') => {
     setSelectedTier(tier);
     setPaymentDialogInitialBilling(undefined);
     setPaymentDialogInitialRecurring(false);
@@ -106,8 +106,8 @@ export function SubscriptionManager() {
   };
 
   const handleSwitchBillingPeriod = (targetPeriod: BillingPeriod) => {
-    if (tier === 'free' || !['starter', 'premium', 'pro'].includes(tier)) return;
-    setSelectedTier(tier as 'starter' | 'premium' | 'pro');
+    if (tier === 'free' || !['starter', 'premium', 'pro', 'enterprise'].includes(tier)) return;
+    setSelectedTier(tier as 'starter' | 'premium' | 'pro' | 'enterprise');
     setPaymentDialogInitialBilling(targetPeriod);
     setPaymentDialogInitialRecurring(true);
     setShowPaymentDialog(true);
