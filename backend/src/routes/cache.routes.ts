@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
+import { requireAdmin } from '../middleware/authorization.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { CacheInvalidationService, InvalidationOptions } from '../services/cache-invalidation.service';
 import { RedisCacheService } from '../services/redis-cache.service';
@@ -30,6 +31,7 @@ const router = Router();
 router.get(
   '/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const health = await RedisCacheService.healthCheck();
@@ -54,6 +56,7 @@ router.get(
 router.get(
   '/version',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const version = await CacheInvalidationService.getCacheVersion();
@@ -76,6 +79,7 @@ router.get(
 router.get(
   '/query-stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const stats = getQueryServiceStats();
@@ -91,6 +95,7 @@ router.get(
 router.post(
   '/warm',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { keys } = req.body;
@@ -119,6 +124,7 @@ router.post(
 router.post(
   '/invalidate/document',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
@@ -162,6 +168,7 @@ router.post(
 router.post(
   '/invalidate/topic',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
@@ -203,6 +210,7 @@ router.post(
 router.post(
   '/invalidate/user',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
@@ -240,6 +248,7 @@ router.post(
 router.post(
   '/invalidate/time',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     // This could be restricted to admin users only
@@ -278,6 +287,7 @@ router.post(
 router.post(
   '/invalidate/manual',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
@@ -321,6 +331,7 @@ router.post(
 router.post(
   '/clear',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     // This should be restricted to admin users only
@@ -351,6 +362,7 @@ router.post(
 router.get(
   '/history',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 50;
@@ -378,6 +390,7 @@ router.get(
 router.get(
   '/rag/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const stats = RAGService.getRAGCacheStats();
@@ -396,6 +409,7 @@ router.get(
 router.get(
   '/embedding/batch-stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const stats = EmbeddingService.getBatchProcessingStats();
@@ -418,6 +432,7 @@ router.get(
 router.post(
   '/rag/invalidate',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
@@ -465,6 +480,7 @@ router.post(
 router.get(
   '/async/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { operation } = req.query;
@@ -508,6 +524,7 @@ router.get(
 router.get(
   '/retry/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const stats = RetryService.getStats();
@@ -537,6 +554,7 @@ router.get(
 router.post(
   '/retry/reset-stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     RetryService.resetStats();
@@ -555,6 +573,7 @@ router.post(
 router.get(
   '/circuit-breaker/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { circuit } = req.query;
@@ -586,6 +605,7 @@ router.get(
 router.get(
   '/circuit-breaker/health',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const health = CircuitBreakerService.healthCheck();
@@ -604,6 +624,7 @@ router.get(
 router.post(
   '/circuit-breaker/:circuit/reset',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const circuit = Array.isArray(req.params.circuit) ? req.params.circuit[0] : req.params.circuit;
@@ -631,6 +652,7 @@ router.post(
 router.post(
   '/circuit-breaker/:circuit/open',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const circuit = Array.isArray(req.params.circuit) ? req.params.circuit[0] : req.params.circuit;
@@ -658,6 +680,7 @@ router.post(
 router.post(
   '/circuit-breaker/:circuit/close',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const circuit = Array.isArray(req.params.circuit) ? req.params.circuit[0] : req.params.circuit;
@@ -685,6 +708,7 @@ router.post(
 router.get(
   '/degradation/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const stats = DegradationService.getStatistics();
@@ -707,6 +731,7 @@ router.get(
 router.post(
   '/degradation/reset',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { service } = req.body;
@@ -734,6 +759,7 @@ router.post(
 router.get(
   '/recovery/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const stats = ErrorRecoveryService.getStats();
@@ -761,6 +787,7 @@ router.get(
 router.get(
   '/recovery/history',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { limit, service, category, strategy } = req.query;
@@ -804,6 +831,7 @@ router.get(
 router.post(
   '/recovery/reset-stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     ErrorRecoveryService.resetStats();

@@ -210,11 +210,12 @@ router.get(
 
 /**
  * GET /api/metrics/latency/alerts
- * Get recent latency alerts
+ * Get recent latency alerts (Admin only)
  */
 router.get(
   '/latency/alerts',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { limit } = req.query;
@@ -472,11 +473,12 @@ router.get(
 
 /**
  * GET /api/metrics/cache/stats
- * Get cache statistics (Tavily, LLM, Redis)
+ * Get cache statistics (Tavily, LLM, Redis) - Admin only
  */
 router.get(
   '/cache/stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const tavilyStats = SearchService.getTavilyCacheStats();

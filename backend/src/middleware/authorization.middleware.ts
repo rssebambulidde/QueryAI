@@ -120,3 +120,47 @@ export const isSuperAdmin = async (userId: string): Promise<boolean> => {
 export const requireOwner = requireSuperAdmin;
 export const isAdminOrOwner = isAdminOrSuperAdmin;
 export const isOwner = isSuperAdmin;
+
+/**
+ * Helper function to check if user has required subscription tier
+ * Admins and super_admins bypass subscription tier checks
+ * @param userId - User ID to check
+ * @param requiredTiers - Array of allowed subscription tiers (e.g., ['premium', 'pro'])
+ * @returns Object with { hasAccess: boolean, reason?: string }
+ */
+export const checkSubscriptionTierWithAdminBypass = async (
+  userId: string,
+  requiredTiers: string[]
+): Promise<{ hasAccess: boolean; reason?: string }> => {
+  try {
+    // First check if user is admin or super_admin - they bypass subscription checks
+    const isAdmin = await isAdminOrSuperAdmin(userId);
+    if (isAdmin) {
+      return { hasAccess: true };
+    }
+
+    // For regular users, check subscription tier
+    const subscription = await DatabaseService.getUserSubscription(userId);
+    if (!subscription) {
+      return {
+        hasAccess: false,
+        reason: `This feature requires ${requiredTiers.join(' or ')} subscription`,
+      };
+    }
+
+    if (!requiredTiers.includes(subscription.tier)) {
+      return {
+        hasAccess: false,
+        reason: `This feature requires ${requiredTiers.join(' or ')} subscription`,
+      };
+    }
+
+    return { hasAccess: true };
+  } catch (error) {
+    logger.error('Error checking subscription tier with admin bypass:', error);
+    return {
+      hasAccess: false,
+      reason: 'Unable to verify subscription access',
+    };
+  }
+};

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
+import { requireAdmin } from '../middleware/authorization.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ValidationError } from '../types/error';
 import { PineconeService } from '../services/pinecone.service';
@@ -60,11 +61,12 @@ router.post(
 
 /**
  * GET /api/search/index-stats
- * Get Pinecone index statistics
+ * Get Pinecone index statistics (Admin only)
  */
 router.get(
   '/index-stats',
   authenticate,
+  requireAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const stats = await PineconeService.getIndexStats();

@@ -5,7 +5,7 @@ import * as AlertService from '../services/alert.service';
 import { MonitoringService, type UsageBucket } from '../services/monitoring.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
-import { requireAdmin } from '../middleware/authorization.middleware';
+import { requireAdmin, checkSubscriptionTierWithAdminBypass } from '../middleware/authorization.middleware';
 import { apiLimiter } from '../middleware/rateLimiter';
 import { ValidationError } from '../types/error';
 import { DatabaseService } from '../services/database.service';
@@ -36,7 +36,7 @@ router.get(
 
 /**
  * GET /api/analytics/cost/trends
- * Cost trends over time. Query: startDate, endDate, interval (hour|day|week).
+ * Cost trends over time (Premium/Pro only). Query: startDate, endDate, interval (hour|day|week).
  */
 router.get(
   '/cost/trends',
@@ -45,6 +45,18 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) throw new ValidationError('User not authenticated');
+
+    // Check subscription tier (Premium/Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
+    if (!tierCheck.hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: tierCheck.reason || 'Cost trends are only available for Premium and Pro subscribers',
+          code: 'SUBSCRIPTION_REQUIRED',
+        },
+      });
+    }
 
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
@@ -69,7 +81,7 @@ router.get(
 
 /**
  * GET /api/analytics/alerts
- * Get active or recent alerts. Query: activeOnly, limit.
+ * Get active or recent alerts (Premium/Pro only). Query: activeOnly, limit.
  */
 router.get(
   '/alerts',
@@ -78,6 +90,18 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) throw new ValidationError('User not authenticated');
+
+    // Check subscription tier (Premium/Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
+    if (!tierCheck.hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: tierCheck.reason || 'Alerts are only available for Premium and Pro subscribers',
+          code: 'SUBSCRIPTION_REQUIRED',
+        },
+      });
+    }
 
     const activeOnly = req.query.activeOnly === 'true';
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
@@ -91,7 +115,7 @@ router.get(
 
 /**
  * POST /api/analytics/alerts/check
- * Run cost/profitability checks for the current user. Body: costThresholdUsd, minMarginPercent, etc.
+ * Run cost/profitability checks for the current user (Premium/Pro only). Body: costThresholdUsd, minMarginPercent, etc.
  * Define before /alerts/:id/acknowledge so "check" is not matched as :id.
  */
 router.post(
@@ -101,6 +125,19 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) throw new ValidationError('User not authenticated');
+
+    // Check subscription tier (Premium/Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
+    if (!tierCheck.hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: tierCheck.reason || 'Alert checks are only available for Premium and Pro subscribers',
+          code: 'SUBSCRIPTION_REQUIRED',
+        },
+      });
+    }
+
     const body = (req.body || {}) as {
       costThresholdUsd?: number;
       costPeriodDays?: number;
@@ -119,7 +156,7 @@ router.post(
 
 /**
  * POST /api/analytics/alerts/:id/acknowledge
- * Acknowledge an alert (must belong to current user).
+ * Acknowledge an alert (Premium/Pro only, must belong to current user).
  */
 router.post(
   '/alerts/:id/acknowledge',
@@ -128,6 +165,19 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) throw new ValidationError('User not authenticated');
+
+    // Check subscription tier (Premium/Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
+    if (!tierCheck.hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: tierCheck.reason || 'Alert acknowledgment is only available for Premium and Pro subscribers',
+          code: 'SUBSCRIPTION_REQUIRED',
+        },
+      });
+    }
+
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const recent = AlertService.getRecentAlerts(500, userId);
     const alert = recent.find((a) => a.id === id);
@@ -141,7 +191,7 @@ router.post(
 
 /**
  * GET /api/analytics/monitoring/usage
- * Usage analytics over time. Query: startDate, endDate, interval (hour|day|week).
+ * Usage analytics over time (Premium/Pro only). Query: startDate, endDate, interval (hour|day|week).
  */
 router.get(
   '/monitoring/usage',
@@ -150,6 +200,18 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) throw new ValidationError('User not authenticated');
+
+    // Check subscription tier (Premium/Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
+    if (!tierCheck.hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: tierCheck.reason || 'Usage analytics are only available for Premium and Pro subscribers',
+          code: 'SUBSCRIPTION_REQUIRED',
+        },
+      });
+    }
 
     const startDate = Array.isArray(req.query.startDate) ? req.query.startDate[0] : req.query.startDate;
     const endDate = Array.isArray(req.query.endDate) ? req.query.endDate[0] : req.query.endDate;
@@ -174,7 +236,7 @@ router.get(
 
 /**
  * GET /api/analytics/monitoring/performance
- * Aggregated performance summary. Query: startDate, endDate.
+ * Aggregated performance summary (Premium/Pro only). Query: startDate, endDate.
  */
 router.get(
   '/monitoring/performance',
@@ -183,6 +245,18 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) throw new ValidationError('User not authenticated');
+
+    // Check subscription tier (Premium/Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
+    if (!tierCheck.hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: tierCheck.reason || 'Performance metrics are only available for Premium and Pro subscribers',
+          code: 'SUBSCRIPTION_REQUIRED',
+        },
+      });
+    }
 
     const startDate = Array.isArray(req.query.startDate) ? req.query.startDate[0] : req.query.startDate;
     const endDate = Array.isArray(req.query.endDate) ? req.query.endDate[0] : req.query.endDate;
@@ -213,13 +287,13 @@ router.get(
       throw new ValidationError('User not authenticated');
     }
 
-    // Check subscription tier (Premium/Pro only)
-    const subscription = await DatabaseService.getUserSubscription(userId);
-    if (!subscription || (subscription.tier !== 'premium' && subscription.tier !== 'pro')) {
+    // Check subscription tier (Premium/Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
+    if (!tierCheck.hasAccess) {
       res.status(403).json({
         success: false,
         error: {
-          message: 'Analytics dashboard is only available for Premium and Pro subscribers',
+          message: tierCheck.reason || 'Analytics dashboard is only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
@@ -256,13 +330,13 @@ router.get(
       throw new ValidationError('User not authenticated');
     }
 
-    // Check subscription tier
-    const subscription = await DatabaseService.getUserSubscription(userId);
-    if (!subscription || (subscription.tier !== 'premium' && subscription.tier !== 'pro')) {
+    // Check subscription tier (Premium/Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
+    if (!tierCheck.hasAccess) {
       res.status(403).json({
         success: false,
         error: {
-          message: 'Analytics dashboard is only available for Premium and Pro subscribers',
+          message: tierCheck.reason || 'Analytics dashboard is only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
@@ -295,13 +369,13 @@ router.get(
       throw new ValidationError('User not authenticated');
     }
 
-    // Check subscription tier
-    const subscription = await DatabaseService.getUserSubscription(userId);
-    if (!subscription || (subscription.tier !== 'premium' && subscription.tier !== 'pro')) {
+    // Check subscription tier (Premium/Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
+    if (!tierCheck.hasAccess) {
       res.status(403).json({
         success: false,
         error: {
-          message: 'Analytics dashboard is only available for Premium and Pro subscribers',
+          message: tierCheck.reason || 'Analytics dashboard is only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
@@ -339,13 +413,13 @@ router.get(
       throw new ValidationError('User not authenticated');
     }
 
-    // Check subscription tier
-    const subscription = await DatabaseService.getUserSubscription(userId);
-    if (!subscription || (subscription.tier !== 'premium' && subscription.tier !== 'pro')) {
+    // Check subscription tier (Premium/Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
+    if (!tierCheck.hasAccess) {
       res.status(403).json({
         success: false,
         error: {
-          message: 'Analytics dashboard is only available for Premium and Pro subscribers',
+          message: tierCheck.reason || 'Analytics dashboard is only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
@@ -378,13 +452,13 @@ router.get(
       throw new ValidationError('User not authenticated');
     }
 
-    // Check subscription tier
-    const subscription = await DatabaseService.getUserSubscription(userId);
-    if (!subscription || (subscription.tier !== 'pro')) {
+    // Check subscription tier (Pro only) - admins bypass this check
+    const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['pro']);
+    if (!tierCheck.hasAccess) {
       res.status(403).json({
         success: false,
         error: {
-          message: 'Usage charts are only available for Pro subscribers',
+          message: tierCheck.reason || 'Usage charts are only available for Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
