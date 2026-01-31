@@ -139,7 +139,7 @@ export function PayPalButton({
         </button>
 
         <p className="text-xs text-gray-500 text-center">
-          Secure checkout powered by PayPal. Enter your card details to complete payment.
+          Secure card payment processed via PayPal. Enter your card details to complete payment.
           <span className="block mt-1 text-gray-400">
             Note: Guest checkout (card payment without PayPal account) requires "PayPal Account Optional" enabled in PayPal business settings.
           </span>
@@ -225,7 +225,7 @@ export function PayPalButton({
       </button>
 
       <p className="text-xs text-gray-500 text-center">
-        Secure checkout powered by PayPal. Enter your card details to complete payment.
+        Secure card payment processed via PayPal. Enter your card details to complete payment.
         <span className="block mt-1 text-gray-400">
           Note: Guest checkout (card payment without PayPal account) requires "PayPal Account Optional" enabled in PayPal business settings.
         </span>

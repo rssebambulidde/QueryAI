@@ -73,7 +73,7 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
                 Upgrade to {tier === 'starter' ? 'Starter' : tier === 'premium' ? 'Premium' : tier === 'pro' ? 'Pro' : 'Enterprise'}
               </h2>
               <p className="text-gray-600 text-sm">
-                Pay with Debit or Credit Card —{' '}
+                Pay with Debit or Credit Card (processed via PayPal) —{' '}
                 <span className="font-semibold text-orange-600">{formatPrice(amount, currency)}</span>
                 {billingPeriod === 'annual' && ' /year'}
                 {recurring && ' (recurring)'}
