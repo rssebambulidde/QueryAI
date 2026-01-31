@@ -636,14 +636,17 @@ export async function getSubscription(
 
   // PayPal REST API returns snake_case; SDK may return camelCase
   const startTime =
-    (data.start_time as string) ?? (data.startTime as string) ?? undefined;
+    (typeof data.start_time === 'string' ? data.start_time : undefined) ??
+    (typeof data.startTime === 'string' ? data.startTime : undefined);
   const billingInfo = data.billing_info ?? data.billingInfo;
+  const bi = billingInfo && typeof billingInfo === 'object' ? (billingInfo as Record<string, unknown>) : null;
   const nextBillingTime =
-    (billingInfo && typeof billingInfo === 'object' && (billingInfo as Record<string, unknown>).next_billing_time as string) ??
-    (billingInfo && typeof billingInfo === 'object' && (billingInfo as Record<string, unknown>).nextBillingTime as string) ??
-    undefined;
-  const planId = (data.plan_id ?? data.planId) as string | undefined;
-  const customId = (data.custom_id ?? data.customId) as string | undefined;
+    (typeof bi?.next_billing_time === 'string' ? bi.next_billing_time : undefined) ??
+    (typeof bi?.nextBillingTime === 'string' ? bi.nextBillingTime : undefined);
+  const planIdRaw = data.plan_id ?? data.planId;
+  const customIdRaw = data.custom_id ?? data.customId;
+  const planId = typeof planIdRaw === 'string' ? planIdRaw : undefined;
+  const customId = typeof customIdRaw === 'string' ? customIdRaw : undefined;
 
   return {
     subscriptionId: (data.id ?? subscriptionId) as string,
