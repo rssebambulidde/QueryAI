@@ -238,13 +238,19 @@ export async function createPayment(
       let approvalUrl = approveLink.href;
       if (params.preferCard) {
         // Add fundingSource=card to the approval URL to pre-select card payment option
+        // Note: Guest checkout (card payment without PayPal account) must be enabled in PayPal business account:
+        // Account Settings > Website payments > Update > "PayPal account optional" = On
         const url = new URL(approvalUrl);
         url.searchParams.set('fundingSource', 'card');
+        // Try to encourage guest checkout by adding guest parameter (may not be officially supported)
+        // The primary requirement is enabling "PayPal Account Optional" in PayPal business account settings
+        url.searchParams.set('guest', '1');
         approvalUrl = url.toString();
         logger.info('PayPal approval URL modified for card payment preference', {
           orderId: result.id,
           originalUrl: approveLink.href,
           modifiedUrl: approvalUrl,
+          note: 'Guest checkout requires "PayPal Account Optional" enabled in PayPal business account settings',
         });
       }
 
