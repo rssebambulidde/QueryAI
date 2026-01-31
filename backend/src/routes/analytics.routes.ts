@@ -49,13 +49,14 @@ router.get(
     // Check subscription tier (Premium/Pro only) - admins bypass this check
     const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
     if (!tierCheck.hasAccess) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: tierCheck.reason || 'Cost trends are only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const startDate = req.query.startDate as string;
@@ -94,13 +95,14 @@ router.get(
     // Check subscription tier (Premium/Pro only) - admins bypass this check
     const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
     if (!tierCheck.hasAccess) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: tierCheck.reason || 'Alerts are only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const activeOnly = req.query.activeOnly === 'true';
@@ -129,13 +131,14 @@ router.post(
     // Check subscription tier (Premium/Pro only) - admins bypass this check
     const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
     if (!tierCheck.hasAccess) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: tierCheck.reason || 'Alert checks are only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const body = (req.body || {}) as {
@@ -169,13 +172,14 @@ router.post(
     // Check subscription tier (Premium/Pro only) - admins bypass this check
     const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
     if (!tierCheck.hasAccess) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: tierCheck.reason || 'Alert acknowledgment is only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -204,13 +208,14 @@ router.get(
     // Check subscription tier (Premium/Pro only) - admins bypass this check
     const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
     if (!tierCheck.hasAccess) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: tierCheck.reason || 'Usage analytics are only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const startDate = Array.isArray(req.query.startDate) ? req.query.startDate[0] : req.query.startDate;
@@ -249,13 +254,14 @@ router.get(
     // Check subscription tier (Premium/Pro only) - admins bypass this check
     const tierCheck = await checkSubscriptionTierWithAdminBypass(userId, ['premium', 'pro']);
     if (!tierCheck.hasAccess) {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: {
           message: tierCheck.reason || 'Performance metrics are only available for Premium and Pro subscribers',
           code: 'SUBSCRIPTION_REQUIRED',
         },
       });
+      return;
     }
 
     const startDate = Array.isArray(req.query.startDate) ? req.query.startDate[0] : req.query.startDate;
