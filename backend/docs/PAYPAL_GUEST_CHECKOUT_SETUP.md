@@ -75,6 +75,98 @@ When "PayPal Account Optional" is enabled:
 - [PayPal Guest Checkout Documentation](https://www.paypal.com/us/cshelp/article/how-do-i-accept-cards-with-checkout-using-the-guest-checkout-option--help307)
 - [PayPal Developer Documentation](https://developer.paypal.com/docs/checkout/standard/customize/display-funding-source/)
 
+## Other PayPal Web Preferences Settings
+
+### Encrypted Website Payments
+**Setting:** Block non-encrypted website payment  
+**Recommendation:** **OFF** (Leave disabled)
+
+**Why:** This setting applies to the old HTML button-based payments. Our implementation uses PayPal's **Orders API v2** with server-side SDK (`@paypal/paypal-server-sdk`), which already uses secure HTTPS/API calls. Enabling this setting would only block old-style HTML buttons, which we don't use.
+
+**Note:** All our payment requests are already encrypted via HTTPS and PayPal's secure API endpoints.
+
+### Express Checkout Settings
+**Setting:** Support giropay and bank transfer payments  
+**Recommendation:** **ON** (Enable if you want to support these payment methods)
+
+**Why:** While we use PayPal's Orders API (not the old Express Checkout), PayPal may internally use Express Checkout for certain payment methods like giropay (Germany) and bank transfers. Enabling this allows PayPal to offer these additional payment options to customers in supported regions.
+
+**Note:** This is optional and mainly affects customers in specific regions (e.g., Germany for giropay).
+
+### Contact Telephone Number
+**Setting:** Contact telephone  
+**Recommendation:** **On (optional field)** or **Off**
+
+**Why:** 
+- **Optional field:** Allows customers to optionally provide a phone number
+- **Required field:** May cause some customers to abandon checkout
+- **Off:** No phone number requested
+
+**Our Implementation:** We collect phone number as optional in our payment form, so setting this to "On (optional field)" or "Off" is fine.
+
+## Other PayPal Web Preferences Settings
+
+### Encrypted Website Payments
+**Setting:** Block non-encrypted website payment  
+**Recommendation:** **OFF** (Leave disabled)
+
+**Why:** 
+- This setting applies to the **old HTML button-based payments** (legacy PayPal buttons)
+- Our implementation uses PayPal's **Orders API v2** with server-side SDK (`@paypal/paypal-server-sdk`)
+- All payment requests are already encrypted via **HTTPS** and PayPal's secure API endpoints
+- Enabling this would only block old-style HTML buttons, which we don't use
+
+**Our Implementation:**
+- Uses secure server-to-server API calls
+- All data transmitted over HTTPS/TLS
+- No HTML buttons or client-side payment forms
+- Payments processed through PayPal's secure API
+
+**Conclusion:** Leave this setting **OFF** - it doesn't apply to our modern API-based implementation.
+
+### Express Checkout Settings
+**Setting:** Support giropay and bank transfer payments  
+**Recommendation:** **ON** (Optional - enable if you want to support these payment methods)
+
+**Why:**
+- While we use PayPal's **Orders API v2** (not the old Express Checkout), PayPal may internally use Express Checkout for certain payment methods
+- **giropay**: Popular payment method in Germany
+- **Bank transfer**: Alternative payment method for some regions
+- Enabling this allows PayPal to offer these additional payment options to customers in supported regions
+
+**Note:** This is **optional** and mainly affects customers in specific regions (e.g., Germany for giropay). If you only want card payments, you can leave this **OFF**.
+
+**Our Implementation:**
+- We use Orders API v2 which supports multiple payment methods
+- The setting controls whether PayPal offers giropay/bank transfer as options
+- Card payments work regardless of this setting
+
+### Contact Telephone Number
+**Setting:** Contact telephone  
+**Recommendation:** **On (optional field)** or **Off**
+
+**Why:**
+- **On (optional field):** Allows customers to optionally provide a phone number
+- **On (required field):** May cause some customers to abandon checkout (not recommended)
+- **Off:** No phone number requested
+
+**Our Implementation:** 
+- We collect phone number as **optional** in our payment form
+- Setting this to "On (optional field)" or "Off" both work fine
+- Avoid "On (required field)" as it may reduce conversion
+
+## Summary of Recommended Settings
+
+| Setting | Recommended Value | Reason |
+|---------|------------------|--------|
+| **PayPal Account Optional** | **ON** | Required for guest checkout (card payments without account) |
+| **Auto Return** | **ON** | Redirects users back to your site after payment |
+| **Return URL** | `https://your-backend-domain.com/api/payment/callback` | Your payment callback endpoint |
+| **Payment Data Transfer** | **ON** | Receives payment notifications (requires Auto Return) |
+| **Encrypted Website Payments** | **OFF** | Doesn't apply to Orders API v2 (we use secure API calls) |
+| **Support giropay and bank transfer** | **ON** (optional) | Enables additional payment methods for international customers |
+| **Contact Telephone** | **On (optional)** or **Off** | Matches our optional phone field |
+
 ## Support
 
 If you continue to experience issues after enabling guest checkout:
