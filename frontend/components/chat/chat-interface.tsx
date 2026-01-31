@@ -1044,6 +1044,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                     }
                   }}
                   onOpenSources={
+                    // Always provide onOpenSources callback if message has sources
+                    // This ensures the "N sources" button appears for ALL assistant messages with sources,
+                    // including responses to related questions
+                    // Note: This callback is provided for ALL assistant messages, not just original ones
                     message.sources && message.sources.length > 0
                       ? (sources, query) => setSourcePanelContext({ sources, query: query ?? '' })
                       : undefined

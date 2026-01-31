@@ -391,8 +391,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
           </div>
         </div>
 
-        {/* "N sources" pill (Perplexity-style) - shown below message */}
-        {!isUser && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && hasSources && onOpenSources && (
+        {/* "N sources" pill (Perplexity-style) - shown below message for ALL assistant responses with sources
+            This includes responses to original questions AND responses to related questions */}
+        {!isUser && 
+         !message.isActionResponse && 
+         !message.isTopicChangeMessage && 
+         !isStreaming && 
+         !message.isStreaming && 
+         hasSources && 
+         onOpenSources && (
           <div className="mt-3">
             <button
               type="button"
