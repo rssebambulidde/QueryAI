@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { subscriptionApi, usageApi, SubscriptionData, UsageLimit, Payment, BillingHistory, UsageStats, UsageWarnings } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { Check, X, Zap, FileText, Folder, Key, Sparkles, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink } from 'lucide-react';
+import { Check, X, Zap, FileText, Folder, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
 import { getAnnualSavings, getPricing, formatPrice, isEnterpriseTier } from '@/lib/pricing';
@@ -421,30 +421,12 @@ export function SubscriptionManager() {
                 <td className="p-3 text-center bg-indigo-50">Unlimited</td>
               </tr>
               <tr className="border-b">
-                <td className="p-3">Tavily searches</td>
+                <td className="p-3">Web searches</td>
                 <td className="p-3 text-center">5</td>
                 <td className="p-3 text-center bg-blue-50">10</td>
                 <td className="p-3 text-center">50</td>
                 <td className="p-3 text-center">200</td>
                 <td className="p-3 text-center bg-indigo-50">Unlimited</td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3">API access</td>
-                <td className="p-3 text-center">
-                  <X className="w-4 h-4 text-gray-400 mx-auto" />
-                </td>
-                <td className="p-3 text-center bg-blue-50">
-                  <X className="w-4 h-4 text-gray-400 mx-auto" />
-                </td>
-                <td className="p-3 text-center">
-                  <X className="w-4 h-4 text-gray-400 mx-auto" />
-                </td>
-                <td className="p-3 text-center">
-                  <Check className="w-4 h-4 text-green-600 mx-auto" />
-                </td>
-                <td className="p-3 text-center bg-indigo-50">
-                  <Check className="w-4 h-4 text-green-600 mx-auto" />
-                </td>
               </tr>
               <tr className="border-b">
                 <td className="p-3">Team collaboration</td>
@@ -647,13 +629,13 @@ export function SubscriptionManager() {
               </div>
             )}
 
-            {/* Tavily Searches */}
+            {/* Web Searches */}
             {usage.tavilySearches && (
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <div className="flex items-center gap-2">
                     <Search className="w-4 h-4 text-blue-600" />
-                    <span className="font-medium">Tavily Searches</span>
+                    <span className="font-medium">Web Searches</span>
                   </div>
                   <span className="text-sm text-gray-600">{formatLimit(usage.tavilySearches)}</span>
                 </div>
@@ -669,7 +651,7 @@ export function SubscriptionManager() {
                   <div className="mt-2">
                     <Alert variant="error" className="py-2">
                       <AlertCircle className="h-4 w-4" />
-                      <span className="ml-2">Tavily search limit reached. Upgrade for more searches.</span>
+                      <span className="ml-2">Web search limit reached. Upgrade for more searches.</span>
                     </Alert>
                     <Button
                       size="sm"
@@ -697,14 +679,19 @@ export function SubscriptionManager() {
             enabled={limits.features.documentUpload}
           />
           <FeatureItem
-            icon={<Sparkles className="w-5 h-5" />}
-            name="Embedding"
-            enabled={limits.features.embedding}
+            icon={<Search className="w-5 h-5" />}
+            name="Web Search"
+            enabled={true}
           />
           <FeatureItem
-            icon={<Key className="w-5 h-5" />}
-            name="API Access"
-            enabled={limits.features.apiAccess}
+            icon={<Folder className="w-5 h-5" />}
+            name="Topics"
+            enabled={limits.features.documentUpload}
+          />
+          <FeatureItem
+            icon={<Download className="w-5 h-5" />}
+            name="Export to PDF"
+            enabled={true}
           />
         </div>
       </div>
@@ -719,7 +706,7 @@ export function SubscriptionManager() {
                 <div className="border-2 border-blue-500 rounded-lg p-4">
                   <h4 className="font-semibold text-lg mb-2">Starter</h4>
                   <p className="text-gray-600 text-sm mb-4">
-                    100 queries/month, 3 documents, 1 topic, 10 Tavily searches
+                    100 queries/month, 3 documents, 1 topic, 10 web searches
                   </p>
                   <div className="space-y-2">
                     <Button
@@ -738,7 +725,7 @@ export function SubscriptionManager() {
                 <div className="border-2 border-orange-500 rounded-lg p-4">
                   <h4 className="font-semibold text-lg mb-2">Premium</h4>
                   <p className="text-gray-600 text-sm mb-4">
-                    500 queries/month, 10 documents, 3 topics, 50 Tavily searches
+                    500 queries/month, 10 documents, 3 topics, 50 web searches
                   </p>
                   <div className="space-y-2">
                     <Button
@@ -760,7 +747,7 @@ export function SubscriptionManager() {
               <div className="border-2 border-orange-500 rounded-lg p-4">
                 <h4 className="font-semibold text-lg mb-2">Premium</h4>
                 <p className="text-gray-600 text-sm mb-4">
-                  500 queries/month, 10 documents, 3 topics, 50 Tavily searches
+                  500 queries/month, 10 documents, 3 topics, 50 web searches
                 </p>
                 <div className="space-y-2">
                   <Button
@@ -780,7 +767,7 @@ export function SubscriptionManager() {
             <div className={`border-2 ${tier === 'premium' || tier === 'starter' ? 'border-purple-500' : 'border-gray-300'} rounded-lg p-4`}>
               <h4 className="font-semibold text-lg mb-2">Pro</h4>
               <p className="text-gray-600 text-sm mb-4">
-                Unlimited queries, unlimited documents, unlimited topics, 200 Tavily searches, API access
+                Unlimited queries, unlimited documents, unlimited topics, 200 web searches
               </p>
               <Button
                 onClick={(e) => {
