@@ -61,20 +61,13 @@ export default function AdminUsersPage() {
         role: newRole,
       });
       if (response.data.success) {
-        toast({
-          title: 'Success',
-          description: `User role updated to ${newRole}`,
-        });
+        toast.success(`User role updated to ${newRole}`);
         await loadUsers();
       } else {
         throw new Error(response.data.error?.message || 'Failed to update role');
       }
     } catch (err: any) {
-      toast({
-        title: 'Error',
-        description: err.response?.data?.error?.message || 'Failed to update user role',
-        variant: 'destructive',
-      });
+      toast.error(err.response?.data?.error?.message || 'Failed to update user role');
     } finally {
       setUpdatingRole(null);
     }
