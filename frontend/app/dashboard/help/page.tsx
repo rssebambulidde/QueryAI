@@ -4,11 +4,12 @@ import { BookOpen } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'User Guide | QueryAI',
-  description: 'How to use QueryAI: chat, documents, topics, and settings.',
+  description: 'How to use QueryAI: for students, researchers, professionals, and more. Chat, documents, topics, citations, and settings.',
 };
 
 const sections = [
   { id: 'getting-started', title: 'Getting started' },
+  { id: 'who-its-for', title: 'Who it\'s for' },
   { id: 'chat-research', title: 'Chat & research' },
   { id: 'conversations', title: 'Conversations' },
   { id: 'documents', title: 'Documents' },
@@ -57,20 +58,51 @@ export default function HelpPage() {
               1. Getting started
             </h2>
             <p>
-              After you sign in, you land on the <strong>dashboard</strong>. The main area is <strong>Chat</strong>:
-              type a question in the box at the bottom and press Enter or click Send. QueryAI will search the web
-              and your documents (if you have any) and return an answer with citations.
+              After you sign in, you land on the <strong>dashboard</strong>. The dashboard has two main tabs in the sidebar: <strong>Query Assistant</strong> (chat) and <strong>Collections</strong>. Under <strong>Query Assistant</strong>, type your question in the box at the bottom and press Enter or click Send. QueryAI searches the web and your uploaded documents (if any) and returns an answer with citations.
             </p>
             <p>
-              Use the <strong>sidebar</strong> on the left to switch between conversations, start a new chat,
-              or filter by topic. Your account menu (avatar, top right) gives access to Profile, Settings,
-              Subscription, and this User guide.
+              Use the <strong>sidebar</strong> to switch between the Query Assistant and Collections tabs, open or search conversations, start a new chat, or filter by topic. Your <strong>account menu</strong> (avatar, top right) gives access to this User guide, Profile, Settings, Subscription, and Sign out.
             </p>
+          </section>
+
+          <section id="who-its-for" className="scroll-mt-8">
+            <h2 className="text-xl font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              2. Who it&apos;s for: how different users benefit
+            </h2>
+            <p className="mb-4">
+              QueryAI is a fact research assistant that combines web search and your documents. Here is how different kinds of users can get the most from it:
+            </p>
+            <ul className="list-none space-y-4 pl-0">
+              <li>
+                <strong className="text-gray-900">University students</strong>
+                <span className="block text-gray-600 mt-1">
+                  Use QueryAI for essays, assignments, and papers: ask questions in plain language, get answers with citations you can cite. Upload lecture notes, readings, or PDFs and turn on <strong>Docs</strong> so answers draw from your course materials as well as the web. Create <strong>topics</strong> per course or assignment (e.g. &quot;Economics 101&quot;, &quot;Research methods&quot;) and use research mode to keep conversations focused. Export conversations to PDF or text for your references.
+                </span>
+              </li>
+              <li>
+                <strong className="text-gray-900">Researchers &amp; academics</strong>
+                <span className="block text-gray-600 mt-1">
+                  Upload papers, reports, or datasets and combine them with web search for literature and context. Use <strong>topics</strong> to scope each conversation to a project or subfield. Rely on citations to verify and trace claims. Use <strong>Advanced RAG</strong> in Settings to tune how many document chunks and web results are used. Organize work with <strong>Collections</strong> and pin important conversations.
+                </span>
+              </li>
+              <li>
+                <strong className="text-gray-900">Professionals &amp; business users</strong>
+                <span className="block text-gray-600 mt-1">
+                  Fact-check claims, prepare briefs, or summarize internal docs. Upload policy docs, contracts, or reports and ask questions that mix your documents with the web. Use <strong>Search preferences</strong> and <strong>Citation preferences</strong> in Settings to match your workflow. Enterprise users can use <strong>Team collaboration</strong> for shared research and documents.
+                </span>
+              </li>
+              <li>
+                <strong className="text-gray-900">General users &amp; lifelong learners</strong>
+                <span className="block text-gray-600 mt-1">
+                  Use QueryAI to explore any topic with source-backed answers. Turn on <strong>Web</strong> for broad fact-checking and learning; add <strong>Docs</strong> when you have PDFs or notes you want included. Follow-up questions help you go deeper. No special syntax needed—just ask in plain language.
+                </span>
+              </li>
+            </ul>
           </section>
 
           <section id="chat-research" className="scroll-mt-8">
             <h2 className="text-xl font-semibold text-gray-900 border-b border-gray-200 pb-2">
-              2. Chat & research
+              3. Chat &amp; research
             </h2>
             <ul className="list-disc pl-6 space-y-1">
               <li><strong>Ask anything</strong> – Type your question; answers stream in with source citations.</li>
@@ -83,10 +115,10 @@ export default function HelpPage() {
 
           <section id="conversations" className="scroll-mt-8">
             <h2 className="text-xl font-semibold text-gray-900 border-b border-gray-200 pb-2">
-              3. Conversations
+              4. Conversations
             </h2>
             <p>
-              Each chat is a <strong>conversation</strong>. In the sidebar you can:
+              Each chat is a <strong>conversation</strong>. In the sidebar under Query Assistant you can:
             </p>
             <ul className="list-disc pl-6 space-y-1">
               <li><strong>New chat</strong> – Start a new conversation.</li>
@@ -96,11 +128,14 @@ export default function HelpPage() {
               <li><strong>Delete</strong> – Remove a conversation from the list.</li>
               <li><strong>Export</strong> – Export the current conversation (e.g. as PDF or text) from the chat area.</li>
             </ul>
+            <p className="mt-3">
+              Use the <strong>Collections</strong> tab to group conversations into collections (e.g. by project or subject). You can save a conversation to a collection from the chat area.
+            </p>
           </section>
 
           <section id="documents" className="scroll-mt-8">
             <h2 className="text-xl font-semibold text-gray-900 border-b border-gray-200 pb-2">
-              4. Documents
+              5. Documents
             </h2>
             <p>
               Upload documents so QueryAI can search them and cite them in answers. Go to{' '}
@@ -117,7 +152,7 @@ export default function HelpPage() {
 
           <section id="topics" className="scroll-mt-8">
             <h2 className="text-xl font-semibold text-gray-900 border-b border-gray-200 pb-2">
-              5. Topics
+              6. Topics
             </h2>
             <p>
               <strong>Topics</strong> help you organize research (e.g. &quot;Legal&quot;, &quot;Market data&quot;). Manage them under{' '}
@@ -129,7 +164,7 @@ export default function HelpPage() {
 
           <section id="settings" className="scroll-mt-8">
             <h2 className="text-xl font-semibold text-gray-900 border-b border-gray-200 pb-2">
-              6. Settings
+              7. Settings
             </h2>
             <p>
               Open <strong>Settings</strong> from your account menu or the sidebar. Available sections:
@@ -148,7 +183,7 @@ export default function HelpPage() {
 
           <section id="account" className="scroll-mt-8">
             <h2 className="text-xl font-semibold text-gray-900 border-b border-gray-200 pb-2">
-              7. Account & privacy
+              8. Account &amp; privacy
             </h2>
             <p>
               Click your <strong>avatar</strong> (top right) to open the account menu. From there you can go to
