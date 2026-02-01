@@ -12,6 +12,16 @@ export default function HomePage() {
   const router = useRouter();
   const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
 
+  // If Supabase OAuth redirected to site root with tokens in hash, send to callback to complete sign-in
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const { pathname, hash } = window.location;
+    if (pathname === '/' && hash && hash.includes('access_token')) {
+      window.location.replace(`/auth/callback${hash}`);
+      return;
+    }
+  }, []);
+
   useEffect(() => {
     checkAuth().catch(() => {});
   }, [checkAuth]);
