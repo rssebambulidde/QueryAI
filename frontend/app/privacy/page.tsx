@@ -114,6 +114,7 @@ export default function PrivacyPage() {
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-200 flex flex-wrap gap-4 text-sm">
+          <Link href="/cookie-policy" className="text-blue-600 hover:underline">Cookies</Link>
           <Link href="/terms" className="text-blue-600 hover:underline">Terms of Service</Link>
           <Link href="/disclaimer" className="text-blue-600 hover:underline">Disclaimer</Link>
           <Link href="/" className="text-blue-600 hover:underline">Home</Link>

@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toast";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { PayPalProvider } from "@/components/payment/paypal-provider";
 import { TokenExpiryWarning } from "@/components/auth/token-expiry-warning";
+import { CookieConsentBanner } from "@/components/cookies/cookie-consent-banner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -184,6 +185,7 @@ export default function RootLayout({
             {children}
             <Toaster />
             <TokenExpiryWarning />
+            <CookieConsentBanner />
           </PayPalProvider>
         </ErrorBoundary>
       </body>

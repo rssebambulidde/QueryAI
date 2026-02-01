@@ -3,10 +3,16 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Logo } from '@/components/logo';
 import Script from 'next/script';
+import { LandingHeader } from '@/components/landing/landing-header';
+import { LandingHero } from '@/components/landing/landing-hero';
+import { LandingFeatures } from '@/components/landing/landing-features';
+import { LandingHowItWorks } from '@/components/landing/landing-how-it-works';
+import { LandingUseCases } from '@/components/landing/landing-use-cases';
+import { LandingPricingTeaser } from '@/components/landing/landing-pricing-teaser';
+import { LandingFaq } from '@/components/landing/landing-faq';
+import { LandingFinalCta } from '@/components/landing/landing-final-cta';
+import { LandingFooter } from '@/components/landing/landing-footer';
 
 export default function HomePage() {
   const router = useRouter();
@@ -52,6 +58,38 @@ export default function HomePage() {
           text: 'Yes. QueryAI offers a free tier so you can start researching immediately. No credit card required.',
         },
       },
+      {
+        '@type': 'Question',
+        name: 'How are sources used?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Answers include inline citations to the sources they use—your uploaded documents or web pages. You can click through to read the original and verify.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'What happens to my data?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Your documents and conversations are stored securely. We use your uploads only to answer your questions and to improve the service within our privacy policy.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'Can I use my own documents?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Yes. Upload PDFs, Word docs, and other supported files. QueryAI will search them and cite them in answers alongside web results.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'Where is QueryAI based?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'QueryAI is built by SamaBrains Solution Company, based in Kampala, Uganda.',
+        },
+      },
     ],
   };
 
@@ -74,62 +112,17 @@ export default function HomePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
       />
       <div className="min-h-screen bg-white flex flex-col">
-        <header className="border-b border-gray-100">
-          <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-            <Logo href="/" showName={false} size="md" />
-            <nav className="flex items-center gap-3">
-              <Link href="/login">
-                <Button variant="ghost" size="sm" className="text-gray-600">
-                  Sign in
-                </Button>
-              </Link>
-              <Link href="/signup">
-                <Button size="sm">Get started</Button>
-              </Link>
-            </nav>
-          </div>
-        </header>
-
-        <main className="flex-1 flex items-center justify-center px-4 py-16">
-          <div className="max-w-xl mx-auto text-center">
-            <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight">
-              Research with sources you can verify
-            </h1>
-            <p className="mt-3 text-gray-600 text-base">
-              Ask questions. Get answers backed by your documents and the web, with citations.
-            </p>
-            <div className="mt-8">
-              <Link href="/signup">
-                <Button size="lg" className="min-w-[180px]">
-                  Get started free
-                </Button>
-              </Link>
-            </div>
-            <p className="mt-4 text-xs text-gray-500">
-              Free tier · No credit card required
-            </p>
-          </div>
+        <LandingHeader />
+        <main>
+          <LandingHero />
+          <LandingFeatures />
+          <LandingHowItWorks />
+          <LandingUseCases />
+          <LandingPricingTeaser />
+          <LandingFaq />
+          <LandingFinalCta />
         </main>
-
-        <footer className="border-t border-gray-100 py-6">
-          <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <Logo href="/" showName={false} size="sm" />
-              <span className="text-sm text-gray-500">SamaBrains Solutions · Kampala, Uganda</span>
-            </div>
-            <div className="flex gap-6 text-sm">
-              <Link href="/privacy" className="text-gray-500 hover:text-gray-900">
-                Privacy
-              </Link>
-              <Link href="/terms" className="text-gray-500 hover:text-gray-900">
-                Terms
-              </Link>
-              <Link href="/disclaimer" className="text-gray-500 hover:text-gray-900">
-                Disclaimer
-              </Link>
-            </div>
-          </div>
-        </footer>
+        <LandingFooter />
       </div>
     </>
   );

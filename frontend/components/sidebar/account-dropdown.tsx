@@ -22,6 +22,7 @@ import {
   LogOut,
   Shield,
   ShieldCheck,
+  BookOpen,
 } from 'lucide-react';
 
 interface AccountDropdownProps {
@@ -47,6 +48,7 @@ interface MenuItem {
 const getMenuGroups = (subscriptionTier: string, isEnterprise: boolean, isSuperAdmin: boolean): MenuGroup[] => [
   {
     items: [
+      { label: 'User guide', icon: BookOpen, href: '/dashboard/help' },
       { label: 'Profile', icon: User, href: '/dashboard/settings/profile' },
       { label: 'Search', icon: Search, href: '/dashboard/settings/search' },
       { label: 'Citations', icon: FileText, href: '/dashboard/settings/citations' },

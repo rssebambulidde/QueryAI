@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { User, Search, FileText, Settings as SettingsIcon, CreditCard, Folder, Tag, Users, ShieldCheck, Bell, Key } from 'lucide-react';
+import { User, Search, FileText, Settings as SettingsIcon, CreditCard, Folder, Tag, Users, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
@@ -61,18 +61,6 @@ const settingsItems: SettingsItem[] = [
     label: 'Advanced RAG Settings', 
     description: 'Fine-tune document search and retrieval',
     icon: SettingsIcon 
-  },
-  { 
-    href: '/dashboard/settings/api', 
-    label: 'API Keys', 
-    description: 'Manage your API keys and access tokens',
-    icon: Key 
-  },
-  { 
-    href: '/dashboard/settings/notifications', 
-    label: 'Notifications', 
-    description: 'Configure notification preferences',
-    icon: Bell 
   },
   { 
     href: '/dashboard/settings/team', 
