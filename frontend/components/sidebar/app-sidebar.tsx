@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, LogOut, User, ArrowUp, CreditCard, Star, Pin } from 'lucide-react';
+import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, LogOut, User, ArrowUp, CreditCard, Star, Pin, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -53,6 +53,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const { toast } = useToast();
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  
+  // Debug: Log user role for super admin visibility
+  React.useEffect(() => {
+    if (user && typeof window !== 'undefined') {
+      console.log('[Sidebar] User role:', user.role || 'not set');
+      console.log('[Sidebar] Is super admin:', user.role === 'super_admin');
+    }
+  }, [user]);
 
   // Debounce search query
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
@@ -327,6 +335,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </span>
             )}
           </button>
+          {user?.role === 'super_admin' && (
+            <button
+              onClick={() => router.push('/dashboard/settings/super-admin')}
+              className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
+              title="Super Admin"
+            >
+              <ShieldCheck className="w-5 h-5" />
+            </button>
+          )}
         </nav>
         
         {/* Bottom Section - Collapsed - Account Button */}
@@ -706,6 +723,25 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             )}
           </div>
 
+          {/* Super Admin Section */}
+          {user?.role === 'super_admin' && (
+            <>
+              <div className="my-2 border-t border-gray-200" />
+              <div className="px-3 py-1">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Super Admin</span>
+              </div>
+              <button
+                onClick={() => router.push('/dashboard/settings/super-admin')}
+                className={cn(
+                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                  'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                )}
+              >
+                <ShieldCheck className="w-5 h-5" />
+                Super Admin
+              </button>
+            </>
+          )}
         </nav>
 
       </div>

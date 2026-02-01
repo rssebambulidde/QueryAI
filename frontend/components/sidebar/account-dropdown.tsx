@@ -20,6 +20,7 @@ import {
   ArrowUpRight,
   LogOut,
   Shield,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface AccountDropdownProps {
@@ -42,7 +43,7 @@ interface MenuItem {
   shortcut?: string;
 }
 
-const getMenuGroups = (subscriptionTier: string, isEnterprise: boolean): MenuGroup[] => [
+const getMenuGroups = (subscriptionTier: string, isEnterprise: boolean, isSuperAdmin: boolean): MenuGroup[] => [
   {
     items: [
       { label: 'Profile', icon: User, href: '/dashboard/settings/profile' },
@@ -53,6 +54,7 @@ const getMenuGroups = (subscriptionTier: string, isEnterprise: boolean): MenuGro
       { label: 'Documents', icon: Folder, href: '/dashboard/settings/documents' },
       { label: 'Topics', icon: Tag, href: '/dashboard/settings/topics' },
       ...(isEnterprise ? [{ label: 'Team Collaboration', icon: Users, href: '/dashboard/settings/team' }] : []),
+      ...(isSuperAdmin ? [{ label: 'Super Admin', icon: ShieldCheck, href: '/dashboard/settings/super-admin' }] : []),
     ],
   },
 ];
@@ -65,6 +67,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
 }) => {
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const isSuperAdmin = user?.role === 'super_admin';
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [privateMode, setPrivateMode] = useState(false);
 
@@ -259,7 +262,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
         <div className="py-2 max-h-[420px] overflow-y-auto custom-scrollbar">
           {(() => {
             const isEnterprise = subscriptionTier === 'enterprise';
-            const groups = getMenuGroups(subscriptionTier, isEnterprise);
+            const groups = getMenuGroups(subscriptionTier, isEnterprise, isSuperAdmin);
             return groups.map((group, groupIndex) => (
               <div key={groupIndex}>
                 {group.items.map((item, itemIndex) => {
