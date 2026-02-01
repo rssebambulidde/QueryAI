@@ -114,6 +114,7 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
         ref={sidebarRef}
         className={cn(
           'fixed top-0 left-0 h-full w-80 max-w-[85vw] bg-white z-50',
+          'flex flex-col',
           'transform transition-transform duration-300 ease-in-out',
           'shadow-xl',
           isOpen ? 'translate-x-0' : '-translate-x-full',
@@ -127,7 +128,7 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
         aria-label="Navigation menu"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-lg font-semibold text-gray-900">Menu</h2>
           <button
             onClick={onClose}
@@ -139,8 +140,8 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden flex flex-col">
+        {/* Content — flex-1 min-h-0 so account section stays visible at bottom */}
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           {children}
         </div>
       </div>

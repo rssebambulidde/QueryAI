@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { isEnterpriseTier } from '@/lib/pricing';
 import { useDebounce } from '@/lib/hooks/use-debounce';
+import { useMobile } from '@/lib/hooks/use-mobile';
 import { ConversationSkeleton, CollectionSkeleton } from './skeleton-loader';
 import { AccountDropdown } from './account-dropdown';
 import { ConversationHoverPreview } from './conversation-hover-preview';
@@ -34,6 +35,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   onTabChange,
   subscriptionTier = 'free',
 }) => {
+  const { isMobile } = useMobile();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showConversations, setShowConversations] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -385,21 +387,26 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     );
   }
 
-  // Expanded sidebar
+  // Expanded sidebar (min-h-0 so when inside mobile overlay the account section stays visible)
   return (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200 w-64 flex-shrink-0">
-      {/* Collapse Button */}
-      <div className="p-2 border-b border-gray-200">
-        <button
-          onClick={() => setIsCollapsed(true)}
-          className="w-full flex items-center justify-center p-2 hover:bg-gray-50 rounded transition-colors"
-          title="Collapse sidebar"
-        >
-          <ChevronLeft className="w-4 h-4 text-gray-600" />
-        </button>
-      </div>
+    <div className={cn(
+      'flex flex-col bg-white border-r border-gray-200 w-64 flex-shrink-0',
+      isMobile ? 'h-full min-h-0' : 'h-full'
+    )}>
+      {/* Collapse Button — hidden on mobile (overlay has its own close) */}
+      {!isMobile && (
+        <div className="p-2 border-b border-gray-200 flex-shrink-0">
+          <button
+            onClick={() => setIsCollapsed(true)}
+            className="w-full flex items-center justify-center p-2 hover:bg-gray-50 rounded transition-colors"
+            title="Collapse sidebar"
+          >
+            <ChevronLeft className="w-4 h-4 text-gray-600" />
+          </button>
+        </div>
+      )}
 
-      <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+      <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
         <nav className="px-2 py-4 space-y-1">
           {/* Query Assistant Tab */}
           <div>
@@ -758,8 +765,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         </Link>
       </div>
 
-      {/* Bottom Section - Account Button */}
-      <div className="border-t border-gray-200 p-2 flex-shrink-0 relative">
+      {/* Bottom Section - Account Button (always visible; safe area on mobile) */}
+      <div
+        className="border-t border-gray-200 p-2 flex-shrink-0 relative"
+        style={isMobile ? { paddingBottom: 'max(8px, env(safe-area-inset-bottom))' } : undefined}
+      >
         <button
           ref={accountButtonRef}
           onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
