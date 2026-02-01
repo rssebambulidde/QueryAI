@@ -21,7 +21,7 @@ type TabType = 'chat' | 'collections';
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isAuthenticated, isLoading, checkAuth } = useAuthStore();
+  const { user, isAuthenticated, isLoading, checkAuth, logout } = useAuthStore();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
@@ -281,8 +281,15 @@ function DashboardContent() {
         </div>
       </main>
 
-      {/* Bottom Navigation (Mobile Only) */}
-      <BottomNavigation />
+      {/* Bottom Navigation (Mobile Only) — account + tier + sign out in bottom right when signed in */}
+      <BottomNavigation
+        user={user}
+        subscriptionTier={user?.subscriptionTier || 'free'}
+        onSignOut={async () => {
+          await logout();
+          router.push('/login');
+        }}
+      />
     </div>
   );
 }
