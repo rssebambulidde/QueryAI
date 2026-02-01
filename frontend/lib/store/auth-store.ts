@@ -337,9 +337,12 @@ export const useAuthStore = create<AuthState>()(
       loginWithGoogle: async () => {
         set({ isLoading: true, error: null });
         try {
-          // Import supabase dynamically to avoid SSR issues
-          const { supabase } = await import('../supabase');
-          
+          const { getSupabase } = await import('../supabase');
+          const supabase = getSupabase();
+          if (!supabase) {
+            set({ isLoading: false, error: 'Google authentication is not configured.' });
+            return;
+          }
           const redirectUrl = typeof window !== 'undefined' 
             ? `${window.location.origin}/auth/callback`
             : '';

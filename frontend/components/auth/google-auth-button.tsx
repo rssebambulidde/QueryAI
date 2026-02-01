@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { getSupabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -29,22 +29,17 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
     setIsLoading(true);
     
     try {
-      // Check if Supabase is configured
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
+      const supabase = getSupabase();
+      if (!supabase) {
         toast.error('Google authentication is not configured. Please contact support.');
         setIsLoading(false);
         return;
       }
 
-      // Get the current URL for redirect
       const redirectUrl = typeof window !== 'undefined' 
         ? `${window.location.origin}/auth/callback`
         : '';
 
-      // Sign in with Google via Supabase
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

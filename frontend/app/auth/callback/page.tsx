@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { getSupabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { authApi } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
+
+export const dynamic = 'force-dynamic';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -15,8 +17,14 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     const handleAuthCallback = async () => {
+      const supabase = getSupabase();
+      if (!supabase) {
+        toast.error('Google authentication is not configured.');
+        setStatus('error');
+        router.push('/login');
+        return;
+      }
       try {
-        // Get the session from Supabase
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError) {
@@ -54,14 +62,11 @@ export default function AuthCallbackPage() {
           //   }),
           // });
 
-          // For now, sign out from Supabase and show message
           await supabase.auth.signOut();
-          
           toast.error('OAuth integration with backend is pending. Please use email/password login for now.');
           router.push('/login');
           setStatus('error');
         } catch (error: any) {
-          // If backend doesn't support OAuth yet, show message
           await supabase.auth.signOut();
           toast.error('OAuth integration is being set up. Please use email/password login.');
           router.push('/login');
