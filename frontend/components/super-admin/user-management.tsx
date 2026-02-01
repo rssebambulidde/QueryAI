@@ -9,6 +9,7 @@ import { Search, UserCheck, UserX, Shield, ShieldCheck, Loader2 } from 'lucide-r
 import { useToast } from '@/lib/hooks/use-toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface User {
   id: string;
