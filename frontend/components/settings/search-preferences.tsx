@@ -33,6 +33,7 @@ export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { isMobile } = useMobile();
 
   // Load saved preferences
   useEffect(() => {
