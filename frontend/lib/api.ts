@@ -290,6 +290,7 @@ export interface DocumentItem {
   chunkCount?: number;
   createdAt?: string;
   updatedAt?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface Topic {
