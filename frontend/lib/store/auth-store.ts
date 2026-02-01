@@ -381,14 +381,10 @@ export const useAuthStore = create<AuthState>()(
             const expiryDuration = rememberMe ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
             const expiryTime = Date.now() + expiryDuration;
             
-            const { rememberMe } = get();
-            const expiryDuration = rememberMe ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
-            const newExpiryTime = Date.now() + expiryDuration;
-            
             set({
               accessToken,
               refreshToken: newRefreshToken,
-              tokenExpiryTime: newExpiryTime,
+              tokenExpiryTime: expiryTime,
             });
             if (typeof window !== 'undefined') {
               localStorage.setItem('accessToken', accessToken);
