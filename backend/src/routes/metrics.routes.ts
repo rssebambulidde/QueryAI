@@ -5,7 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
-import { requireAdmin } from '../middleware/authorization.middleware';
+import { requireSuperAdmin } from '../middleware/authorization.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { MetricsService, MetricsQuery } from '../services/metrics.service';
 import { LatencyTrackerService, LatencyQuery, OperationType } from '../services/latency-tracker.service';
@@ -26,7 +26,7 @@ const router = Router();
 router.get(
   '/retrieval',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -57,7 +57,7 @@ router.get(
 router.get(
   '/retrieval/summary',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -78,7 +78,7 @@ router.get(
 router.post(
   '/retrieval/collect',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -132,7 +132,7 @@ router.post(
 router.get(
   '/latency/stats',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -174,7 +174,7 @@ router.get(
 router.get(
   '/latency/trends',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { operationType, startDate, endDate, interval } = req.query;
@@ -215,7 +215,7 @@ router.get(
 router.get(
   '/latency/alerts',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { limit } = req.query;
@@ -240,7 +240,7 @@ router.get(
 router.get(
   '/latency/alerts/stats',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate } = req.query;
@@ -264,7 +264,7 @@ router.get(
 router.get(
   '/errors/stats',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -303,7 +303,7 @@ router.get(
 router.get(
   '/errors/trends',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { serviceType, errorCategory, startDate, endDate, interval } = req.query;
@@ -346,7 +346,7 @@ router.get(
 router.get(
   '/errors/alerts',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { limit } = req.query;
@@ -371,7 +371,7 @@ router.get(
 router.get(
   '/errors/alerts/stats',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { startDate, endDate } = req.query;
@@ -395,7 +395,7 @@ router.get(
 router.get(
   '/quality/stats',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
@@ -437,7 +437,7 @@ router.get(
 router.get(
   '/quality/trends',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { metricType, startDate, endDate, interval } = req.query;
@@ -478,7 +478,7 @@ router.get(
 router.get(
   '/cache/stats',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const tavilyStats = SearchService.getTavilyCacheStats();

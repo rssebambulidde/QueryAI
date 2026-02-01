@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { SubscriptionService } from '../services/subscription.service';
 import { authenticate } from '../middleware/auth.middleware';
-import { requireAdmin } from '../middleware/authorization.middleware';
+import { requireSuperAdmin } from '../middleware/authorization.middleware';
 import { checkSubscription } from '../middleware/subscription.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ValidationError } from '../types/error';
@@ -61,7 +61,7 @@ router.get(
 router.put(
   '/upgrade',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
-import { requireAdmin } from '../middleware/authorization.middleware';
+import { requireSuperAdmin } from '../middleware/authorization.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { supabaseAdmin, supabase } from '../config/database';
 import config from '../config/env';
@@ -14,7 +14,7 @@ const router = Router();
 router.get(
   '/supabase',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const logger = (await import('../config/logger')).default;
 

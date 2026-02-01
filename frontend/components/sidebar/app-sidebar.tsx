@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, TestTube, CheckSquare, LogOut, User, ArrowUp, CreditCard, Star, Pin, ShieldCheck } from 'lucide-react';
+import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, LogOut, User, ArrowUp, CreditCard, Star, Pin } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -134,7 +134,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   };
   
   // Check if user is admin or super_admin using role
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   
   const {
     conversations,
@@ -328,24 +327,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </span>
             )}
           </button>
-          {isAdmin && (
-            <>
-              <button
-                onClick={() => router.push('/dashboard/ab-testing')}
-                className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
-                title="A/B Testing"
-              >
-                <TestTube className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => router.push('/dashboard/validation')}
-                className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
-                title="Validation Reports"
-              >
-                <CheckSquare className="w-5 h-5" />
-              </button>
-            </>
-          )}
         </nav>
         
         {/* Bottom Section - Collapsed - Account Button */}
@@ -725,47 +706,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             )}
           </div>
 
-          {/* Admin Section */}
-          {isAdmin && (
-            <>
-              <div className="my-2 border-t border-gray-200" />
-              <div className="px-3 py-1">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Admin</span>
-              </div>
-              <button
-                onClick={() => router.push('/dashboard/ab-testing')}
-                className={cn(
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                )}
-              >
-                <TestTube className="w-5 h-5" />
-                A/B Testing
-              </button>
-              <button
-                onClick={() => router.push('/dashboard/validation')}
-                className={cn(
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                )}
-              >
-                <CheckSquare className="w-5 h-5" />
-                Validation Reports
-              </button>
-              {user?.role === 'super_admin' && (
-                <button
-                  onClick={() => router.push('/dashboard/admin/users')}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                    'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  )}
-                >
-                  <ShieldCheck className="w-5 h-5" />
-                  User Management
-                </button>
-              )}
-            </>
-          )}
         </nav>
 
       </div>

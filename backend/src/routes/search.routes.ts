@@ -66,7 +66,7 @@ router.post(
 router.get(
   '/index-stats',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const stats = await PineconeService.getIndexStats();

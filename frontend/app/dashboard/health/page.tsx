@@ -39,7 +39,7 @@ export default function HealthPage() {
     );
   }
 
-  if (!isAuthenticated || !isAdmin) {
+  if (!isAuthenticated || !isSuperAdmin) {
     return null;
   }
 

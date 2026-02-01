@@ -17,7 +17,7 @@ const router = Router();
 router.get(
   '/users',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { limit = 50, offset = 0, search } = req.query;
@@ -56,7 +56,7 @@ router.get(
 router.get(
   '/users/:id',
   authenticate,
-  requireAdmin,
+  requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;

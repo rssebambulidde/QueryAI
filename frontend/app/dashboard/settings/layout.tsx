@@ -3,10 +3,11 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { User, Search, FileText, Settings as SettingsIcon, CreditCard, Folder, Tag, ArrowLeft, ChevronRight, Users } from 'lucide-react';
+import { User, Search, FileText, Settings as SettingsIcon, CreditCard, Folder, Tag, ArrowLeft, ChevronRight, Users, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useUserRole } from '@/lib/hooks/use-user-role';
 import { subscriptionApi } from '@/lib/api';
 import { useEffect, useState } from 'react';
 
@@ -15,6 +16,7 @@ interface SettingsNavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   requiresEnterprise?: boolean;
+  requiresSuperAdmin?: boolean;
 }
 
 const settingsNav: SettingsNavItem[] = [
@@ -26,6 +28,7 @@ const settingsNav: SettingsNavItem[] = [
   { href: '/dashboard/settings/documents', label: 'Documents', icon: Folder },
   { href: '/dashboard/settings/topics', label: 'Topics', icon: Tag },
   { href: '/dashboard/settings/team', label: 'Team Collaboration', icon: Users, requiresEnterprise: true },
+  { href: '/dashboard/settings/super-admin', label: 'Super Admin', icon: ShieldCheck, requiresSuperAdmin: true },
 ];
 
 export default function SettingsLayout({
@@ -35,6 +38,7 @@ export default function SettingsLayout({
 }) {
   const pathname = usePathname();
   const { user } = useAuthStore();
+  const { isSuperAdmin } = useUserRole();
   const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'starter' | 'premium' | 'pro' | 'enterprise'>('free');
 
   // Load subscription tier
@@ -52,9 +56,13 @@ export default function SettingsLayout({
     loadSubscription();
   }, []);
 
-  // Filter nav items based on subscription tier
+  // Filter nav items based on subscription tier and role
   const isEnterprise = subscriptionTier === 'enterprise';
-  const visibleNav = settingsNav.filter(item => !item.requiresEnterprise || isEnterprise);
+  const visibleNav = settingsNav.filter(item => {
+    if (item.requiresSuperAdmin && !isSuperAdmin) return false;
+    if (item.requiresEnterprise && !isEnterprise) return false;
+    return true;
+  });
 
   // Get current page label for breadcrumb
   const currentPage = visibleNav.find(item => item.href === pathname);

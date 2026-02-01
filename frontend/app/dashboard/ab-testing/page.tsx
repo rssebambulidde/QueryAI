@@ -32,14 +32,14 @@ export default function ABTestingPage() {
     selectedTest?.status === 'active'
   );
 
-  // Check if user is admin or super_admin using role
-  const { isAdmin } = useUserRole();
+  // Check if user is super_admin only
+  const { isSuperAdmin } = useUserRole();
 
   useEffect(() => {
-    if (!isLoading && (!isAuthenticated || !isAdmin)) {
+    if (!isLoading && (!isAuthenticated || !isSuperAdmin)) {
       router.push('/dashboard');
     }
-  }, [isAuthenticated, isLoading, isAdmin, router]);
+  }, [isAuthenticated, isLoading, isSuperAdmin, router]);
 
   if (isLoading) {
     return (
@@ -52,7 +52,7 @@ export default function ABTestingPage() {
     );
   }
 
-  if (!isAuthenticated || !isAdmin) {
+  if (!isAuthenticated || !isSuperAdmin) {
     return null;
   }
 
