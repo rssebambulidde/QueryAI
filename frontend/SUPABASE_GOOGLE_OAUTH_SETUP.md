@@ -188,6 +188,20 @@ Fill in the following fields:
 
 7. Click **"Save"**
 
+### 5.4 Add your app's redirect URL (required for production)
+**If you skip this, Google will redirect to your site root with tokens in the URL instead of `/auth/callback`.**
+
+1. In Supabase Dashboard go to **Authentication** → **URL Configuration**
+2. Under **Redirect URLs**, add your app callback URL(s), one per line, for example:
+   ```
+   https://queryai.samabrains.com/auth/callback
+   http://localhost:3000/auth/callback
+   ```
+3. **Site URL** can stay as your production URL (e.g. `https://queryai.samabrains.com`)
+4. Click **Save**
+
+Without these, Supabase may redirect to the site root after Google sign-in; the app will then redirect to `/auth/callback` via a fallback script, but adding the URL here is the correct fix.
+
 ---
 
 ## ✅ Step 6: Verify Configuration
