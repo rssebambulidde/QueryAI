@@ -72,16 +72,18 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 flex flex-col"
-        style={{ 
-          maxHeight: isMobile ? 'calc(100vh - 2rem)' : '90vh',
-          marginTop: isMobile ? 'env(safe-area-inset-top, 0)' : '0',
-          marginBottom: isMobile ? 'env(safe-area-inset-bottom, 0)' : '0'
+        className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 flex flex-col overflow-hidden"
+        style={{
+          maxHeight: isMobile
+            ? 'min(90vh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 1rem))'
+            : '90vh',
+          marginTop: isMobile ? 'max(0.5rem, env(safe-area-inset-top, 0))' : '0',
+          marginBottom: isMobile ? 'max(0.5rem, env(safe-area-inset-bottom, 0))' : '0',
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header - Fixed */}
-        <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex-shrink-0 flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <Settings className="w-5 h-5 text-gray-600" />
             <h2 className="text-lg font-semibold text-gray-900">Citation Settings</h2>
@@ -95,8 +97,8 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
           </button>
         </div>
 
-        {/* Content - Scrollable */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0 space-y-6">
+        {/* Content - Scrollable (footer stays visible on small screens) */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 min-h-0 space-y-6 overscroll-contain">
           {/* Citation Style */}
           <div>
             <label className="block text-sm font-medium text-gray-900 mb-3">
@@ -234,11 +236,14 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
           </div>
         </div>
 
-        {/* Footer - Fixed, Always Visible */}
-        <div className={cn(
-          "flex-shrink-0 flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50",
-          isMobile ? "flex-col gap-3" : "flex-row"
-        )}>
+        {/* Footer - Fixed at bottom, always visible (safe area on iPhone) */}
+        <div
+          className={cn(
+            'flex-shrink-0 flex items-center justify-between border-t border-gray-200 bg-gray-50',
+            isMobile ? 'flex-col gap-3 px-4 py-3' : 'flex-row px-6 py-4'
+          )}
+          style={isMobile ? { paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0))' } : undefined}
+        >
           <button
             onClick={reset}
             className={cn(

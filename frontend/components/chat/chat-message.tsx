@@ -185,14 +185,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={cn('flex flex-col', isUser ? 'items-end' : 'items-start', 'max-w-[85%]')}>
+      <div className={cn('flex flex-col w-full', isUser ? 'items-end max-w-[85%]' : 'items-stretch max-w-full')}>
         {/* Message Bubble */}
         <div
           className={cn(
             'rounded-2xl shadow-sm',
             isUser
               ? 'px-4 py-3 bg-gradient-to-br from-orange-600 to-orange-700 text-white'
-              : 'px-4 py-3.5 bg-white border border-gray-200 text-gray-900'
+              : 'px-4 py-3.5 bg-white border border-gray-200 text-gray-900 w-full'
           )}
         >
           {/* Role Label - hide when assistant is streaming with empty content */}
@@ -207,10 +207,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
             </div>
           )}
 
-          {/* Content */}
+          {/* Content - full width for assistant so text is well aligned, no gap on right */}
           <div className={cn(
             'max-w-none break-words overflow-wrap-anywhere',
-            isUser ? 'prose prose-sm prose-invert max-w-none' : 'min-w-0'
+            isUser ? 'prose prose-sm prose-invert max-w-none' : 'min-w-0 w-full text-left prose prose-sm prose-gray max-w-none'
           )}>
             {isUser && isEditing ? (
               <div className="space-y-2">

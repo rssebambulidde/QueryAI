@@ -514,6 +514,57 @@ router.get(
 );
 
 /**
+ * PATCH /api/documents/:id
+ * Update document metadata (and optionally filename)
+ */
+router.patch(
+  '/:id',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { id } = req.params;
+    const documentId = Array.isArray(id) ? id[0] : id;
+    if (!documentId) {
+      throw new ValidationError('Document ID is required');
+    }
+
+    const { metadata, filename } = req.body;
+    const updates: Record<string, any> = {};
+    if (metadata !== undefined && typeof metadata === 'object') {
+      updates.metadata = metadata;
+    }
+    if (filename !== undefined && typeof filename === 'string' && filename.trim()) {
+      updates.filename = filename.trim();
+    }
+    if (Object.keys(updates).length === 0) {
+      throw new ValidationError('No valid updates provided (metadata or filename)');
+    }
+
+    const document = await DocumentService.getDocument(documentId, userId);
+    if (!document) {
+      throw new ValidationError('Document not found');
+    }
+
+    await DocumentService.updateDocument(documentId, userId, updates);
+
+    const updated = await DocumentService.getDocument(documentId, userId);
+    res.status(200).json({
+      success: true,
+      message: 'Metadata saved',
+      data: {
+        id: updated?.id,
+        filename: updated?.filename,
+        metadata: updated?.metadata,
+      },
+    });
+  })
+);
+
+/**
  * POST /api/documents/:id/extract
  * Manually trigger text extraction for a document
  */
@@ -1367,7 +1418,12 @@ router.delete(
       throw new ValidationError('User not authenticated');
     }
 
-    const { path: filePath, id } = req.body;
+    // Accept id/path from body or query (some clients don't send body on DELETE)
+    const { path: filePathBody, id: idBody } = req.body || {};
+    const pathFromQuery = typeof req.query.path === 'string' ? req.query.path : undefined;
+    const idFromQuery = typeof req.query.id === 'string' ? req.query.id : undefined;
+    const filePath = filePathBody ?? pathFromQuery;
+    const id = idBody ?? idFromQuery;
 
     // If ID is provided, delete by ID (preferred)
     if (id && typeof id === 'string') {

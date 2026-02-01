@@ -20,6 +20,7 @@ export interface UpdateDocumentInput {
   extraction_error?: string | null;
   embedding_error?: string | null;
   metadata?: Record<string, any>;
+  filename?: string;
 }
 
 export class DocumentService {

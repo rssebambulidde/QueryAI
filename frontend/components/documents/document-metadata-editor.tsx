@@ -82,20 +82,27 @@ export const DocumentMetadataEditor: React.FC<DocumentMetadataEditorProps> = ({
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Note: This assumes the backend supports metadata updates
-      // You may need to add an update endpoint to documentApi
       const metadata = {
         description,
         tags,
         topicId: selectedTopicId,
       };
-
-      // For now, we'll show a toast since the API might not support metadata updates yet
-      // In a real implementation, you'd call: documentApi.update(document.id, { metadata, name: title })
-      
-      toast.success('Metadata saved (Note: Backend update endpoint may need to be implemented)');
-      onSave?.(document);
-      onClose();
+      const docId = document.id || document.path;
+      if (!docId) {
+        toast.error('Document ID not found');
+        return;
+      }
+      const response = await documentApi.update(docId, {
+        metadata,
+        filename: title.trim() || undefined,
+      });
+      if (response.success) {
+        toast.success('Metadata saved');
+        onSave?.({ ...document, name: response.data?.filename ?? title, metadata: response.data?.metadata ?? metadata });
+        onClose();
+      } else {
+        toast.error(response.message || 'Failed to save metadata');
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to save metadata');
     } finally {

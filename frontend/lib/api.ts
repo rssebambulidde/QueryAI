@@ -581,7 +581,7 @@ export const documentApi = {
 
   delete: async (pathOrId: string): Promise<ApiResponse<void>> => {
     const response = await apiClient.delete('/api/documents', {
-      params: { path: pathOrId, id: pathOrId },
+      data: { id: pathOrId, path: pathOrId },
     });
     return response.data;
   },
@@ -599,7 +599,12 @@ export const documentApi = {
   },
 
   clearProcessing: async (documentId: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.delete(`/api/documents/${documentId}/chunks`);
+    const response = await apiClient.post(`/api/documents/${documentId}/clear-processing`);
+    return response.data;
+  },
+
+  update: async (documentId: string, data: { metadata?: Record<string, unknown>; filename?: string }): Promise<ApiResponse<{ id: string; filename?: string; metadata?: Record<string, unknown> }>> => {
+    const response = await apiClient.patch(`/api/documents/${documentId}`, data);
     return response.data;
   },
 };
