@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authApi } from '@/lib/api';
@@ -11,7 +11,9 @@ import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
-export default function VerifyEmailPage() {
+export const dynamic = 'force-dynamic';
+
+function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { checkAuth } = useAuthStore();
@@ -167,5 +169,24 @@ export default function VerifyEmailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function VerifyEmailFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8 text-center">
+        <Loader2 className="mx-auto h-12 w-12 animate-spin text-orange-600" />
+        <p className="text-gray-600">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<VerifyEmailFallback />}>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }
