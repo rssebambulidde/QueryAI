@@ -2,6 +2,8 @@ import { getPineconeIndex, isPineconeConfigured } from '../config/pinecone';
 import logger from '../config/logger';
 import { AppError } from '../types/error';
 import { ChunkService } from './chunk.service';
+import { getEmbeddingDimensions, DEFAULT_EMBEDDING_MODEL } from '../config/embedding.config';
+import { CircuitBreakerService } from './circuit-breaker.service';
 
 export interface VectorMetadata {
   userId: string;
@@ -11,6 +13,8 @@ export interface VectorMetadata {
   topicId?: string;
   content: string;
   createdAt: string;
+  embeddingModel?: string; // Store which model was used
+  embeddingDimensions?: number; // Store dimensions for validation
 }
 
 export interface SearchResult {
@@ -22,7 +26,13 @@ export interface SearchResult {
   metadata: VectorMetadata;
 }
 
-const EMBEDDING_DIMENSIONS = 1536; // OpenAI text-embedding-3-small
+/**
+ * Get default embedding dimensions from current model configuration
+ * Can be overridden per operation
+ */
+function getDefaultEmbeddingDimensions(): number {
+  return getEmbeddingDimensions(DEFAULT_EMBEDDING_MODEL);
+}
 
 /**
  * Pinecone Service
@@ -52,13 +62,22 @@ export class PineconeService {
 
   /**
    * Upsert vectors to Pinecone
+   * @param documentId - Document ID
+   * @param chunks - Chunk data
+   * @param embeddings - Embedding vectors
+   * @param userId - User ID
+   * @param topicId - Optional topic ID
+   * @param expectedDimensions - Expected embedding dimensions (defaults to current model dimensions)
+   * @param embeddingModel - Optional embedding model name for metadata
    */
   static async upsertVectors(
     documentId: string,
     chunks: Array<{ id: string; chunkIndex: number; content: string }>,
     embeddings: number[][],
     userId: string,
-    topicId?: string
+    topicId?: string,
+    expectedDimensions?: number,
+    embeddingModel?: string
   ): Promise<string[]> {
     if (!isPineconeConfigured()) {
       throw new AppError('Pinecone is not configured', 500, 'PINECONE_NOT_CONFIGURED');
@@ -72,19 +91,39 @@ export class PineconeService {
       );
     }
 
+    // Use provided dimensions or default
+    const dimensions = expectedDimensions || getDefaultEmbeddingDimensions();
+
+    // Validate all embeddings have the same dimensions
+    const firstEmbeddingDimensions = embeddings[0]?.length;
+    if (!firstEmbeddingDimensions) {
+      throw new AppError('No embeddings provided', 400, 'NO_EMBEDDINGS');
+    }
+
+    // Check if all embeddings have consistent dimensions
+    const inconsistentEmbeddings = embeddings.filter(emb => emb.length !== firstEmbeddingDimensions);
+    if (inconsistentEmbeddings.length > 0) {
+      throw new AppError(
+        `Inconsistent embedding dimensions: expected ${firstEmbeddingDimensions}, found ${inconsistentEmbeddings.length} mismatched`,
+        400,
+        'INCONSISTENT_EMBEDDING_DIMENSIONS'
+      );
+    }
+
+    // Warn if dimensions don't match expected (but allow if dimensions are valid)
+    if (firstEmbeddingDimensions !== dimensions) {
+      logger.warn('Embedding dimensions mismatch', {
+        expected: dimensions,
+        actual: firstEmbeddingDimensions,
+        documentId,
+      });
+    }
+
     try {
       const index = await getPineconeIndex();
       const vectors = chunks.map((chunk, i) => {
         const vectorId = this.generateVectorId(documentId, chunk.id);
         const embedding = embeddings[i];
-
-        if (embedding.length !== EMBEDDING_DIMENSIONS) {
-          throw new AppError(
-            `Invalid embedding dimensions: expected ${EMBEDDING_DIMENSIONS}, got ${embedding.length}`,
-            400,
-            'INVALID_EMBEDDING_DIMENSIONS'
-          );
-        }
 
         const metadata: VectorMetadata = {
           userId,
@@ -93,10 +132,15 @@ export class PineconeService {
           chunkIndex: chunk.chunkIndex,
           content: chunk.content.substring(0, 1000), // Limit metadata size
           createdAt: new Date().toISOString(),
+          embeddingDimensions: embedding.length,
         };
 
         if (topicId) {
           metadata.topicId = topicId;
+        }
+
+        if (embeddingModel) {
+          metadata.embeddingModel = embeddingModel;
         }
 
         return {
@@ -119,8 +163,24 @@ export class PineconeService {
         const batch = vectors.slice(i, i + batchSize);
         
         try {
-          // New Pinecone SDK uses upsert with records array
-          await index.upsert(batch);
+          // Use circuit breaker for Pinecone upsert operations
+          await CircuitBreakerService.execute(
+            'pinecone-upsert',
+            async () => {
+              // New Pinecone SDK uses upsert with records array
+              await index.upsert(batch);
+            },
+            {
+              failureThreshold: 5,
+              resetTimeout: 60000, // 60 seconds
+              monitoringWindow: 60000,
+              timeout: 30000, // 30 seconds
+              errorFilter: (error) => {
+                // Only count server errors and connection issues as failures
+                return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
+              },
+            }
+          );
           
           logger.info(`Upserted batch ${Math.floor(i / batchSize) + 1}`, {
             documentId,
@@ -208,7 +268,23 @@ export class PineconeService {
 
     try {
       const index = await getPineconeIndex();
-      await index.deleteMany(vectorIds);
+      
+      // Use circuit breaker for Pinecone delete operations
+      await CircuitBreakerService.execute(
+        'pinecone-delete',
+        async () => {
+          await index.deleteMany(vectorIds);
+        },
+        {
+          failureThreshold: 5,
+          resetTimeout: 60000,
+          monitoringWindow: 60000,
+          timeout: 30000,
+          errorFilter: (error) => {
+            return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
+          },
+        }
+      );
 
       logger.info('Vectors deleted from Pinecone', {
         documentId,
@@ -245,7 +321,22 @@ export class PineconeService {
         });
 
         try {
-          await index.deleteMany(vectorIds);
+          // Use circuit breaker for Pinecone delete operations
+          await CircuitBreakerService.execute(
+            'pinecone-delete',
+            async () => {
+              await index.deleteMany(vectorIds);
+            },
+            {
+              failureThreshold: 5,
+              resetTimeout: 60000,
+              monitoringWindow: 60000,
+              timeout: 30000,
+              errorFilter: (error) => {
+                return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
+              },
+            }
+          );
           logger.info('Document vectors deleted from Pinecone by IDs', {
             documentId,
             vectorCount: vectorIds.length,
@@ -265,11 +356,26 @@ export class PineconeService {
         documentId,
       });
 
-      await index.deleteMany({
-        filter: {
-          documentId: { $eq: documentId },
+      // Use circuit breaker for Pinecone delete operations
+      await CircuitBreakerService.execute(
+        'pinecone-delete',
+        async () => {
+          await index.deleteMany({
+            filter: {
+              documentId: { $eq: documentId },
+            },
+          });
         },
-      });
+        {
+          failureThreshold: 5,
+          resetTimeout: 60000,
+          monitoringWindow: 60000,
+          timeout: 30000,
+          errorFilter: (error) => {
+            return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
+          },
+        }
+      );
 
       logger.info('Document vectors deleted from Pinecone by filter', {
         documentId,
@@ -287,6 +393,9 @@ export class PineconeService {
 
   /**
    * Semantic search - find similar vectors
+   * @param queryEmbedding - Query embedding vector
+   * @param options - Search options
+   * @param expectedDimensions - Expected embedding dimensions (defaults to current model dimensions)
    */
   static async search(
     queryEmbedding: number[],
@@ -296,18 +405,30 @@ export class PineconeService {
       topicId?: string;
       documentIds?: string[];
       minScore?: number;
-    }
+      embeddingModel?: string; // Optional: filter by embedding model
+    },
+    expectedDimensions?: number
   ): Promise<SearchResult[]> {
     if (!isPineconeConfigured()) {
       throw new AppError('Pinecone is not configured', 500, 'PINECONE_NOT_CONFIGURED');
     }
 
-    if (queryEmbedding.length !== EMBEDDING_DIMENSIONS) {
-      throw new AppError(
-        `Invalid query embedding dimensions: expected ${EMBEDDING_DIMENSIONS}, got ${queryEmbedding.length}`,
-        400,
-        'INVALID_EMBEDDING_DIMENSIONS'
-      );
+    // Use provided dimensions or default
+    const dimensions = expectedDimensions || getDefaultEmbeddingDimensions();
+
+    // Validate query embedding dimensions
+    if (queryEmbedding.length === 0) {
+      throw new AppError('Query embedding is empty', 400, 'EMPTY_EMBEDDING');
+    }
+
+    // Warn if dimensions don't match (but allow search to proceed)
+    // Pinecone can handle dimension mismatches, but results may be less accurate
+    if (queryEmbedding.length !== dimensions) {
+      logger.warn('Query embedding dimensions mismatch', {
+        expected: dimensions,
+        actual: queryEmbedding.length,
+        userId: options.userId,
+      });
     }
 
     try {
@@ -328,17 +449,40 @@ export class PineconeService {
         filter.documentId = { $in: options.documentIds };
       }
 
+      // Optional: filter by embedding model (for migration scenarios)
+      if (options.embeddingModel) {
+        filter.embeddingModel = { $eq: options.embeddingModel };
+      }
+
       logger.debug('Performing semantic search', {
         topK,
         filter,
       });
 
-      const queryResponse = await index.query({
-        vector: queryEmbedding,
-        topK,
-        includeMetadata: true,
-        filter: Object.keys(filter).length > 0 ? filter : undefined,
-      });
+      // Use circuit breaker for Pinecone query operations
+      const circuitResult = await CircuitBreakerService.execute(
+        'pinecone-query',
+        async () => {
+          return await index.query({
+            vector: queryEmbedding,
+            topK,
+            includeMetadata: true,
+            filter: Object.keys(filter).length > 0 ? filter : undefined,
+          });
+        },
+        {
+          failureThreshold: 5,
+          resetTimeout: 60000, // 60 seconds
+          monitoringWindow: 60000,
+          timeout: 30000, // 30 seconds
+          errorFilter: (error) => {
+            // Only count server errors and connection issues as failures
+            return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
+          },
+        }
+      );
+
+      const queryResponse = circuitResult.result;
 
       const results: SearchResult[] = [];
 

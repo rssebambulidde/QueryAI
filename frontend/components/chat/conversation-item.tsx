@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Conversation } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { MessageSquare, Trash2, Edit2, Check, X, Folder } from 'lucide-react';
+import { MessageSquare, Trash2, Edit2, Check, X, Folder, MoreVertical, Pin } from 'lucide-react';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
@@ -14,6 +14,8 @@ interface ConversationItemProps {
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
   onSaveToCollection?: (conversationId: string) => void;
+  onPin?: (conversationId: string) => void;
+  isPinned?: boolean;
   formatTime: (dateString?: string) => string;
 }
 
@@ -23,18 +25,37 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   onSelect,
   onDelete,
   onSaveToCollection,
+  onPin,
+  isPinned = false,
   formatTime,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(conversation.title || '');
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const { updateConversation } = useConversationStore();
   const { toast } = useToast();
+
+  // Close menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showMenu]);
 
   const handleEdit = async () => {
     if (editTitle.trim() && editTitle !== conversation.title) {
       try {
         await updateConversation(conversation.id, editTitle.trim());
         setIsEditing(false);
+        setShowMenu(false);
         toast.success('Conversation renamed');
       } catch (error: any) {
         toast.error(error.message || 'Failed to rename conversation');
@@ -48,6 +69,32 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditTitle(conversation.title || '');
+    setShowMenu(false);
+  };
+
+  const handleRename = () => {
+    setIsEditing(true);
+    setShowMenu(false);
+  };
+
+  const handleAddToCollection = () => {
+    if (onSaveToCollection) {
+      onSaveToCollection(conversation.id);
+    }
+    setShowMenu(false);
+  };
+
+  const handlePin = () => {
+    if (onPin) {
+      onPin(conversation.id);
+    }
+    setShowMenu(false);
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowMenu(false);
+    onDelete(e);
   };
 
   return (
@@ -105,47 +152,72 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
           ) : (
             <>
               <div className="flex items-center justify-between mb-1 gap-2">
-                <h3 className={cn(
-                  'text-sm font-medium truncate min-w-0',
-                  isActive ? 'text-orange-900' : 'text-gray-900'
-                )}>
-                  {conversation.title || 'New Conversation'}
-                </h3>
-                {conversation.topic_id && (
-                  <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 bg-orange-100 rounded">
-                    Research
-                  </span>
-                )}
-                <div className="flex items-center gap-1">
-                  {onSaveToCollection && (
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  {isPinned && (
+                    <Pin className="w-3 h-3 text-orange-500 fill-orange-500 flex-shrink-0" />
+                  )}
+                  <h3 className={cn(
+                    'text-sm font-medium truncate',
+                    isActive ? 'text-orange-900' : 'text-gray-900'
+                  )}>
+                    {conversation.title || 'New Conversation'}
+                  </h3>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {conversation.topic_id && (
+                    <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 bg-orange-100 rounded">
+                      Research
+                    </span>
+                  )}
+                  <div className="relative" ref={menuRef}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onSaveToCollection(conversation.id);
+                        setShowMenu(!showMenu);
                       }}
-                      className="p-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded transition-opacity opacity-100"
-                      title="Add to Collection"
+                      className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="More options"
                     >
-                      <Folder className="w-3.5 h-3.5" />
+                      <MoreVertical className="w-3.5 h-3.5" />
                     </button>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsEditing(true);
-                    }}
-                    className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                    title="Rename"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={onDelete}
-                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                    {showMenu && (
+                      <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                        {onPin && (
+                          <button
+                            onClick={handlePin}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                          >
+                            <Pin className={cn('w-4 h-4', isPinned && 'fill-current')} />
+                            {isPinned ? 'Unpin' : 'Pin'}
+                          </button>
+                        )}
+                        {onSaveToCollection && (
+                          <button
+                            onClick={handleAddToCollection}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                          >
+                            <Folder className="w-4 h-4" />
+                            Add to Collection
+                          </button>
+                        )}
+                        <button
+                          onClick={handleRename}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                          Rename
+                        </button>
+                        <div className="border-t border-gray-100 my-1" />
+                        <button
+                          onClick={handleDelete}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               

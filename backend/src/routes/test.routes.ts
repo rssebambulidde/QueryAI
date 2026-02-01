@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { authenticate } from '../middleware/auth.middleware';
+import { requireSuperAdmin } from '../middleware/authorization.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { supabaseAdmin, supabase } from '../config/database';
 import config from '../config/env';
@@ -7,10 +9,12 @@ const router = Router();
 
 /**
  * GET /api/test/supabase
- * Test Supabase connection and configuration
+ * Test Supabase connection and configuration (Admin only)
  */
 router.get(
   '/supabase',
+  authenticate,
+  requireSuperAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const logger = (await import('../config/logger')).default;
 

@@ -43,11 +43,14 @@ export default function ForgotPasswordPage() {
       } else {
         setError(response.error?.message || 'Failed to send reset email');
       }
-    } catch (err: any) {
-      setError(
-        err.response?.data?.error?.message ||
-          'Failed to send reset email. Please try again.'
-      );
+    } catch (err: unknown) {
+      const msg =
+        err &&
+        typeof err === 'object' &&
+        'response' in err
+          ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+          : undefined;
+      setError(msg || 'Failed to send reset email. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -85,7 +88,7 @@ export default function ForgotPasswordPage() {
               {...register('email')}
             />
             <p className="mt-2 text-sm text-gray-500">
-              Enter your email address and we'll send you a link to reset your
+              Enter your email address and we&apos;ll send you a link to reset your
               password.
             </p>
           </div>

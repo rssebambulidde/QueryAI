@@ -5,25 +5,28 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { ChatInterface } from '@/components/chat/chat-interface';
-import { DocumentManager } from '@/components/documents/document-manager';
-import { TopicManager } from '@/components/topics/topic-manager';
-import { ApiKeyManager } from '@/components/api-keys/api-key-manager';
-import { EmbeddingManager } from '@/components/embeddings/embedding-manager';
 import { CollectionManager } from '@/components/collections/collection-manager';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
-import { SubscriptionManager } from '@/components/subscription/subscription-manager';
 import { RAGSettings } from '@/components/chat/rag-source-selector';
 import { documentApi } from '@/lib/api';
 import { useConversationStore } from '@/lib/store/conversation-store';
+import { BottomNavigation } from '@/components/mobile/bottom-navigation';
+import { MobileSidebar, HamburgerMenu } from '@/components/mobile/mobile-sidebar';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { useToast } from '@/lib/hooks/use-toast';
+// import { RoleDebug } from '@/components/debug/role-debug'; // Uncomment to debug role issues
 
-type TabType = 'chat' | 'documents' | 'topics' | 'api-keys' | 'embeddings' | 'collections' | 'subscription';
+type TabType = 'chat' | 'collections';
 
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isAuthenticated, isLoading, logout, checkAuth } = useAuthStore();
+  const { user, isAuthenticated, isLoading, checkAuth } = useAuthStore();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const { isMobile } = useMobile();
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ragSettings');
@@ -48,17 +51,74 @@ function DashboardContent() {
   // Read tab from URL query parameter on mount and when it changes
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['chat', 'documents', 'topics', 'api-keys', 'embeddings', 'collections', 'subscription'].includes(tabParam)) {
+    if (tabParam && ['chat', 'collections'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
+    } else if (tabParam === 'documents') {
+      // Redirect to settings/documents
+      router.replace('/dashboard/settings/documents');
+    } else if (tabParam === 'topics') {
+      // Redirect to settings/topics
+      router.replace('/dashboard/settings/topics');
+    } else if (tabParam === 'subscription') {
+      // Redirect to settings/subscription
+      router.replace('/dashboard/settings/subscription');
     }
   }, [searchParams]);
+
+  // Handle PayPal redirect query params (payment=success | cancelled | failed | error | pending)
+  useEffect(() => {
+    const payment = searchParams.get('payment');
+    if (!payment) return;
+
+    if (payment === 'success') {
+      // Sync subscription from PayPal (handles case where callback didn't run, e.g. Auto return OFF)
+      import('@/lib/api').then(({ paymentApi }) => {
+        paymentApi.syncSubscription().then((r) => {
+          if (r.success && r.data?.synced) {
+            checkAuth().catch(() => {});
+          }
+        }).catch(() => {});
+      });
+      toast.success('Payment completed. Your subscription has been updated.');
+      router.replace('/dashboard/settings/subscription', { scroll: false });
+      checkAuth().catch(() => {});
+    } else if (payment === 'cancelled') {
+      toast.info('Payment was cancelled.');
+      router.replace('/dashboard', { scroll: false });
+    } else if (payment === 'failed') {
+      toast.error('Payment failed. Please try again or contact support.');
+      router.replace('/dashboard/settings/subscription', { scroll: false });
+    } else if (payment === 'error') {
+      const reason = searchParams.get('reason');
+      if (reason === 'payment_not_found') {
+        toast.error(
+          "We couldn't find your payment record. Click 'Sync billing status' in Subscription settings to retry, or contact support.",
+          { duration: 8000 } // Longer duration for this important message
+        );
+      } else {
+        toast.error('Something went wrong. Please try again or contact support.');
+      }
+      router.replace('/dashboard/settings/subscription', { scroll: false });
+    } else if (payment === 'pending') {
+      // Try syncing - sometimes callback doesn't run but PayPal has activated the subscription
+      import('@/lib/api').then(({ paymentApi }) => {
+        paymentApi.syncSubscription().then((r) => {
+          if (r.success && r.data?.synced) {
+            toast.success('Subscription synced. Your plan has been updated.');
+            checkAuth().catch(() => {});
+          }
+        }).catch(() => {});
+      });
+      toast.info('Payment is pending. Syncing with PayPal...');
+      router.replace('/dashboard/settings/subscription', { scroll: false });
+    }
+  }, [searchParams, toast, router, checkAuth]);
 
   // Listen for navigation to subscription tab from chat errors
   useEffect(() => {
     const handleNavigateToSubscription = () => {
-      setActiveTab('subscription');
-      // Update URL without causing a page reload
-      router.push('/dashboard?tab=subscription', { scroll: false });
+      // Navigate to settings subscription page
+      router.push('/dashboard/settings/subscription', { scroll: false });
     };
     
     window.addEventListener('navigateToSubscription', handleNavigateToSubscription);
@@ -136,10 +196,6 @@ function DashboardContent() {
   }, [ragSettings]);
 
 
-  const handleLogout = async () => {
-    await logout();
-    router.push('/login');
-  };
 
   if (isLoading) {
     return (
@@ -161,57 +217,50 @@ function DashboardContent() {
       <nav className="bg-white shadow-sm flex-shrink-0 border-b border-gray-200">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            <div className="flex items-center">
+            <div className="flex items-center gap-3">
+              {isMobile && (
+                <HamburgerMenu onClick={() => setIsMobileSidebarOpen(true)} />
+              )}
               <h1 className="text-xl font-bold text-gray-900">QueryAI</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700">
-                {user.full_name || user.email}
-              </span>
-              <Button variant="outline" onClick={handleLogout}>
-                Logout
-              </Button>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="flex-1 flex overflow-hidden">
-        {/* Unified Sidebar with Navigation, Source Selection, and Conversations */}
-        <AppSidebar
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          ragSettings={ragSettings}
-          onRagSettingsChange={setRagSettings}
-          documentCount={documentCount}
-          hasProcessedDocuments={hasProcessedDocuments}
-          subscriptionTier={user?.subscriptionTier || 'free'}
-        />
+      <main className="flex-1 flex overflow-hidden relative">
+        {/* Mobile Sidebar */}
+        {isMobile && (
+          <MobileSidebar
+            isOpen={isMobileSidebarOpen}
+            onClose={() => setIsMobileSidebarOpen(false)}
+          >
+            <AppSidebar
+              activeTab={activeTab}
+              onTabChange={(tab) => {
+                setActiveTab(tab);
+                setIsMobileSidebarOpen(false);
+              }}
+              subscriptionTier={user?.subscriptionTier || 'free'}
+            />
+          </MobileSidebar>
+        )}
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Desktop Sidebar */}
+        {!isMobile && (
+          <AppSidebar
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            subscriptionTier={user?.subscriptionTier || 'free'}
+          />
+        )}
+
+        {/* Main Content Area — chat tab always shows conversation thread (messages + input), not sources */}
+        <div className="flex-1 flex flex-col overflow-hidden" style={isMobile ? { paddingBottom: '64px' } : undefined}>
           {activeTab === 'chat' ? (
             <div className="flex-1 overflow-hidden">
-              {/* Chat Interface - Full width now */}
               <ChatInterface ragSettings={ragSettings} />
             </div>
-          ) : activeTab === 'documents' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <DocumentManager />
-            </div>
-          ) : activeTab === 'topics' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <TopicManager />
-            </div>
-          ) : activeTab === 'api-keys' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <ApiKeyManager />
-            </div>
-          ) : activeTab === 'embeddings' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <EmbeddingManager />
-            </div>
-           ) : activeTab === 'collections' ? (
+          ) : activeTab === 'collections' ? (
              <div className="flex-1 overflow-y-auto p-6">
                <CollectionManager 
                  onConversationSelect={(conversationId) => {
@@ -221,13 +270,12 @@ function DashboardContent() {
                  }}
                />
              </div>
-          ) : activeTab === 'subscription' ? (
-            <div className="flex-1 overflow-y-auto p-6">
-              <SubscriptionManager />
-            </div>
           ) : null}
         </div>
       </main>
+
+      {/* Bottom Navigation (Mobile Only) */}
+      <BottomNavigation />
     </div>
   );
 }

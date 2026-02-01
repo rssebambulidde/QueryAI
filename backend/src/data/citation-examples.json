@@ -1,0 +1,242 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-26",
+  "citationGuidelines": {
+    "whenToCite": {
+      "facts": "Cite all factual claims, data points, and verifiable information",
+      "statistics": "Cite all statistics, numbers, percentages, and quantitative data",
+      "quotes": "Cite all direct quotes, paraphrased quotes, and attributed statements",
+      "claims": "Cite all claims, assertions, and statements of fact",
+      "definitions": "Cite all definitions, explanations of terms, and conceptual descriptions",
+      "dates": "Cite all dates, timeframes, and temporal information",
+      "locations": "Cite all geographic locations, places, and spatial information",
+      "names": "Cite all proper names, organizations, and entities when first mentioned",
+      "processes": "Cite all descriptions of processes, procedures, and methodologies",
+      "comparisons": "Cite all comparisons, contrasts, and relative statements"
+    },
+    "citationFormats": {
+      "documentCitations": {
+        "format": "[Document N]",
+        "description": "Use for citations from document excerpts",
+        "examples": [
+          "[Document 1]",
+          "[Document 2]",
+          "[Document 3]"
+        ],
+        "rules": [
+          "Use the exact label from the 'Relevant Document Excerpts' section",
+          "Number corresponds to the order in the context",
+          "No URL needed for document citations",
+          "Can use [Document Name] if a document name is provided"
+        ]
+      },
+      "documentCitationsWithUrl": {
+        "format": "[Document Name](document://id)",
+        "description": "Use when document has a URL in the context",
+        "examples": [
+          "[Company Policy](document://doc123)",
+          "[User Manual](document://doc456)",
+          "[Technical Specification](document://doc789)"
+        ],
+        "rules": [
+          "Use document name if provided in context",
+          "Include document://id URL format",
+          "Make the link clickable"
+        ]
+      },
+      "webCitations": {
+        "format": "[Web Source N](URL)",
+        "description": "Use for citations from web search results",
+        "examples": [
+          "[Web Source 1](https://example.com/article)",
+          "[Web Source 2](https://example.com/report)",
+          "[Web Source 3](https://example.com/study)"
+        ],
+        "rules": [
+          "Use the exact label from the 'Web Search Results' section",
+          "ALWAYS include the full URL in parentheses",
+          "URL must match the URL from the web search results",
+          "Make the link clickable using markdown format"
+        ]
+      },
+      "webCitationsWithTitle": {
+        "format": "[Title](URL)",
+        "description": "Use when web source has a descriptive title",
+        "examples": [
+          "[Research Study on AI](https://example.com/ai-study)",
+          "[Industry Report 2024](https://example.com/report-2024)",
+          "[Expert Analysis](https://example.com/analysis)"
+        ],
+        "rules": [
+          "Use descriptive title if provided in context",
+          "Always include full URL",
+          "Title should be concise and descriptive"
+        ]
+      }
+    },
+    "citationPlacement": {
+      "inline": {
+        "description": "Citations should be placed inline within sentences",
+        "examples": [
+          "Machine learning is a subset of AI [Document 1] that enables systems to learn from data.",
+          "According to [Web Source 1](https://example.com), the technology has advanced significantly.",
+          "The study found that 85% of participants [Web Source 2](https://example.com/study) preferred the new approach."
+        ],
+        "rules": [
+          "Place citation immediately after the fact or claim",
+          "Citations should flow naturally within the sentence",
+          "Avoid placing all citations at the end of paragraphs"
+        ]
+      },
+      "sentenceStart": {
+        "description": "Citations can start sentences when appropriate",
+        "examples": [
+          "[Document 1] According to the policy, remote work is allowed up to three days per week.",
+          "[Web Source 1](https://example.com) The latest research shows significant improvements in accuracy."
+        ],
+        "rules": [
+          "Use when the entire sentence is from one source",
+          "Citation should come before the statement"
+        ]
+      },
+      "sentenceEnd": {
+        "description": "Citations can end sentences when appropriate",
+        "examples": [
+          "The capital of France is Paris [Web Source 1](https://example.com/france).",
+          "Neural networks use backpropagation for training [Document 2]."
+        ],
+        "rules": [
+          "Use when the entire sentence is from one source",
+          "Citation should come after the statement"
+        ]
+      }
+    },
+    "citationExamples": {
+      "factualStatement": {
+        "type": "fact",
+        "example": "The population of Tokyo is approximately 14 million people [Web Source 1](https://example.com/tokyo-population).",
+        "explanation": "Cite factual information with the source immediately after the fact"
+      },
+      "statisticalData": {
+        "type": "statistic",
+        "example": "According to the study [Web Source 2](https://example.com/study), 72% of users prefer mobile apps over desktop applications.",
+        "explanation": "Cite statistics with the source, preferably at the start or after the number"
+      },
+      "directQuote": {
+        "type": "quote",
+        "example": "As stated in the report [Document 1], 'The implementation was successful in 95% of cases.'",
+        "explanation": "Cite quotes with the source, using quotation marks for direct quotes"
+      },
+      "paraphrasedQuote": {
+        "type": "paraphrase",
+        "example": "The expert explained [Web Source 3](https://example.com/expert) that the process requires careful planning and execution.",
+        "explanation": "Cite paraphrased quotes with the source"
+      },
+      "definition": {
+        "type": "definition",
+        "example": "Machine learning [Document 2] is a method of data analysis that automates analytical model building.",
+        "explanation": "Cite definitions with the source immediately after the term"
+      },
+      "processDescription": {
+        "type": "process",
+        "example": "The deployment process involves several steps [Document 3]: first, prepare the environment; second, configure the settings; and third, run the deployment script.",
+        "explanation": "Cite process descriptions with the source"
+      },
+      "comparison": {
+        "type": "comparison",
+        "example": "Supervised learning uses labeled data [Web Source 4](https://example.com/supervised), while unsupervised learning works with unlabeled data [Web Source 5](https://example.com/unsupervised).",
+        "explanation": "Cite each part of a comparison with its respective source"
+      },
+      "multipleFacts": {
+        "type": "multiple",
+        "example": "The company reported revenue of $10 million [Web Source 6](https://example.com/revenue) and plans to expand to five new markets [Document 4] by the end of the year.",
+        "explanation": "Cite each fact separately when they come from different sources"
+      },
+      "singleSourceMultipleFacts": {
+        "type": "single-source",
+        "example": "The research study [Web Source 7](https://example.com/research) found that user satisfaction increased by 30% and response times decreased by 40%.",
+        "explanation": "When multiple facts come from the same source, cite once at the end or after the first fact"
+      }
+    },
+    "citationRules": {
+      "mandatory": [
+        "EVERY factual statement MUST have a citation",
+        "EVERY statistic MUST have a citation",
+        "EVERY quote MUST have a citation",
+        "EVERY claim MUST have a citation",
+        "NO information should be presented without a source"
+      ],
+      "formatting": [
+        "Use markdown link format: [text](URL) for web sources",
+        "Use [Document N] format for document sources",
+        "URLs must be complete and valid",
+        "Citations should be clickable links",
+        "Never use plain text for citations"
+      ],
+      "placement": [
+        "Place citations immediately after the fact or claim",
+        "Citations should flow naturally within sentences",
+        "Avoid clustering all citations at paragraph end",
+        "Each sentence with facts should have citations",
+        "Multiple facts from same source can share one citation"
+      ],
+      "validation": [
+        "Every citation must reference a source from the provided context",
+        "Document citations must match labels in 'Relevant Document Excerpts'",
+        "Web citations must match labels and URLs in 'Web Search Results'",
+        "URLs must be exact matches from the context",
+        "No citations to sources not provided in context"
+      ]
+    },
+    "commonMistakes": {
+      "missingCitations": {
+        "mistake": "Presenting facts without citations",
+        "correct": "Always include citations for all factual information",
+        "example": {
+          "wrong": "The population is 14 million.",
+          "correct": "The population is 14 million [Web Source 1](https://example.com/population)."
+        }
+      },
+      "incorrectFormat": {
+        "mistake": "Using incorrect citation format",
+        "correct": "Use proper markdown format: [text](URL) for web, [Document N] for documents",
+        "example": {
+          "wrong": "Source: https://example.com",
+          "correct": "[Web Source 1](https://example.com)"
+        }
+      },
+      "wrongUrl": {
+        "mistake": "Using incorrect or incomplete URLs",
+        "correct": "Use exact URLs from the web search results context",
+        "example": {
+          "wrong": "[Web Source 1](https://example.com)",
+          "correct": "[Web Source 1](https://example.com/article-2024)"
+        }
+      },
+      "missingUrl": {
+        "mistake": "Web citations without URLs",
+        "correct": "ALWAYS include full URL in parentheses for web sources",
+        "example": {
+          "wrong": "[Web Source 1]",
+          "correct": "[Web Source 1](https://example.com/article)"
+        }
+      },
+      "citationClustering": {
+        "mistake": "Placing all citations at the end of paragraphs",
+        "correct": "Place citations inline, immediately after each fact",
+        "example": {
+          "wrong": "The population is 14 million. The city covers 2,000 km². [Web Source 1]",
+          "correct": "The population is 14 million [Web Source 1](https://example.com/pop). The city covers 2,000 km² [Web Source 2](https://example.com/area)."
+        }
+      },
+      "citationToNonExistentSource": {
+        "mistake": "Citing sources not in the provided context",
+        "correct": "Only cite sources that are explicitly provided in the context",
+        "example": {
+          "wrong": "[Web Source 10](https://example.com) (if only 5 sources provided)",
+          "correct": "Use only sources numbered 1-5 as provided in context"
+        }
+      }
+    }
+  }
+}

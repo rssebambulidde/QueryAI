@@ -220,9 +220,10 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.getMe();
           if (response.success && response.data) {
             const userData = response.data.user;
-            // Debug: Log subscription tier
+            // Debug: Log user data including role
             if (typeof window !== 'undefined') {
               console.log('[AuthStore] User data from /api/auth/me:', userData);
+              console.log('[AuthStore] User role:', userData.role || 'not set');
               console.log('[AuthStore] Subscription tier:', userData.subscriptionTier || 'not set');
             }
             set({

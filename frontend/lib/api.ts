@@ -14,8 +14,8 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   }
 }
 
-// Create axios instance
-const apiClient: AxiosInstance = axios.create({
+// Create axios instance (exported for use by api-health, api-validation, api-ab-testing)
+export const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
@@ -48,12 +48,13 @@ apiClient.interceptors.response.use(
       const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
       
       // Provide helpful error message for network errors
+      const displayUrl = apiUrl.replace(/\/$/, '');
       if (isLocalhost && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
         // Production environment but API URL is localhost
         error.message = `Network Error: API URL is set to localhost. Please configure NEXT_PUBLIC_API_URL in Cloudflare Pages environment variables.`;
       } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
-        // Generic network error
-        error.message = `Network Error: Unable to connect to the API server. Please check your internet connection and ensure the backend is running.`;
+        // Generic network error - include URL so user can verify what the app is trying to reach
+        error.message = `Network Error: Unable to connect to the API server (${displayUrl}). Check that the backend is running and CORS allows this site.`;
       }
       return Promise.reject(error);
     }
@@ -89,7 +90,9 @@ export interface User {
   id: string;
   email: string;
   full_name?: string;
-  subscriptionTier?: 'free' | 'premium' | 'pro';
+  avatar_url?: string;
+  role?: 'user' | 'admin' | 'super_admin';
+  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
 }
 
 export interface Session {
@@ -134,6 +137,19 @@ export interface QuestionRequest {
   // Conversation management
   conversationId?: string;
   resendUserMessageId?: string; // When editing: update this user message and replace following assistant
+  // Advanced features
+  enableQueryExpansion?: boolean;
+  queryExpansionSettings?: {
+    expansionMethod?: 'synonym' | 'semantic' | 'hybrid';
+    maxExpansions?: number;
+    confidenceThreshold?: number;
+  };
+  enableReranking?: boolean;
+  rerankingSettings?: {
+    rerankingMethod?: 'cross-encoder' | 'reciprocal-rank-fusion' | 'learned';
+    topK?: number;
+    diversityWeight?: number;
+  };
 }
 
 export interface QuestionResponse {
@@ -148,6 +164,53 @@ export interface QuestionResponse {
     totalTokens: number;
   };
   conversationId?: string;
+  // Advanced features
+  queryExpansion?: {
+    original: string;
+    expanded: string;
+    reasoning?: string;
+  };
+  reranking?: {
+    impact: {
+      before: number[];
+      after: number[];
+      improvement: number;
+    };
+    preview?: {
+      originalRanking: Array<{ id: string; title: string; score: number }>;
+      reranked: Array<{ id: string; title: string; score: number }>;
+    };
+  };
+  contextChunks?: Array<{
+    id: string;
+    content: string;
+    source: {
+      type: 'document' | 'web';
+      title: string;
+      url?: string;
+      documentId?: string;
+    };
+    score: number;
+    tokens: number;
+    selected: boolean;
+    reasoning?: string;
+  }>;
+  selectionReasoning?: string;
+  cost?: {
+    perQuery: number;
+    total: number;
+    breakdown: {
+      embedding?: number;
+      search?: number;
+      ai?: {
+        prompt: number;
+        completion: number;
+        total: number;
+      };
+      storage?: number;
+      other?: number;
+    };
+  };
 }
 
 export interface Source {
@@ -254,6 +317,32 @@ export const authApi = {
     const response = await apiClient.get('/api/auth/me');
     return response.data;
   },
+
+  uploadAvatar: async (file: File): Promise<ApiResponse<{ avatar_url: string }>> => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    const response = await apiClient.post('/api/auth/profile/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  updateProfile: async (data: { full_name?: string; avatar_url?: string }): Promise<ApiResponse<{ user: User }>> => {
+    const response = await apiClient.put('/api/auth/profile', data);
+    return response.data;
+  },
+
+  changeEmail: async (data: { newEmail: string }): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/change-email', data);
+    return response.data;
+  },
+
+  changePassword: async (data: { currentPassword: string; newPassword: string }): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/change-password', data);
+    return response.data;
+  },
 };
 
 // AI API
@@ -263,57 +352,115 @@ export const aiApi = {
     return response.data;
   },
 
-  askStream: async function* (request: QuestionRequest): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean }, void, unknown> {
-    const response = await fetch(`${API_URL}/api/ai/ask/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: typeof window !== 'undefined' ? `Bearer ${localStorage.getItem('accessToken') || ''}` : '',
-      },
-      body: JSON.stringify(request),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+  askStream: async function* (
+    request: QuestionRequest,
+    options?: {
+      signal?: AbortSignal;
+      onError?: (error: Error) => void;
+      maxRetries?: number;
+      retryDelay?: number;
     }
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean }, void, unknown> {
+    const maxRetries = options?.maxRetries ?? 3;
+    const retryDelay = options?.retryDelay ?? 1000;
+    let retryCount = 0;
 
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
+    while (retryCount <= maxRetries) {
+      try {
+        const response = await fetch(`${API_URL}/api/ai/ask/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: typeof window !== 'undefined' ? `Bearer ${localStorage.getItem('accessToken') || ''}` : '',
+          },
+          body: JSON.stringify(request),
+          signal: options?.signal,
+        });
 
-    if (!reader) {
-      throw new Error('No reader available');
-    }
+        if (!response.ok) {
+          // Don't retry on client errors (4xx) except 429
+          if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          // Retry on server errors (5xx) and rate limits (429)
+          if (retryCount < maxRetries) {
+            retryCount++;
+            await new Promise((resolve) => setTimeout(resolve, retryDelay * retryCount));
+            continue;
+          }
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
-    let buffer = '';
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+        if (!reader) {
+          throw new Error('No reader available');
+        }
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+        let buffer = '';
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.chunk) {
-              yield data.chunk;
-            }
-            if (data.followUpQuestions) {
-              yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal };
-            }
-            if (data.done) {
+        try {
+          while (true) {
+            // Check if aborted
+            if (options?.signal?.aborted) {
+              reader.cancel();
               return;
             }
-            if (data.error) {
-              throw new Error(data.error.message || 'Stream error');
+
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (data.chunk) {
+                    yield data.chunk;
+                  }
+                  if (data.followUpQuestions) {
+                    yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal };
+                  }
+                  if (data.done) {
+                    return;
+                  }
+                  if (data.error) {
+                    throw new Error(data.error.message || 'Stream error');
+                  }
+                } catch (e) {
+                  // Skip invalid JSON
+                }
+              }
             }
-          } catch (e) {
-            // Skip invalid JSON
           }
+        } finally {
+          reader.releaseLock();
         }
+
+        // Success - exit retry loop
+        return;
+      } catch (error: any) {
+        // Don't retry if aborted
+        if (options?.signal?.aborted || error.name === 'AbortError') {
+          return;
+        }
+
+        // Don't retry on network errors if we've exhausted retries
+        if (retryCount >= maxRetries) {
+          if (options?.onError) {
+            options.onError(error);
+          }
+          throw error;
+        }
+
+        // Retry with exponential backoff
+        retryCount++;
+        const delay = retryDelay * Math.pow(2, retryCount - 1);
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   },
@@ -467,108 +614,6 @@ export const topicApi = {
   },
 };
 
-// API Key interface
-export interface ApiKey {
-  id: string;
-  user_id: string;
-  topic_id?: string;
-  key_hash: string;
-  key_prefix: string;
-  name: string;
-  description?: string;
-  rate_limit_per_hour: number;
-  rate_limit_per_day: number;
-  is_active: boolean;
-  last_used_at?: string;
-  expires_at?: string;
-  created_at: string;
-  updated_at: string;
-  key?: string; // Only present on creation
-}
-
-// API Key API
-export const apiKeyApi = {
-  list: async (): Promise<ApiResponse<ApiKey[]>> => {
-    const response = await apiClient.get('/api/api-keys');
-    return response.data;
-  },
-
-  get: async (id: string): Promise<ApiResponse<ApiKey>> => {
-    const response = await apiClient.get(`/api/api-keys/${id}`);
-    return response.data;
-  },
-
-  create: async (data: {
-    name: string;
-    description?: string;
-    topicId?: string;
-    rateLimitPerHour?: number;
-    rateLimitPerDay?: number;
-    expiresAt?: string;
-  }): Promise<ApiResponse<ApiKey>> => {
-    const response = await apiClient.post('/api/api-keys', data);
-    return response.data;
-  },
-
-  update: async (
-    id: string,
-    data: {
-      name?: string;
-      description?: string;
-      rateLimitPerHour?: number;
-      rateLimitPerDay?: number;
-      isActive?: boolean;
-      expiresAt?: string;
-    }
-  ): Promise<ApiResponse<ApiKey>> => {
-    const response = await apiClient.put(`/api/api-keys/${id}`, data);
-    return response.data;
-  },
-
-  delete: async (id: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.delete(`/api/api-keys/${id}`);
-    return response.data;
-  },
-
-  getUsage: async (id: string, options?: { startDate?: string; endDate?: string; limit?: number }): Promise<ApiResponse<{
-    usage: Array<{
-      id: string;
-      api_key_id: string;
-      endpoint: string;
-      method: string;
-      status_code?: number;
-      response_time_ms?: number;
-      created_at: string;
-    }>;
-    statistics: {
-      totalRequests: number;
-      successCount: number;
-      errorCount: number;
-      avgResponseTime: number;
-      endpointStats: Record<string, { count: number; avgTime: number }>;
-    };
-  }>> => {
-    const response = await apiClient.get(`/api/api-keys/${id}/usage`, {
-      params: options,
-    });
-    return response.data;
-  },
-};
-
-// Embedding Config interface
-export interface EmbeddingConfig {
-  id: string;
-  user_id: string;
-  topic_id: string;
-  name: string;
-  embed_code?: string;
-  customization?: Record<string, any>;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-// Embedding API
 // Collection types
 export interface Collection {
   id: string;
@@ -637,44 +682,6 @@ export const collectionApi = {
     const response = await apiClient.get(`/api/collections/${collectionId}/search`, {
       params: { q: query },
     });
-    return response.data;
-  },
-};
-
-export const embeddingApi = {
-  list: async (): Promise<ApiResponse<EmbeddingConfig[]>> => {
-    const response = await apiClient.get('/api/embeddings');
-    return response.data;
-  },
-
-  get: async (id: string): Promise<ApiResponse<EmbeddingConfig>> => {
-    const response = await apiClient.get(`/api/embeddings/${id}`);
-    return response.data;
-  },
-
-  create: async (data: {
-    name: string;
-    topicId: string;
-    customization?: Record<string, any>;
-  }): Promise<ApiResponse<EmbeddingConfig>> => {
-    const response = await apiClient.post('/api/embeddings', data);
-    return response.data;
-  },
-
-  update: async (
-    id: string,
-    data: {
-      name?: string;
-      customization?: Record<string, any>;
-      isActive?: boolean;
-    }
-  ): Promise<ApiResponse<EmbeddingConfig>> => {
-    const response = await apiClient.put(`/api/embeddings/${id}`, data);
-    return response.data;
-  },
-
-  delete: async (id: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.delete(`/api/embeddings/${id}`);
     return response.data;
   },
 };
@@ -785,11 +792,15 @@ export const analyticsApi = {
 export interface Subscription {
   id: string;
   user_id: string;
-  tier: 'free' | 'premium' | 'pro';
+  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
   status: 'active' | 'cancelled' | 'expired';
   current_period_start?: string;
   current_period_end?: string;
   cancel_at_period_end: boolean;
+  paypal_subscription_id?: string;
+  billing_period?: 'monthly' | 'annual';
+  annual_discount?: number;
+  grace_period_end?: string;
   created_at: string;
   updated_at: string;
 }
@@ -821,6 +832,7 @@ export interface SubscriptionData {
     queries: UsageLimit;
     documentUploads: UsageLimit;
     topics: UsageLimit;
+    tavilySearches?: UsageLimit;
   };
 }
 
@@ -849,6 +861,12 @@ export interface UsageStats {
     remaining: number | null;
     percentage: number;
   };
+  tavilySearches: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
   apiCalls?: {
     used: number;
     limit: number | null;
@@ -857,7 +875,7 @@ export interface UsageStats {
   };
   periodStart: string;
   periodEnd: string;
-  tier: 'free' | 'premium' | 'pro';
+  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
 }
 
 export interface UsageHistory {
@@ -869,7 +887,24 @@ export interface UsageHistory {
 
 export interface UsageWarnings {
   approaching: boolean;
-  warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics'; percentage: number }>;
+  warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics' | 'tavilySearches'; percentage: number }>;
+}
+
+export interface OverageRecord {
+  metric_type: 'queries' | 'document_upload' | 'tavily_searches';
+  limit_value: number;
+  usage_value: number;
+  overage_units: number;
+  unit_price: number;
+  amount_charged: number;
+}
+
+export interface OverageSummary {
+  periodStart: string;
+  periodEnd: string;
+  currency: string;
+  totalCharged: number;
+  records: OverageRecord[];
 }
 
 // Usage API
@@ -892,6 +927,87 @@ export const usageApi = {
   },
 };
 
+// Billing API (overage)
+export const billingApi = {
+  getOverage: async (params?: {
+    periodStart?: string;
+    periodEnd?: string;
+    currency?: 'USD' | 'UGX';
+  }): Promise<ApiResponse<OverageSummary>> => {
+    const response = await apiClient.get('/api/billing/overage', { params: params ?? {} });
+    return response.data;
+  },
+
+  initiateOveragePayment: async (params: {
+    periodStart: string;
+    periodEnd: string;
+    currency?: 'USD' | 'UGX';
+  }): Promise<
+    ApiResponse<
+      | { noOverage: true; message: string }
+      | { payment_id: string; redirect_url: string; order_id: string; amount: number; currency: string }
+    >
+  > => {
+    const response = await apiClient.post('/api/billing/overage/initiate', {
+      periodStart: params.periodStart,
+      periodEnd: params.periodEnd,
+      currency: params.currency ?? 'USD',
+    });
+    return response.data;
+  },
+};
+
+// Enterprise API
+export const enterpriseApi = {
+  submitInquiry: async (params: {
+    name: string;
+    email: string;
+    company?: string;
+    message?: string;
+  }): Promise<ApiResponse<{ id: string; message: string }>> => {
+    const response = await apiClient.post('/api/enterprise/inquiry', params);
+    return response.data;
+  },
+};
+
+// Cost Analytics (Week 12)
+export interface CostSummary {
+  totalCost: number;
+  totalQueries: number;
+  totalTokens: number;
+  averageCostPerQuery: number;
+  modelBreakdown: Record<string, { count: number; totalCost: number; totalTokens: number }>;
+}
+
+export interface CostTrendPoint {
+  date: string;
+  totalCost: number;
+  totalQueries: number;
+  totalTokens: number;
+  byModel: Record<string, { cost: number; queries: number; tokens: number }>;
+}
+
+export const costApi = {
+  getSummary: async (params?: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<CostSummary>> => {
+    const response = await apiClient.get('/api/analytics/cost/summary', { params: params ?? {} });
+    return response.data;
+  },
+
+  getTrends: async (params: {
+    startDate: string;
+    endDate: string;
+    interval?: 'hour' | 'day' | 'week';
+  }): Promise<
+    ApiResponse<{ trends: CostTrendPoint[]; interval: string; startDate: string; endDate: string }>
+  > => {
+    const response = await apiClient.get('/api/analytics/cost/trends', { params: params ?? {} });
+    return response.data;
+  },
+};
+
 export const subscriptionApi = {
   get: async (): Promise<ApiResponse<SubscriptionData>> => {
     const response = await apiClient.get('/api/subscription');
@@ -907,7 +1023,7 @@ export const subscriptionApi = {
     return response.data;
   },
 
-  upgrade: async (tier: 'free' | 'premium' | 'pro'): Promise<ApiResponse<{ subscription: Subscription }>> => {
+  upgrade: async (tier: 'free' | 'starter' | 'premium' | 'pro'): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.put('/api/subscription/upgrade', { tier });
     return response.data;
   },
@@ -917,7 +1033,7 @@ export const subscriptionApi = {
     return response.data;
   },
 
-  downgrade: async (tier: 'free' | 'premium' | 'pro', immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
+  downgrade: async (tier: 'free' | 'starter' | 'premium' | 'pro', immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.put('/api/subscription/downgrade', { tier, immediate });
     return response.data;
   },
@@ -944,15 +1060,28 @@ export const subscriptionApi = {
     return response.data;
   },
 
-  getProratedPricing: async (toTier: 'free' | 'premium' | 'pro', currency: 'UGX' | 'USD' = 'UGX'): Promise<ApiResponse<{ proratedPricing: any }>> => {
-    const response = await apiClient.get('/api/subscription/prorated-pricing', {
-      params: { toTier, currency },
-    });
+  getProratedPricing: async (
+    toTier: 'free' | 'starter' | 'premium' | 'pro',
+    currency: 'UGX' | 'USD' = 'UGX',
+    toBillingPeriod?: 'monthly' | 'annual'
+  ): Promise<ApiResponse<{ proratedPricing: any }>> => {
+    const params: { toTier: string; currency: string; toBillingPeriod?: string } = { toTier, currency };
+    if (toBillingPeriod) params.toBillingPeriod = toBillingPeriod;
+    const response = await apiClient.get('/api/subscription/prorated-pricing', { params });
     return response.data;
   },
 
-  startTrial: async (tier: 'premium' | 'pro', trialDays: number = 7): Promise<ApiResponse<{ subscription: Subscription; trial_end: string }>> => {
+  startTrial: async (tier: 'starter' | 'premium' | 'pro', trialDays: number = 7): Promise<ApiResponse<{ subscription: Subscription; trial_end: string }>> => {
     const response = await apiClient.post('/api/subscription/start-trial', { tier, trialDays });
+    return response.data;
+  },
+
+  getPayPalStatus: async (): Promise<ApiResponse<{
+    hasPayPalSubscription: boolean;
+    subscription: Subscription;
+    paypalStatus: { subscriptionId: string; status: string; next_billing_time?: string } | null;
+  }>> => {
+    const response = await apiClient.get('/api/subscription/paypal-status');
     return response.data;
   },
 };
@@ -962,38 +1091,53 @@ export interface Payment {
   id: string;
   user_id: string;
   subscription_id?: string;
-  pesapal_order_tracking_id?: string;
-  pesapal_merchant_reference?: string;
-  tier: 'free' | 'premium' | 'pro';
+  paypal_order_id?: string;
+  paypal_payment_id?: string;
+  paypal_subscription_id?: string;
+  payment_provider?: 'paypal';
+  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
   amount: number;
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'cancelled';
   payment_method?: string;
   payment_description?: string;
+  callback_data?: Record<string, any>;
+  webhook_data?: Record<string, any>;
   created_at: string;
   updated_at: string;
   completed_at?: string;
 }
 
 export interface PaymentInitiateRequest {
-  tier: 'premium' | 'pro';
+  tier: 'starter' | 'premium' | 'pro' | 'enterprise';
   currency: 'UGX' | 'USD';
   firstName: string;
   lastName: string;
   email: string;
   phoneNumber?: string;
+  billing_period?: 'monthly' | 'annual';
+  return_url?: string; // URL to redirect to after payment completion
+  prefer_card?: boolean; // If true, PayPal checkout will prefer card payment form
 }
 
 export interface PaymentInitiateResponse {
   payment: {
     id: string;
-    tier: 'premium' | 'pro';
+    tier: 'starter' | 'premium' | 'pro' | 'enterprise';
     amount: number;
     currency: string;
     status: string;
+    billing_period?: 'monthly' | 'annual';
   };
   redirect_url: string;
-  order_tracking_id: string;
+  /** One-time payment: PayPal order ID */
+  order_id?: string;
+  /** Recurring: PayPal subscription ID */
+  subscription_id?: string;
+  recurring?: boolean;
+  billing_period?: 'monthly' | 'annual';
+  /** @deprecated Use order_id or subscription_id */
+  order_tracking_id?: string;
 }
 
 export interface RefundRequest {
@@ -1014,7 +1158,9 @@ export interface RefundResponse {
 }
 
 export const paymentApi = {
-  initiate: async (data: PaymentInitiateRequest & { recurring?: boolean }): Promise<ApiResponse<PaymentInitiateResponse>> => {
+  initiate: async (
+    data: PaymentInitiateRequest & { recurring?: boolean }
+  ): Promise<ApiResponse<PaymentInitiateResponse>> => {
     const response = await apiClient.post('/api/payment/initiate', data);
     return response.data;
   },
@@ -1033,4 +1179,352 @@ export const paymentApi = {
     const response = await apiClient.post('/api/payment/refund', data);
     return response.data;
   },
+
+  syncSubscription: async (subscriptionId?: string): Promise<ApiResponse<{ synced: boolean; message: string }>> => {
+    const response = await apiClient.post('/api/payment/sync-subscription', {
+      subscription_id: subscriptionId,
+    });
+    return response.data;
+  },
 };
+
+// Metrics API Types
+export interface RetrievalMetrics {
+  totalQueries: number;
+  averagePrecision: number;
+  averageRecall: number;
+  averageF1Score: number;
+  averageMRR: number;
+  averageAP: number;
+  averageNDCG?: number;
+  queries: Array<{
+    query: string;
+    userId: string;
+    queryId?: string;
+    timestamp: number;
+    totalRetrieved: number;
+    totalRelevant: number;
+    relevantRetrieved: number;
+    precision: number;
+    recall: number;
+    f1Score: number;
+    meanReciprocalRank: number;
+    averagePrecision: number;
+    ndcg?: number;
+  }>;
+}
+
+export interface RetrievalMetricsSummary {
+  totalQueries: number;
+  averagePrecision: number;
+  averageRecall: number;
+  averageF1Score: number;
+  averageMRR: number;
+  averageAP: number;
+  averageNDCG?: number;
+  dateRange: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface LatencyStats {
+  stats: Array<{
+    operationType: string;
+    count: number;
+    averageLatency: number;
+    minLatency: number;
+    maxLatency: number;
+    p95Latency: number;
+    p99Latency: number;
+  }>;
+  summary: {
+    totalOperations: number;
+    averageLatency: number;
+    operationsTracked: number;
+  };
+}
+
+export interface LatencyTrend {
+  date: string;
+  averageLatency: number;
+  p95Latency: number;
+  p99Latency: number;
+  count: number;
+}
+
+export interface LatencyTrends {
+  trends: LatencyTrend[];
+  operationType: string;
+  interval: 'hour' | 'day' | 'week';
+  dateRange: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface LatencyAlert {
+  id: string;
+  operationType: string;
+  latency: number;
+  threshold: number;
+  timestamp: string;
+  message: string;
+}
+
+export interface ErrorStats {
+  stats: Array<{
+    serviceType: string;
+    errorCategory: string;
+    count: number;
+    percentage: number;
+  }>;
+  summary: {
+    totalErrors: number;
+    servicesTracked: number;
+    categoriesTracked: number;
+  };
+}
+
+export interface ErrorTrend {
+  date: string;
+  count: number;
+  errorRate: number;
+}
+
+export interface ErrorTrends {
+  trends: ErrorTrend[];
+  serviceType: string;
+  errorCategory: string | null;
+  interval: 'hour' | 'day' | 'week';
+  dateRange: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface QualityStats {
+  stats: Array<{
+    metricType: string;
+    count: number;
+    averageScore: number;
+    minScore: number;
+    maxScore: number;
+  }>;
+  summary: {
+    totalMetrics: number;
+    averageScore: number;
+    metricTypesTracked: number;
+  };
+}
+
+export interface QualityTrend {
+  date: string;
+  averageScore: number;
+  count: number;
+}
+
+export interface QualityTrends {
+  trends: QualityTrend[];
+  metricType: string;
+  interval: 'hour' | 'day' | 'week';
+  dateRange: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface PerformanceMetrics {
+  responseTime: {
+    avg: number;
+    min: number;
+    max: number;
+    p95: number;
+    p99: number;
+  };
+  throughput: number; // requests/second
+  errorRate: number; // percentage
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+}
+
+// Metrics API
+export const metricsApi = {
+  // Retrieval Quality Metrics
+  getRetrievalMetrics: async (options?: {
+    startDate?: string;
+    endDate?: string;
+    topicId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiResponse<RetrievalMetrics>> => {
+    const response = await apiClient.get('/api/metrics/retrieval', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  getRetrievalMetricsSummary: async (): Promise<ApiResponse<RetrievalMetricsSummary>> => {
+    const response = await apiClient.get('/api/metrics/retrieval/summary');
+    return response.data;
+  },
+
+  // Latency/Performance Metrics
+  getLatencyStats: async (options?: {
+    operationType?: string;
+    startDate?: string;
+    endDate?: string;
+    minLatency?: number;
+    maxLatency?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiResponse<LatencyStats>> => {
+    const response = await apiClient.get('/api/metrics/latency/stats', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  getLatencyTrends: async (options: {
+    operationType: string;
+    startDate: string;
+    endDate: string;
+    interval?: 'hour' | 'day' | 'week';
+  }): Promise<ApiResponse<LatencyTrends>> => {
+    const response = await apiClient.get('/api/metrics/latency/trends', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  getLatencyAlerts: async (limit?: number): Promise<ApiResponse<{ alerts: LatencyAlert[]; total: number }>> => {
+    const response = await apiClient.get('/api/metrics/latency/alerts', {
+      params: limit ? { limit } : {},
+    });
+    return response.data;
+  },
+
+  getLatencyAlertStats: async (options?: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<any>> => {
+    const response = await apiClient.get('/api/metrics/latency/alerts/stats', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  // Error Metrics
+  getErrorStats: async (options?: {
+    serviceType?: string;
+    errorCategory?: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiResponse<ErrorStats>> => {
+    const response = await apiClient.get('/api/metrics/errors/stats', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  getErrorTrends: async (options: {
+    serviceType: string;
+    errorCategory?: string;
+    startDate: string;
+    endDate: string;
+    interval?: 'hour' | 'day' | 'week';
+  }): Promise<ApiResponse<ErrorTrends>> => {
+    const response = await apiClient.get('/api/metrics/errors/trends', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  getErrorAlerts: async (limit?: number): Promise<ApiResponse<{ alerts: any[]; total: number }>> => {
+    const response = await apiClient.get('/api/metrics/errors/alerts', {
+      params: limit ? { limit } : {},
+    });
+    return response.data;
+  },
+
+  getErrorAlertStats: async (options?: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse<any>> => {
+    const response = await apiClient.get('/api/metrics/errors/alerts/stats', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  // Quality Metrics
+  getQualityStats: async (options?: {
+    metricType?: string;
+    startDate?: string;
+    endDate?: string;
+    minScore?: number;
+    maxScore?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiResponse<QualityStats>> => {
+    const response = await apiClient.get('/api/metrics/quality/stats', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  getQualityTrends: async (options: {
+    metricType: string;
+    startDate: string;
+    endDate: string;
+    interval?: 'hour' | 'day' | 'week';
+  }): Promise<ApiResponse<QualityTrends>> => {
+    const response = await apiClient.get('/api/metrics/quality/trends', {
+      params: options,
+    });
+    return response.data;
+  },
+};
+
+// Export A/B Testing API
+export { abTestingApi } from './api-ab-testing';
+export type {
+  ABTest,
+  ABTestMetrics,
+  CreateABTestInput,
+  UpdateABTestInput,
+  VariantConfig,
+  StatisticalSignificance,
+} from './api-ab-testing';
+
+// Export Validation API
+export { validationApi } from './api-validation';
+export type {
+  ValidationTestSuite,
+  ValidationTestCase,
+  ValidationTestResult,
+  ValidationRun,
+  ValidationReport,
+  CreateTestSuiteInput,
+  UpdateTestSuiteInput,
+  RunTestSuiteInput,
+} from './api-validation';
+
+// Export Health Monitoring API
+export { healthApi } from './api-health';
+export type {
+  SystemHealth,
+  ComponentHealth,
+  ResponseTimeMetric,
+  ErrorRateMetric,
+  ThroughputMetric,
+  ComponentPerformance,
+  PerformanceAlert,
+  AlertConfiguration,
+  HealthMetrics,
+  SystemStatus,
+  ComponentStatus,
+} from './api-health';

@@ -12,19 +12,21 @@ import authRoutes from './routes/auth.routes';
 import aiRoutes from './routes/ai.routes';
 import searchRoutes from './routes/search.routes';
 import documentsRoutes from './routes/documents.routes';
-import embeddingConfigsRoutes from './routes/embeddings.routes';
-import embedRoutes from './routes/embed.routes';
 import conversationsRoutes from './routes/conversations.routes';
 import topicsRoutes from './routes/topics.routes';
-import apiKeysRoutes from './routes/api-keys.routes';
 import collectionsRoutes from './routes/collections.routes';
-import customApiRoutes from './routes/custom-api.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import subscriptionRoutes from './routes/subscription.routes';
 import paymentRoutes from './routes/payment.routes';
 import usageRoutes from './routes/usage.routes';
+import billingRoutes from './routes/billing.routes';
+import enterpriseRoutes from './routes/enterprise.routes';
 import testRoutes from './routes/test.routes';
 import debugRoutes from './routes/debug.routes';
+import cacheRoutes from './routes/cache.routes';
+import connectionsRoutes from './routes/connections.routes';
+import metricsRoutes from './routes/metrics.routes';
+import adminRoutes from './routes/admin.routes';
 
 const app: Express = express();
 
@@ -56,27 +58,25 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // Parse CORS_ORIGIN - support comma-separated origins
+    // Parse CORS_ORIGIN - support comma-separated origins; strip quotes (Railway/env sometimes add them)
     const corsOrigins = config.CORS_ORIGIN
       .split(',')
-      .map(origin => origin.trim())
+      .map(o => o.trim().replace(/^["']|["']$/g, ''))
       .filter(Boolean);
 
-    // Helper to normalize URL (handle both with and without https://)
+    // Helper to normalize URL: add https if needed, strip trailing slash (browser sends origin without slash)
     const normalizeUrl = (url: string): string => {
-      const trimmed = url.trim();
+      const trimmed = url.trim().replace(/\/+$/, '');
       if (!trimmed) return '';
-      // If already starts with http:// or https://, return as is
       if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
         return trimmed;
       }
-      // Otherwise, add https://
       return `https://${trimmed}`;
     };
 
     const allowedOrigins = [
-      ...corsOrigins,
-      // Cloudflare Pages frontend (if set) - normalize URL format
+      ...corsOrigins.map(normalizeUrl),
+      // Cloudflare Pages frontend (if set)
       ...(process.env.CLOUDFLARE_PAGES_URL
         ? [normalizeUrl(process.env.CLOUDFLARE_PAGES_URL)]
         : []),
@@ -85,7 +85,11 @@ const corsOptions = {
       'http://localhost:3001',
     ].filter(Boolean);
 
-    if (allowedOrigins.includes(origin) || config.NODE_ENV === 'development') {
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+    const exactMatch = allowedOrigins.includes(normalizedOrigin) || allowedOrigins.includes(origin);
+    // Allow Cloudflare Pages preview URLs: https://<deployment-id>.queryai-frontend.pages.dev
+    const isCloudflarePreview = /^https:\/\/[a-z0-9-]+\.queryai-frontend\.pages\.dev$/i.test(normalizedOrigin);
+    if (exactMatch || isCloudflarePreview || config.NODE_ENV === 'development') {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -108,14 +112,8 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Request logging
 app.use(requestLogger);
 
-// Rate limiting (exclude embed routes as they're public)
-app.use('/api/', (req, res, next) => {
-  // Skip rate limiting for public embed routes
-  if (req.path.startsWith('/embed/')) {
-    return next();
-  }
-  return apiLimiter(req, res, next);
-});
+// Rate limiting
+app.use('/api/', apiLimiter);
 
 // API Routes
 app.use('/api/test', testRoutes);
@@ -125,16 +123,17 @@ app.use('/api/search', searchRoutes);
 app.use('/api/documents', documentsRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/topics', topicsRoutes);
-app.use('/api/api-keys', apiKeysRoutes);
 app.use('/api/collections', collectionsRoutes);
-app.use('/api/embeddings', embeddingConfigsRoutes);
-// Mount embed routes separately for public access
-app.use('/api/embed', embedRoutes);
-app.use('/api/v1', customApiRoutes); // Custom API with API key auth
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/usage', usageRoutes);
+app.use('/api/billing', billingRoutes);
+app.use('/api/enterprise', enterpriseRoutes);
+app.use('/api/cache', cacheRoutes);
+app.use('/api/connections', connectionsRoutes);
+app.use('/api/metrics', metricsRoutes);
+app.use('/api/admin', adminRoutes);
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }
@@ -142,8 +141,6 @@ if (process.env.NODE_ENV !== 'production') {
 // Renewal job endpoint (can be called by cron)
 app.post('/api/jobs/renewals', async (_req: Request, res: Response) => {
   try {
-    // Optional: Add authentication/authorization for this endpoint
-    // For now, you can protect it with an API key or secret
     const { runRenewalJob } = await import('./jobs/renewal-job');
     await runRenewalJob();
     res.status(200).json({
@@ -155,6 +152,25 @@ app.post('/api/jobs/renewals', async (_req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: 'Renewal job failed',
+      error: error.message,
+    });
+  }
+});
+
+// Email scheduler endpoint (payment/renewal/expiration reminders + queue). Call daily via cron.
+app.post('/api/jobs/email-scheduler', async (_req: Request, res: Response) => {
+  try {
+    const { runEmailScheduler } = await import('./cron/email-scheduler');
+    await runEmailScheduler();
+    res.status(200).json({
+      success: true,
+      message: 'Email scheduler completed successfully',
+    });
+  } catch (error: any) {
+    logger.error('Email scheduler endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Email scheduler failed',
       error: error.message,
     });
   }
@@ -206,6 +222,15 @@ app.get('/health', async (_req: Request, res: Response) => {
   });
 });
 
+// CORS check - call from frontend origin to verify CORS allows your site
+app.get('/cors-check', (req: Request, res: Response) => {
+  res.status(200).json({
+    ok: true,
+    message: 'CORS allows this origin',
+    origin: req.headers.origin || '(none)',
+  });
+});
+
 // API info endpoint
 app.get('/api', (_req: Request, res: Response) => {
   res.status(200).json({
@@ -249,8 +274,30 @@ app.use(notFoundHandler);
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
+// Initialize request queue and worker
+async function initializeQueue() {
+  try {
+    const { RequestQueueService } = await import('./services/request-queue.service');
+    const { RAGWorker } = await import('./workers/rag-worker');
+    
+    await RequestQueueService.initialize();
+    await RAGWorker.initialize();
+    
+    logger.info('Request queue and worker initialized');
+  } catch (error: any) {
+    logger.warn('Failed to initialize request queue (continuing without queue)', {
+      error: error.message,
+    });
+  }
+}
+
 // Start server
 const PORT = config.PORT;
+
+// Initialize queue on startup
+initializeQueue().catch((error) => {
+  logger.error('Queue initialization error:', error);
+});
 
 // Check if running as Railway cron job
 if (process.env.RAILWAY_CRON === 'true') {
@@ -271,17 +318,35 @@ if (process.env.RAILWAY_CRON === 'true') {
   });
 
   // Graceful shutdown
-  process.on('SIGTERM', () => {
+  process.on('SIGTERM', async () => {
     logger.info('SIGTERM signal received: closing HTTP server');
-    server.close(() => {
+    server.close(async () => {
+      // Close queue and worker
+      try {
+        const { RequestQueueService } = await import('./services/request-queue.service');
+        const { RAGWorker } = await import('./workers/rag-worker');
+        await RequestQueueService.close();
+        await RAGWorker.close();
+      } catch (error) {
+        logger.warn('Error closing queue/worker:', error);
+      }
       logger.info('HTTP server closed');
       process.exit(0);
     });
   });
 
-  process.on('SIGINT', () => {
+  process.on('SIGINT', async () => {
     logger.info('SIGINT signal received: closing HTTP server');
-    server.close(() => {
+    server.close(async () => {
+      // Close queue and worker
+      try {
+        const { RequestQueueService } = await import('./services/request-queue.service');
+        const { RAGWorker } = await import('./workers/rag-worker');
+        await RequestQueueService.close();
+        await RAGWorker.close();
+      } catch (error) {
+        logger.warn('Error closing queue/worker:', error);
+      }
       logger.info('HTTP server closed');
       process.exit(0);
     });

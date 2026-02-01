@@ -1,0 +1,350 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2025-01-26",
+  "domains": {
+    "google.com": {
+      "authorityScore": 100,
+      "category": "tech",
+      "tier": "tier1",
+      "description": "Google - Major tech platform"
+    },
+    "youtube.com": {
+      "authorityScore": 100,
+      "category": "media",
+      "tier": "tier1",
+      "description": "YouTube - Video platform"
+    },
+    "wikipedia.org": {
+      "authorityScore": 95,
+      "category": "reference",
+      "tier": "tier1",
+      "description": "Wikipedia - Online encyclopedia"
+    },
+    "github.com": {
+      "authorityScore": 95,
+      "category": "tech",
+      "tier": "tier1",
+      "description": "GitHub - Code repository platform"
+    },
+    "stackoverflow.com": {
+      "authorityScore": 95,
+      "category": "tech",
+      "tier": "tier1",
+      "description": "Stack Overflow - Developer Q&A"
+    },
+    "microsoft.com": {
+      "authorityScore": 99,
+      "category": "tech",
+      "tier": "tier1",
+      "description": "Microsoft - Technology company"
+    },
+    "apple.com": {
+      "authorityScore": 99,
+      "category": "tech",
+      "tier": "tier1",
+      "description": "Apple - Technology company"
+    },
+    "amazon.com": {
+      "authorityScore": 99,
+      "category": "ecommerce",
+      "tier": "tier1",
+      "description": "Amazon - E-commerce platform"
+    },
+    "linkedin.com": {
+      "authorityScore": 99,
+      "category": "social",
+      "tier": "tier1",
+      "description": "LinkedIn - Professional network"
+    },
+    "twitter.com": {
+      "authorityScore": 98,
+      "category": "social",
+      "tier": "tier1",
+      "description": "Twitter/X - Social media platform"
+    },
+    "facebook.com": {
+      "authorityScore": 98,
+      "category": "social",
+      "tier": "tier1",
+      "description": "Facebook - Social media platform"
+    },
+    "reddit.com": {
+      "authorityScore": 95,
+      "category": "social",
+      "tier": "tier1",
+      "description": "Reddit - Social news platform"
+    },
+    "bbc.com": {
+      "authorityScore": 95,
+      "category": "news",
+      "tier": "tier1",
+      "description": "BBC - News organization"
+    },
+    "bbc.co.uk": {
+      "authorityScore": 95,
+      "category": "news",
+      "tier": "tier1",
+      "description": "BBC UK - News organization"
+    },
+    "cnn.com": {
+      "authorityScore": 94,
+      "category": "news",
+      "tier": "tier1",
+      "description": "CNN - News organization"
+    },
+    "reuters.com": {
+      "authorityScore": 96,
+      "category": "news",
+      "tier": "tier1",
+      "description": "Reuters - News agency"
+    },
+    "theguardian.com": {
+      "authorityScore": 94,
+      "category": "news",
+      "tier": "tier1",
+      "description": "The Guardian - News organization"
+    },
+    "nytimes.com": {
+      "authorityScore": 95,
+      "category": "news",
+      "tier": "tier1",
+      "description": "New York Times - News organization"
+    },
+    "wsj.com": {
+      "authorityScore": 94,
+      "category": "news",
+      "tier": "tier1",
+      "description": "Wall Street Journal - News organization"
+    },
+    "economist.com": {
+      "authorityScore": 93,
+      "category": "news",
+      "tier": "tier1",
+      "description": "The Economist - News magazine"
+    },
+    "nature.com": {
+      "authorityScore": 98,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "Nature - Scientific journal"
+    },
+    "science.org": {
+      "authorityScore": 97,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "Science - Scientific journal"
+    },
+    "nih.gov": {
+      "authorityScore": 98,
+      "category": "government",
+      "tier": "tier1",
+      "description": "NIH - National Institutes of Health"
+    },
+    "cdc.gov": {
+      "authorityScore": 97,
+      "category": "government",
+      "tier": "tier1",
+      "description": "CDC - Centers for Disease Control"
+    },
+    "who.int": {
+      "authorityScore": 97,
+      "category": "government",
+      "tier": "tier1",
+      "description": "WHO - World Health Organization"
+    },
+    "ieee.org": {
+      "authorityScore": 96,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "IEEE - Technical professional organization"
+    },
+    "acm.org": {
+      "authorityScore": 96,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "ACM - Computing professional organization"
+    },
+    "arxiv.org": {
+      "authorityScore": 94,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "arXiv - Preprint repository"
+    },
+    "pubmed.ncbi.nlm.nih.gov": {
+      "authorityScore": 97,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "PubMed - Medical literature database"
+    },
+    "mit.edu": {
+      "authorityScore": 98,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "MIT - Massachusetts Institute of Technology"
+    },
+    "stanford.edu": {
+      "authorityScore": 98,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "Stanford University"
+    },
+    "harvard.edu": {
+      "authorityScore": 98,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "Harvard University"
+    },
+    "oxford.ac.uk": {
+      "authorityScore": 98,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "Oxford University"
+    },
+    "cambridge.ac.uk": {
+      "authorityScore": 98,
+      "category": "academic",
+      "tier": "tier1",
+      "description": "Cambridge University"
+    },
+    "medium.com": {
+      "authorityScore": 92,
+      "category": "media",
+      "tier": "tier2",
+      "description": "Medium - Publishing platform"
+    },
+    "techcrunch.com": {
+      "authorityScore": 91,
+      "category": "news",
+      "tier": "tier2",
+      "description": "TechCrunch - Tech news"
+    },
+    "wired.com": {
+      "authorityScore": 92,
+      "category": "news",
+      "tier": "tier2",
+      "description": "Wired - Technology magazine"
+    },
+    "theverge.com": {
+      "authorityScore": 90,
+      "category": "news",
+      "tier": "tier2",
+      "description": "The Verge - Technology news"
+    },
+    "bloomberg.com": {
+      "authorityScore": 95,
+      "category": "news",
+      "tier": "tier1",
+      "description": "Bloomberg - Financial news"
+    },
+    "ft.com": {
+      "authorityScore": 94,
+      "category": "news",
+      "tier": "tier1",
+      "description": "Financial Times - Financial news"
+    },
+    "forbes.com": {
+      "authorityScore": 93,
+      "category": "news",
+      "tier": "tier1",
+      "description": "Forbes - Business news"
+    },
+    "nasa.gov": {
+      "authorityScore": 97,
+      "category": "government",
+      "tier": "tier1",
+      "description": "NASA - Space agency"
+    },
+    "nsf.gov": {
+      "authorityScore": 96,
+      "category": "government",
+      "tier": "tier1",
+      "description": "NSF - National Science Foundation"
+    },
+    "whitehouse.gov": {
+      "authorityScore": 98,
+      "category": "government",
+      "tier": "tier1",
+      "description": "White House - US Government"
+    },
+    "gov.uk": {
+      "authorityScore": 97,
+      "category": "government",
+      "tier": "tier1",
+      "description": "UK Government"
+    },
+    "europa.eu": {
+      "authorityScore": 96,
+      "category": "government",
+      "tier": "tier1",
+      "description": "European Union"
+    },
+    "un.org": {
+      "authorityScore": 97,
+      "category": "government",
+      "tier": "tier1",
+      "description": "United Nations"
+    },
+    "worldbank.org": {
+      "authorityScore": 96,
+      "category": "government",
+      "tier": "tier1",
+      "description": "World Bank"
+    },
+    "imf.org": {
+      "authorityScore": 96,
+      "category": "government",
+      "tier": "tier1",
+      "description": "IMF - International Monetary Fund"
+    }
+  },
+  "domainPatterns": {
+    "edu": {
+      "authorityScore": 85,
+      "category": "academic",
+      "tier": "tier2",
+      "description": "US Educational institutions",
+      "pattern": "\\.edu$"
+    },
+    "ac.uk": {
+      "authorityScore": 88,
+      "category": "academic",
+      "tier": "tier2",
+      "description": "UK Academic institutions",
+      "pattern": "\\.ac\\.uk$"
+    },
+    "edu.au": {
+      "authorityScore": 87,
+      "category": "academic",
+      "tier": "tier2",
+      "description": "Australian Educational institutions",
+      "pattern": "\\.edu\\.au$"
+    },
+    "gov": {
+      "authorityScore": 90,
+      "category": "government",
+      "tier": "tier2",
+      "description": "US Government domains",
+      "pattern": "\\.gov$"
+    },
+    "gov.uk": {
+      "authorityScore": 92,
+      "category": "government",
+      "tier": "tier2",
+      "description": "UK Government domains",
+      "pattern": "\\.gov\\.uk$"
+    },
+    "org": {
+      "authorityScore": 70,
+      "category": "organization",
+      "tier": "tier3",
+      "description": "Non-profit organizations",
+      "pattern": "\\.org$"
+    }
+  },
+  "categoryWeights": {
+    "tier1": 1.0,
+    "tier2": 0.85,
+    "tier3": 0.70,
+    "default": 0.50
+  }
+}

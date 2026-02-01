@@ -1,20 +1,25 @@
 import { Database } from '../types/database';
-import logger from '../config/logger';
+import { getPricing } from '../constants/pricing';
+import type { BillingPeriod, Tier } from '../constants/pricing';
 
 /**
  * Prorating Service
- * Calculates prorated amounts for mid-period subscription changes
+ * Calculates prorated amounts for mid-period subscription changes (tier and/or billing period).
  */
 export class ProratingService {
   /**
-   * Calculate prorated amount for upgrade/downgrade
+   * Calculate prorated amount for upgrade/downgrade or period change.
+   * Uses getPricing(tier, currency, period) when periods are provided.
    */
   static calculateProratedAmount(
-    currentTier: 'free' | 'premium' | 'pro',
-    newTier: 'free' | 'premium' | 'pro',
+    currentTier: Tier,
+    newTier: Tier,
     periodStart: Date,
     periodEnd: Date,
-    currentDate: Date = new Date()
+    currentDate: Date = new Date(),
+    currency: 'UGX' | 'USD' = 'UGX',
+    currentBillingPeriod: BillingPeriod = 'monthly',
+    newBillingPeriod: BillingPeriod = 'monthly'
   ): {
     proratedAmount: number;
     daysUsed: number;
@@ -22,36 +27,22 @@ export class ProratingService {
     creditAmount: number;
     chargeAmount: number;
   } {
-    const tierPricing: Record<'free' | 'premium' | 'pro', Record<'UGX' | 'USD', number>> = {
-      free: { UGX: 0, USD: 0 },
-      premium: { UGX: 50000, USD: 15 },
-      pro: { UGX: 150000, USD: 45 },
-    };
-
-    // Calculate days
     const totalDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000));
     const daysUsed = Math.ceil((currentDate.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000));
-    const daysRemaining = totalDays - daysUsed;
+    const daysRemaining = Math.max(0, totalDays - daysUsed);
 
-    // Calculate amounts (using UGX as default, can be adjusted)
-    const currentMonthlyPrice = tierPricing[currentTier].UGX;
-    const newMonthlyPrice = tierPricing[newTier].UGX;
+    const currentPrice = getPricing(currentTier, currency, currentBillingPeriod);
+    const newPrice = getPricing(newTier, currency, newBillingPeriod);
 
-    // Calculate daily rates
-    const currentDailyRate = currentMonthlyPrice / totalDays;
-    const newDailyRate = newMonthlyPrice / totalDays;
+    const currentDailyRate = totalDays > 0 ? currentPrice / totalDays : 0;
+    const newDailyRate = totalDays > 0 ? newPrice / totalDays : 0;
 
-    // Credit for unused portion of current tier
     const creditAmount = currentDailyRate * daysRemaining;
-
-    // Charge for remaining portion of new tier
     const chargeAmount = newDailyRate * daysRemaining;
-
-    // Net amount to charge (could be negative for downgrades)
     const proratedAmount = chargeAmount - creditAmount;
 
     return {
-      proratedAmount: Math.max(0, proratedAmount), // Don't charge negative amounts
+      proratedAmount: Math.max(0, proratedAmount),
       daysUsed,
       daysRemaining,
       creditAmount,
@@ -74,13 +65,15 @@ export class ProratingService {
   }
 
   /**
-   * Get prorated pricing for tier change
+   * Get prorated pricing for tier and/or billing-period change.
+   * @param toBillingPeriod - Optional. Target period when switching monthly ↔ annual; defaults to subscription.billing_period.
    */
   static getProratedPricing(
-    fromTier: 'free' | 'premium' | 'pro',
-    toTier: 'free' | 'premium' | 'pro',
+    fromTier: Tier,
+    toTier: Tier,
     subscription: Database.Subscription,
-    currency: 'UGX' | 'USD' = 'UGX'
+    currency: 'UGX' | 'USD' = 'UGX',
+    toBillingPeriod?: BillingPeriod
   ): {
     currentTierPrice: number;
     newTierPrice: number;
@@ -89,21 +82,21 @@ export class ProratingService {
     creditAmount: number;
     chargeAmount: number;
   } {
-    if (!subscription.current_period_start || !subscription.current_period_end) {
-      // No period set, return full price
-      const tierPricing: Record<'free' | 'premium' | 'pro', Record<'UGX' | 'USD', number>> = {
-        free: { UGX: 0, USD: 0 },
-        premium: { UGX: 50000, USD: 15 },
-        pro: { UGX: 150000, USD: 45 },
-      };
+    const sub = subscription as Database.Subscription & { billing_period?: BillingPeriod };
+    const currentPeriod: BillingPeriod = sub.billing_period ?? 'monthly';
+    const newPeriod: BillingPeriod = toBillingPeriod ?? currentPeriod;
 
+    const currentPrice = getPricing(fromTier, currency, currentPeriod);
+    const newPrice = getPricing(toTier, currency, newPeriod);
+
+    if (!subscription.current_period_start || !subscription.current_period_end) {
       return {
-        currentTierPrice: tierPricing[fromTier][currency],
-        newTierPrice: tierPricing[toTier][currency],
-        proratedAmount: tierPricing[toTier][currency],
+        currentTierPrice: currentPrice,
+        newTierPrice: newPrice,
+        proratedAmount: newPrice,
         daysRemaining: 30,
         creditAmount: 0,
-        chargeAmount: tierPricing[toTier][currency],
+        chargeAmount: newPrice,
       };
     }
 
@@ -111,17 +104,20 @@ export class ProratingService {
     const periodEnd = new Date(subscription.current_period_end);
     const now = new Date();
 
-    const prorated = this.calculateProratedAmount(fromTier, toTier, periodStart, periodEnd, now);
-
-    const tierPricing: Record<'free' | 'premium' | 'pro', Record<'UGX' | 'USD', number>> = {
-      free: { UGX: 0, USD: 0 },
-      premium: { UGX: 50000, USD: 15 },
-      pro: { UGX: 150000, USD: 45 },
-    };
+    const prorated = this.calculateProratedAmount(
+      fromTier,
+      toTier,
+      periodStart,
+      periodEnd,
+      now,
+      currency,
+      currentPeriod,
+      newPeriod
+    );
 
     return {
-      currentTierPrice: tierPricing[fromTier][currency],
-      newTierPrice: tierPricing[toTier][currency],
+      currentTierPrice: currentPrice,
+      newTierPrice: newPrice,
       proratedAmount: prorated.proratedAmount,
       daysRemaining: prorated.daysRemaining,
       creditAmount: prorated.creditAmount,

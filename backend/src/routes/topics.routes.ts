@@ -1,9 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { TopicService, CreateTopicInput, UpdateTopicInput } from '../services/topic.service';
+import { CacheInvalidationService } from '../services/cache-invalidation.service';
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { AppError, ValidationError } from '../types/error';
 import { enforceTopicLimit } from '../middleware/subscription.middleware';
+import logger from '../config/logger';
 
 const router = Router();
 
@@ -105,6 +107,20 @@ router.put(
 
     const topic = await TopicService.updateTopic(topicId, userId, updates);
 
+    // Invalidate cache for this topic
+    try {
+      await CacheInvalidationService.invalidateTopicCache(userId, topicId, {
+        invalidateRAG: true,
+        reason: 'Topic updated',
+      });
+    } catch (cacheError: any) {
+      // Don't fail topic update if cache invalidation fails
+      logger.warn('Cache invalidation failed after topic update', {
+        topicId,
+        error: cacheError.message,
+      });
+    }
+
     res.json({
       success: true,
       data: topic,
@@ -124,6 +140,20 @@ router.delete(
     const topicId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
     await TopicService.deleteTopic(topicId, userId);
+
+    // Invalidate cache for this topic
+    try {
+      await CacheInvalidationService.invalidateTopicCache(userId, topicId, {
+        invalidateRAG: true,
+        reason: 'Topic deleted',
+      });
+    } catch (cacheError: any) {
+      // Don't fail topic deletion if cache invalidation fails
+      logger.warn('Cache invalidation failed after topic deletion', {
+        topicId,
+        error: cacheError.message,
+      });
+    }
 
     res.json({
       success: true,

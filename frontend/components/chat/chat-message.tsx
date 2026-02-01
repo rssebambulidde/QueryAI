@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
-import { Copy, Edit2, Check, X } from 'lucide-react';
+import { Copy, Edit2, Check, X, Layers } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
@@ -13,6 +13,7 @@ import { EnhancedContentProcessor } from './enhanced-content-processor';
 import { AIActionButtons } from './ai-action-buttons';
 import { Source, aiApi } from '@/lib/api';
 import { exportToPdf } from '@/lib/export-pdf';
+import { ResponseTimeIndicator } from '@/components/health/response-time-indicator';
 import 'highlight.js/styles/github-dark.css';
 
 export interface ChatMessageType {
@@ -26,6 +27,7 @@ export interface ChatMessageType {
   isStreaming?: boolean; // Flag to indicate if message is still streaming
   isRefusal?: boolean; // true when response is an off-topic refusal (11.1)
   isTopicChangeMessage?: boolean; // synthetic "Research mode disabled" / "topic now" – hide action buttons
+  responseTime?: number; // Response time in milliseconds
 }
 
 // Keep Message as an alias for backward compatibility
@@ -35,16 +37,19 @@ const REFUSAL_PATTERN = /outside|limited to|disable research mode|research (mode
 
 interface ChatMessageProps {
   message: Message;
+  previousResponseTime?: number; // Previous assistant message's response time for trend
   onEdit?: (messageId: string, newContent: string) => void;
   onFollowUpClick?: (question: string) => void;
   userQuestion?: string; // The user's original question for context
   onActionResponse?: (content: string, actionType?: 'summary' | 'essay' | 'report') => void; // Callback for action responses
+  /** Open Perplexity-style sources sidebar with this message's sources and optional query for header */
+  onOpenSources?: (sources: Source[], query?: string) => void;
   isStreaming?: boolean; // Whether the message is currently streaming
   selectedTopicName?: string | null; // For refusal hint (11.2)
   onExitResearchMode?: () => void; // For refusal hint "exit research mode" action
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFollowUpClick, userQuestion, onActionResponse, isStreaming = false, selectedTopicName, onExitResearchMode }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onActionResponse, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode }) => {
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
@@ -253,18 +258,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
             )}
           </div>
 
-          {/* Timestamp and Actions */}
+          {/* Timestamp, Response Time, and Actions */}
           <div className="flex items-center justify-between mt-2">
-            <div
-              className={cn(
-                'text-xs opacity-70',
-                isUser ? 'text-orange-100' : 'text-gray-500'
+            <div className="flex items-center gap-2">
+              <div
+                className={cn(
+                  'text-xs opacity-70',
+                  isUser ? 'text-orange-100' : 'text-gray-500'
+                )}
+              >
+                {message.timestamp.toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </div>
+              {!isUser && message.responseTime !== undefined && (
+                <ResponseTimeIndicator
+                  responseTime={message.responseTime}
+                  previousResponseTime={previousResponseTime}
+                  showTrend={true}
+                  size="sm"
+                />
               )}
-            >
-              {message.timestamp.toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
             </div>
             <div
               className={cn(
@@ -294,87 +309,111 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, onEdit, onFol
                   <Edit2 className="w-3.5 h-3.5" />
                 </button>
               )}
+              {/* Ellipsis menu for assistant messages with actions */}
+              {!isUser && onActionResponse && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
+                <AIActionButtons
+                  onSummarize={async () => {
+                    if (!userQuestion) return;
+                    setIsActionLoading(true);
+                    try {
+                      const response = await aiApi.summarize(
+                        message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
+                        userQuestion,
+                        message.sources
+                      );
+                      if (response.success && response.data) {
+                        onActionResponse(response.data.summary, 'summary');
+                      } else {
+                        toast.error(response.message || 'Failed to generate summary');
+                      }
+                    } catch (error: any) {
+                      toast.error(error.message || 'Failed to generate summary');
+                    } finally {
+                      setIsActionLoading(false);
+                    }
+                  }}
+                  onWriteEssay={async () => {
+                    if (!userQuestion) return;
+                    setIsActionLoading(true);
+                    try {
+                      const response = await aiApi.writeEssay(
+                        message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
+                        userQuestion,
+                        message.sources
+                      );
+                      if (response.success && response.data) {
+                        onActionResponse(response.data.essay, 'essay');
+                      } else {
+                        toast.error(response.message || 'Failed to generate essay');
+                      }
+                    } catch (error: any) {
+                      toast.error(error.message || 'Failed to generate essay');
+                    } finally {
+                      setIsActionLoading(false);
+                    }
+                  }}
+                  onDetailedReport={async () => {
+                    if (!userQuestion) return;
+                    setIsActionLoading(true);
+                    try {
+                      const response = await aiApi.generateReport(
+                        message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
+                        userQuestion,
+                        message.sources
+                      );
+                      if (response.success && response.data) {
+                        onActionResponse(response.data.report, 'report');
+                      } else {
+                        toast.error(response.message || 'Failed to generate report');
+                      }
+                    } catch (error: any) {
+                      toast.error(error.message || 'Failed to generate report');
+                    } finally {
+                      setIsActionLoading(false);
+                    }
+                  }}
+                  onExport={() => {
+                    try {
+                      const content = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
+                      exportToPdf({
+                        question: userQuestion ?? '',
+                        answer: content,
+                        sources: message.sources ?? [],
+                      });
+                    } catch {
+                      toast.error('Failed to export PDF');
+                    }
+                  }}
+                  isLoading={isActionLoading}
+                />
+              )}
             </div>
           </div>
         </div>
 
-        {/* AI Action Buttons for Assistant Messages - Only show on complete responses, not action/topic-change */}
-        {!isUser && onActionResponse && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
-          <AIActionButtons
-            onSummarize={async () => {
-              if (!userQuestion) return;
-              setIsActionLoading(true);
-              try {
-                const response = await aiApi.summarize(
-                  message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
-                  userQuestion,
-                  message.sources
-                );
-                if (response.success && response.data) {
-                  onActionResponse(response.data.summary, 'summary');
-                } else {
-                  toast.error(response.message || 'Failed to generate summary');
-                }
-              } catch (error: any) {
-                toast.error(error.message || 'Failed to generate summary');
-              } finally {
-                setIsActionLoading(false);
-              }
-            }}
-            onWriteEssay={async () => {
-              if (!userQuestion) return;
-              setIsActionLoading(true);
-              try {
-                const response = await aiApi.writeEssay(
-                  message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
-                  userQuestion,
-                  message.sources
-                );
-                if (response.success && response.data) {
-                  onActionResponse(response.data.essay, 'essay');
-                } else {
-                  toast.error(response.message || 'Failed to generate essay');
-                }
-              } catch (error: any) {
-                toast.error(error.message || 'Failed to generate essay');
-              } finally {
-                setIsActionLoading(false);
-              }
-            }}
-            onDetailedReport={async () => {
-              if (!userQuestion) return;
-              setIsActionLoading(true);
-              try {
-                const response = await aiApi.generateReport(
-                  message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
-                  userQuestion,
-                  message.sources
-                );
-                if (response.success && response.data) {
-                  onActionResponse(response.data.report, 'report');
-                } else {
-                  toast.error(response.message || 'Failed to generate report');
-                }
-              } catch (error: any) {
-                toast.error(error.message || 'Failed to generate report');
-              } finally {
-                setIsActionLoading(false);
-              }
-            }}
-            onExport={() => {
-              try {
-                const content = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
-                exportToPdf({
-                  question: userQuestion ?? '',
-                  answer: content,
-                  sources: message.sources ?? [],
-                });
-              } catch {
-                toast.error('Failed to export PDF');
-              }
-            }}
-            isLoading={isActionLoading}
-          />
+        {/* "N sources" pill (Perplexity-style) - shown below message for ALL assistant responses with sources
+            This includes responses to original questions AND responses to related questions */}
+        {!isUser && 
+         !message.isActionResponse && 
+         !message.isTopicChangeMessage && 
+         !isStreaming && 
+         !message.isStreaming && 
+         hasSources && 
+         onOpenSources && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => onOpenSources(message.sources!, userQuestion)}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium',
+                'bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors'
+              )}
+              aria-label={`View ${message.sources!.length} sources`}
+            >
+              <Layers className="w-3.5 h-3.5 text-gray-500" />
+              {message.sources!.length} sources
+            </button>
+          </div>
         )}
 
         {/* Follow-up Questions for Assistant Messages - Show AI-generated questions */}

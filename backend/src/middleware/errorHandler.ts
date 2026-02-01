@@ -18,14 +18,33 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
-  // Log error
-  if (err instanceof AppError && err.isOperational) {
+  // Determine status code
+  const statusCode = err instanceof AppError ? err.statusCode : 500;
+  
+  // Enhanced logging for 400 errors (validation errors)
+  if (statusCode === 400) {
+    logger.error('400 Bad Request Error', {
+      message: err.message,
+      code: err instanceof AppError ? err.code : undefined,
+      stack: err.stack,
+      path: req.path,
+      method: req.method,
+      body: req.body,
+      query: req.query,
+      params: req.params,
+      headers: {
+        'content-type': req.headers['content-type'],
+        'authorization': req.headers.authorization ? 'present' : 'missing',
+      },
+    });
+  } else if (err instanceof AppError && err.isOperational) {
     logger.warn(`Operational error: ${err.message}`, {
       statusCode: err.statusCode,
       code: err.code,
       stack: err.stack,
       path: req.path,
       method: req.method,
+      body: req.body,
     });
   } else {
     logger.error('Unhandled error:', {
@@ -33,11 +52,9 @@ export const errorHandler = (
       stack: err.stack,
       path: req.path,
       method: req.method,
+      body: req.body,
     });
   }
-
-  // Determine status code
-  const statusCode = err instanceof AppError ? err.statusCode : 500;
 
   // Determine error message
   let message = err.message || 'Internal server error';

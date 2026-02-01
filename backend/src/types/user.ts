@@ -2,6 +2,7 @@ export interface User {
   id: string;
   email: string;
   fullName?: string;
+  role?: 'user' | 'admin' | 'super_admin';
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -11,7 +12,8 @@ export interface UserProfile {
   userId: string;
   email: string;
   fullName?: string;
-  subscriptionTier?: 'free' | 'premium' | 'pro';
+  role?: 'user' | 'admin' | 'super_admin';
+  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
   createdAt: Date;
   updatedAt: Date;
 }

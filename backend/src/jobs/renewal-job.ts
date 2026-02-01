@@ -29,6 +29,18 @@ export async function runRenewalJob(): Promise<void> {
   logger.info('Starting renewal job...');
   
   try {
+    // Send 7-day payment reminders for upcoming renewals
+    await SubscriptionService.processRenewalReminders();
+    logger.info('Renewal reminders processed');
+
+    // Send 3-day expiration warnings for cancel_at_period_end
+    await SubscriptionService.processExpirationWarnings();
+    logger.info('Expiration warnings processed');
+
+    // Send grace period warnings (3 days and 1 day remaining)
+    await SubscriptionService.processGracePeriodWarnings();
+    logger.info('Grace period warnings processed');
+
     // Process subscription renewals
     await SubscriptionService.processRenewals();
     logger.info('Subscription renewals processed');

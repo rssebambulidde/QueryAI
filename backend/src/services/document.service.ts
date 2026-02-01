@@ -158,6 +158,51 @@ export class DocumentService {
   }
 
   /**
+   * Get multiple documents by IDs (batch query for better performance)
+   */
+  static async getDocumentsBatch(
+    documentIds: string[],
+    userId: string
+  ): Promise<Map<string, Database.Document>> {
+    if (documentIds.length === 0) {
+      return new Map();
+    }
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('documents')
+        .select('*')
+        .in('id', documentIds)
+        .eq('user_id', userId);
+
+      if (error) {
+        logger.error('Failed to get documents batch', {
+          error: error.message,
+          documentIds: documentIds.length,
+          userId,
+        });
+        throw new AppError('Failed to get documents batch', 500, 'DB_ERROR');
+      }
+
+      // Create a map for O(1) lookup
+      const documentMap = new Map<string, Database.Document>();
+      if (data) {
+        for (const doc of data) {
+          documentMap.set(doc.id, doc as Database.Document);
+        }
+      }
+
+      return documentMap;
+    } catch (error: any) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      logger.error('Unexpected error getting documents batch', { error: error.message });
+      throw new AppError('Failed to get documents batch', 500, 'UNKNOWN_ERROR');
+    }
+  }
+
+  /**
    * Get document by file path
    */
   static async getDocumentByPath(
@@ -309,6 +354,18 @@ export class DocumentService {
       const existing = await this.getDocument(documentId, userId);
       if (!existing) {
         throw new ValidationError('Document not found');
+      }
+
+      // Remove from keyword search index
+      try {
+        const { KeywordSearchService } = await import('./keyword-search.service');
+        await KeywordSearchService.removeDocumentFromIndex(documentId);
+      } catch (keywordError: any) {
+        // Don't fail deletion if keyword index removal fails
+        logger.warn('Failed to remove document from keyword index', {
+          documentId,
+          error: keywordError.message,
+        });
       }
 
       const { error } = await supabaseAdmin
