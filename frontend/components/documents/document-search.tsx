@@ -215,7 +215,7 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
       )}>
         <Button
           variant="outline"
-          size={isMobile ? "default" : "sm"}
+          size={isMobile ? "md" : "sm"}
           onClick={() => setShowFilters(!showFilters)}
           className={cn(
             'flex items-center gap-2 touch-manipulation',
@@ -250,7 +250,7 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
         )}>
           <Button
             variant="outline"
-            size={isMobile ? "default" : "sm"}
+            size={isMobile ? "md" : "sm"}
             onClick={() => handleSortChange('date')}
             className={cn(
               "touch-manipulation",
@@ -267,7 +267,7 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
           </Button>
           <Button
             variant="outline"
-            size={isMobile ? "default" : "sm"}
+            size={isMobile ? "md" : "sm"}
             onClick={() => handleSortChange('name')}
             className={cn(
               "touch-manipulation",
@@ -309,7 +309,7 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
                 <Button
                   key={option.value}
                   variant="outline"
-                  size={isMobile ? "default" : "sm"}
+                  size={isMobile ? "md" : "sm"}
                   onClick={() => setFilters((prev) => ({ ...prev, status: option.value }))}
                   className={cn(
                     'flex items-center gap-1.5 touch-manipulation',
@@ -342,7 +342,7 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
                 <Button
                   key={type}
                   variant="outline"
-                  size={isMobile ? "default" : "sm"}
+                  size={isMobile ? "md" : "sm"}
                   onClick={() => setFilters((prev) => ({ ...prev, type }))}
                   className={cn(
                     'flex items-center gap-1.5 touch-manipulation',
@@ -415,7 +415,7 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
           {hasActiveFilters && (
             <Button
               variant="outline"
-              size={isMobile ? "default" : "sm"}
+              size={isMobile ? "md" : "sm"}
               onClick={clearFilters}
               className={cn(
                 "w-full touch-manipulation",

@@ -100,7 +100,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
       )}>
         <Button
           variant={isPresetActive('today') ? 'default' : 'outline'}
-          size={isMobile ? "default" : "sm"}
+          size={isMobile ? "md" : "sm"}
           onClick={() => handlePreset('today')}
           className={cn(
             "touch-manipulation min-h-[44px]",
@@ -111,7 +111,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
         </Button>
         <Button
           variant={isPresetActive('week') ? 'default' : 'outline'}
-          size={isMobile ? "default" : "sm"}
+          size={isMobile ? "md" : "sm"}
           onClick={() => handlePreset('week')}
           className={cn(
             "touch-manipulation min-h-[44px]",
@@ -122,7 +122,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
         </Button>
         <Button
           variant={isPresetActive('month') ? 'default' : 'outline'}
-          size={isMobile ? "default" : "sm"}
+          size={isMobile ? "md" : "sm"}
           onClick={() => handlePreset('month')}
           className={cn(
             "touch-manipulation min-h-[44px]",
@@ -133,7 +133,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
         </Button>
         <Button
           variant={isPresetActive('year') ? 'default' : 'outline'}
-          size={isMobile ? "default" : "sm"}
+          size={isMobile ? "md" : "sm"}
           onClick={() => handlePreset('year')}
           className={cn(
             "touch-manipulation min-h-[44px]",
@@ -151,7 +151,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
       )}>
         <Button
           variant={isCustom ? 'default' : 'outline'}
-          size={isMobile ? "default" : "sm"}
+          size={isMobile ? "md" : "sm"}
           onClick={() => setIsCustom(!isCustom)}
           className={cn(
             "touch-manipulation min-h-[44px]",
@@ -191,7 +191,7 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
               )}
             />
             <Button 
-              size={isMobile ? "default" : "sm"} 
+              size={isMobile ? "md" : "sm"} 
               onClick={handleCustomApply}
               className={cn(
                 "touch-manipulation min-h-[44px]",

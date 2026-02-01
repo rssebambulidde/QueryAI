@@ -212,7 +212,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
               </h4>
               <Button
                 variant="ghost"
-                size={isMobile ? "default" : "sm"}
+                size={isMobile ? "md" : "sm"}
                 onClick={editingTopic ? cancelEdit : cancelCreate}
                 className={cn(
                   "touch-manipulation",
@@ -274,7 +274,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
             )}>
               <Button
                 onClick={editingTopic ? handleUpdate : handleCreate}
-                size={isMobile ? "default" : "sm"}
+                size={isMobile ? "md" : "sm"}
                 className={cn(
                   "flex items-center gap-2 touch-manipulation min-h-[44px]",
                   isMobile ? "w-full" : ""
@@ -285,7 +285,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
               </Button>
               <Button
                 variant="outline"
-                size={isMobile ? "default" : "sm"}
+                size={isMobile ? "md" : "sm"}
                 onClick={editingTopic ? cancelEdit : cancelCreate}
                 className={cn(
                   "touch-manipulation min-h-[44px]",

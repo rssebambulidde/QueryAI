@@ -458,7 +458,7 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
                       Conversations ({selectedCollection.conversation_count || 0})
                     </p>
                     <Button
-                      size={isMobile ? "default" : "sm"}
+                      size={isMobile ? "md" : "sm"}
                       variant="outline"
                       onClick={() => {
                         setShowAddConversationsDialog(true);

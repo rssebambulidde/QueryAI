@@ -113,7 +113,7 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({
               {(upload.status === 'uploading' || upload.status === 'processing') && onCancel && (
                 <Button
                   variant="outline"
-                  size={isMobile ? "default" : "sm"}
+                  size={isMobile ? "md" : "sm"}
                   onClick={() => onCancel(upload.id)}
                   className={cn(
                     "text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 touch-manipulation",
@@ -128,7 +128,7 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({
               {(upload.status === 'completed' || upload.status === 'error') && onDismiss && (
                 <Button
                   variant="ghost"
-                  size={isMobile ? "default" : "sm"}
+                  size={isMobile ? "md" : "sm"}
                   onClick={() => onDismiss(upload.id)}
                   className={cn(
                     "text-gray-400 hover:text-gray-600 touch-manipulation",

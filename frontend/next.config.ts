@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
   compress: true,
   poweredByHeader: false,
   reactStrictMode: true,
-  swcMinify: true,
+  // swcMinify is deprecated in Next.js 16 - SWC is the default minifier
   
   images: {
     formats: ['image/avif', 'image/webp'],
