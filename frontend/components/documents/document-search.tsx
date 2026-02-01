@@ -317,7 +317,7 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
                     filters.status === option.value && 'bg-orange-50 border-orange-300'
                   )}
                 >
-                  {option.icon && React.cloneElement(option.icon as React.ReactElement, {
+                  {option.icon && React.isValidElement(option.icon) && React.cloneElement(option.icon, {
                     className: cn(isMobile ? "w-4 h-4" : "w-3.5 h-3.5")
                   })}
                   {option.label}
