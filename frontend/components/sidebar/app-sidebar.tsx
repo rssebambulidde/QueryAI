@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, LogOut, User, ArrowUp, CreditCard, Star, Pin, ShieldCheck, BookOpen } from 'lucide-react';
-import Link from 'next/link';
+import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, LogOut, User, ArrowUp, CreditCard, Star, Pin, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -752,17 +751,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           )}
         </nav>
 
-      </div>
-
-      {/* User guide link */}
-      <div className="px-2 py-1 flex-shrink-0">
-        <Link
-          href="/dashboard/help"
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-        >
-          <BookOpen className="w-5 h-5" />
-          User guide
-        </Link>
       </div>
 
       {/* Bottom Section - Account Button (always visible; safe area on mobile) */}

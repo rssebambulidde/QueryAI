@@ -37,6 +37,14 @@ export function LandingHeader() {
           >
             FAQ
           </button>
+          <Link
+            href="/help"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1.5 rounded-md hover:bg-gray-50 touch-manipulation min-h-[44px] sm:min-h-0"
+          >
+            User guide
+          </Link>
           <Link href="/login" className="ml-1 sm:ml-2">
             <Button variant="ghost" size="sm" className="text-gray-600 min-h-[44px] sm:min-h-9">
               Sign in

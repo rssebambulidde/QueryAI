@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BookOpen } from 'lucide-react';
+import { Logo } from '@/components/logo';
 
 export const metadata: Metadata = {
   title: 'User Guide | QueryAI',
@@ -21,6 +22,15 @@ const sections = [
 export default function HelpPage() {
   return (
     <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16 items-center">
+            <Logo href="/" showName size="sm" />
+            <Link href="/" className="text-sm text-gray-600 hover:text-gray-900">Back to Home</Link>
+          </div>
+        </div>
+      </nav>
+
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         <div className="flex items-center gap-3 mb-8">
           <div className="p-2 rounded-lg bg-orange-100">
@@ -61,7 +71,7 @@ export default function HelpPage() {
               After you sign in, you land on the <strong>dashboard</strong>. The dashboard has two main tabs in the sidebar: <strong>Query Assistant</strong> (chat) and <strong>Collections</strong>. Under <strong>Query Assistant</strong>, type your question in the box at the bottom and press Enter or click Send. QueryAI searches the web and your uploaded documents (if any) and returns an answer with citations.
             </p>
             <p>
-              Use the <strong>sidebar</strong> to switch between the Query Assistant and Collections tabs, open or search conversations, start a new chat, or filter by topic. Your <strong>account menu</strong> (avatar, top right) gives access to this User guide, Profile, Settings, Subscription, and Sign out.
+              Use the <strong>sidebar</strong> to switch between the Query Assistant and Collections tabs, open or search conversations, start a new chat, or filter by topic. Your <strong>account menu</strong> (avatar, top right) gives access to Profile, Settings, Subscription, and Sign out.
             </p>
           </section>
 
@@ -187,7 +197,7 @@ export default function HelpPage() {
             </h2>
             <p>
               Click your <strong>avatar</strong> (top right) to open the account menu. From there you can go to
-              Profile, Settings, Subscription, this User guide, and <strong>Sign out</strong>. You can also toggle{' '}
+              Profile, Settings, Subscription, and <strong>Sign out</strong>. You can also toggle{' '}
               <strong>Private mode</strong> so that your activity is not used for product improvements (when available).
             </p>
           </section>

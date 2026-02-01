@@ -36,7 +36,7 @@ Create in-app user documentation for **end users only**, covering features and c
 
 ## Placement in the app
 
-- **Route:** `/dashboard/help` (under dashboard; uses dashboard layout and sidebar)
+- **Route:** `/help` (public; linked from landing page header)
 - **Entry points:**
   - Account dropdown: add **User guide** (or **Help**) link
   - Optional: footer of sidebar or a persistent “Help” link in the main nav
