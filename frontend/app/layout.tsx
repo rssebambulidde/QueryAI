@@ -5,15 +5,20 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toast";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { PayPalProvider } from "@/components/payment/paypal-provider";
+import { TokenExpiryWarning } from "@/components/auth/token-expiry-warning";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: 'swap', // Add this for faster text rendering
+  preload: true,
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: 'swap', // Add this for faster text rendering
+  preload: true,
 });
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://queryai.com";
@@ -133,8 +138,19 @@ export default function RootLayout({
     }
   };
 
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
   return (
     <html lang="en">
+      <head>
+        {/* Resource hints for API connection optimization */}
+        {apiUrl && (
+          <>
+            <link rel="preconnect" href={apiUrl} />
+            <link rel="dns-prefetch" href={apiUrl} />
+          </>
+        )}
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
@@ -161,6 +177,7 @@ export default function RootLayout({
           <PayPalProvider>
             {children}
             <Toaster />
+            <TokenExpiryWarning />
           </PayPalProvider>
         </ErrorBoundary>
       </body>

@@ -9,6 +9,8 @@ import { PayPalButton } from '@/components/payment/paypal-button';
 import { getPricing, getAnnualSavings, formatPrice } from '@/lib/pricing';
 import type { BillingPeriod } from '@/lib/pricing';
 import { getPaymentErrorMessage } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 
 interface PaymentDialogProps {
   tier: 'starter' | 'premium' | 'pro' | 'enterprise';
@@ -22,6 +24,7 @@ interface PaymentDialogProps {
 
 export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, initialRecurring }: PaymentDialogProps) {
   const { user } = useAuthStore();
+  const { isMobile } = useMobile();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currency, setCurrency] = useState<'UGX' | 'USD'>('USD');
@@ -68,23 +71,32 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full my-auto max-h-[95vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-0 sm:p-4 overflow-y-auto">
+      <div
+        className={cn(
+          "bg-white shadow-xl flex flex-col",
+          isMobile ? "w-full h-full rounded-none" : "rounded-lg max-w-md w-full max-h-[95vh]"
+        )}
+        style={isMobile ? {
+          marginTop: 'env(safe-area-inset-top, 0)',
+          marginBottom: 'env(safe-area-inset-bottom, 0)'
+        } : {}}
+      >
         {/* Header - Fixed */}
-        <div className="flex-shrink-0 p-6 border-b border-gray-200">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h2 className="text-xl font-bold mb-2">
+        <div className="flex-shrink-0 p-4 sm:p-6 border-b border-gray-200">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg sm:text-xl font-bold mb-2">
                 Upgrade to {tier === 'starter' ? 'Starter' : tier === 'premium' ? 'Premium' : tier === 'pro' ? 'Pro' : 'Enterprise'}
               </h2>
-              <p className="text-gray-600 text-sm">
+              <p className="text-gray-600 text-xs sm:text-sm">
                 Pay with Debit or Credit Card (processed via PayPal) —{' '}
                 <span className="font-semibold text-orange-600">{formatPrice(amount, currency)}</span>
                 {billingPeriod === 'annual' && ' /year'}
                 {recurring && ' (recurring)'}
               </p>
               {billingPeriod === 'annual' && annualSavings.savingsPercentage > 0 && (
-                <p className="text-green-600 text-sm mt-1">
+                <p className="text-green-600 text-xs sm:text-sm mt-1">
                   Save {annualSavings.savingsPercentage}% with annual billing
                 </p>
               )}
@@ -92,10 +104,10 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
             <button
               type="button"
               onClick={onClose}
-              className="ml-4 text-gray-400 hover:text-gray-600 transition-colors"
+              className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Close"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -103,21 +115,22 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
         </div>
 
         {/* Scrollable Content - Includes PayPal buttons */}
-        <div className="flex-1 overflow-y-auto p-6 min-h-0 pb-8">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 min-h-0 pb-4 sm:pb-8">
           {/* Currency Selection */}
-          <div className="mb-4 space-y-2">
+          <div className="mb-4 space-y-3">
             <label className="block text-sm font-medium text-gray-700">
               Select Currency <span className="text-red-500">*</span>
             </label>
-            <div className="flex gap-3">
+            <div className="flex gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setCurrency('UGX')}
-                className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+                className={cn(
+                  "flex-1 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg border-2 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base font-medium",
                   currency === 'UGX'
                     ? 'border-orange-500 bg-orange-50 text-orange-700'
                     : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
-                }`}
+                )}
                 disabled={loading}
               >
                 UGX
@@ -125,11 +138,12 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               <button
                 type="button"
                 onClick={() => setCurrency('USD')}
-                className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+                className={cn(
+                  "flex-1 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg border-2 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base font-medium",
                   currency === 'USD'
                     ? 'border-orange-500 bg-orange-50 text-orange-700'
                     : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
-                }`}
+                )}
                 disabled={loading}
               >
                 USD
@@ -139,15 +153,16 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
             {/* Billing period selector */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">Billing period</label>
-              <div className="flex gap-3">
+              <div className="flex gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => setBillingPeriod('monthly')}
-                  className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+                  className={cn(
+                    "flex-1 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg border-2 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base font-medium",
                     billingPeriod === 'monthly'
                       ? 'border-orange-500 bg-orange-50 text-orange-700'
                       : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
-                  }`}
+                  )}
                   disabled={loading}
                 >
                   Monthly
@@ -155,16 +170,17 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
                 <button
                   type="button"
                   onClick={() => setBillingPeriod('annual')}
-                  className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+                  className={cn(
+                    "flex-1 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg border-2 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base font-medium",
                     billingPeriod === 'annual'
                       ? 'border-orange-500 bg-orange-50 text-orange-700'
                       : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
-                  }`}
+                  )}
                   disabled={loading}
                 >
-                  Annual
+                  <span className="block sm:inline">Annual</span>
                   {annualSavings.savingsPercentage > 0 && (
-                    <span className="ml-1 text-xs font-normal text-green-600">
+                    <span className="block sm:inline sm:ml-1 text-xs font-normal text-green-600">
                       (Save {annualSavings.savingsPercentage}%)
                     </span>
                   )}
@@ -172,14 +188,14 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               </div>
             </div>
 
-            <div className="space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50">
-              <label className="flex items-start gap-3 text-sm cursor-pointer group">
+            <div className="space-y-2 border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50">
+              <label className="flex items-start gap-3 text-sm cursor-pointer group touch-manipulation">
                 <input
                   type="checkbox"
                   checked={recurring}
                   onChange={(e) => setRecurring(e.target.checked)}
                   disabled={loading}
-                  className="mt-0.5 rounded border-gray-300 focus:ring-orange-500 focus:ring-2"
+                  className="mt-0.5 rounded border-gray-300 focus:ring-orange-500 focus:ring-2 w-5 h-5 sm:w-4 sm:h-4 flex-shrink-0"
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
@@ -270,6 +286,7 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
               required
               disabled={loading}
+              className="min-h-[44px] text-base sm:text-sm"
             />
           </div>
 
@@ -283,6 +300,7 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
               required
               disabled={loading}
+              className="min-h-[44px] text-base sm:text-sm"
             />
           </div>
 
@@ -296,6 +314,7 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               required
               disabled={loading}
+              className="min-h-[44px] text-base sm:text-sm"
             />
           </div>
 
@@ -309,13 +328,14 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
               disabled={loading}
               placeholder={currency === 'UGX' ? '+256712345678' : '+12125551234'}
+              className="min-h-[44px] text-base sm:text-sm"
             />
           </div>
 
           </form>
 
           {/* Payment Section - Inside scrollable area */}
-          <div className="mt-6 pt-6 border-t border-gray-200 space-y-3 pb-4">
+          <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-200 space-y-3 pb-4">
             <p className="text-sm font-medium text-gray-700 text-center mb-2">Complete Payment</p>
             <div className="w-full">
               <PayPalButton
@@ -336,13 +356,13 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
         </div>
 
         {/* Footer with Cancel button - Fixed */}
-        <div className="flex-shrink-0 p-6 border-t border-gray-200 bg-gray-50">
+        <div className="flex-shrink-0 p-4 sm:p-6 border-t border-gray-200 bg-gray-50">
           <Button
             type="button"
             variant="outline"
             onClick={onClose}
             disabled={loading}
-            className="w-full"
+            className="w-full touch-manipulation min-h-[44px]"
           >
             Cancel
           </Button>

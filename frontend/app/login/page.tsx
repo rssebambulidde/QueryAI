@@ -10,10 +10,14 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
+import { GoogleAuthButton } from '@/components/auth/google-auth-button';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
+  rememberMe: z.boolean().optional(),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -59,7 +63,7 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginFormData) => {
     try {
-      await login(data.email, data.password);
+      await login(data.email, data.password, data.rememberMe || false);
       // Don't manually redirect - let the useEffect handle it
       // This prevents double redirects and loops
     } catch (err) {
@@ -68,14 +72,22 @@ export default function LoginPage() {
     }
   };
 
+  const { isMobile } = useMobile();
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className={cn(
+            "mt-6 text-center font-extrabold text-gray-900",
+            isMobile ? "text-2xl" : "text-3xl"
+          )}>
             Sign in to QueryAI
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
+          <p className={cn(
+            "mt-2 text-center text-gray-600",
+            isMobile ? "text-sm" : "text-sm"
+          )}>
             Or{' '}
             <Link
               href="/signup"
@@ -90,7 +102,22 @@ export default function LoginPage() {
           <Alert variant="error">{error}</Alert>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+        {/* Google OAuth Button */}
+        <div className="mt-6">
+          <GoogleAuthButton variant="login" />
+        </div>
+
+        {/* Divider */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-gray-50 text-gray-500">Or continue with email</span>
+          </div>
+        </div>
+
+        <form className="mt-6 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="rounded-md shadow-sm space-y-4">
             <Input
               label="Email address"
@@ -112,12 +139,28 @@ export default function LoginPage() {
           </div>
 
           <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                {...register('rememberMe')}
+                className={cn(
+                  "rounded border-gray-300 text-orange-600 focus:ring-orange-500",
+                  isMobile ? "w-5 h-5" : "w-4 h-4"
+                )}
+              />
+              <span className={cn(
+                "text-gray-700",
+                isMobile ? "text-sm" : "text-sm"
+              )}>
+                Remember me for 7 days
+              </span>
+            </label>
             <div className="text-sm">
               <Link
                 href="/forgot-password"
                 className="font-medium text-orange-600 hover:text-orange-500"
               >
-                Forgot your password?
+                Forgot password?
               </Link>
             </div>
           </div>

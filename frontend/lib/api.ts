@@ -66,19 +66,74 @@ apiClient.interceptors.response.use(
     }
     
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      // Clear tokens but don't redirect here - let the page components handle it
-      // This prevents infinite redirect loops
+      // Token expired or invalid - try to refresh
+      const originalRequest = error.config;
+      
+      // Don't retry if this is already a refresh request or if we're on an auth page
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname;
         const isAuthPage = currentPath === '/login' || currentPath === '/signup' || currentPath === '/forgot-password';
+        const isRefreshRequest = originalRequest?.url?.includes('/api/auth/refresh');
         
-        if (!isAuthPage) {
+        if (isAuthPage || isRefreshRequest) {
+          // Clear tokens and dispatch unauthorized event
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
-          // Dispatch event to notify auth store instead of redirecting directly
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+          return Promise.reject(error);
+        }
+      }
+      
+      // Try to refresh the token
+      const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null;
+      
+      if (refreshToken && originalRequest && !originalRequest._retry) {
+        originalRequest._retry = true;
+        
+        try {
+          // Import authApi here to avoid circular dependency
+          const { authApi } = await import('./api');
+          const refreshResponse = await authApi.refreshToken(refreshToken);
+          
+          if (refreshResponse.success && refreshResponse.data) {
+            // Update tokens
+            const { accessToken, refreshToken: newRefreshToken } = refreshResponse.data;
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('accessToken', accessToken);
+              localStorage.setItem('refreshToken', newRefreshToken);
+            }
+            
+            // Update the original request with new token
+            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+            
+            // Retry the original request
+            return apiClient(originalRequest);
+          } else {
+            // Refresh failed - clear tokens and logout
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('refreshToken');
+              window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+            }
+            return Promise.reject(error);
+          }
+        } catch (refreshError) {
+          // Refresh failed - clear tokens and logout
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+          }
+          return Promise.reject(error);
+        }
+      } else {
+        // No refresh token available - clear tokens and logout
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
           window.dispatchEvent(new CustomEvent('auth:unauthorized'));
         }
+        return Promise.reject(error);
       }
     }
     return Promise.reject(error);
@@ -310,6 +365,11 @@ export const authApi = {
 
   resetPassword: async (data: { password: string; accessToken: string; refreshToken: string }): Promise<ApiResponse<void>> => {
     const response = await apiClient.post('/api/auth/reset-password', data);
+    return response.data;
+  },
+
+  verifyEmail: async (data: { token: string; email?: string }): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/verify-email', data);
     return response.data;
   },
 

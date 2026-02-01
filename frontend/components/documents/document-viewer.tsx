@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { DocumentItem, documentApi } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Button } from '@/components/ui/button';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface DocumentViewerProps {
   document: DocumentItem;
@@ -28,6 +29,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
   hasPrevious = false,
   className,
 }) => {
+  const { isMobile } = useMobile();
   const [content, setContent] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -35,6 +37,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
   const viewerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -160,112 +163,143 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
         className
       )}
       ref={viewerRef}
+      onClick={() => isMobile && setShowControls(!showControls)}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-black/80 border-b border-gray-800">
-        <div className="flex items-center gap-4 flex-1 min-w-0">
-          <h3 className="text-sm font-medium text-white truncate">{document.name}</h3>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            {onPrevious && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onPrevious}
-                disabled={!hasPrevious}
-                className="h-7 px-2 text-white hover:bg-gray-800"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-            )}
-            {onNext && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onNext}
-                disabled={!hasNext}
-                className="h-7 px-2 text-white hover:bg-gray-800"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Zoom Controls */}
-          {(imageUrl || pdfUrl) && (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleZoomOut}
-                disabled={zoom <= 0.5}
-                className="h-7 px-2 text-white hover:bg-gray-800"
-                title="Zoom Out"
-              >
-                <ZoomOut className="w-4 h-4" />
-              </Button>
-              <span className="text-xs text-gray-400 min-w-[3rem] text-center">
-                {Math.round(zoom * 100)}%
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleZoomIn}
-                disabled={zoom >= 3}
-                className="h-7 px-2 text-white hover:bg-gray-800"
-                title="Zoom In"
-              >
-                <ZoomIn className="w-4 h-4" />
-              </Button>
-              {imageUrl && (
+      {/* Header - Hidden on mobile when controls are hidden */}
+      {(!isMobile || showControls) && (
+        <div className={cn(
+          "flex items-center justify-between bg-black/80 border-b border-gray-800 flex-shrink-0",
+          isMobile ? "px-3 py-2" : "px-4 py-3"
+        )}>
+          <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+            <h3 className={cn("font-medium text-white truncate", isMobile ? "text-xs" : "text-sm")}>
+              {document.name}
+            </h3>
+            <div className="flex items-center gap-1 sm:gap-2 text-xs text-gray-400">
+              {onPrevious && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleRotate}
-                  className="h-7 px-2 text-white hover:bg-gray-800"
-                  title="Rotate"
+                  onClick={onPrevious}
+                  disabled={!hasPrevious}
+                  className={cn(
+                    "text-white hover:bg-gray-800 touch-manipulation",
+                    isMobile ? "h-9 px-2.5" : "h-7 px-2"
+                  )}
                 >
-                  <RotateCw className="w-4 h-4" />
+                  <ChevronLeft className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
                 </Button>
               )}
-            </>
+              {onNext && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onNext}
+                  disabled={!hasNext}
+                  className={cn(
+                    "text-white hover:bg-gray-800 touch-manipulation",
+                    isMobile ? "h-9 px-2.5" : "h-7 px-2"
+                  )}
+                >
+                  <ChevronRight className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {!isMobile && (
+            <div className="flex items-center gap-2">
+              {/* Zoom Controls - Desktop only in header */}
+              {(imageUrl || pdfUrl) && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleZoomOut}
+                    disabled={zoom <= 0.5}
+                    className="h-7 px-2 text-white hover:bg-gray-800"
+                    title="Zoom Out"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </Button>
+                  <span className="text-xs text-gray-400 min-w-[3rem] text-center">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleZoomIn}
+                    disabled={zoom >= 3}
+                    className="h-7 px-2 text-white hover:bg-gray-800"
+                    title="Zoom In"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </Button>
+                  {imageUrl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRotate}
+                      className="h-7 px-2 text-white hover:bg-gray-800"
+                      title="Rotate"
+                    >
+                      <RotateCw className="w-4 h-4" />
+                    </Button>
+                  )}
+                </>
+              )}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleFullscreen}
+                className="h-7 px-2 text-white hover:bg-gray-800"
+                title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+              >
+                {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDownload}
+                className="h-7 px-2 text-white hover:bg-gray-800"
+                title="Download"
+              >
+                <Download className="w-4 h-4" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="h-7 px-2 text-white hover:bg-gray-800"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
           )}
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleFullscreen}
-            className="h-7 px-2 text-white hover:bg-gray-800"
-            title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-          >
-            {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleDownload}
-            className="h-7 px-2 text-white hover:bg-gray-800"
-            title="Download"
-          >
-            <Download className="w-4 h-4" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            className="h-7 px-2 text-white hover:bg-gray-800"
-            title="Close"
-          >
-            <X className="w-4 h-4" />
-          </Button>
+          {/* Mobile: Close button only in header */}
+          {isMobile && (
+            <Button
+              variant="ghost"
+              onClick={onClose}
+              className="h-9 px-2.5 text-white hover:bg-gray-800 touch-manipulation min-w-[44px] min-h-[44px]"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </Button>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Content */}
-      <div className="flex-1 overflow-auto bg-gray-900 flex items-center justify-center p-4">
+      <div className={cn(
+        "flex-1 overflow-auto bg-gray-900 flex items-center justify-center",
+        isMobile ? "p-2" : "p-4"
+      )}>
         {isLoading ? (
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin" />
@@ -275,7 +309,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
           <iframe
             src={pdfUrl}
             className="w-full h-full border-0"
-            style={{ minHeight: '600px' }}
+            style={{ minHeight: isMobile ? '100%' : '600px' }}
             title={document.name}
           />
         ) : imageUrl ? (
@@ -289,7 +323,10 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
             }}
           />
         ) : content ? (
-          <pre className="w-full max-w-4xl bg-gray-950 text-gray-100 p-6 rounded-lg overflow-auto text-sm font-mono whitespace-pre-wrap">
+          <pre className={cn(
+            "w-full bg-gray-950 text-gray-100 rounded-lg overflow-auto font-mono whitespace-pre-wrap",
+            isMobile ? "max-w-full p-3 text-xs" : "max-w-4xl p-6 text-sm"
+          )}>
             {content}
           </pre>
         ) : (
@@ -298,6 +335,93 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Mobile: Bottom Sheet Controls */}
+      {isMobile && (!showControls || (imageUrl || pdfUrl)) && (
+        <div
+          className={cn(
+            "fixed bottom-0 left-0 right-0 z-50 bg-black/90 border-t border-gray-800 transition-transform duration-300",
+            showControls ? "translate-y-0" : "translate-y-full"
+          )}
+          style={{
+            paddingBottom: 'env(safe-area-inset-bottom, 0)',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Handle bar */}
+          <div className="flex justify-center pt-2 pb-1">
+            <div className="w-12 h-1 bg-gray-600 rounded-full" />
+          </div>
+
+          {/* Controls */}
+          <div className="px-4 py-3 space-y-3">
+            {/* Document name */}
+            <div className="text-center">
+              <p className="text-xs text-gray-400 truncate">{document.name}</p>
+            </div>
+
+            {/* Zoom Controls */}
+            {(imageUrl || pdfUrl) && (
+              <div className="flex items-center justify-center gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={handleZoomOut}
+                  disabled={zoom <= 0.5}
+                  className="h-11 w-11 text-white hover:bg-gray-800 touch-manipulation flex items-center justify-center"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-5 h-5" />
+                </Button>
+                <span className="text-sm text-white min-w-[4rem] text-center font-medium">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <Button
+                  variant="ghost"
+                  onClick={handleZoomIn}
+                  disabled={zoom >= 3}
+                  className="h-11 w-11 text-white hover:bg-gray-800 touch-manipulation flex items-center justify-center"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-5 h-5" />
+                </Button>
+                {imageUrl && (
+                  <Button
+                    variant="ghost"
+                    onClick={handleRotate}
+                    className="h-11 w-11 text-white hover:bg-gray-800 touch-manipulation flex items-center justify-center ml-2"
+                    title="Rotate"
+                  >
+                    <RotateCw className="w-5 h-5" />
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                variant="ghost"
+                onClick={handleDownload}
+                className="flex-1 h-11 text-white hover:bg-gray-800 touch-manipulation flex items-center justify-center gap-2"
+                title="Download"
+              >
+                <Download className="w-5 h-5" />
+                <span className="text-sm">Download</span>
+              </Button>
+              {!isMobile && (
+                <Button
+                  variant="ghost"
+                  onClick={handleFullscreen}
+                  className="h-11 w-11 text-white hover:bg-gray-800 touch-manipulation flex items-center justify-center"
+                  title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                >
+                  {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

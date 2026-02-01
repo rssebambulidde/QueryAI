@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, Edit2, Folder, Search, X, MessageSquare, FolderPlus } from 'lucide-react';
 import { AddConversationsToCollectionDialog } from './add-conversations-to-collection-dialog';
 import { cn } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface CollectionManagerProps {
   onConversationSelect?: (conversationId: string) => void;
@@ -16,6 +17,7 @@ interface CollectionManagerProps {
 
 export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversationSelect }) => {
   const { toast } = useToast();
+  const { isMobile } = useMobile();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -192,66 +194,102 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
         <p className="text-gray-600">Organize your conversations into collections for better management</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={cn(
+        "grid gap-6",
+        isMobile ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-3"
+      )}>
         {/* Left Panel: Collections List */}
-        <div className="lg:col-span-2">
+        <div className={cn(isMobile ? "" : "lg:col-span-2")}>
           {/* Search */}
           <div className="mb-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className={cn(
+                "absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400",
+                isMobile ? "w-5 h-5" : "w-4 h-4"
+              )} />
               <Input
                 type="text"
                 placeholder="Search collections..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className={cn(
+                  "pl-10 pr-10",
+                  isMobile ? "h-11 text-base" : ""
+                )}
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className={cn(
+                    "absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 touch-manipulation",
+                    isMobile ? "w-8 h-8 flex items-center justify-center" : ""
+                  )}
                 >
-                  <X className="w-4 h-4" />
+                  <X className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
                 </button>
               )}
             </div>
           </div>
 
           {/* Create/Edit Form */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          <div className={cn(
+            "bg-white rounded-lg border border-gray-200 mb-4",
+            isMobile ? "p-4" : "p-4"
+          )}>
+            <h2 className={cn(
+              "font-semibold text-gray-900 mb-4",
+              isMobile ? "text-base" : "text-lg"
+            )}>
               {editingId ? 'Edit Collection' : 'Create New Collection'}
             </h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <label className={cn(
+                  "block font-medium text-gray-700 mb-1",
+                  isMobile ? "text-sm" : "text-sm"
+                )}>
+                  Name *
+                </label>
                 <Input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="Collection name"
                   disabled={isCreating}
+                  className={cn(isMobile && "min-h-[44px] text-base")}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className={cn(
+                  "block font-medium text-gray-700 mb-1",
+                  isMobile ? "text-sm" : "text-sm"
+                )}>
+                  Description
+                </label>
                 <Textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Optional description"
                   rows={2}
                   disabled={isCreating}
+                  className={cn(isMobile && "min-h-[44px] text-base")}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
+                <label className={cn(
+                  "block font-medium text-gray-700 mb-2",
+                  isMobile ? "text-sm" : "text-sm"
+                )}>
+                  Color
+                </label>
                 <div className="flex gap-2 flex-wrap">
                   {predefinedColors.map((color) => (
                     <button
                       key={color}
                       onClick={() => setFormData({ ...formData, color })}
                       className={cn(
-                        'w-8 h-8 rounded-full border-2 transition-all',
+                        'rounded-full border-2 transition-all touch-manipulation',
+                        isMobile ? "w-10 h-10" : "w-8 h-8",
                         formData.color === color
                           ? 'border-gray-900 scale-110'
                           : 'border-gray-300 hover:border-gray-400'
@@ -261,13 +299,19 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
                   ))}
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className={cn(
+                "flex gap-2",
+                isMobile ? "flex-col" : ""
+              )}>
                 {editingId ? (
                   <>
                     <Button
                       onClick={() => handleUpdate(editingId)}
                       disabled={isCreating}
-                      className="flex-1"
+                      className={cn(
+                        "touch-manipulation min-h-[44px]",
+                        isMobile ? "w-full" : "flex-1"
+                      )}
                     >
                       Update Collection
                     </Button>
@@ -275,6 +319,10 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
                       onClick={cancelEdit}
                       variant="outline"
                       disabled={isCreating}
+                      className={cn(
+                        "touch-manipulation min-h-[44px]",
+                        isMobile ? "w-full" : ""
+                      )}
                     >
                       Cancel
                     </Button>
@@ -283,7 +331,10 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
                   <Button
                     onClick={handleCreate}
                     disabled={isCreating || !formData.name.trim()}
-                    className="flex-1"
+                    className={cn(
+                      "touch-manipulation min-h-[44px]",
+                      isMobile ? "w-full" : "flex-1"
+                    )}
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Create Collection
@@ -362,15 +413,28 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
 
         {/* Right Panel: Collection Details */}
         {selectedCollection && (
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg border border-gray-200 p-4 sticky top-4">
+          <div className={cn(
+            isMobile ? "fixed inset-0 z-50 bg-white overflow-y-auto" : "lg:col-span-1"
+          )}>
+            <div className={cn(
+              "bg-white rounded-lg border border-gray-200",
+              isMobile ? "min-h-full p-4" : "p-4 sticky top-4"
+            )}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Collection Details</h2>
+                <h2 className={cn(
+                  "font-semibold text-gray-900",
+                  isMobile ? "text-base" : "text-lg"
+                )}>
+                  Collection Details
+                </h2>
                 <button
                   onClick={() => setSelectedCollection(null)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className={cn(
+                    "text-gray-400 hover:text-gray-600 touch-manipulation",
+                    isMobile ? "min-w-[44px] min-h-[44px] flex items-center justify-center" : ""
+                  )}
                 >
-                  <X className="w-4 h-4" />
+                  <X className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
                 </button>
               </div>
 
@@ -394,14 +458,17 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
                       Conversations ({selectedCollection.conversation_count || 0})
                     </p>
                     <Button
-                      size="sm"
+                      size={isMobile ? "default" : "sm"}
                       variant="outline"
                       onClick={() => {
                         setShowAddConversationsDialog(true);
                       }}
-                      className="h-7 text-xs"
+                      className={cn(
+                        "touch-manipulation",
+                        isMobile ? "h-11 text-sm" : "h-7 text-xs"
+                      )}
                     >
-                      <FolderPlus className="w-3 h-3 mr-1" />
+                      <FolderPlus className={cn(isMobile ? "w-4 h-4" : "w-3 h-3", "mr-1")} />
                       Add Conversations
                     </Button>
                   </div>
@@ -446,10 +513,21 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
 
                   {/* Conversations List */}
                   {isSearching ? (
-                    <div className="text-center py-4 text-sm text-gray-500">Searching...</div>
+                    <div className={cn(
+                      "text-center py-4 text-gray-500",
+                      isMobile ? "text-base" : "text-sm"
+                    )}>
+                      Searching...
+                    </div>
                   ) : collectionSearchQuery && collectionSearchResults.length > 0 ? (
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                      <p className="text-xs text-gray-500 mb-2">
+                    <div className={cn(
+                      "space-y-2 overflow-y-auto",
+                      isMobile ? "max-h-[50vh]" : "max-h-96"
+                    )}>
+                      <p className={cn(
+                        "text-gray-500 mb-2",
+                        isMobile ? "text-sm" : "text-xs"
+                      )}>
                         Found {collectionSearchResults.length} conversation(s)
                       </p>
                       {collectionSearchResults.map((conversation) => (
@@ -461,21 +539,28 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
                             }
                           }}
                           className={cn(
-                            "p-2 bg-gray-50 rounded border border-gray-200 text-sm cursor-pointer hover:bg-gray-100 hover:border-gray-300 transition-colors",
+                            "bg-gray-50 rounded border border-gray-200 cursor-pointer hover:bg-gray-100 hover:border-gray-300 transition-colors touch-manipulation",
+                            isMobile ? "p-3 text-base min-h-[60px]" : "p-2 text-sm",
                             onConversationSelect && "hover:shadow-sm"
                           )}
                         >
                           <p className="font-medium text-gray-900">
                             {conversation.title || 'Untitled Conversation'}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className={cn(
+                            "text-gray-500 mt-1",
+                            isMobile ? "text-sm" : "text-xs"
+                          )}>
                             {new Date(conversation.created_at).toLocaleDateString()}
                           </p>
                         </div>
                       ))}
                     </div>
                   ) : selectedCollection.conversations && selectedCollection.conversations.length > 0 ? (
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                    <div className={cn(
+                      "space-y-2 overflow-y-auto",
+                      isMobile ? "max-h-[50vh]" : "max-h-96"
+                    )}>
                       {selectedCollection.conversations.map((conversation) => (
                         <div
                           key={conversation.id}
@@ -485,21 +570,28 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
                             }
                           }}
                           className={cn(
-                            "p-2 bg-gray-50 rounded border border-gray-200 text-sm cursor-pointer hover:bg-gray-100 hover:border-gray-300 transition-colors",
+                            "bg-gray-50 rounded border border-gray-200 cursor-pointer hover:bg-gray-100 hover:border-gray-300 transition-colors touch-manipulation",
+                            isMobile ? "p-3 text-base min-h-[60px]" : "p-2 text-sm",
                             onConversationSelect && "hover:shadow-sm"
                           )}
                         >
                           <p className="font-medium text-gray-900">
                             {conversation.title || 'Untitled Conversation'}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className={cn(
+                            "text-gray-500 mt-1",
+                            isMobile ? "text-sm" : "text-xs"
+                          )}>
                             {new Date(conversation.created_at).toLocaleDateString()}
                           </p>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">
+                    <p className={cn(
+                      "text-gray-500",
+                      isMobile ? "text-base" : "text-sm"
+                    )}>
                       {collectionSearchQuery ? 'No conversations found' : 'No conversations in this collection yet'}
                     </p>
                   )}

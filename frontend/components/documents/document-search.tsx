@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { DocumentItem } from '@/lib/api';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 export type DocumentSortOption = 'name' | 'date' | 'size' | 'status';
 export type DocumentSortDirection = 'asc' | 'desc';
@@ -33,6 +34,7 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
   onFilterChange,
   className,
 }) => {
+  const { isMobile } = useMobile();
   const [filters, setFilters] = useState<DocumentFilters>({
     searchQuery: '',
     status: 'all',
@@ -176,42 +178,58 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
   ];
 
   return (
-    <div className={cn('space-y-3', className)}>
+    <div className={cn('space-y-3 sm:space-y-3', className)}>
       {/* Search Bar */}
       <div className="relative">
-        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <Search className={cn(
+          "absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400",
+          isMobile ? "w-5 h-5" : "w-4 h-4 left-2"
+        )} />
         <Input
           type="text"
           placeholder="Search documents..."
           value={filters.searchQuery}
           onChange={(e) => setFilters((prev) => ({ ...prev, searchQuery: e.target.value }))}
-          className="pl-8 pr-8 h-9 text-sm"
+          className={cn(
+            "pr-10 sm:pr-8",
+            isMobile ? "pl-10 h-11 text-base" : "pl-8 h-9 text-sm"
+          )}
         />
         {filters.searchQuery && (
           <button
             onClick={() => setFilters((prev) => ({ ...prev, searchQuery: '' }))}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            className={cn(
+              "absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 touch-manipulation",
+              isMobile ? "w-8 h-8 flex items-center justify-center" : "right-2"
+            )}
           >
-            <X className="w-4 h-4" />
+            <X className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
           </button>
         )}
       </div>
 
       {/* Filter Toggle and Sort */}
-      <div className="flex items-center justify-between gap-2">
+      <div className={cn(
+        "flex items-center gap-2",
+        isMobile ? "flex-col" : "justify-between"
+      )}>
         <Button
           variant="outline"
-          size="sm"
+          size={isMobile ? "default" : "sm"}
           onClick={() => setShowFilters(!showFilters)}
           className={cn(
-            'flex items-center gap-2',
+            'flex items-center gap-2 touch-manipulation',
+            isMobile ? "w-full h-11 justify-center" : "",
             hasActiveFilters && 'bg-orange-50 border-orange-300'
           )}
         >
-          <Filter className="w-4 h-4" />
+          <Filter className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
           Filters
           {hasActiveFilters && (
-            <span className="ml-1 px-1.5 py-0.5 bg-orange-600 text-white text-xs rounded-full">
+            <span className={cn(
+              "ml-1 px-2 py-0.5 bg-orange-600 text-white rounded-full",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
               {[
                 filters.searchQuery && '1',
                 filters.status !== 'all' && '1',
@@ -226,55 +244,82 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
         </Button>
 
         {/* Sort Options */}
-        <div className="flex items-center gap-1">
+        <div className={cn(
+          "flex items-center gap-2",
+          isMobile ? "w-full" : "gap-1"
+        )}>
           <Button
             variant="outline"
-            size="sm"
+            size={isMobile ? "default" : "sm"}
             onClick={() => handleSortChange('date')}
             className={cn(
+              "touch-manipulation",
+              isMobile ? "flex-1 h-11" : "",
               filters.sortBy === 'date' && 'bg-orange-50 border-orange-300'
             )}
           >
             {filters.sortBy === 'date' && filters.sortDirection === 'desc' ? (
-              <SortDesc className="w-4 h-4" />
+              <SortDesc className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
             ) : (
-              <SortAsc className="w-4 h-4" />
+              <SortAsc className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
             )}
+            {isMobile && <span className="ml-2">Date</span>}
           </Button>
           <Button
             variant="outline"
-            size="sm"
+            size={isMobile ? "default" : "sm"}
             onClick={() => handleSortChange('name')}
             className={cn(
+              "touch-manipulation",
+              isMobile ? "flex-1 h-11" : "",
               filters.sortBy === 'name' && 'bg-orange-50 border-orange-300'
             )}
           >
-            Name
+            {isMobile ? (
+              <>
+                <SortAsc className="w-5 h-5 mr-2" />
+                Name
+              </>
+            ) : (
+              'Name'
+            )}
           </Button>
         </div>
       </div>
 
       {/* Advanced Filters */}
       {showFilters && (
-        <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-4">
+        <div className={cn(
+          "bg-gray-50 rounded-lg border border-gray-200 space-y-4 overflow-y-auto max-h-[60vh]",
+          isMobile ? "p-4" : "p-4"
+        )}>
           {/* Status Filter */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">
+            <label className={cn(
+              "block font-medium text-gray-700 mb-2",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
               Status
             </label>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className={cn(
+              "flex flex-wrap items-center gap-2",
+              isMobile ? "gap-2" : "gap-2"
+            )}>
               {statusOptions.map((option) => (
                 <Button
                   key={option.value}
                   variant="outline"
-                  size="sm"
+                  size={isMobile ? "default" : "sm"}
                   onClick={() => setFilters((prev) => ({ ...prev, status: option.value }))}
                   className={cn(
-                    'flex items-center gap-1.5',
+                    'flex items-center gap-1.5 touch-manipulation',
+                    isMobile ? "h-11 px-4" : "",
                     filters.status === option.value && 'bg-orange-50 border-orange-300'
                   )}
                 >
-                  {option.icon}
+                  {option.icon && React.cloneElement(option.icon as React.ReactElement, {
+                    className: cn(isMobile ? "w-4 h-4" : "w-3.5 h-3.5")
+                  })}
                   {option.label}
                 </Button>
               ))}
@@ -283,18 +328,25 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
 
           {/* Type Filter */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">
+            <label className={cn(
+              "block font-medium text-gray-700 mb-2",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
               Document Type
             </label>
-            <div className="flex items-center gap-2">
+            <div className={cn(
+              "flex items-center gap-2",
+              isMobile ? "flex-wrap" : ""
+            )}>
               {(['all', 'pdf', 'text', 'docx', 'image'] as DocumentTypeFilter[]).map((type) => (
                 <Button
                   key={type}
                   variant="outline"
-                  size="sm"
+                  size={isMobile ? "default" : "sm"}
                   onClick={() => setFilters((prev) => ({ ...prev, type }))}
                   className={cn(
-                    'flex items-center gap-1.5',
+                    'flex items-center gap-1.5 touch-manipulation',
+                    isMobile ? "h-11 px-4 flex-1 min-w-[100px]" : "",
                     filters.type === type && 'bg-orange-50 border-orange-300'
                   )}
                 >
@@ -306,12 +358,23 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
 
           {/* Date Range */}
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">
+            <label className={cn(
+              "block font-medium text-gray-700 mb-2",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
               Date Range
             </label>
-            <div className="flex items-center gap-2">
-              <div className="flex-1">
-                <label className="block text-xs text-gray-500 mb-1">From</label>
+            <div className={cn(
+              "flex items-center gap-2",
+              isMobile ? "flex-col" : ""
+            )}>
+              <div className={isMobile ? "w-full" : "flex-1"}>
+                <label className={cn(
+                  "block text-gray-500 mb-1",
+                  isMobile ? "text-sm" : "text-xs"
+                )}>
+                  From
+                </label>
                 <Input
                   type="date"
                   value={dateFrom}
@@ -319,11 +382,19 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
                     setDateFrom(e.target.value);
                     setFilters((prev) => ({ ...prev, dateFrom: e.target.value }));
                   }}
-                  className="h-8 text-xs"
+                  className={cn(
+                    "min-h-[44px] text-base sm:text-sm",
+                    isMobile ? "w-full" : "h-8 text-xs"
+                  )}
                 />
               </div>
-              <div className="flex-1">
-                <label className="block text-xs text-gray-500 mb-1">To</label>
+              <div className={isMobile ? "w-full" : "flex-1"}>
+                <label className={cn(
+                  "block text-gray-500 mb-1",
+                  isMobile ? "text-sm" : "text-xs"
+                )}>
+                  To
+                </label>
                 <Input
                   type="date"
                   value={dateTo}
@@ -331,7 +402,10 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
                     setDateTo(e.target.value);
                     setFilters((prev) => ({ ...prev, dateTo: e.target.value }));
                   }}
-                  className="h-8 text-xs"
+                  className={cn(
+                    "min-h-[44px] text-base sm:text-sm",
+                    isMobile ? "w-full" : "h-8 text-xs"
+                  )}
                 />
               </div>
             </div>
@@ -339,7 +413,15 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
 
           {/* Clear Filters */}
           {hasActiveFilters && (
-            <Button variant="outline" size="sm" onClick={clearFilters} className="w-full">
+            <Button
+              variant="outline"
+              size={isMobile ? "default" : "sm"}
+              onClick={clearFilters}
+              className={cn(
+                "w-full touch-manipulation",
+                isMobile ? "h-11" : ""
+              )}
+            >
               Clear All Filters
             </Button>
           )}
@@ -348,7 +430,10 @@ export const DocumentSearch: React.FC<DocumentSearchProps> = ({
 
       {/* Results Count */}
       {hasActiveFilters && (
-        <div className="text-xs text-gray-500 text-center">
+        <div className={cn(
+          "text-gray-500 text-center",
+          isMobile ? "text-sm" : "text-xs"
+        )}>
           Showing {filteredDocuments.length} of {documents.length} documents
         </div>
       )}

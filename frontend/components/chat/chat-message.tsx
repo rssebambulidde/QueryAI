@@ -14,6 +14,7 @@ import { AIActionButtons } from './ai-action-buttons';
 import { Source, aiApi } from '@/lib/api';
 import { exportToPdf } from '@/lib/export-pdf';
 import { ResponseTimeIndicator } from '@/components/health/response-time-indicator';
+import { useMobile } from '@/lib/hooks/use-mobile';
 import 'highlight.js/styles/github-dark.css';
 
 export interface ChatMessageType {
@@ -50,6 +51,7 @@ interface ChatMessageProps {
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onActionResponse, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode }) => {
+  const { isMobile } = useMobile();
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
@@ -207,7 +209,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
 
           {/* Content */}
           <div className={cn(
-            'max-w-none break-words',
+            'max-w-none break-words overflow-wrap-anywhere',
             isUser ? 'prose prose-sm prose-invert max-w-none' : 'min-w-0'
           )}>
             {isUser && isEditing ? (
@@ -215,29 +217,29 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                 <textarea
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded text-gray-900 bg-white resize-none"
+                  className="w-full p-2 border border-gray-300 rounded text-gray-900 bg-white resize-none min-h-[44px] text-base sm:text-sm"
                   rows={3}
                   autoFocus
                 />
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleSaveEdit}
-                    className="px-3 py-1 bg-orange-600 text-white rounded text-sm hover:bg-orange-700 flex items-center gap-1"
+                    className="px-3 py-2 bg-orange-600 text-white rounded text-sm hover:bg-orange-700 flex items-center gap-1 touch-manipulation min-h-[44px] min-w-[44px]"
                   >
-                    <Check className="w-3 h-3" />
+                    <Check className="w-4 h-4" />
                     Save
                   </button>
                   <button
                     onClick={handleCancelEdit}
-                    className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300 flex items-center gap-1"
+                    className="px-3 py-2 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300 flex items-center gap-1 touch-manipulation min-h-[44px] min-w-[44px]"
                   >
-                    <X className="w-3 h-3" />
+                    <X className="w-4 h-4" />
                     Cancel
                   </button>
                 </div>
               </div>
             ) : isUser ? (
-              <div className="whitespace-pre-wrap">{message.content}</div>
+              <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{message.content}</div>
             ) : !isUser && (isStreaming || message.isStreaming) && !(message.content || '').trim() ? (
               <div className="flex items-center gap-1.5 text-gray-500">
                 <span className="text-sm">Query assistant, thinking.</span>
@@ -283,30 +285,34 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
             </div>
             <div
               className={cn(
-                'flex items-center gap-1 opacity-0 transition-opacity',
-                isHovered && 'opacity-100'
+                'flex items-center gap-1 transition-opacity',
+                isMobile ? 'opacity-100' : (isHovered ? 'opacity-100' : 'opacity-0')
               )}
             >
               <button
                 onClick={handleCopy}
                 className={cn(
-                  'p-1.5 rounded hover:bg-opacity-20 transition-colors',
-                  isUser ? 'text-orange-100 hover:bg-white' : 'text-gray-400 hover:bg-gray-100'
+                  'rounded hover:bg-opacity-20 transition-colors touch-manipulation',
+                  'min-w-[44px] min-h-[44px] flex items-center justify-center',
+                  isUser ? 'text-orange-100 hover:bg-white p-1.5' : 'text-gray-400 hover:bg-gray-100 p-1.5'
                 )}
                 title="Copy message"
+                aria-label="Copy message"
               >
-                <Copy className="w-3.5 h-3.5" />
+                <Copy className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
               </button>
               {isUser && onEdit && !isEditing && (
                 <button
                   onClick={handleEdit}
                   className={cn(
-                    'p-1.5 rounded hover:bg-opacity-20 transition-colors',
-                    'text-orange-100 hover:bg-white'
+                    'rounded hover:bg-opacity-20 transition-colors touch-manipulation',
+                    'min-w-[44px] min-h-[44px] flex items-center justify-center',
+                    'text-orange-100 hover:bg-white p-1.5'
                   )}
                   title="Edit message"
+                  aria-label="Edit message"
                 >
-                  <Edit2 className="w-3.5 h-3.5" />
+                  <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 </button>
               )}
               {/* Ellipsis menu for assistant messages with actions */}
@@ -405,12 +411,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               type="button"
               onClick={() => onOpenSources(message.sources!, userQuestion)}
               className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium',
-                'bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors'
+                'inline-flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-full text-sm font-medium',
+                'bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors touch-manipulation',
+                'min-h-[44px]'
               )}
               aria-label={`View ${message.sources!.length} sources`}
             >
-              <Layers className="w-3.5 h-3.5 text-gray-500" />
+              <Layers className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-gray-500" />
               {message.sources!.length} sources
             </button>
           </div>

@@ -7,6 +7,7 @@ import { MessageSquare, Trash2, Edit2, Check, X, Folder, MoreVertical, Pin } fro
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface ConversationItemProps {
   conversation: Conversation;
@@ -35,18 +36,24 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const { updateConversation } = useConversationStore();
   const { toast } = useToast();
+  const { isMobile } = useMobile();
 
-  // Close menu on outside click
+  // Close menu on outside click (works for both mouse and touch)
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowMenu(false);
       }
     };
 
     if (showMenu) {
+      // Listen to both mousedown and touchstart for better mobile support
       document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('touchstart', handleClickOutside);
+      };
     }
   }, [showMenu]);
 
@@ -175,17 +182,28 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                         e.stopPropagation();
                         setShowMenu(!showMenu);
                       }}
-                      className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                      className={cn(
+                        "p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-opacity touch-manipulation",
+                        "min-w-[44px] min-h-[44px] flex items-center justify-center", // Touch target size
+                        isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100" // Always visible on mobile
+                      )}
                       title="More options"
+                      aria-label="More options"
                     >
-                      <MoreVertical className="w-3.5 h-3.5" />
+                      <MoreVertical className="w-4 h-4" />
                     </button>
                     {showMenu && (
-                      <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                      <div className={cn(
+                        "absolute bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1",
+                        isMobile 
+                          ? "right-0 top-full mt-1 w-48 max-w-[calc(100vw-2rem)]" // Ensure menu doesn't overflow on mobile
+                          : "right-0 top-full mt-1 w-48"
+                      )}>
                         {onPin && (
                           <button
                             onClick={handlePin}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[44px]"
+                            style={{ minHeight: '44px' }}
                           >
                             <Pin className={cn('w-4 h-4', isPinned && 'fill-current')} />
                             {isPinned ? 'Unpin' : 'Pin'}
@@ -194,7 +212,8 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                         {onSaveToCollection && (
                           <button
                             onClick={handleAddToCollection}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[44px]"
+                            style={{ minHeight: '44px' }}
                           >
                             <Folder className="w-4 h-4" />
                             Add to Collection
@@ -202,7 +221,8 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                         )}
                         <button
                           onClick={handleRename}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[44px]"
+                          style={{ minHeight: '44px' }}
                         >
                           <Edit2 className="w-4 h-4" />
                           Rename
@@ -210,7 +230,8 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                         <div className="border-t border-gray-100 my-1" />
                         <button
                           onClick={handleDelete}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left"
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left touch-manipulation min-h-[44px]"
+                          style={{ minHeight: '44px' }}
                         >
                           <Trash2 className="w-4 h-4" />
                           Delete

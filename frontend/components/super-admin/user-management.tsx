@@ -21,6 +21,7 @@ interface User {
 export default function UserManagement() {
   const { user: currentUser } = useAuthStore();
   const { isSuperAdmin } = useUserRole();
+  const { isMobile } = useMobile();
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,7 +137,67 @@ export default function UserManagement() {
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
             <span className="ml-2 text-gray-600">Loading users...</span>
           </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            {searchTerm ? 'No users found matching your search' : 'No users found'}
+          </div>
+        ) : isMobile ? (
+          /* Mobile: Card Layout */
+          <div className="space-y-4">
+            {filteredUsers.map((user) => (
+              <div
+                key={user.id}
+                className="border rounded-lg p-4 space-y-3 hover:bg-gray-50"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm text-gray-900 break-words">{user.email}</div>
+                    {user.full_name && (
+                      <div className="text-sm text-gray-600 mt-1">{user.full_name}</div>
+                    )}
+                  </div>
+                  <div className="flex-shrink-0">
+                    {getRoleBadge(user.role)}
+                  </div>
+                </div>
+                
+                <div className="text-xs text-gray-600 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Created:</span>
+                    <span>{new Date(user.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                
+                <div className="pt-2 border-t border-gray-200">
+                  {user.id !== currentUser?.id && isSuperAdmin ? (
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={user.role}
+                        onChange={(e) =>
+                          updateUserRole(user.id, e.target.value as 'user' | 'admin' | 'super_admin')
+                        }
+                        disabled={updatingRole === user.id}
+                        className="flex-1 text-sm border rounded px-3 py-2 min-h-[44px] touch-manipulation"
+                      >
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">Super Admin</option>
+                      </select>
+                      {updatingRole === user.id && (
+                        <Loader2 className="w-5 h-5 animate-spin text-gray-400 flex-shrink-0" />
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400">
+                      {user.id === currentUser?.id ? 'Current user' : '—'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
+          /* Desktop: Table Layout */
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -188,11 +249,6 @@ export default function UserManagement() {
                 ))}
               </tbody>
             </table>
-            {filteredUsers.length === 0 && (
-              <div className="text-center py-12 text-gray-500">
-                {searchTerm ? 'No users found matching your search' : 'No users found'}
-              </div>
-            )}
           </div>
         )}
       </div>

@@ -35,7 +35,7 @@ const navItems: BottomNavItem[] = [
     id: 'settings',
     label: 'Settings',
     icon: Settings,
-    href: '/dashboard/settings/profile',
+    href: '/dashboard/settings', // Now points to settings index page
   },
 ];
 

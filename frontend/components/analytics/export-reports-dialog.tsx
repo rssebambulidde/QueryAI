@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DateRange } from './date-range-picker';
 import jsPDF from 'jspdf';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { cn } from '@/lib/utils';
+import { X } from 'lucide-react';
 
 interface ExportReportsDialogProps {
   isOpen: boolean;
@@ -22,6 +25,7 @@ export function ExportReportsDialog({
   dateRange,
   metricsData,
 }: ExportReportsDialogProps) {
+  const { isMobile } = useMobile();
   const [exporting, setExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<'pdf' | 'csv'>('pdf');
 
@@ -181,49 +185,132 @@ export function ExportReportsDialog({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Export Report</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className={cn(
+        "bg-white shadow-xl w-full flex flex-col",
+        isMobile
+          ? "h-full rounded-none"
+          : "rounded-lg max-w-md mx-4"
+      )}
+      style={isMobile ? {
+        marginTop: 'env(safe-area-inset-top, 0)',
+        marginBottom: 'env(safe-area-inset-bottom, 0)'
+      } : {}}
+      >
+        {/* Header */}
+        <div className={cn(
+          "flex items-center justify-between border-b border-gray-200 flex-shrink-0",
+          isMobile ? "p-4" : "p-6 pb-4"
+        )}>
+          <h2 className={cn(
+            "font-bold text-gray-900",
+            isMobile ? "text-lg" : "text-xl"
+          )}>
+            Export Report
+          </h2>
+          <button
+            onClick={onClose}
+            className={cn(
+              "text-gray-400 hover:text-gray-600 transition-colors touch-manipulation",
+              isMobile ? "min-w-[44px] min-h-[44px] flex items-center justify-center" : ""
+            )}
+          >
+            <X className={cn(isMobile ? "w-6 h-6" : "w-5 h-5")} />
+          </button>
+        </div>
         
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Export Format
-            </label>
-            <div className="flex gap-4">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  value="pdf"
-                  checked={exportFormat === 'pdf'}
-                  onChange={(e) => setExportFormat(e.target.value as 'pdf' | 'csv')}
-                  className="mr-2"
-                />
-                PDF
+        {/* Content */}
+        <div className={cn(
+          "flex-1 overflow-y-auto min-h-0",
+          isMobile ? "p-4" : "p-6 pt-4"
+        )}>
+          <div className="space-y-4">
+            <div>
+              <label className={cn(
+                "block font-medium text-gray-700 mb-3",
+                isMobile ? "text-base" : "text-sm"
+              )}>
+                Export Format
               </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  value="csv"
-                  checked={exportFormat === 'csv'}
-                  onChange={(e) => setExportFormat(e.target.value as 'pdf' | 'csv')}
-                  className="mr-2"
-                />
-                CSV
-              </label>
+              <div className={cn(
+                "flex gap-3",
+                isMobile ? "flex-col" : "gap-4"
+              )}>
+                <label className={cn(
+                  "flex items-center cursor-pointer touch-manipulation",
+                  isMobile ? "p-4 border border-gray-200 rounded-lg hover:bg-gray-50 min-h-[60px]" : ""
+                )}>
+                  <input
+                    type="radio"
+                    value="pdf"
+                    checked={exportFormat === 'pdf'}
+                    onChange={(e) => setExportFormat(e.target.value as 'pdf' | 'csv')}
+                    className={cn(
+                      isMobile ? "w-5 h-5 mr-3" : "mr-2"
+                    )}
+                  />
+                  <span className={cn(
+                    isMobile ? "text-base font-medium" : ""
+                  )}>
+                    PDF
+                  </span>
+                </label>
+                <label className={cn(
+                  "flex items-center cursor-pointer touch-manipulation",
+                  isMobile ? "p-4 border border-gray-200 rounded-lg hover:bg-gray-50 min-h-[60px]" : ""
+                )}>
+                  <input
+                    type="radio"
+                    value="csv"
+                    checked={exportFormat === 'csv'}
+                    onChange={(e) => setExportFormat(e.target.value as 'pdf' | 'csv')}
+                    className={cn(
+                      isMobile ? "w-5 h-5 mr-3" : "mr-2"
+                    )}
+                  />
+                  <span className={cn(
+                    isMobile ? "text-base font-medium" : ""
+                  )}>
+                    CSV
+                  </span>
+                </label>
+              </div>
             </div>
-          </div>
 
-          <div className="text-sm text-gray-600">
-            <p>Date Range: {dateRange.startDate} to {dateRange.endDate}</p>
+            <div className={cn(
+              "text-gray-600",
+              isMobile ? "text-base" : "text-sm"
+            )}>
+              <p>Date Range: {dateRange.startDate} to {dateRange.endDate}</p>
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 mt-6">
-          <Button variant="outline" onClick={onClose} disabled={exporting}>
+        {/* Footer */}
+        <div className={cn(
+          "flex gap-2 border-t border-gray-200 flex-shrink-0",
+          isMobile ? "flex-col p-4" : "justify-end p-6 pt-4"
+        )}>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={exporting}
+            className={cn(
+              "touch-manipulation min-h-[44px]",
+              isMobile ? "w-full" : ""
+            )}
+          >
             Cancel
           </Button>
-          <Button onClick={handleExport} disabled={exporting} isLoading={exporting}>
+          <Button
+            onClick={handleExport}
+            disabled={exporting}
+            isLoading={exporting}
+            className={cn(
+              "touch-manipulation min-h-[44px]",
+              isMobile ? "w-full" : ""
+            )}
+          >
             Export {exportFormat.toUpperCase()}
           </Button>
         </div>

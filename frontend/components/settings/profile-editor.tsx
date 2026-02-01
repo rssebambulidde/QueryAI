@@ -8,6 +8,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { authApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface ProfileEditorProps {
   className?: string;
@@ -17,6 +18,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
   className,
 }) => {
   const { user, setUser } = useAuthStore();
+  const { isMobile } = useMobile();
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -194,7 +196,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
             )}
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="absolute bottom-0 right-0 p-1.5 bg-orange-600 text-white rounded-full hover:bg-orange-700 transition-colors shadow-lg"
+              className="absolute bottom-0 right-0 p-1.5 bg-orange-600 text-white rounded-full hover:bg-orange-700 transition-colors shadow-lg touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
               title="Change avatar"
             >
               <Camera className="w-4 h-4" />
@@ -241,6 +243,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
               Full Name
             </label>
             <Input
+              type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="Enter your full name"
@@ -251,8 +254,9 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Email Address
             </label>
-            <div className="flex items-center gap-2">
+            <div className={cn("flex items-center gap-2", isMobile ? "flex-col" : "flex-row")}>
               <Input
+                type="email"
                 value={email}
                 disabled
                 className="w-full bg-gray-50"
@@ -261,6 +265,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
                 variant="outline"
                 onClick={() => setIsChangingEmail(true)}
                 disabled={isChangingEmail}
+                className={cn("touch-manipulation min-h-[44px]", isMobile ? "w-full" : "")}
               >
                 <Mail className="w-4 h-4 mr-2" />
                 Change
@@ -275,18 +280,18 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               New Email Address
             </label>
-            <div className="flex items-center gap-2">
+            <div className={cn("flex items-center gap-2", isMobile ? "flex-col" : "flex-row")}>
               <Input
                 type="email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 placeholder="Enter new email"
-                className="flex-1"
+                className={cn("touch-manipulation", isMobile ? "w-full" : "flex-1")}
               />
               <Button
                 onClick={handleChangeEmail}
                 disabled={!newEmail || newEmail === email}
-                className="bg-orange-600 hover:bg-orange-700 text-white"
+                className={cn("bg-orange-600 hover:bg-orange-700 text-white touch-manipulation min-h-[44px]", isMobile ? "w-full" : "")}
               >
                 Save
               </Button>
@@ -296,6 +301,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
                   setIsChangingEmail(false);
                   setNewEmail('');
                 }}
+                className={cn("touch-manipulation min-h-[44px]", isMobile ? "w-full" : "")}
               >
                 Cancel
               </Button>
@@ -303,11 +309,14 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
           </div>
         )}
 
-        <div className="mt-6 pt-6 border-t border-gray-200">
+        <div className={cn(
+          "mt-6 pt-6 border-t border-gray-200",
+          isMobile && "sticky bottom-0 bg-white pb-safe-area-inset-bottom z-10"
+        )}>
           <Button
             onClick={handleSaveProfile}
             disabled={isSaving}
-            className="bg-orange-600 hover:bg-orange-700 text-white"
+            className="bg-orange-600 hover:bg-orange-700 text-white touch-manipulation min-h-[44px] w-full sm:w-auto"
           >
             {isSaving ? (
               <>
@@ -380,7 +389,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
             <Button
               onClick={handleChangePassword}
               disabled={isChangingPassword || !currentPassword || !newPassword || newPassword !== confirmPassword}
-              className="bg-orange-600 hover:bg-orange-700 text-white"
+              className="bg-orange-600 hover:bg-orange-700 text-white touch-manipulation min-h-[44px] w-full sm:w-auto"
             >
               <Lock className="w-4 h-4 mr-2" />
               Update Password

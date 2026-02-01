@@ -5,6 +5,7 @@ import { Filter, X, Calendar, MapPin, Hash, Tag, Plus, Sparkles, Info, Check } f
 import { TimeRange, Topic, topicApi } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 export interface UnifiedFilters {
   // Persistent (Topic)
@@ -294,6 +295,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
   onLoadTopics,
 }) => {
   const { toast } = useToast();
+  const { isMobile } = useMobile();
   const [showTopicDropdown, setShowTopicDropdown] = useState(false);
   const [showCreateTopic, setShowCreateTopic] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
@@ -419,10 +421,18 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
   return (
     <div 
       ref={panelRef}
-      className="bg-white border border-gray-200 rounded-xl shadow-xl animate-in fade-in slide-in-from-bottom-2 max-h-[80vh] overflow-y-auto relative z-[100]"
+      className={cn(
+        "bg-white border border-gray-200 rounded-xl shadow-xl animate-in fade-in slide-in-from-bottom-2 relative z-[100] flex flex-col",
+        isMobile ? "max-h-[90vh] w-full mx-2" : "max-h-[80vh]"
+      )}
+      style={isMobile ? {
+        maxHeight: 'calc(100vh - 2rem)',
+        marginTop: 'env(safe-area-inset-top, 0)',
+        marginBottom: 'env(safe-area-inset-bottom, 0)'
+      } : {}}
     >
-      {/* Header */}
-      <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-[60] shadow-sm overflow-visible">
+      {/* Header - Fixed */}
+      <div className="flex-shrink-0 sticky top-0 bg-white border-b border-gray-200 px-4 py-3 z-[60] shadow-sm overflow-visible">
         <div className="flex items-center justify-between gap-3 min-w-0">
           <div className="flex items-center gap-2 min-w-0 flex-shrink">
             <Filter className="w-4 h-4 text-gray-600 flex-shrink-0" />
@@ -433,7 +443,11 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
               <button
                 onClick={handleClear}
                 disabled={disabled}
-                className="text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-3 py-1.5 rounded-md transition-colors whitespace-nowrap border border-gray-300 hover:border-gray-400"
+                className={cn(
+                  "text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-3 py-1.5 rounded-md transition-colors whitespace-nowrap border border-gray-300 hover:border-gray-400 touch-manipulation",
+                  "min-h-[44px]", // Touch target
+                  isMobile ? "text-sm px-4" : ""
+                )}
                 title="Clear all filters"
               >
                 Clear All
@@ -442,7 +456,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
             <button
               onClick={onClose}
               disabled={disabled}
-              className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors relative z-[70] flex items-center justify-center min-w-[32px] min-h-[32px] flex-shrink-0"
+              className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors relative z-[70] flex items-center justify-center touch-manipulation min-w-[44px] min-h-[44px] flex-shrink-0"
               title="Close filters"
             >
               <X className="w-5 h-5" />
@@ -451,7 +465,8 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
         </div>
       </div>
 
-      <div className="p-4 space-y-6">
+      {/* Content - Scrollable */}
+      <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-6">
         {/* Topic Scope Section (Persistent) */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -484,10 +499,13 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
               <button
                 onClick={() => setShowTopicDropdown(!showTopicDropdown)}
                 disabled={disabled}
-                className="w-full flex items-center justify-between px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
+                className={cn(
+                  "w-full flex items-center justify-between px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 touch-manipulation",
+                  "min-h-[44px]" // Touch target
+                )}
               >
                 <span className="text-gray-500">Select a topic...</span>
-                <Plus className="w-4 h-4 text-gray-400" />
+                <Plus className="w-4 h-4 text-gray-400 flex-shrink-0" />
               </button>
               
               {showTopicDropdown && (
@@ -622,6 +640,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
                 disabled={disabled || !!selectedTopic}
                 className={cn(
                   "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-400",
+                  "min-h-[44px]", // Touch target
                   selectedTopic && "bg-gray-100 cursor-not-allowed"
                 )}
               />
@@ -696,7 +715,10 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
               </select>
 
               {useCustomDates && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className={cn(
+                  "grid gap-2",
+                  isMobile ? "grid-cols-1" : "grid-cols-2"
+                )}>
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">Start Date</label>
                     <input
@@ -704,7 +726,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
                       value={filters.startDate || ''}
                       onChange={(e) => onChange({ ...filters, startDate: e.target.value })}
                       disabled={disabled}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 min-h-[44px]"
                     />
                   </div>
                   <div>
@@ -715,7 +737,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
                       onChange={(e) => onChange({ ...filters, endDate: e.target.value })}
                       disabled={disabled}
                       min={filters.startDate}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 min-h-[44px]"
                     />
                   </div>
                 </div>
@@ -733,7 +755,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
               value={filters.country || ''}
               onChange={(e) => onChange({ ...filters, country: e.target.value || undefined })}
               disabled={disabled}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 min-h-[44px]"
             >
               <option value="">All countries</option>
               {COUNTRIES.map((country) => (

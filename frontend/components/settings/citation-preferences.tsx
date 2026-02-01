@@ -7,6 +7,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { CitationSettings } from '@/components/chat/citation-settings';
 import { useCitationPreferencesStore } from '@/lib/store/citation-preferences-store';
 import { cn } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface CitationPreferencesProps {
   className?: string;
@@ -16,6 +17,7 @@ export const CitationPreferences: React.FC<CitationPreferencesProps> = ({
   className,
 }) => {
   const { preferences, reset } = useCitationPreferencesStore();
+  const { isMobile } = useMobile();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { toast } = useToast();
 
@@ -66,14 +68,21 @@ export const CitationPreferences: React.FC<CitationPreferencesProps> = ({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-3">
-        <Button variant="outline" onClick={reset}>
+      <div className={cn(
+        "flex items-center gap-3",
+        isMobile ? "flex-col sticky bottom-0 bg-white pt-4 pb-safe-area-inset-bottom z-10" : "justify-end"
+      )}>
+        <Button 
+          variant="outline" 
+          onClick={reset}
+          className="touch-manipulation min-h-[44px] w-full sm:w-auto"
+        >
           <RotateCcw className="w-4 h-4 mr-2" />
           Reset to Defaults
         </Button>
         <Button
           onClick={() => setIsSettingsOpen(true)}
-          className="bg-orange-600 hover:bg-orange-700 text-white"
+          className="bg-orange-600 hover:bg-orange-700 text-white touch-manipulation min-h-[44px] w-full sm:w-auto"
         >
           <FileText className="w-4 h-4 mr-2" />
           Edit Citation Settings

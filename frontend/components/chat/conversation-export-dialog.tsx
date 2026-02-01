@@ -7,6 +7,7 @@ import { Conversation, Message } from '@/lib/api';
 import { exportConversation, ExportOptions } from '@/lib/utils/export-conversation';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Button } from '@/components/ui/button';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface ConversationExportDialogProps {
   conversation: Conversation;
@@ -23,6 +24,7 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
   onClose,
   className,
 }) => {
+  const { isMobile } = useMobile();
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     format: 'pdf',
     includeSources: true,
@@ -61,37 +63,70 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
     <div
       className={cn(
         'fixed inset-0 z-50 flex items-center justify-center bg-black/50',
+        isMobile && 'p-0',
         className
       )}
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+        className={cn(
+          "bg-white shadow-xl flex flex-col",
+          isMobile 
+            ? "w-full h-full rounded-none max-h-none" 
+            : "rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+        )}
+        style={isMobile ? {
+          marginTop: 'env(safe-area-inset-top)',
+          marginBottom: 'env(safe-area-inset-bottom)',
+        } : {}}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className={cn(
+          "flex items-center justify-between border-b border-gray-200 flex-shrink-0",
+          isMobile ? "px-4 py-3" : "px-6 py-4"
+        )}>
           <div className="flex items-center gap-2">
-            <Download className="w-5 h-5 text-gray-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Export Conversation</h2>
+            <Download className={cn(isMobile ? "w-5 h-5" : "w-5 h-5", "text-gray-600")} />
+            <h2 className={cn(
+              "font-semibold text-gray-900",
+              isMobile ? "text-base" : "text-lg"
+            )}>
+              Export Conversation
+            </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className={cn(
+              "rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors touch-manipulation",
+              isMobile ? "p-2 min-w-[44px] min-h-[44px]" : "p-1.5"
+            )}
             aria-label="Close dialog"
           >
-            <X className="w-5 h-5" />
+            <X className={cn(isMobile ? "w-6 h-6" : "w-5 h-5")} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className={cn(
+          "flex-1 overflow-y-auto min-h-0",
+          isMobile ? "p-4 space-y-4" : "p-6 space-y-6"
+        )}>
           {/* Conversation Info */}
-          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <div className="text-sm font-medium text-gray-900 mb-1">
+          <div className={cn(
+            "bg-gray-50 rounded-lg border border-gray-200",
+            isMobile ? "p-3" : "p-4"
+          )}>
+            <div className={cn(
+              "font-medium text-gray-900 mb-1",
+              isMobile ? "text-base" : "text-sm"
+            )}>
               {conversation.title || 'Untitled Conversation'}
             </div>
-            <div className="text-xs text-gray-500">
+            <div className={cn(
+              "text-gray-500",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
               {messages.length} message{messages.length !== 1 ? 's' : ''} • Created{' '}
               {new Date(conversation.created_at).toLocaleDateString()}
             </div>
@@ -99,17 +134,24 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
 
           {/* Format Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-3">
+            <label className={cn(
+              "block font-medium text-gray-900 mb-3",
+              isMobile ? "text-base" : "text-sm"
+            )}>
               Export Format
             </label>
-            <div className="space-y-2">
+            <div className={cn(
+              "space-y-2",
+              isMobile && "flex flex-col"
+            )}>
               {formats.map((format) => {
                 const Icon = format.icon;
                 return (
                   <label
                     key={format.value}
                     className={cn(
-                      'flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all',
+                      'flex items-start gap-3 rounded-lg border-2 cursor-pointer transition-all touch-manipulation min-h-[60px]',
+                      isMobile ? "p-4" : "p-3",
                       exportOptions.format === format.value
                         ? 'border-orange-500 bg-orange-50'
                         : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
@@ -121,12 +163,28 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
                       value={format.value}
                       checked={exportOptions.format === format.value}
                       onChange={() => setExportOptions({ ...exportOptions, format: format.value })}
-                      className="mt-1 w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
+                      className={cn(
+                        "mt-1 text-orange-600 border-gray-300 focus:ring-orange-500",
+                        isMobile ? "w-5 h-5" : "w-4 h-4"
+                      )}
                     />
-                    <Icon className="w-5 h-5 text-gray-600 mt-0.5 flex-shrink-0" />
+                    <Icon className={cn(
+                      "text-gray-600 mt-0.5 flex-shrink-0",
+                      isMobile ? "w-6 h-6" : "w-5 h-5"
+                    )} />
                     <div className="flex-1">
-                      <div className="font-medium text-gray-900">{format.label}</div>
-                      <div className="text-sm text-gray-500 mt-0.5">{format.description}</div>
+                      <div className={cn(
+                        "font-medium text-gray-900",
+                        isMobile ? "text-base" : "text-sm"
+                      )}>
+                        {format.label}
+                      </div>
+                      <div className={cn(
+                        "text-gray-500 mt-0.5",
+                        isMobile ? "text-sm" : "text-xs"
+                      )}>
+                        {format.description}
+                      </div>
                     </div>
                   </label>
                 );
@@ -136,14 +194,28 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
 
           {/* Export Options */}
           <div className="space-y-4">
-            <label className="block text-sm font-medium text-gray-900 mb-3">
+            <label className={cn(
+              "block font-medium text-gray-900 mb-3",
+              isMobile ? "text-base" : "text-sm"
+            )}>
               Export Options
             </label>
 
-            <label className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+            <label className={cn(
+              "flex items-center justify-between rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer touch-manipulation min-h-[60px]",
+              isMobile ? "p-4" : "p-3"
+            )}>
               <div>
-                <div className="font-medium text-sm text-gray-900">Include Sources</div>
-                <div className="text-xs text-gray-500 mt-0.5">
+                <div className={cn(
+                  "font-medium text-gray-900",
+                  isMobile ? "text-base" : "text-sm"
+                )}>
+                  Include Sources
+                </div>
+                <div className={cn(
+                  "text-gray-500 mt-0.5",
+                  isMobile ? "text-sm" : "text-xs"
+                )}>
                   Include source references and metadata
                 </div>
               </div>
@@ -153,14 +225,28 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
                 onChange={(e) =>
                   setExportOptions({ ...exportOptions, includeSources: e.target.checked })
                 }
-                className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                className={cn(
+                  "text-orange-600 border-gray-300 rounded focus:ring-orange-500",
+                  isMobile ? "w-5 h-5" : "w-4 h-4"
+                )}
               />
             </label>
 
-            <label className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+            <label className={cn(
+              "flex items-center justify-between rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer touch-manipulation min-h-[60px]",
+              isMobile ? "p-4" : "p-3"
+            )}>
               <div>
-                <div className="font-medium text-sm text-gray-900">Include Citations</div>
-                <div className="text-xs text-gray-500 mt-0.5">
+                <div className={cn(
+                  "font-medium text-gray-900",
+                  isMobile ? "text-base" : "text-sm"
+                )}>
+                  Include Citations
+                </div>
+                <div className={cn(
+                  "text-gray-500 mt-0.5",
+                  isMobile ? "text-sm" : "text-xs"
+                )}>
                   Include inline citation links and references
                 </div>
               </div>
@@ -170,21 +256,37 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
                 onChange={(e) =>
                   setExportOptions({ ...exportOptions, includeCitations: e.target.checked })
                 }
-                className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                className={cn(
+                  "text-orange-600 border-gray-300 rounded focus:ring-orange-500",
+                  isMobile ? "w-5 h-5" : "w-4 h-4"
+                )}
               />
             </label>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <Button onClick={onClose} variant="outline" disabled={isExporting}>
+        <div className={cn(
+          "flex items-center border-t border-gray-200 bg-gray-50 flex-shrink-0",
+          isMobile 
+            ? "flex-col gap-3 px-4 py-4 pb-safe-area-inset-bottom" 
+            : "justify-end gap-3 px-6 py-4"
+        )}>
+          <Button 
+            onClick={onClose} 
+            variant="outline" 
+            disabled={isExporting}
+            className={isMobile ? "w-full" : ""}
+          >
             Cancel
           </Button>
           <Button
             onClick={handleExport}
             disabled={isExporting || messages.length === 0}
-            className="bg-orange-600 hover:bg-orange-700 text-white"
+            className={cn(
+              "bg-orange-600 hover:bg-orange-700 text-white",
+              isMobile && "w-full"
+            )}
           >
             {isExporting ? (
               <>

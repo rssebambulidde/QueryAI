@@ -23,6 +23,12 @@ const formatBytes = (bytes: number): string => {
   return `${(bytes / Math.pow(1024, idx)).toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
 };
 
+const formatDate = (date: string | Date): string => {
+  if (!date) return '';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString();
+};
+
 const getFileIcon = (mimeType: string, fileName: string): React.ReactElement => {
   const extension = fileName.split('.').pop()?.toLowerCase();
   
@@ -571,163 +577,410 @@ export const DocumentManager = () => {
             )}
           </div>
         ) : (
-          <div className="space-y-2">
+          <>
             {/* Select All */}
             {filteredDocuments.length > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 mb-2">
                 <button
                   onClick={handleSelectAll}
-                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 touch-manipulation min-h-[44px]"
                 >
                   {selectedDocuments.size === filteredDocuments.length ? (
-                    <CheckSquare className="w-4 h-4 text-orange-600" />
+                    <CheckSquare className="w-5 h-5 text-orange-600" />
                   ) : (
-                    <Square className="w-4 h-4" />
+                    <Square className="w-5 h-5" />
                   )}
                   <span>Select All</span>
                 </button>
+                {selectedDocuments.size > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    className="text-red-600 border-red-200 hover:bg-red-50 touch-manipulation min-h-[44px]"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1.5" />
+                    Delete Selected ({selectedDocuments.size})
+                  </Button>
+                )}
               </div>
             )}
-            {filteredDocuments.map((doc) => {
-              const docId = doc.id || doc.path;
-              const isSelected = selectedDocuments.has(docId);
-              return (
-              <div
-                key={docId}
-                className={cn(
-                  'flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 transition-colors',
-                  isSelected
-                    ? 'border-orange-500 bg-orange-50'
-                    : 'border-gray-100 hover:bg-gray-50'
-                )}
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  {/* Selection Checkbox */}
-                  <button
-                    onClick={() => handleBulkSelect(docId)}
-                    className="flex-shrink-0"
-                  >
-                    {isSelected ? (
-                      <CheckSquare className="w-4 h-4 text-orange-600" />
-                    ) : (
-                      <Square className="w-4 h-4 text-gray-400" />
-                    )}
-                  </button>
-                  
-                  {getFileIcon(doc.mimeType, doc.name)}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
-                      <DocumentStatusBadge
-                        document={doc}
-                        onRefresh={() => loadDocuments(false)}
-                        showProgress={true}
-                      />
+
+            {isMobile ? (
+              /* Mobile: Card Layout */
+              <div className="space-y-4">
+                {filteredDocuments.map((doc) => {
+                  const docId = doc.id || doc.path;
+                  const isSelected = selectedDocuments.has(docId);
+                  return (
+                    <div
+                      key={docId}
+                      className={cn(
+                        'border rounded-lg p-4 transition-colors',
+                        isSelected
+                          ? 'border-orange-500 bg-orange-50'
+                          : 'border-gray-200 bg-white hover:bg-gray-50'
+                      )}
+                    >
+                      {/* Header with checkbox, icon, name, and status */}
+                      <div className="flex items-start justify-between mb-3 gap-2">
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          <button
+                            onClick={() => handleBulkSelect(docId)}
+                            className="flex-shrink-0 mt-0.5 touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-5 h-5 text-orange-600" />
+                            ) : (
+                              <Square className="w-5 h-5 text-gray-400" />
+                            )}
+                          </button>
+                          <div className="flex-shrink-0 mt-0.5">
+                            {getFileIcon(doc.mimeType, doc.name)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-sm font-medium text-gray-900 truncate mb-1">{doc.name}</h3>
+                            <DocumentStatusBadge
+                              document={doc}
+                              onRefresh={() => loadDocuments(false)}
+                              showProgress={true}
+                              className="mb-2"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Document Details */}
+                      <div className="text-xs text-gray-600 space-y-1 mb-3 pl-9">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">Size:</span>
+                          <span>{formatBytes(doc.size)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">Type:</span>
+                          <span>{doc.mimeType || 'Unknown'}</span>
+                        </div>
+                        {doc.createdAt && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Uploaded:</span>
+                            <span>{formatDate(doc.createdAt)}</span>
+                          </div>
+                        )}
+                        {(doc.status === 'extracted' || doc.status === 'processed' || doc.status === 'embedded') && doc.textLength && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Characters:</span>
+                            <span>{doc.textLength.toLocaleString()}</span>
+                          </div>
+                        )}
+                        {doc.chunkCount && doc.chunkCount > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Chunks:</span>
+                            <span>{doc.chunkCount}</span>
+                          </div>
+                        )}
+                        {doc.status === 'failed' && doc.extractionError && (
+                          <div className="text-red-600 mt-1">
+                            <span className="font-medium">Error: </span>
+                            <span className="break-words">{doc.extractionError}</span>
+                          </div>
+                        )}
+                        {doc.status === 'embedding_failed' && doc.embeddingError && (
+                          <div className="text-red-600 mt-1">
+                            <span className="font-medium">Error: </span>
+                            <span className="break-words">{doc.embeddingError}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditMetadata(doc)}
+                          className="flex-1 min-w-[100px] touch-manipulation min-h-[44px] text-xs"
+                          title="Edit metadata"
+                        >
+                          <Edit2 className="w-3 h-3 mr-1" />
+                          Edit
+                        </Button>
+                        
+                        {/* Process button */}
+                        {doc.id && (doc.status === 'stored' || (doc.status !== 'processed' && doc.status !== 'processing' && doc.status !== 'embedding' && doc.status !== 'extracted' && doc.status !== 'embedded')) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleProcess(doc)}
+                            className="flex-1 min-w-[100px] text-orange-600 border-orange-200 hover:bg-orange-50 touch-manipulation min-h-[44px] text-xs"
+                            disabled={isLoading}
+                          >
+                            <Play className="w-3 h-3 mr-1" />
+                            Process
+                          </Button>
+                        )}
+                        
+                        {/* Retry button */}
+                        {(doc.status === 'failed' || doc.status === 'embedding_failed') && doc.id && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await documentApi.process(doc.id!);
+                                toast.success('Processing retry started');
+                                setTimeout(() => loadDocuments(), 2000);
+                              } catch (error: any) {
+                                toast.error(error.message || 'Failed to retry processing');
+                              }
+                            }}
+                            className="flex-1 min-w-[100px] touch-manipulation min-h-[44px] text-xs"
+                          >
+                            <RefreshCw className="w-3 h-3 mr-1" />
+                            Retry
+                          </Button>
+                        )}
+                        
+                        {/* Clear processing button */}
+                        {doc.id && (doc.status === 'processed' || doc.status === 'extracted' || doc.status === 'embedded') && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleClearProcessing(doc)}
+                            className="flex-1 min-w-[100px] text-orange-600 border-orange-200 hover:bg-orange-50 touch-manipulation min-h-[44px] text-xs"
+                          >
+                            <Eraser className="w-3 h-3 mr-1" />
+                            Clear
+                          </Button>
+                        )}
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleView(doc)}
+                          className="flex-1 min-w-[100px] touch-manipulation min-h-[44px] text-xs"
+                          disabled={!doc.path || (doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed'))}
+                          title={!doc.path ? 'Document path not available' : doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding') ? `Document is ${doc.status}` : 'View document'}
+                        >
+                          <Eye className="w-3 h-3 mr-1" />
+                          View
+                        </Button>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDownload(doc)}
+                          className="flex-1 min-w-[100px] touch-manipulation min-h-[44px] text-xs"
+                          disabled={!doc.path || (doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed'))}
+                          title={!doc.path ? 'Document path not available' : doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding') ? `Document is ${doc.status}` : 'Download document'}
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          Download
+                        </Button>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDelete(doc.id || doc.path)}
+                          className="flex-1 min-w-[100px] text-red-600 border-red-200 hover:bg-red-50 touch-manipulation min-h-[44px] text-xs"
+                        >
+                          <Trash2 className="w-3 h-3 mr-1" />
+                          Delete
+                        </Button>
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-500">
-                      {formatBytes(doc.size)}
-                      {doc.createdAt ? ` · ${new Date(doc.createdAt).toLocaleDateString()}` : ''}
-                      {(doc.status === 'extracted' || doc.status === 'processed' || doc.status === 'embedded') && doc.textLength && ` · ${doc.textLength.toLocaleString()} chars`}
-                      {doc.chunkCount && doc.chunkCount > 0 && ` · ${doc.chunkCount} chunk${doc.chunkCount !== 1 ? 's' : ''}`}
-                      {doc.status === 'failed' && doc.extractionError && ` · ${doc.extractionError}`}
-                      {doc.status === 'embedding_failed' && doc.embeddingError && ` · ${doc.embeddingError}`}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {/* Edit Metadata Button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEditMetadata(doc)}
-                    className="h-8 px-3"
-                    title="Edit metadata"
-                  >
-                    <Edit2 className="w-3 h-3 mr-1.5" />
-                    Edit
-                  </Button>
-                  
-                  {/* Process button - show for stored documents or documents that aren't processed yet */}
-                  {doc.id && (doc.status === 'stored' || (doc.status !== 'processed' && doc.status !== 'processing' && doc.status !== 'embedding' && doc.status !== 'extracted' && doc.status !== 'embedded')) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleProcess(doc)}
-                      className="h-8 px-3 text-orange-600 border-orange-200 hover:bg-orange-50"
-                      disabled={isLoading}
-                    >
-                      <Play className="w-3 h-3 mr-1.5" />
-                      Process
-                    </Button>
-                  )}
-                  {/* Retry button - show for failed documents */}
-                  {(doc.status === 'failed' || doc.status === 'embedding_failed') && doc.id && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          await documentApi.process(doc.id!);
-                          toast.success('Processing retry started');
-                          setTimeout(() => loadDocuments(), 2000);
-                        } catch (error: any) {
-                          toast.error(error.message || 'Failed to retry processing');
-                        }
-                      }}
-                      className="h-8 px-3"
-                    >
-                      <RefreshCw className="w-3 h-3 mr-1.5" />
-                      Retry
-                    </Button>
-                  )}
-                  {/* Clear processing button - show for processed/extracted documents */}
-                  {doc.id && (doc.status === 'processed' || doc.status === 'extracted' || doc.status === 'embedded') && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleClearProcessing(doc)}
-                      className="h-8 px-3 text-orange-600 border-orange-200 hover:bg-orange-50"
-                    >
-                      <Eraser className="w-3 h-3 mr-1.5" />
-                      Clear
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleView(doc)}
-                    className="h-8 px-3"
-                    disabled={!doc.path || (doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed'))}
-                    title={!doc.path ? 'Document path not available' : doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding') ? `Document is ${doc.status}` : 'View document'}
-                  >
-                    <Eye className="w-3 h-3 mr-1.5" />
-                    View
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDownload(doc)}
-                    className="h-8 px-3"
-                    disabled={!doc.path || (doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed'))}
-                    title={!doc.path ? 'Document path not available' : doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding') ? `Document is ${doc.status}` : 'Download document'}
-                  >
-                    <Download className="w-3 h-3 mr-1.5" />
-                    Download
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(doc.id || doc.path)}
-                    className="h-8 px-3 text-red-600 border-red-200 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-3 h-3 mr-1.5" />
-                    Delete
-                  </Button>
-                </div>
+                  );
+                })}
               </div>
-            );
-            })}
-          </div>
+            ) : (
+              /* Desktop: Table Layout */
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        <button
+                          onClick={handleSelectAll}
+                          className="flex items-center gap-2 hover:text-gray-900"
+                        >
+                          {selectedDocuments.size === filteredDocuments.length ? (
+                            <CheckSquare className="w-4 h-4 text-orange-600" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Document</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Size</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Uploaded</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Details</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {filteredDocuments.map((doc) => {
+                      const docId = doc.id || doc.path;
+                      const isSelected = selectedDocuments.has(docId);
+                      return (
+                        <tr
+                          key={docId}
+                          className={cn(
+                            'hover:bg-gray-50 transition-colors',
+                            isSelected && 'bg-orange-50'
+                          )}
+                        >
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <button
+                              onClick={() => handleBulkSelect(docId)}
+                              className="flex items-center"
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-orange-600" />
+                              ) : (
+                                <Square className="w-4 h-4 text-gray-400" />
+                              )}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {getFileIcon(doc.mimeType, doc.name)}
+                              <span className="text-sm font-medium text-gray-900 truncate">{doc.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <DocumentStatusBadge
+                              document={doc}
+                              onRefresh={() => loadDocuments(false)}
+                              showProgress={true}
+                            />
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {formatBytes(doc.size)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                            {doc.createdAt ? formatDate(doc.createdAt) : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">
+                            <div className="space-y-0.5">
+                              {(doc.status === 'extracted' || doc.status === 'processed' || doc.status === 'embedded') && doc.textLength && (
+                                <div>{doc.textLength.toLocaleString()} chars</div>
+                              )}
+                              {doc.chunkCount && doc.chunkCount > 0 && (
+                                <div>{doc.chunkCount} chunk{doc.chunkCount !== 1 ? 's' : ''}</div>
+                              )}
+                              {doc.status === 'failed' && doc.extractionError && (
+                                <div className="text-red-600 text-xs truncate max-w-xs" title={doc.extractionError}>
+                                  {doc.extractionError}
+                                </div>
+                              )}
+                              {doc.status === 'embedding_failed' && doc.embeddingError && (
+                                <div className="text-red-600 text-xs truncate max-w-xs" title={doc.embeddingError}>
+                                  {doc.embeddingError}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditMetadata(doc)}
+                                className="h-8 px-3"
+                                title="Edit metadata"
+                              >
+                                <Edit2 className="w-3 h-3 mr-1.5" />
+                                Edit
+                              </Button>
+                              
+                              {doc.id && (doc.status === 'stored' || (doc.status !== 'processed' && doc.status !== 'processing' && doc.status !== 'embedding' && doc.status !== 'extracted' && doc.status !== 'embedded')) && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleProcess(doc)}
+                                  className="h-8 px-3 text-orange-600 border-orange-200 hover:bg-orange-50"
+                                  disabled={isLoading}
+                                >
+                                  <Play className="w-3 h-3 mr-1.5" />
+                                  Process
+                                </Button>
+                              )}
+                              
+                              {(doc.status === 'failed' || doc.status === 'embedding_failed') && doc.id && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      await documentApi.process(doc.id!);
+                                      toast.success('Processing retry started');
+                                      setTimeout(() => loadDocuments(), 2000);
+                                    } catch (error: any) {
+                                      toast.error(error.message || 'Failed to retry processing');
+                                    }
+                                  }}
+                                  className="h-8 px-3"
+                                >
+                                  <RefreshCw className="w-3 h-3 mr-1.5" />
+                                  Retry
+                                </Button>
+                              )}
+                              
+                              {doc.id && (doc.status === 'processed' || doc.status === 'extracted' || doc.status === 'embedded') && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleClearProcessing(doc)}
+                                  className="h-8 px-3 text-orange-600 border-orange-200 hover:bg-orange-50"
+                                >
+                                  <Eraser className="w-3 h-3 mr-1.5" />
+                                  Clear
+                                </Button>
+                              )}
+                              
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleView(doc)}
+                                className="h-8 px-3"
+                                disabled={!doc.path || (doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed'))}
+                                title={!doc.path ? 'Document path not available' : doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding') ? `Document is ${doc.status}` : 'View document'}
+                              >
+                                <Eye className="w-3 h-3 mr-1.5" />
+                                View
+                              </Button>
+                              
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownload(doc)}
+                                className="h-8 px-3"
+                                disabled={!doc.path || (doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding' || doc.status === 'failed' || doc.status === 'embedding_failed'))}
+                                title={!doc.path ? 'Document path not available' : doc.status && (doc.status === 'stored' || doc.status === 'processing' || doc.status === 'embedding') ? `Document is ${doc.status}` : 'Download document'}
+                              >
+                                <Download className="w-3 h-3 mr-1.5" />
+                                Download
+                              </Button>
+                              
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDelete(doc.id || doc.path)}
+                                className="h-8 px-3 text-red-600 border-red-200 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-3 h-3 mr-1.5" />
+                                Delete
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
 

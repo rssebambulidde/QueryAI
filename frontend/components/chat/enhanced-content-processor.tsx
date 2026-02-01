@@ -142,7 +142,7 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
     return processed;
   }, [contentWithCitationLinks, sources, useInlineCitations]);
 
-  const wrapperClass = 'ai-response-content font-sans text-[15px] leading-[1.72] tracking-[0.01em] text-gray-800 antialiased max-w-none';
+  const wrapperClass = 'ai-response-content font-sans text-[15px] leading-[1.72] tracking-[0.01em] text-gray-800 antialiased max-w-none break-words overflow-wrap-anywhere';
 
   // Render markdown with inline citations
   const renderContentWithInlineCitations = () => {
@@ -487,15 +487,17 @@ const getMarkdownComponents = (isUser: boolean) => ({
   code: ({ node, inline, className, children, ...props }: any) => {
     if (inline) {
       return (
-        <code className="bg-gray-100 text-orange-600 px-1.5 py-0.5 rounded text-sm font-mono align-baseline" {...props}>
+        <code className="bg-gray-100 text-orange-600 px-1.5 py-0.5 rounded text-sm font-mono align-baseline break-words" {...props}>
           {children}
         </code>
       );
     }
     return (
-      <code className={`block p-3 rounded-lg overflow-x-auto text-sm font-mono my-3 bg-gray-900 text-gray-100 ${className || ''}`} {...props}>
-        {children}
-      </code>
+      <pre className="overflow-x-auto max-w-full my-3">
+        <code className={`block p-3 rounded-lg text-sm font-mono bg-gray-900 text-gray-100 ${className || ''}`} {...props}>
+          {children}
+        </code>
+      </pre>
     );
   },
   blockquote: ({ node, ...props }: any) => (

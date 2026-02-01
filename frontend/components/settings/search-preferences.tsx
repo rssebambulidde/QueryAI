@@ -8,6 +8,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { RAGSettings, RAGSourceSelector } from '@/components/chat/rag-source-selector';
 import { topicApi, Topic } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface SearchPreferencesProps {
   className?: string;
@@ -225,13 +226,13 @@ export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Default Topic Filter</h3>
         <div className="space-y-3">
-          <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+          <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer touch-manipulation min-h-[44px]">
             <input
               type="radio"
               name="defaultTopic"
               checked={defaultTopicId === null}
               onChange={() => setDefaultTopicId(null)}
-              className="w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
+              className="w-5 h-5 sm:w-4 sm:h-4 text-orange-600 border-gray-300 focus:ring-orange-500 flex-shrink-0"
             />
             <div>
               <div className="text-sm font-medium text-gray-900">No Default Topic</div>
@@ -244,14 +245,14 @@ export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
             availableTopics.map((topic) => (
               <label
                 key={topic.id}
-                className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
+                className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer touch-manipulation min-h-[44px]"
               >
                 <input
                   type="radio"
                   name="defaultTopic"
                   checked={defaultTopicId === topic.id}
                   onChange={() => setDefaultTopicId(topic.id)}
-                  className="w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
+                  className="w-5 h-5 sm:w-4 sm:h-4 text-orange-600 border-gray-300 focus:ring-orange-500 flex-shrink-0"
                 />
                 <div className="flex-1">
                   <div className="text-sm font-medium text-gray-900">{topic.name}</div>
@@ -266,15 +267,22 @@ export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-3">
-        <Button variant="outline" onClick={handleReset}>
+      <div className={cn(
+        "flex items-center gap-3",
+        isMobile ? "flex-col sticky bottom-0 bg-white pt-4 pb-safe-area-inset-bottom z-10" : "justify-end"
+      )}>
+        <Button 
+          variant="outline" 
+          onClick={handleReset}
+          className="touch-manipulation min-h-[44px] w-full sm:w-auto"
+        >
           <RotateCw className="w-4 h-4 mr-2" />
           Reset to Defaults
         </Button>
         <Button
           onClick={handleSave}
           disabled={isSaving}
-          className="bg-orange-600 hover:bg-orange-700 text-white"
+          className="bg-orange-600 hover:bg-orange-700 text-white touch-manipulation min-h-[44px] w-full sm:w-auto"
         >
           {isSaving ? (
             <>

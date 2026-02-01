@@ -12,6 +12,8 @@ import { useFilterStore } from '@/lib/store/filter-store';
 import { Alert } from '@/components/ui/alert';
 import { MessageSquare, Settings } from 'lucide-react';
 import { UnifiedFilters } from './unified-filter-panel';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 import { ResearchModeBanner } from './research-mode-banner';
 import { ResearchSessionSummaryModal } from './research-session-summary-modal';
 import { StreamingControls, StreamingState } from './streaming-controls';
@@ -126,6 +128,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   const [previousTokenUsage, setPreviousTokenUsage] = useState<{ totalTokens: number } | null>(null);
   const [previousCost, setPreviousCost] = useState<{ total: number } | null>(null);
   const { toast } = useToast();
+  const { isMobile } = useMobile();
   const { currentConversationId, createConversation, refreshConversations, conversations, updateConversationFilters, updateConversation } = useConversationStore();
   const { unifiedFilters, setUnifiedFilters, selectedTopic, setSelectedTopic } = useFilterStore();
   
@@ -1057,7 +1060,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                 
                 {/* Advanced Features Display - Show after last assistant message */}
                 {isLastMessage && message.role === 'assistant' && !isStreaming && lastResponseData && (
-                  <div className="mt-4 space-y-3">
+                  <div className={cn(
+                    "mt-4 space-y-3",
+                    isMobile ? "space-y-4" : "space-y-3"
+                  )}>
                     {/* Query Expansion */}
                     {lastResponseData.queryExpansion && (
                       <QueryExpansionDisplay
@@ -1237,7 +1243,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           {selectedTopic && (
             <div className="px-4 pt-3 pb-1">
               <span className="text-xs text-gray-500 mr-2">Try:</span>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex overflow-x-auto gap-1.5 pb-2 scrollbar-hide">
                 {(
                   (dynamicStarters && dynamicStarters.length > 0
                     ? dynamicStarters.slice(0, 4)
@@ -1255,7 +1261,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                     type="button"
                     onClick={() => handleSend(q)}
                     disabled={isLoading || isStreaming}
-                    className="px-2.5 py-1 text-xs rounded-full bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100 disabled:opacity-50"
+                    className="flex-shrink-0 px-3 py-2 text-xs rounded-full bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100 disabled:opacity-50 touch-manipulation min-h-[44px] whitespace-nowrap"
                   >
                     {q.length > 50 ? q.slice(0, 47) + '...' : q}
                   </button>

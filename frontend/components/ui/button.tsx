@@ -1,5 +1,6 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'outline' | 'ghost' | 'danger';
@@ -23,6 +24,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
+    const { isMobile } = useMobile();
     const baseStyles =
       'inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
 
@@ -42,8 +44,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       lg: 'px-6 py-3 text-lg',
     };
 
-    // Ensure minimum touch target size (44x44px) for mobile
-    const touchStyles = touchOptimized
+    // Always ensure minimum touch target size (44x44px) on mobile
+    const touchStyles = (isMobile || touchOptimized)
       ? { minHeight: '44px', minWidth: '44px', ...style }
       : style;
 
@@ -54,7 +56,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           baseStyles,
           variants[variant],
           sizes[size],
-          touchOptimized && 'touch-manipulation', // Optimize for touch
+          (isMobile || touchOptimized) && 'touch-manipulation', // Optimize for touch
           className
         )}
         style={touchStyles}

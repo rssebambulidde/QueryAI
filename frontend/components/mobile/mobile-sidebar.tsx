@@ -158,17 +158,15 @@ export const HamburgerMenu: React.FC<HamburgerMenuProps> = ({
   onClick,
   className,
 }) => {
-  const { isMobile } = useMobile();
-
-  if (!isMobile) {
-    return null;
-  }
+  // Removed isMobile check - parent component controls when to render
+  // This allows flexibility for fixed positioning on mobile while keeping it in nav on desktop
 
   return (
     <button
       onClick={onClick}
       className={cn(
         'p-2 text-gray-700 hover:text-gray-900 rounded-lg transition-colors touch-manipulation',
+        'focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2',
         className
       )}
       style={{ minHeight: '44px', minWidth: '44px' }}

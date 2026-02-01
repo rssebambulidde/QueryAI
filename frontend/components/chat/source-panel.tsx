@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 import { documentApi } from '@/lib/api';
 import { SourceMetadataCard } from './source-metadata-card';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 export type SourceFilter = 'all' | 'document' | 'web';
 export type SourceViewMode = 'list' | 'cards';
@@ -49,6 +50,7 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
   className,
   viewMode: initialViewMode = 'list',
 }) => {
+  const { isMobile } = useMobile();
   const [filter, setFilter] = useState<SourceFilter>('all');
   const [expandedSource, setExpandedSource] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<SourceViewMode>(initialViewMode);
@@ -214,6 +216,124 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
   if (variant === 'sidebar') {
     const displayTitle = title?.trim() ? title.trim() : 'this response';
     const headerLabel = displayTitle.length > 40 ? `Sources for ${displayTitle.slice(0, 37)}...` : `Sources for ${displayTitle}`;
+    
+    // Mobile: Full-screen overlay with bottom sheet style
+    if (isMobile) {
+      return (
+        <>
+          {/* Backdrop */}
+          {isOpen && (
+            <div
+              className="fixed inset-0 bg-black/50 z-40"
+              onClick={onClose}
+              aria-hidden="true"
+            />
+          )}
+          
+          {/* Bottom Sheet */}
+          <div
+            className={cn(
+              'fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-2xl shadow-2xl flex flex-col',
+              'transition-transform duration-300 ease-out',
+              isOpen ? 'translate-y-0' : 'translate-y-full',
+              className
+            )}
+            style={{
+              maxHeight: '90vh',
+              marginTop: 'env(safe-area-inset-top, 0)',
+              marginBottom: 'env(safe-area-inset-bottom, 0)',
+            }}
+          >
+            {/* Handle bar */}
+            <div className="flex justify-center pt-3 pb-2">
+              <div className="w-12 h-1 bg-gray-300 rounded-full" />
+            </div>
+            
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50/80 flex-shrink-0">
+              <h3 className="font-semibold text-base text-gray-900 truncate pr-2">{headerLabel}</h3>
+              {onClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="p-2 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+                  aria-label="Close sources"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+            
+            {/* Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <div className="divide-y divide-gray-100">
+                {sortedForSidebar.map((source, index) => {
+                  const domain = getSourceDomain(source.url);
+                  const sourceName = domain || (source.type === 'document' ? 'Document' : 'Web');
+                  return (
+                    <div
+                      key={`${source.type}-${index}`}
+                      className="px-4 py-4 hover:bg-gray-50 transition-colors touch-manipulation min-h-[60px]"
+                    >
+                      <div className="flex gap-3">
+                        <div
+                          className={cn(
+                            'flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center',
+                            source.type === 'document' ? 'bg-blue-100' : 'bg-green-100'
+                          )}
+                        >
+                          {source.type === 'document' ? (
+                            <FileText className="w-5 h-5 text-blue-600" />
+                          ) : (
+                            <Globe className="w-5 h-5 text-green-600" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-500 font-medium mb-1">{sourceName}</p>
+                          <h4
+                            className="font-semibold text-sm text-gray-900 line-clamp-2 cursor-pointer hover:text-orange-600 transition-colors mb-1.5 touch-manipulation"
+                            onClick={() => handleSourceClick(source)}
+                          >
+                            {source.title || `Source ${index + 1}`}
+                          </h4>
+                          {source.snippet && (
+                            <p className="text-xs text-gray-600 line-clamp-2 mb-2">{source.snippet}</p>
+                          )}
+                          {(source.url || (source.type === 'document' && source.documentId)) && (
+                            <div className="mt-2 flex items-center gap-3">
+                              {source.type === 'document' && source.documentId ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleDocumentDownload(source); }}
+                                  className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1.5 touch-manipulation min-h-[44px] px-3 py-2 rounded-lg hover:bg-blue-50"
+                                >
+                                  <Download className="w-4 h-4" /> Download
+                                </button>
+                              ) : source.url ? (
+                                <a
+                                  href={source.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-sm text-green-600 hover:text-green-700 flex items-center gap-1.5 touch-manipulation min-h-[44px] px-3 py-2 rounded-lg hover:bg-green-50"
+                                >
+                                  <ExternalLink className="w-4 h-4" /> Open
+                                </a>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    }
+    
+    // Desktop: Right sidebar
     return (
       <div className={cn('flex flex-col h-full w-full bg-white border-l border-gray-200 flex-shrink-0', className)} style={{ width: 'min(400px, 100%)' }}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50/80">
@@ -222,7 +342,7 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Close sources"
             >
               <X className="w-4 h-4" />
@@ -301,7 +421,7 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
       {/* Header */}
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors touch-manipulation min-h-[44px]"
       >
         <div className="flex items-center gap-2">
           {isOpen ? (
@@ -321,10 +441,10 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
                   e.stopPropagation();
                   handleExportSources('json');
                 }}
-                className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                className="p-2 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
                 title="Export sources (JSON)"
               >
-                <DownloadIcon className="w-4 h-4" />
+                <DownloadIcon className="w-5 h-5 sm:w-4 sm:h-4" />
               </button>
               {/* Export menu - could be expanded later */}
             </div>
@@ -344,7 +464,7 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
                   <button
                     onClick={() => setFilter('all')}
                     className={cn(
-                      'px-2.5 py-1 text-xs font-medium rounded transition-colors',
+                      'px-3 py-2 sm:px-2.5 sm:py-1 text-xs font-medium rounded transition-colors touch-manipulation min-h-[44px] sm:min-h-0',
                       filter === 'all'
                         ? 'bg-orange-100 text-orange-700'
                         : 'text-gray-600 hover:bg-gray-100'
@@ -355,25 +475,25 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
                   <button
                     onClick={() => setFilter('document')}
                     className={cn(
-                      'px-2.5 py-1 text-xs font-medium rounded transition-colors',
+                      'px-3 py-2 sm:px-2.5 sm:py-1 text-xs font-medium rounded transition-colors touch-manipulation min-h-[44px] sm:min-h-0',
                       filter === 'document'
                         ? 'bg-blue-100 text-blue-700'
                         : 'text-gray-600 hover:bg-gray-100'
                     )}
                   >
-                    <FileText className="w-3 h-3 inline mr-1" />
+                    <FileText className="w-4 h-4 sm:w-3 sm:h-3 inline mr-1" />
                     Docs ({documentCount})
                   </button>
                   <button
                     onClick={() => setFilter('web')}
                     className={cn(
-                      'px-2.5 py-1 text-xs font-medium rounded transition-colors',
+                      'px-3 py-2 sm:px-2.5 sm:py-1 text-xs font-medium rounded transition-colors touch-manipulation min-h-[44px] sm:min-h-0',
                       filter === 'web'
                         ? 'bg-green-100 text-green-700'
                         : 'text-gray-600 hover:bg-gray-100'
                     )}
                   >
-                    <Globe className="w-3 h-3 inline mr-1" />
+                    <Globe className="w-4 h-4 sm:w-3 sm:h-3 inline mr-1" />
                     Web ({webCount})
                   </button>
                 </div>
@@ -383,26 +503,26 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
                 <button
                   onClick={() => setViewMode('list')}
                   className={cn(
-                    'p-1.5 rounded transition-colors',
+                    'p-2 sm:p-1.5 rounded transition-colors touch-manipulation min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center',
                     viewMode === 'list'
                       ? 'bg-gray-200 text-gray-700'
                       : 'text-gray-500 hover:bg-gray-100'
                   )}
                   title="List view"
                 >
-                  <List className="w-4 h-4" />
+                  <List className="w-5 h-5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('cards')}
                   className={cn(
-                    'p-1.5 rounded transition-colors',
+                    'p-2 sm:p-1.5 rounded transition-colors touch-manipulation min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center',
                     viewMode === 'cards'
                       ? 'bg-gray-200 text-gray-700'
                       : 'text-gray-500 hover:bg-gray-100'
                   )}
                   title="Card view"
                 >
-                  <Grid className="w-4 h-4" />
+                  <Grid className="w-5 h-5 sm:w-4 sm:h-4" />
                 </button>
               </div>
             </div>
@@ -514,7 +634,7 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
                                 const key = `${source.type}-${index}`;
                                 setExpandedSource(isExpanded ? null : key);
                               }}
-                              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                              className="text-sm sm:text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 touch-manipulation min-h-[44px] sm:min-h-0 px-2 py-1 rounded-lg hover:bg-gray-100"
                             >
                               {isExpanded ? (
                                 <>
@@ -534,10 +654,10 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
                                   e.stopPropagation();
                                   handleDocumentDownload(source);
                                 }}
-                                className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                                className="text-sm sm:text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1.5 touch-manipulation min-h-[44px] sm:min-h-0 px-2 py-1 rounded-lg hover:bg-blue-50"
                                 title="Download document"
                               >
-                                <Download className="w-3 h-3" />
+                                <Download className="w-4 h-4 sm:w-3 sm:h-3" />
                                 Download
                               </button>
                             ) : source.url ? (
@@ -546,10 +666,10 @@ export const SourcePanel: React.FC<SourcePanelProps> = ({
                                   e.stopPropagation();
                                   window.open(source.url, '_blank');
                                 }}
-                                className="text-xs text-green-600 hover:text-green-700 flex items-center gap-1"
+                                className="text-sm sm:text-xs text-green-600 hover:text-green-700 flex items-center gap-1.5 touch-manipulation min-h-[44px] sm:min-h-0 px-2 py-1 rounded-lg hover:bg-green-50"
                                 title="Open in new tab"
                               >
-                                <ExternalLink className="w-3 h-3" />
+                                <ExternalLink className="w-4 h-4 sm:w-3 sm:h-3" />
                                 Open
                               </button>
                             ) : null}

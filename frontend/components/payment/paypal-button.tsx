@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 import { PayPalButtons } from '@paypal/react-paypal-js';
 import { paymentApi, PaymentInitiateRequest } from '@/lib/api';
 import { Alert } from '@/components/ui/alert';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || '';
@@ -40,6 +41,7 @@ export function PayPalButton({
   onError,
   onRedirect,
 }: PayPalButtonProps) {
+  const { isMobile } = useMobile();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -163,21 +165,21 @@ export function PayPalButton({
           type="button"
           onClick={() => handleInitiateRedirect(true)}
           disabled={disabled || loading}
-          className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors shadow-md"
-          style={{ minHeight: 44 }}
+          className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors shadow-md touch-manipulation"
+          style={{ minHeight: 48 }}
         >
           {loading ? (
-            <span className="animate-pulse">Redirecting...</span>
+            <span className="animate-pulse text-sm sm:text-base">Redirecting...</span>
           ) : (
             <>
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
                 <line x1="1" y1="10" x2="23" y2="10"/>
                 <line x1="5" y1="4" x2="5" y2="10"/>
               </svg>
-              <span>Pay with Debit or Credit Card</span>
+              <span className="text-sm sm:text-base text-center flex-1">Pay with Debit or Credit Card</span>
               {recurring && (
-                <span className="text-xs opacity-90">
+                <span className="text-xs opacity-90 flex-shrink-0 hidden sm:inline">
                   (Subscription{billingPeriod === 'annual' ? ', annual' : ''})
                 </span>
               )}
@@ -205,19 +207,19 @@ export function PayPalButton({
         type="button"
         onClick={() => handleOneTimeRedirect(true)}
         disabled={disabled || loading}
-        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors shadow-md"
-        style={{ minHeight: 44 }}
+        className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors shadow-md touch-manipulation"
+        style={{ minHeight: 48 }}
       >
         {loading ? (
-          <span className="animate-pulse">Redirecting...</span>
+          <span className="animate-pulse text-sm sm:text-base">Redirecting...</span>
         ) : (
           <>
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
               <line x1="1" y1="10" x2="23" y2="10"/>
               <line x1="5" y1="4" x2="5" y2="10"/>
             </svg>
-            <span>Pay with Debit or Credit Card</span>
+            <span className="text-sm sm:text-base text-center flex-1">Pay with Debit or Credit Card</span>
           </>
         )}
       </button>

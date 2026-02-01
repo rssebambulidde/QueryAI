@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 
 export interface DateRange {
   startDate: string;
@@ -54,6 +56,7 @@ const PRESET_RANGES = {
 };
 
 export function DateRangePicker({ value, onChange, className }: DateRangePickerProps) {
+  const { isMobile } = useMobile();
   const [isCustom, setIsCustom] = useState(false);
   const [customStart, setCustomStart] = useState(value.startDate);
   const [customEnd, setCustomEnd] = useState(value.endDate);
@@ -85,63 +88,116 @@ export function DateRangePicker({ value, onChange, className }: DateRangePickerP
   };
 
   return (
-    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
-      <div className="flex gap-2">
+    <div className={cn(
+      "flex items-center gap-2",
+      isMobile ? "flex-col" : "flex-wrap",
+      className
+    )}>
+      {/* Preset Buttons */}
+      <div className={cn(
+        "flex gap-2",
+        isMobile ? "w-full flex-wrap" : ""
+      )}>
         <Button
           variant={isPresetActive('today') ? 'default' : 'outline'}
-          size="sm"
+          size={isMobile ? "default" : "sm"}
           onClick={() => handlePreset('today')}
+          className={cn(
+            "touch-manipulation min-h-[44px]",
+            isMobile ? "flex-1 min-w-[80px]" : ""
+          )}
         >
           Today
         </Button>
         <Button
           variant={isPresetActive('week') ? 'default' : 'outline'}
-          size="sm"
+          size={isMobile ? "default" : "sm"}
           onClick={() => handlePreset('week')}
+          className={cn(
+            "touch-manipulation min-h-[44px]",
+            isMobile ? "flex-1 min-w-[100px]" : ""
+          )}
         >
-          Last 7 Days
+          {isMobile ? "7 Days" : "Last 7 Days"}
         </Button>
         <Button
           variant={isPresetActive('month') ? 'default' : 'outline'}
-          size="sm"
+          size={isMobile ? "default" : "sm"}
           onClick={() => handlePreset('month')}
+          className={cn(
+            "touch-manipulation min-h-[44px]",
+            isMobile ? "flex-1 min-w-[100px]" : ""
+          )}
         >
-          Last 30 Days
+          {isMobile ? "30 Days" : "Last 30 Days"}
         </Button>
         <Button
           variant={isPresetActive('year') ? 'default' : 'outline'}
-          size="sm"
+          size={isMobile ? "default" : "sm"}
           onClick={() => handlePreset('year')}
+          className={cn(
+            "touch-manipulation min-h-[44px]",
+            isMobile ? "flex-1 min-w-[100px]" : ""
+          )}
         >
-          Last Year
+          {isMobile ? "Year" : "Last Year"}
         </Button>
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* Custom Range */}
+      <div className={cn(
+        "flex items-center gap-2",
+        isMobile ? "w-full flex-col" : ""
+      )}>
         <Button
           variant={isCustom ? 'default' : 'outline'}
-          size="sm"
+          size={isMobile ? "default" : "sm"}
           onClick={() => setIsCustom(!isCustom)}
+          className={cn(
+            "touch-manipulation min-h-[44px]",
+            isMobile ? "w-full" : ""
+          )}
         >
           Custom Range
         </Button>
 
         {isCustom && (
-          <div className="flex items-center gap-2">
+          <div className={cn(
+            "flex items-center gap-2",
+            isMobile ? "w-full flex-col" : ""
+          )}>
             <Input
               type="date"
               value={customStart}
               onChange={(e) => setCustomStart(e.target.value)}
-              className="w-auto"
+              className={cn(
+                "min-h-[44px] text-base sm:text-sm",
+                isMobile ? "w-full" : "w-auto"
+              )}
             />
-            <span className="text-gray-500">to</span>
+            <span className={cn(
+              "text-gray-500",
+              isMobile ? "hidden" : ""
+            )}>
+              to
+            </span>
             <Input
               type="date"
               value={customEnd}
               onChange={(e) => setCustomEnd(e.target.value)}
-              className="w-auto"
+              className={cn(
+                "min-h-[44px] text-base sm:text-sm",
+                isMobile ? "w-full" : "w-auto"
+              )}
             />
-            <Button size="sm" onClick={handleCustomApply}>
+            <Button 
+              size={isMobile ? "default" : "sm"} 
+              onClick={handleCustomApply}
+              className={cn(
+                "touch-manipulation min-h-[44px]",
+                isMobile ? "w-full" : ""
+              )}
+            >
               Apply
             </Button>
           </div>

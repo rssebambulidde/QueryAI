@@ -7,6 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { topicApi, Topic } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 
 interface TopicManagerProps {
   onTopicSelect?: (topic: Topic | null) => void;
@@ -17,6 +19,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
   onTopicSelect,
   selectedTopicId,
 }) => {
+  const { isMobile } = useMobile();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -179,69 +182,121 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
         </Button>
       </div>
 
-      {/* Create/Edit Form */}
+      {/* Create/Edit Form - Full-screen modal on mobile */}
       {(showCreateForm || editingTopic) && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="font-medium text-gray-900">
-              {editingTopic ? 'Edit Topic' : 'Create New Topic'}
-            </h4>
-            <Button
-              variant="ghost"
-              size="sm"
+        <>
+          {/* Backdrop for mobile */}
+          {isMobile && (
+            <div
+              className="fixed inset-0 bg-black/50 z-40"
               onClick={editingTopic ? cancelEdit : cancelCreate}
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-          <Input
-            placeholder="Topic name (e.g., Bank of Uganda, Politics in Uganda)"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          />
-          <Textarea
-            placeholder="Description (optional)"
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            rows={2}
-          />
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={formData.strict}
-              onChange={(e) => setFormData({ ...formData, strict: e.target.checked })}
-              className="rounded border-gray-300"
             />
-            Research mode only (refuse off-topic questions)
-          </label>
-          <div>
-            <label className="text-sm text-gray-600">Suggested starter questions (one per line, optional)</label>
+          )}
+          
+          <div className={cn(
+            "bg-gray-50 border border-gray-200 rounded-lg space-y-3",
+            isMobile
+              ? "fixed inset-x-0 bottom-0 z-50 max-h-[90vh] overflow-y-auto p-4 rounded-t-2xl shadow-2xl"
+              : "p-4"
+          )}
+          style={isMobile ? {
+            marginBottom: 'env(safe-area-inset-bottom, 0)',
+          } : {}}
+          >
+            <div className="flex items-center justify-between">
+              <h4 className={cn(
+                "font-medium text-gray-900",
+                isMobile ? "text-base" : ""
+              )}>
+                {editingTopic ? 'Edit Topic' : 'Create New Topic'}
+              </h4>
+              <Button
+                variant="ghost"
+                size={isMobile ? "default" : "sm"}
+                onClick={editingTopic ? cancelEdit : cancelCreate}
+                className={cn(
+                  "touch-manipulation",
+                  isMobile ? "min-w-[44px] min-h-[44px]" : ""
+                )}
+              >
+                <X className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
+              </Button>
+            </div>
+            <Input
+              placeholder="Topic name (e.g., Bank of Uganda, Politics in Uganda)"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className={cn(isMobile && "min-h-[44px] text-base")}
+            />
             <Textarea
-              placeholder="e.g. What are the key concepts?&#10;How does X work in practice?"
-              value={formData.suggestedStarters}
-              onChange={(e) => setFormData({ ...formData, suggestedStarters: e.target.value })}
+              placeholder="Description (optional)"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
-              className="mt-1"
+              className={cn(isMobile && "min-h-[44px] text-base")}
             />
+            <label className={cn(
+              "flex items-center gap-2 cursor-pointer touch-manipulation",
+              isMobile ? "text-base min-h-[44px]" : "text-sm"
+            )}>
+              <input
+                type="checkbox"
+                checked={formData.strict}
+                onChange={(e) => setFormData({ ...formData, strict: e.target.checked })}
+                className={cn(
+                  "rounded border-gray-300",
+                  isMobile ? "w-5 h-5" : ""
+                )}
+              />
+              Research mode only (refuse off-topic questions)
+            </label>
+            <div>
+              <label className={cn(
+                "text-gray-600",
+                isMobile ? "text-base mb-2 block" : "text-sm"
+              )}>
+                Suggested starter questions (one per line, optional)
+              </label>
+              <Textarea
+                placeholder="e.g. What are the key concepts?&#10;How does X work in practice?"
+                value={formData.suggestedStarters}
+                onChange={(e) => setFormData({ ...formData, suggestedStarters: e.target.value })}
+                rows={2}
+                className={cn(
+                  "mt-1",
+                  isMobile && "min-h-[44px] text-base"
+                )}
+              />
+            </div>
+            <div className={cn(
+              "flex gap-2",
+              isMobile ? "flex-col" : ""
+            )}>
+              <Button
+                onClick={editingTopic ? handleUpdate : handleCreate}
+                size={isMobile ? "default" : "sm"}
+                className={cn(
+                  "flex items-center gap-2 touch-manipulation min-h-[44px]",
+                  isMobile ? "w-full" : ""
+                )}
+              >
+                <Save className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
+                {editingTopic ? 'Update' : 'Create'}
+              </Button>
+              <Button
+                variant="outline"
+                size={isMobile ? "default" : "sm"}
+                onClick={editingTopic ? cancelEdit : cancelCreate}
+                className={cn(
+                  "touch-manipulation min-h-[44px]",
+                  isMobile ? "w-full" : ""
+                )}
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={editingTopic ? handleUpdate : handleCreate}
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <Save className="w-4 h-4" />
-              {editingTopic ? 'Update' : 'Create'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={editingTopic ? cancelEdit : cancelCreate}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
+        </>
       )}
 
       {/* Topics List */}
@@ -253,41 +308,64 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
           <p className="text-sm mt-2">Topics help scope your AI queries to specific domains.</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className={cn(
+          "space-y-2 overflow-y-auto",
+          isMobile ? "max-h-[60vh]" : ""
+        )}>
           {topics.map((topic) => (
             <div
               key={topic.id}
-              className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+              className={cn(
+                "flex items-center justify-between rounded-lg border transition-colors touch-manipulation",
+                isMobile ? "p-4 min-h-[60px]" : "p-3",
                 selectedTopicId === topic.id
                   ? 'bg-orange-50 border-orange-300'
                   : 'bg-white border-gray-200 hover:border-gray-300'
-              }`}
+              )}
             >
               <div
-                className="flex-1 cursor-pointer"
+                className="flex-1 cursor-pointer min-h-[44px] flex items-center"
                 onClick={() => handleSelect(topic)}
               >
-                <div className="font-medium text-gray-900">{topic.name}</div>
-                {topic.description && (
-                  <div className="text-sm text-gray-500 mt-1">{topic.description}</div>
-                )}
+                <div>
+                  <div className={cn(
+                    "font-medium text-gray-900",
+                    isMobile ? "text-base" : ""
+                  )}>
+                    {topic.name}
+                  </div>
+                  {topic.description && (
+                    <div className={cn(
+                      "text-gray-500 mt-1",
+                      isMobile ? "text-sm" : "text-sm"
+                    )}>
+                      {topic.description}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => handleEdit(topic)}
-                  className="h-8 w-8 p-0"
+                  className={cn(
+                    "p-0 touch-manipulation",
+                    isMobile ? "h-11 w-11" : "h-8 w-8"
+                  )}
                 >
-                  <Edit2 className="w-4 h-4" />
+                  <Edit2 className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => handleDelete(topic)}
-                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                  className={cn(
+                    "p-0 text-red-600 hover:text-red-700 touch-manipulation",
+                    isMobile ? "h-11 w-11" : "h-8 w-8"
+                  )}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
                 </Button>
               </div>
             </div>

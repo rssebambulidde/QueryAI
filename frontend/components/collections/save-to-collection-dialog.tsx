@@ -6,6 +6,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Folder, Plus, X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface SaveToCollectionDialogProps {
   conversationId: string;
@@ -21,6 +22,7 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
   onSaved,
 }) => {
   const { toast } = useToast();
+  const { isMobile } = useMobile();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(new Set());
@@ -125,21 +127,45 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[80vh] flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className={cn(
+        "bg-white shadow-xl w-full flex flex-col",
+        isMobile
+          ? "h-full rounded-none"
+          : "rounded-lg max-w-md mx-4 max-h-[80vh]"
+      )}
+      style={isMobile ? {
+        marginTop: 'env(safe-area-inset-top, 0)',
+        marginBottom: 'env(safe-area-inset-bottom, 0)'
+      } : {}}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Save to Collection</h2>
+        <div className={cn(
+          "flex items-center justify-between border-b border-gray-200 flex-shrink-0",
+          isMobile ? "p-4" : "p-4"
+        )}>
+          <h2 className={cn(
+            "font-semibold text-gray-900",
+            isMobile ? "text-base" : "text-lg"
+          )}>
+            Save to Collection
+          </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className={cn(
+              "text-gray-400 hover:text-gray-600 transition-colors touch-manipulation",
+              isMobile ? "min-w-[44px] min-h-[44px] flex items-center justify-center" : ""
+            )}
           >
-            <X className="w-5 h-5" />
+            <X className={cn(isMobile ? "w-6 h-6" : "w-5 h-5")} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className={cn(
+          "flex-1 overflow-y-auto min-h-0",
+          isMobile ? "p-4" : "p-4"
+        )}>
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">Loading collections...</div>
           ) : collections.length === 0 ? (
@@ -167,26 +193,40 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
                     key={collection.id}
                     onClick={() => handleToggleCollection(collection.id)}
                     className={cn(
-                      'w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left',
+                      'w-full flex items-center gap-3 rounded-lg border transition-all text-left touch-manipulation',
+                      isMobile ? "p-4 min-h-[60px]" : "p-3",
                       isSelected
                         ? 'border-orange-300 bg-orange-50'
                         : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     )}
                   >
                     <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      className={cn(
+                        "rounded-lg flex items-center justify-center flex-shrink-0",
+                        isMobile ? "w-10 h-10" : "w-8 h-8"
+                      )}
                       style={{ backgroundColor: collection.color || '#f97316' }}
                     >
                       {isSelected ? (
-                        <Check className="w-4 h-4 text-white" />
+                        <Check className={cn(isMobile ? "w-5 h-5" : "w-4 h-4", "text-white")} />
                       ) : (
-                        <Folder className="w-4 h-4 text-white" />
+                        <Folder className={cn(isMobile ? "w-5 h-5" : "w-4 h-4", "text-white")} />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900">{collection.name}</p>
+                      <p className={cn(
+                        "font-medium text-gray-900",
+                        isMobile ? "text-base" : ""
+                      )}>
+                        {collection.name}
+                      </p>
                       {collection.description && (
-                        <p className="text-sm text-gray-500 truncate">{collection.description}</p>
+                        <p className={cn(
+                          "text-gray-500 truncate",
+                          isMobile ? "text-sm mt-1" : "text-sm"
+                        )}>
+                          {collection.description}
+                        </p>
                       )}
                     </div>
                   </button>
@@ -197,14 +237,28 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-200">
-          <Button onClick={onClose} variant="outline" disabled={isSaving}>
+        <div className={cn(
+          "flex items-center gap-2 border-t border-gray-200 flex-shrink-0",
+          isMobile ? "flex-col p-4" : "justify-end p-4"
+        )}>
+          <Button
+            onClick={onClose}
+            variant="outline"
+            disabled={isSaving}
+            className={cn(
+              "touch-manipulation min-h-[44px]",
+              isMobile ? "w-full" : ""
+            )}
+          >
             Cancel
           </Button>
           <Button
             onClick={handleSave}
             disabled={isSaving || isLoading}
-            className="bg-orange-600 hover:bg-orange-700"
+            className={cn(
+              "bg-orange-600 hover:bg-orange-700 touch-manipulation min-h-[44px]",
+              isMobile ? "w-full" : ""
+            )}
           >
             {isSaving ? 'Saving...' : 'Save'}
           </Button>

@@ -8,6 +8,7 @@ import {
   CitationStyle,
   CitationFormat,
 } from '@/lib/store/citation-preferences-store';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface CitationSettingsProps {
   isOpen?: boolean;
@@ -22,6 +23,7 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
 }) => {
   const { preferences, setStyle, setFormat, setShowFootnotes, setShowInlineNumbers, reset } =
     useCitationPreferencesStore();
+  const { isMobile } = useMobile();
 
   if (!isOpen) return null;
 
@@ -70,26 +72,31 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 flex flex-col"
+        style={{ 
+          maxHeight: isMobile ? 'calc(100vh - 2rem)' : '90vh',
+          marginTop: isMobile ? 'env(safe-area-inset-top, 0)' : '0',
+          marginBottom: isMobile ? 'env(safe-area-inset-bottom, 0)' : '0'
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        {/* Header - Fixed */}
+        <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <Settings className="w-5 h-5 text-gray-600" />
             <h2 className="text-lg font-semibold text-gray-900">Citation Settings</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
             aria-label="Close settings"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0 space-y-6">
           {/* Citation Style */}
           <div>
             <label className="block text-sm font-medium text-gray-900 mb-3">
@@ -100,7 +107,8 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
                 <label
                   key={style.value}
                   className={cn(
-                    'flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all',
+                    'flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all touch-manipulation',
+                    'min-h-[44px]', // Touch target
                     preferences.style === style.value
                       ? 'border-orange-500 bg-orange-50'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
@@ -133,7 +141,8 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
                 <label
                   key={format.value}
                   className={cn(
-                    'flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all',
+                    'flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all touch-manipulation',
+                    'min-h-[44px]', // Touch target
                     preferences.format === format.value
                       ? 'border-orange-500 bg-orange-50'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
@@ -164,7 +173,7 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
 
             {/* Show Footnotes */}
             {preferences.style === 'inline' && (
-              <label className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+              <label className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer touch-manipulation min-h-[44px]">
                 <div>
                   <div className="font-medium text-sm text-gray-900">Show Footnotes</div>
                   <div className="text-xs text-gray-500 mt-0.5">
@@ -181,7 +190,7 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
             )}
 
             {/* Show Inline Numbers */}
-            <label className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+            <label className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer touch-manipulation min-h-[44px]">
               <div>
                 <div className="font-medium text-sm text-gray-900">Show Inline Numbers</div>
                 <div className="text-xs text-gray-500 mt-0.5">
@@ -225,18 +234,29 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+        {/* Footer - Fixed, Always Visible */}
+        <div className={cn(
+          "flex-shrink-0 flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50",
+          isMobile ? "flex-col gap-3" : "flex-row"
+        )}>
           <button
             onClick={reset}
-            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors touch-manipulation",
+              "min-h-[44px] min-w-[44px]", // Touch target
+              isMobile ? "w-full justify-center" : ""
+            )}
           >
             <RotateCcw className="w-4 h-4" />
             Reset to Defaults
           </button>
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 rounded transition-colors"
+            className={cn(
+              "px-4 py-2 text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 rounded transition-colors touch-manipulation",
+              "min-h-[44px] min-w-[120px]", // Touch target
+              isMobile ? "w-full" : ""
+            )}
           >
             Done
           </button>

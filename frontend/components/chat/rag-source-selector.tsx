@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Globe, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
 
 export interface RAGSettings {
   enableDocumentSearch: boolean;
@@ -29,6 +30,7 @@ export const RAGSourceSelector: React.FC<RAGSourceSelectorProps> = ({
   hasProcessedDocuments = false,
   className,
 }) => {
+  const { isMobile } = useMobile();
   const [isDocumentAvailable, setIsDocumentAvailable] = useState(hasProcessedDocuments);
   const [isWebAvailable, setIsWebAvailable] = useState(true); // Assume web is available
 
@@ -74,14 +76,19 @@ export const RAGSourceSelector: React.FC<RAGSourceSelectorProps> = ({
   }, [settings.enableDocumentSearch, settings.enableWebSearch, isDocumentAvailable, isWebAvailable]);
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <div className={cn(
+      'flex items-center gap-2',
+      isMobile ? 'overflow-x-auto pb-2 scrollbar-hide' : '',
+      className
+    )}>
       {/* Document Search Toggle */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <button
           onClick={handleDocumentToggle}
           disabled={!isDocumentAvailable}
           className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg border transition-all',
+            'flex items-center gap-2 px-3 py-2 rounded-lg border transition-all touch-manipulation',
+            'min-w-[44px] min-h-[44px]', // Touch target
             settings.enableDocumentSearch && isDocumentAvailable
               ? 'bg-orange-50 border-orange-300 text-orange-700'
               : 'bg-gray-50 border-gray-200 text-gray-500',
@@ -98,13 +105,13 @@ export const RAGSourceSelector: React.FC<RAGSourceSelectorProps> = ({
           }
         >
           <FileText className={cn(
-            'w-4 h-4',
+            'w-4 h-4 flex-shrink-0',
             settings.enableDocumentSearch && isDocumentAvailable ? 'text-orange-600' : 'text-gray-400'
           )} />
-          <span className="text-sm font-medium">Documents</span>
+          <span className="text-sm font-medium whitespace-nowrap">Documents</span>
           {isDocumentAvailable && (
             <span className={cn(
-              'text-xs px-1.5 py-0.5 rounded',
+              'text-xs px-1.5 py-0.5 rounded flex-shrink-0',
               settings.enableDocumentSearch
                 ? 'bg-blue-100 text-blue-700'
                 : 'bg-gray-200 text-gray-600'
@@ -113,21 +120,22 @@ export const RAGSourceSelector: React.FC<RAGSourceSelectorProps> = ({
             </span>
           )}
           {settings.enableDocumentSearch && isDocumentAvailable && (
-            <CheckCircle2 className="w-3 h-3 text-orange-600" />
+            <CheckCircle2 className="w-3 h-3 text-orange-600 flex-shrink-0" />
           )}
           {!isDocumentAvailable && (
-            <AlertCircle className="w-3 h-3 text-gray-400" />
+            <AlertCircle className="w-3 h-3 text-gray-400 flex-shrink-0" />
           )}
         </button>
       </div>
 
       {/* Web Search Toggle */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <button
           onClick={handleWebToggle}
           disabled={!isWebAvailable}
           className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg border transition-all',
+            'flex items-center gap-2 px-3 py-2 rounded-lg border transition-all touch-manipulation',
+            'min-w-[44px] min-h-[44px]', // Touch target
             settings.enableWebSearch && isWebAvailable
               ? 'bg-green-50 border-green-300 text-green-700'
               : 'bg-gray-50 border-gray-200 text-gray-500',
@@ -144,15 +152,15 @@ export const RAGSourceSelector: React.FC<RAGSourceSelectorProps> = ({
           }
         >
           <Globe className={cn(
-            'w-4 h-4',
+            'w-4 h-4 flex-shrink-0',
             settings.enableWebSearch && isWebAvailable ? 'text-green-600' : 'text-gray-400'
           )} />
-          <span className="text-sm font-medium">Web</span>
+          <span className="text-sm font-medium whitespace-nowrap">Web</span>
           {settings.enableWebSearch && isWebAvailable && (
-            <CheckCircle2 className="w-3 h-3 text-green-600" />
+            <CheckCircle2 className="w-3 h-3 text-green-600 flex-shrink-0" />
           )}
           {!isWebAvailable && (
-            <AlertCircle className="w-3 h-3 text-gray-400" />
+            <AlertCircle className="w-3 h-3 text-gray-400 flex-shrink-0" />
           )}
         </button>
       </div>

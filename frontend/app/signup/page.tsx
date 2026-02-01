@@ -10,6 +10,9 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
+import { GoogleAuthButton } from '@/components/auth/google-auth-button';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 
 const signupSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -72,14 +75,22 @@ export default function SignupPage() {
     }
   };
 
+  const { isMobile } = useMobile();
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className={cn(
+            "mt-6 text-center font-extrabold text-gray-900",
+            isMobile ? "text-2xl" : "text-3xl"
+          )}>
             Create your account
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
+          <p className={cn(
+            "mt-2 text-center text-gray-600",
+            isMobile ? "text-sm" : "text-sm"
+          )}>
             Or{' '}
             <Link
               href="/login"
@@ -91,13 +102,38 @@ export default function SignupPage() {
         </div>
 
         {showAlert && successMessage && (
-          <Alert variant="success">{successMessage}</Alert>
+          <Alert variant="success">
+            {successMessage}
+            <div className="mt-2 text-sm">
+              <Link
+                href="/verify-email"
+                className="font-medium text-orange-600 hover:text-orange-500 underline"
+              >
+                Or verify your email directly
+              </Link>
+            </div>
+          </Alert>
         )}
         {showAlert && error && !successMessage && (
           <Alert variant="error">{error}</Alert>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
+        {/* Google OAuth Button */}
+        <div className="mt-6">
+          <GoogleAuthButton variant="signup" />
+        </div>
+
+        {/* Divider */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-gray-50 text-gray-500">Or continue with email</span>
+          </div>
+        </div>
+
+        <form className="mt-6 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="rounded-md shadow-sm space-y-4">
             <Input
               label="Full Name (Optional)"

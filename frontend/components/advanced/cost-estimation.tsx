@@ -2,6 +2,8 @@
 
 import React from 'react';
 import { DollarSign, AlertTriangle, TrendingUp } from 'lucide-react';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 
 interface CostEstimationProps {
   cost: {
@@ -34,6 +36,7 @@ export const CostEstimation: React.FC<CostEstimationProps> = ({
   budget,
   previousCost,
 }) => {
+  const { isMobile } = useMobile();
   const budgetPercentage = budget ? (cost.total / budget) * 100 : 0;
   const getTrend = () => {
     if (!previousCost) return null;
@@ -64,54 +67,95 @@ export const CostEstimation: React.FC<CostEstimationProps> = ({
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+    <div className={cn(
+      "bg-white border border-gray-200 rounded-lg space-y-3",
+      isMobile ? "p-4" : "p-4"
+    )}>
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-green-600" />
+        <h3 className={cn(
+          "font-semibold text-gray-900 flex items-center gap-2",
+          isMobile ? "text-base" : "text-sm"
+        )}>
+          <DollarSign className={cn(isMobile ? "w-5 h-5" : "w-4 h-4", "text-green-600")} />
           Cost Estimation
-          {getTrend()}
+          {getTrend() && React.cloneElement(getTrend()!, {
+            className: cn(isMobile ? "w-4 h-4" : "w-3 h-3")
+          })}
         </h3>
         {alertLevel && showAlerts && (
           <div
-            className={`flex items-center gap-1 text-xs ${
+            className={cn(
+              "flex items-center gap-1",
+              isMobile ? "text-sm" : "text-xs",
               alertLevel === 'critical' ? 'text-red-600' : 'text-yellow-600'
-            }`}
+            )}
           >
-            <AlertTriangle className="w-3 h-3" />
+            <AlertTriangle className={cn(isMobile ? "w-4 h-4" : "w-3 h-3")} />
             {alertLevel === 'critical' ? 'Critical' : 'Warning'}
           </div>
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className={cn(
+        "grid gap-4",
+        isMobile ? "grid-cols-1" : "grid-cols-2"
+      )}>
         <div>
-          <p className="text-xs text-gray-600 mb-1">Cost Per Query</p>
-          <p className="text-xl font-bold text-green-600">{formatCost(cost.perQuery)}</p>
+          <p className={cn(
+            "text-gray-600 mb-1",
+            isMobile ? "text-sm" : "text-xs"
+          )}>
+            Cost Per Query
+          </p>
+          <p className={cn(
+            "font-bold text-green-600",
+            isMobile ? "text-2xl" : "text-xl"
+          )}>
+            {formatCost(cost.perQuery)}
+          </p>
         </div>
         <div>
-          <p className="text-xs text-gray-600 mb-1">Total Cost</p>
-          <p className="text-xl font-bold text-gray-900">{formatCost(cost.total)}</p>
+          <p className={cn(
+            "text-gray-600 mb-1",
+            isMobile ? "text-sm" : "text-xs"
+          )}>
+            Total Cost
+          </p>
+          <p className={cn(
+            "font-bold text-gray-900",
+            isMobile ? "text-2xl" : "text-xl"
+          )}>
+            {formatCost(cost.total)}
+          </p>
         </div>
       </div>
 
       {/* Budget Visualization */}
       {budget && (
         <div>
-          <div className="flex justify-between text-xs text-gray-600 mb-1">
+          <div className={cn(
+            "flex justify-between text-gray-600 mb-2",
+            isMobile ? "text-sm" : "text-xs"
+          )}>
             <span>Budget Usage</span>
             <span>
               {formatCost(cost.total)} / {formatCost(budget)} ({budgetPercentage.toFixed(1)}%)
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className={cn(
+            "w-full bg-gray-200 rounded-full",
+            isMobile ? "h-3" : "h-2"
+          )}>
             <div
-              className={`h-2 rounded-full transition-all ${
+              className={cn(
+                "rounded-full transition-all",
+                isMobile ? "h-3" : "h-2",
                 budgetPercentage >= 90
                   ? 'bg-red-600'
                   : budgetPercentage >= 75
                   ? 'bg-yellow-600'
                   : 'bg-green-600'
-              }`}
+              )}
               style={{ width: `${Math.min(budgetPercentage, 100)}%` }}
             />
           </div>
@@ -120,10 +164,18 @@ export const CostEstimation: React.FC<CostEstimationProps> = ({
 
       {/* Cost Breakdown */}
       <div className="border-t pt-3">
-        <p className="text-xs font-semibold text-gray-900 mb-2">Cost Breakdown</p>
-        <div className="space-y-1">
+        <p className={cn(
+          "font-semibold text-gray-900 mb-2",
+          isMobile ? "text-sm" : "text-xs"
+        )}>
+          Cost Breakdown
+        </p>
+        <div className="space-y-1.5 sm:space-y-1">
           {cost.breakdown.ai && (
-            <div className="flex justify-between text-xs">
+            <div className={cn(
+              "flex justify-between",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
               <span className="text-gray-600">AI Processing</span>
               <span className="font-medium text-gray-900">
                 {formatCost(cost.breakdown.ai.total)}
@@ -132,18 +184,27 @@ export const CostEstimation: React.FC<CostEstimationProps> = ({
           )}
           {cost.breakdown.ai && (
             <>
-              <div className="flex justify-between text-xs pl-3">
+              <div className={cn(
+                "flex justify-between",
+                isMobile ? "text-sm pl-4" : "text-xs pl-3"
+              )}>
                 <span className="text-gray-500">- Prompt</span>
                 <span className="text-gray-600">{formatCost(cost.breakdown.ai.prompt)}</span>
               </div>
-              <div className="flex justify-between text-xs pl-3">
+              <div className={cn(
+                "flex justify-between",
+                isMobile ? "text-sm pl-4" : "text-xs pl-3"
+              )}>
                 <span className="text-gray-500">- Completion</span>
                 <span className="text-gray-600">{formatCost(cost.breakdown.ai.completion)}</span>
               </div>
             </>
           )}
           {cost.breakdown.embedding && (
-            <div className="flex justify-between text-xs">
+            <div className={cn(
+              "flex justify-between",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
               <span className="text-gray-600">Embedding</span>
               <span className="font-medium text-gray-900">
                 {formatCost(cost.breakdown.embedding)}
@@ -151,7 +212,10 @@ export const CostEstimation: React.FC<CostEstimationProps> = ({
             </div>
           )}
           {cost.breakdown.search && (
-            <div className="flex justify-between text-xs">
+            <div className={cn(
+              "flex justify-between",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
               <span className="text-gray-600">Search</span>
               <span className="font-medium text-gray-900">
                 {formatCost(cost.breakdown.search)}
@@ -159,7 +223,10 @@ export const CostEstimation: React.FC<CostEstimationProps> = ({
             </div>
           )}
           {cost.breakdown.storage && (
-            <div className="flex justify-between text-xs">
+            <div className={cn(
+              "flex justify-between",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
               <span className="text-gray-600">Storage</span>
               <span className="font-medium text-gray-900">
                 {formatCost(cost.breakdown.storage)}
@@ -167,7 +234,10 @@ export const CostEstimation: React.FC<CostEstimationProps> = ({
             </div>
           )}
           {cost.breakdown.other && (
-            <div className="flex justify-between text-xs">
+            <div className={cn(
+              "flex justify-between",
+              isMobile ? "text-sm" : "text-xs"
+            )}>
               <span className="text-gray-600">Other</span>
               <span className="font-medium text-gray-900">
                 {formatCost(cost.breakdown.other)}
@@ -180,11 +250,13 @@ export const CostEstimation: React.FC<CostEstimationProps> = ({
       {/* Alerts */}
       {showAlerts && alertLevel && (
         <div
-          className={`p-2 rounded text-xs ${
+          className={cn(
+            "p-3 rounded border",
+            isMobile ? "text-sm" : "text-xs",
             alertLevel === 'critical'
-              ? 'bg-red-50 text-red-800 border border-red-200'
-              : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
-          }`}
+              ? 'bg-red-50 text-red-800 border-red-200'
+              : 'bg-yellow-50 text-yellow-800 border-yellow-200'
+          )}
         >
           {alertLevel === 'critical' ? (
             <p>

@@ -214,13 +214,20 @@ function DashboardContent() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
+      {/* Fixed Hamburger Menu for Mobile - Always Visible */}
+      {isMobile && (
+        <HamburgerMenu 
+          onClick={() => setIsMobileSidebarOpen(true)}
+          className="fixed top-4 left-4 z-50 bg-white shadow-lg rounded-lg p-2 border border-gray-200"
+        />
+      )}
+      
       <nav className="bg-white shadow-sm flex-shrink-0 border-b border-gray-200">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-3">
-              {isMobile && (
-                <HamburgerMenu onClick={() => setIsMobileSidebarOpen(true)} />
-              )}
+              {/* Hamburger menu only on mobile (fixed position above) */}
+              {/* On desktop, sidebar is always visible, no hamburger needed */}
               <h1 className="text-xl font-bold text-gray-900">QueryAI</h1>
             </div>
           </div>

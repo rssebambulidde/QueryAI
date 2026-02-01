@@ -11,15 +11,20 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  tokenExpiryTime: number | null; // Timestamp when token expires
+  rememberMe: boolean; // Remember me option
 
   // Actions
   setUser: (user: User | null) => void;
-  setTokens: (accessToken: string | null, refreshToken: string | null) => void;
-  login: (email: string, password: string) => Promise<void>;
+  setTokens: (accessToken: string | null, refreshToken: string | null, expiryTime?: number | null) => void;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signup: (email: string, password: string, fullName?: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  refreshAuthToken: () => Promise<boolean>;
   clearError: () => void;
+  syncFromStorage: () => void; // Sync auth state from storage events
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -31,19 +36,33 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      tokenExpiryTime: null,
+      rememberMe: false,
 
       setUser: (user) => {
         set({ user, isAuthenticated: !!user });
       },
 
-      setTokens: (accessToken, refreshToken) => {
-        set({ accessToken, refreshToken });
+      setTokens: (accessToken, refreshToken, expiryTime = null) => {
+        const { rememberMe } = get();
+        // Calculate expiry time if not provided
+        const calculatedExpiry = expiryTime || (Date.now() + (rememberMe ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000));
+        
+        set({ accessToken, refreshToken, tokenExpiryTime: calculatedExpiry });
         // Also store in localStorage for API client (or remove if null)
         if (typeof window !== 'undefined') {
           if (accessToken) {
             localStorage.setItem('accessToken', accessToken);
+            localStorage.setItem('tokenExpiryTime', calculatedExpiry.toString());
+            // Broadcast token update to other tabs
+            window.localStorage.setItem('auth:token-update', Date.now().toString());
+            setTimeout(() => window.localStorage.removeItem('auth:token-update'), 100);
           } else {
             localStorage.removeItem('accessToken');
+            localStorage.removeItem('tokenExpiryTime');
+            // Broadcast logout to other tabs
+            window.localStorage.setItem('auth:logout', Date.now().toString());
+            setTimeout(() => window.localStorage.removeItem('auth:logout'), 100);
           }
           if (refreshToken) {
             localStorage.setItem('refreshToken', refreshToken);
@@ -53,8 +72,40 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      login: async (email, password) => {
-        set({ isLoading: true, error: null });
+      syncFromStorage: () => {
+        // Sync auth state from localStorage (triggered by storage events from other tabs)
+        if (typeof window !== 'undefined') {
+          const storedAccessToken = localStorage.getItem('accessToken');
+          const storedRefreshToken = localStorage.getItem('refreshToken');
+          const storedExpiryTime = localStorage.getItem('tokenExpiryTime');
+          
+          const currentState = get();
+          
+          // Only update if tokens changed
+          if (
+            storedAccessToken !== currentState.accessToken ||
+            storedRefreshToken !== currentState.refreshToken
+          ) {
+            set({
+              accessToken: storedAccessToken,
+              refreshToken: storedRefreshToken,
+              tokenExpiryTime: storedExpiryTime ? parseInt(storedExpiryTime, 10) : null,
+              isAuthenticated: !!storedAccessToken,
+            });
+            
+            // If tokens were cleared, clear user too
+            if (!storedAccessToken) {
+              set({ user: null });
+            } else {
+              // Refresh user data if tokens exist
+              get().checkAuth().catch(() => {});
+            }
+          }
+        }
+      },
+
+      login: async (email, password, rememberMe = false) => {
+        set({ isLoading: true, error: null, rememberMe });
         try {
           const response = await authApi.login({ email, password });
           if (response.success && response.data) {
@@ -64,18 +115,31 @@ export const useAuthStore = create<AuthState>()(
               console.log('[AuthStore] Login response - User data:', user);
               console.log('[AuthStore] Login response - Subscription tier:', user.subscriptionTier || 'not set');
             }
+            
+            // Calculate token expiry time
+            // Default: 1 hour, if rememberMe: 7 days
+            const expiryDuration = rememberMe ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+            const expiryTime = Date.now() + expiryDuration;
+            
             set({
               user,
               accessToken: session.accessToken,
               refreshToken: session.refreshToken,
               isAuthenticated: true,
               isLoading: false,
-              error: null, // Clear any previous errors
+              error: null,
+              tokenExpiryTime: expiryTime,
+              rememberMe,
             });
             // Store tokens in localStorage for API client
             if (typeof window !== 'undefined') {
               localStorage.setItem('accessToken', session.accessToken);
               localStorage.setItem('refreshToken', session.refreshToken);
+              localStorage.setItem('tokenExpiryTime', expiryTime.toString());
+              localStorage.setItem('rememberMe', rememberMe.toString());
+              // Broadcast login to other tabs
+              window.localStorage.setItem('auth:login', Date.now().toString());
+              setTimeout(() => window.localStorage.removeItem('auth:login'), 100);
             }
           } else {
             throw new Error(response.error?.message || 'Login failed');
@@ -270,6 +334,95 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      loginWithGoogle: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          // Import supabase dynamically to avoid SSR issues
+          const { supabase } = await import('../supabase');
+          
+          const redirectUrl = typeof window !== 'undefined' 
+            ? `${window.location.origin}/auth/callback`
+            : '';
+
+          const { data, error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: redirectUrl,
+            },
+          });
+
+          if (error) {
+            throw error;
+          }
+
+          // The redirect will happen automatically
+          // The callback page will handle the rest
+        } catch (error: any) {
+          set({ 
+            error: error.message || 'Google login failed', 
+            isLoading: false 
+          });
+          throw error;
+        }
+      },
+
+      refreshAuthToken: async () => {
+        const { refreshToken, rememberMe } = get();
+        if (!refreshToken) {
+          return false;
+        }
+
+        try {
+          const response = await authApi.refreshToken(refreshToken);
+          if (response.success && response.data) {
+            const { accessToken, refreshToken: newRefreshToken } = response.data;
+            
+            // Calculate new expiry time (same duration as before)
+            const expiryDuration = rememberMe ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+            const expiryTime = Date.now() + expiryDuration;
+            
+            const { rememberMe } = get();
+            const expiryDuration = rememberMe ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+            const newExpiryTime = Date.now() + expiryDuration;
+            
+            set({
+              accessToken,
+              refreshToken: newRefreshToken,
+              tokenExpiryTime: newExpiryTime,
+            });
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('accessToken', accessToken);
+              localStorage.setItem('refreshToken', newRefreshToken);
+              localStorage.setItem('tokenExpiryTime', expiryTime.toString());
+              // Broadcast token update to other tabs
+              window.localStorage.setItem('auth:token-update', Date.now().toString());
+              setTimeout(() => window.localStorage.removeItem('auth:token-update'), 100);
+            }
+            return true;
+          }
+          return false;
+        } catch (error) {
+          console.error('Token refresh failed:', error);
+          // Clear tokens on refresh failure
+          set({
+            accessToken: null,
+            refreshToken: null,
+            isAuthenticated: false,
+            user: null,
+            tokenExpiryTime: null,
+          });
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('tokenExpiryTime');
+            // Broadcast logout to other tabs
+            window.localStorage.setItem('auth:logout', Date.now().toString());
+            setTimeout(() => window.localStorage.removeItem('auth:logout'), 100);
+          }
+          return false;
+        }
+      },
+
       clearError: () => set({ error: null }),
     }),
     {
@@ -279,6 +432,8 @@ export const useAuthStore = create<AuthState>()(
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
+        tokenExpiryTime: state.tokenExpiryTime,
+        rememberMe: state.rememberMe,
       }),
     }
   )
@@ -291,4 +446,31 @@ if (typeof window !== 'undefined') {
     store.setUser(null);
     store.setTokens(null, null);
   });
+
+  // Listen for storage events to sync auth state across tabs
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'auth:logout' || e.key === 'auth:token-update') {
+      const store = useAuthStore.getState();
+      store.syncFromStorage();
+    }
+  });
+
+  // Also listen for custom storage events (for same-tab updates)
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'accessToken' || e.key === 'refreshToken' || e.key === 'tokenExpiryTime' || 
+        e.key === 'auth:logout' || e.key === 'auth:login' || e.key === 'auth:token-update') {
+      const store = useAuthStore.getState();
+      store.syncFromStorage();
+    }
+  });
+
+  // Initialize token expiry time and rememberMe from localStorage on load
+  const storedExpiryTime = localStorage.getItem('tokenExpiryTime');
+  const storedRememberMe = localStorage.getItem('rememberMe');
+  if (storedExpiryTime) {
+    useAuthStore.setState({
+      tokenExpiryTime: parseInt(storedExpiryTime, 10),
+      rememberMe: storedRememberMe === 'true',
+    });
+  }
 }

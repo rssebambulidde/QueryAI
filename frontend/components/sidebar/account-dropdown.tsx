@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
 import {
   User,
   Search,
@@ -67,6 +68,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
 }) => {
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const { isMobile } = useMobile();
   const isSuperAdmin = user?.role === 'super_admin';
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [privateMode, setPrivateMode] = useState(false);
@@ -184,10 +186,14 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
       {/* Dropdown */}
       <div
         ref={dropdownRef}
-        className="absolute z-50 bg-white rounded-xl shadow-2xl border border-gray-100 w-[340px] min-w-[300px] max-w-[90vw] overflow-hidden"
+        className={cn(
+          "absolute z-50 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden",
+          isMobile ? "w-[90vw] max-w-[90vw] min-w-0" : "w-[340px] min-w-[300px] max-w-[90vw]"
+        )}
         style={{
           bottom: '100%',
-          left: '0',
+          left: isMobile ? '50%' : '0',
+          transform: isMobile ? 'translateX(-50%)' : 'none',
           marginBottom: '12px',
         }}
       >
@@ -241,7 +247,8 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
               <button
                 onClick={handlePrivateModeToggle}
                 className={cn(
-                  'relative inline-flex h-[22px] w-[38px] items-center rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1',
+                  'relative inline-flex items-center rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 touch-manipulation',
+                  isMobile ? 'h-7 w-12' : 'h-[22px] w-[38px]',
                   privateMode ? 'bg-orange-500 shadow-sm' : 'bg-gray-300'
                 )}
                 role="switch"
@@ -249,8 +256,9 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
               >
                 <span
                   className={cn(
-                    'inline-block h-[18px] w-[18px] transform rounded-full bg-white shadow-sm transition-all duration-200',
-                    privateMode ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                    'inline-block rounded-full bg-white shadow-sm transition-all duration-200',
+                    isMobile ? 'h-6 w-6' : 'h-[18px] w-[18px]',
+                    privateMode ? (isMobile ? 'translate-x-[18px]' : 'translate-x-[18px]') : 'translate-x-[2px]'
                   )}
                 />
               </button>
@@ -271,7 +279,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
                     <button
                       key={itemIndex}
                       onClick={() => handleMenuItemClick(item.href)}
-                      className="w-full flex items-center gap-3.5 px-5 py-3 text-sm text-gray-700 hover:bg-orange-50/50 transition-colors text-left group"
+                      className="w-full flex items-center gap-3.5 px-5 py-3.5 sm:py-3 text-sm text-gray-700 hover:bg-orange-50/50 transition-colors text-left group touch-manipulation min-h-[44px]"
                     >
                       <div className={cn(
                         'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
@@ -314,7 +322,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
             <div className="px-5 py-4 bg-gradient-to-r from-orange-50 to-orange-100/30">
               <button
                 onClick={handleUpgrade}
-                className="w-full flex items-center justify-between p-3.5 bg-white border-2 border-orange-200 rounded-lg hover:border-orange-300 hover:shadow-sm transition-all group"
+                className="w-full flex items-center justify-between p-3.5 bg-white border-2 border-orange-200 rounded-lg hover:border-orange-300 hover:shadow-sm transition-all group touch-manipulation min-h-[44px]"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-sm">
@@ -339,7 +347,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
         <div className="border-t border-gray-100">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3.5 px-5 py-3.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50/50 transition-colors text-left"
+            className="w-full flex items-center gap-3.5 px-5 py-3.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50/50 transition-colors text-left touch-manipulation min-h-[44px]"
           >
             <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-50 border border-gray-100">
               <LogOut className="w-4.5 h-4.5" />

@@ -13,9 +13,12 @@ import type { BillingPeriod } from '@/lib/pricing';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
 import { getPaymentErrorMessage } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 
 export function SubscriptionManager() {
   const { toast } = useToast();
+  const { isMobile } = useMobile();
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncingBilling, setSyncingBilling] = useState(false);
@@ -1497,13 +1500,15 @@ export function SubscriptionManager() {
             )}
             {billingHistory && billingHistory.payments.length > 0 ? (
               <div className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-2 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-2">
-                  <div className="md:col-span-4">Description</div>
-                  <div className="md:col-span-2">Provider</div>
-                  <div className="md:col-span-2">Date</div>
-                  <div className="md:col-span-2">Status</div>
-                  <div className="md:col-span-2 text-right">Invoice</div>
-                </div>
+                {!isMobile && (
+                  <div className="grid grid-cols-12 gap-2 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-2">
+                    <div className="col-span-4">Description</div>
+                    <div className="col-span-2">Provider</div>
+                    <div className="col-span-2">Date</div>
+                    <div className="col-span-2">Status</div>
+                    <div className="col-span-2 text-right">Invoice</div>
+                  </div>
+                )}
                 {billingHistory.payments.map((payment: Payment) => {
                   // Determine payment method and details
                   const isPayPal = payment.payment_provider === 'paypal' ||
@@ -1532,12 +1537,127 @@ export function SubscriptionManager() {
                     ? Math.floor((Date.now() - new Date(payment.created_at).getTime()) / 60000)
                     : 0;
                   
+                  if (isMobile) {
+                    // Mobile: Card Layout
+                    return (
+                      <div
+                        key={payment.id}
+                        className="border rounded-lg p-4 space-y-3 hover:bg-gray-50/50"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm">
+                              {payment.tier.toUpperCase()} — {payment.currency} {payment.amount.toLocaleString()}
+                            </div>
+                            {payment.payment_description && (
+                              <div className="text-xs text-gray-500 mt-1 break-words">{payment.payment_description}</div>
+                            )}
+                          </div>
+                          <div className="flex-shrink-0">
+                            <span
+                              className={cn(
+                                "text-xs font-medium px-2 py-1 rounded",
+                                payment.status === 'completed'
+                                  ? 'bg-green-100 text-green-700'
+                                  : payment.status === 'failed' || payment.status === 'cancelled'
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-amber-100 text-amber-700'
+                              )}
+                            >
+                              {payment.status}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="text-xs text-gray-600 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Provider:</span>
+                            {isPayPal ? (
+                              <>
+                                <span className="text-orange-600 font-semibold">PayPal</span>
+                                {paypalEmail && (
+                                  <span className="text-gray-500 truncate" title={paypalEmail}>
+                                    • {paypalEmail}
+                                  </span>
+                                )}
+                              </>
+                            ) : cardLast4 ? (
+                              <>
+                                <CreditCard className="w-3 h-3 text-gray-500" />
+                                <span>
+                                  {cardBrand && <span className="capitalize">{cardBrand} </span>}
+                                  •••• {cardLast4}
+                                </span>
+                              </>
+                            ) : (
+                              <span>{paymentMethodDisplay}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Date:</span>
+                            <span>{new Date(payment.created_at).toLocaleDateString()}</span>
+                            {payment.status === 'pending' && (
+                              <span className="text-gray-500">
+                                {new Date(payment.created_at).toLocaleTimeString()}
+                              </span>
+                            )}
+                          </div>
+                          {payment.status === 'pending' && timeSincePayment > 0 && (
+                            <div className="text-amber-600">
+                              Pending for {timeSincePayment} {timeSincePayment === 1 ? 'minute' : 'minutes'}
+                            </div>
+                          )}
+                          {payment.status === 'pending' && lastSyncTime && (
+                            <div className="text-gray-500">
+                              Last synced: {Math.floor((Date.now() - lastSyncTime.getTime()) / 60000)}m ago
+                            </div>
+                          )}
+                        </div>
+                        
+                        {payment.status === 'failed' && (
+                          <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                            <AlertCircle className="w-3 h-3 inline mr-1" />
+                            {getPaymentErrorMessage(
+                              payment.callback_data?.failure_reason || payment.callback_data?.failed_payment_reason || 'Payment failed',
+                              payment
+                            )}
+                          </div>
+                        )}
+                        
+                        <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
+                          {payment.status === 'completed' && (
+                            <Button
+                              onClick={() => handleDownloadInvoice(payment.id)}
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-w-[100px] touch-manipulation min-h-[44px] text-xs"
+                            >
+                              <Download className="w-3 h-3 mr-1" />
+                              Invoice
+                            </Button>
+                          )}
+                          {payment.status === 'failed' && (
+                            <Button
+                              onClick={() => handleRetryPayment(payment.id)}
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-w-[100px] border-orange-500 text-orange-600 hover:bg-orange-50 touch-manipulation min-h-[44px] text-xs"
+                            >
+                              Retry Payment
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Desktop: Table Layout
                   return (
                     <div
                       key={payment.id}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50/50"
+                      className="grid grid-cols-12 gap-2 items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50/50"
                     >
-                      <div className="md:col-span-4 min-w-0">
+                      <div className="col-span-4 min-w-0">
                         <div className="font-medium">
                           {payment.tier.toUpperCase()} — {payment.currency} {payment.amount.toLocaleString()}
                         </div>
@@ -1559,7 +1679,7 @@ export function SubscriptionManager() {
                           </div>
                         )}
                       </div>
-                      <div className="text-sm text-gray-600 md:col-span-2">
+                      <div className="col-span-2 text-sm text-gray-600">
                         <div className="flex items-center gap-1.5">
                           {isPayPal ? (
                             <>
@@ -1583,7 +1703,7 @@ export function SubscriptionManager() {
                           )}
                         </div>
                       </div>
-                      <div className="text-sm text-gray-600 md:col-span-2">
+                      <div className="col-span-2 text-sm text-gray-600">
                         {new Date(payment.created_at).toLocaleDateString()}
                         {payment.status === 'pending' && (
                           <div className="text-xs text-gray-500 mt-0.5">
@@ -1591,7 +1711,7 @@ export function SubscriptionManager() {
                           </div>
                         )}
                       </div>
-                      <div className="text-sm md:col-span-2">
+                      <div className="col-span-2 text-sm">
                         <span
                           className={
                             payment.status === 'completed'
@@ -1609,7 +1729,7 @@ export function SubscriptionManager() {
                           </div>
                         )}
                       </div>
-                      <div className="md:col-span-2 md:text-right">
+                      <div className="col-span-2 text-right">
                         {payment.status === 'completed' && (
                           <Button
                             onClick={() => handleDownloadInvoice(payment.id)}
