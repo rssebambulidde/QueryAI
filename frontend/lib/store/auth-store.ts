@@ -19,7 +19,6 @@ interface AuthState {
   setTokens: (accessToken: string | null, refreshToken: string | null, expiryTime?: number | null) => void;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signup: (email: string, password: string, fullName?: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   refreshAuthToken: () => Promise<boolean>;
@@ -330,41 +329,6 @@ export const useAuthStore = create<AuthState>()(
           }
           
           // Re-throw other errors so caller knows it failed
-          throw error;
-        }
-      },
-
-      loginWithGoogle: async () => {
-        set({ isLoading: true, error: null });
-        try {
-          const { getSupabase } = await import('../supabase');
-          const supabase = getSupabase();
-          if (!supabase) {
-            set({ isLoading: false, error: 'Google authentication is not configured.' });
-            return;
-          }
-          const redirectUrl = typeof window !== 'undefined' 
-            ? `${window.location.origin}/auth/callback`
-            : '';
-
-          const { data, error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-              redirectTo: redirectUrl,
-            },
-          });
-
-          if (error) {
-            throw error;
-          }
-
-          // The redirect will happen automatically
-          // The callback page will handle the rest
-        } catch (error: any) {
-          set({ 
-            error: error.message || 'Google login failed', 
-            isLoading: false 
-          });
           throw error;
         }
       },

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -15,82 +15,62 @@ export default function AuthCallbackPage() {
   const { toast } = useToast();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
 
+  const finishWithSession = useCallback(
+    async (accessToken: string, refreshToken: string, expiresIn: number, email: string, id: string, fullName?: string) => {
+      setTokens(accessToken, refreshToken, expiresIn * 1000 + Date.now());
+      setUser({ id, email, full_name: fullName, role: 'user', subscriptionTier: 'free' });
+      try {
+        await authApi.getMe();
+      } catch {
+        // Profile may be created by /me
+      }
+      router.replace('/dashboard');
+    },
+    [setUser, setTokens, router]
+  );
+
   useEffect(() => {
-    const handleAuthCallback = async () => {
+    const run = async () => {
       const supabase = getSupabase();
       if (!supabase) {
-        toast.error('Google authentication is not configured.');
+        toast.error('Authentication is not configured.');
         setStatus('error');
-        router.push('/login');
+        router.replace('/login');
         return;
       }
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-        if (sessionError) {
-          throw sessionError;
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (!session?.user) {
+          throw new Error('No session');
         }
-
-        if (!session) {
-          throw new Error('No session found');
-        }
-
-        // Get the access token and user from Supabase
-        const supabaseAccessToken = session.access_token;
-        const supabaseUser = session.user;
-
-        // Exchange Supabase token for backend token
-        // This assumes your backend has an endpoint to handle OAuth callback
-        // You may need to adjust this based on your backend implementation
-        try {
-          const response = await authApi.login({
-            email: supabaseUser.email || '',
-            password: '', // OAuth users don't have passwords
-          });
-
-          // If direct login doesn't work, you might need a special OAuth endpoint
-          // For now, we'll try to create/login via a special endpoint
-          // This is a placeholder - adjust based on your backend API
-          
-          // Alternative: Call a special OAuth endpoint if your backend supports it
-          // const oauthResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/oauth/google`, {
-          //   method: 'POST',
-          //   headers: { 'Content-Type': 'application/json' },
-          //   body: JSON.stringify({
-          //     accessToken: supabaseAccessToken,
-          //     user: supabaseUser,
-          //   }),
-          // });
-
-          await supabase.auth.signOut();
-          toast.error('OAuth integration with backend is pending. Please use email/password login for now.');
-          router.push('/login');
-          setStatus('error');
-        } catch (error: any) {
-          await supabase.auth.signOut();
-          toast.error('OAuth integration is being set up. Please use email/password login.');
-          router.push('/login');
-          setStatus('error');
-        }
-      } catch (error: any) {
-        console.error('Auth callback error:', error);
-        toast.error(error.message || 'Authentication failed');
+        const { access_token, refresh_token, expires_in } = session;
+        const u = session.user;
+        await finishWithSession(
+          access_token,
+          refresh_token,
+          expires_in ?? 3600,
+          u.email ?? '',
+          u.id,
+          (u.user_metadata?.full_name as string) || (u.user_metadata?.name as string)
+        );
+      } catch (e: any) {
+        console.error('Auth callback error:', e);
+        toast.error(e?.message ?? 'Authentication failed');
         setStatus('error');
-        setTimeout(() => {
-          router.push('/login');
-        }, 2000);
+        setTimeout(() => router.replace('/login'), 2000);
       }
     };
 
-    handleAuthCallback();
-  }, [router, setUser, setTokens, toast]);
+    run();
+  }, [finishWithSession, toast, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
         {status === 'loading' && (
           <>
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-600 border-r-transparent"></div>
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-orange-600 border-r-transparent" />
             <p className="mt-4 text-gray-600">Completing authentication...</p>
           </>
         )}

@@ -10,7 +10,6 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
-import { GoogleAuthButton } from '@/components/auth/google-auth-button';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
@@ -73,7 +72,6 @@ export default function LoginPage() {
   };
 
   const { isMobile } = useMobile();
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -101,21 +99,6 @@ export default function LoginPage() {
         {showAlert && error && (
           <Alert variant="error">{error}</Alert>
         )}
-
-        {/* Google OAuth Button */}
-        <div className="mt-6">
-          <GoogleAuthButton variant="login" />
-        </div>
-
-        {/* Divider */}
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300" />
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-gray-50 text-gray-500">Or continue with email</span>
-          </div>
-        </div>
 
         <form className="mt-6 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="rounded-md shadow-sm space-y-4">

@@ -187,8 +187,13 @@ router.get(
   '/me',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
-    // User is attached by authenticate middleware
-    const profile = await DatabaseService.getUserProfile(req.user!.id);
+    let profile = await DatabaseService.getUserProfile(req.user!.id);
+    // Ensure profile exists (e.g. for Google sign-in via signInWithIdToken)
+    if (!profile) {
+      await DatabaseService.createUserProfile(req.user!.id, req.user!.email || '', undefined);
+      await DatabaseService.createDefaultSubscription(req.user!.id);
+      profile = await DatabaseService.getUserProfile(req.user!.id);
+    }
     const subscription = await DatabaseService.getUserSubscription(req.user!.id);
 
     res.status(200).json({

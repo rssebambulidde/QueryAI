@@ -26,27 +26,11 @@
 
 ---
 
-### 2. Supabase Google OAuth ✅
-**Files Created**:
+### 2. Supabase & Auth
+**Files**:
 - `frontend/lib/supabase.ts` - Supabase client configuration
-- `frontend/components/auth/google-auth-button.tsx` - Google OAuth button component
-- `frontend/app/auth/callback/page.tsx` - OAuth callback handler
-
-**Files Modified**:
-- `frontend/lib/store/auth-store.ts` - Added `loginWithGoogle()` and `refreshAuthToken()` methods
-- `frontend/app/login/page.tsx` - Added Google login button
-- `frontend/app/signup/page.tsx` - Added Google signup button
-- `frontend/package.json` - Added `@supabase/supabase-js` dependency
-
-**What was added**:
-- Google OAuth button component with loading states
-- OAuth callback page to handle redirect
-- Auth store methods for OAuth flow
-- Mobile-responsive OAuth buttons
-
-**Current Status**:
-- ✅ Frontend implementation complete
-- ⚠️ **Backend integration pending** - Backend needs OAuth callback endpoint
+- `frontend/app/auth/callback/page.tsx` - Auth callback handler (Supabase session from hash)
+- `frontend/lib/store/auth-store.ts` - `refreshAuthToken()` and auth state
 
 ---
 
@@ -57,7 +41,7 @@
 Add these to your `.env.local` file:
 
 ```env
-# Supabase Configuration (Required for Google OAuth)
+# Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=your-supabase-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 
@@ -71,21 +55,6 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
    - Go to https://supabase.com
    - Create a new project
    - Get your project URL and anon key
-
-2. **Enable Google OAuth Provider**
-   - In Supabase Dashboard → Authentication → Providers
-   - Enable Google provider
-   - Add Google OAuth credentials:
-     - Client ID (from Google Cloud Console)
-     - Client Secret (from Google Cloud Console)
-   - Set redirect URL: `https://your-domain.com/auth/callback`
-
-3. **Google Cloud Console Setup**
-   - Go to https://console.cloud.google.com
-   - Create OAuth 2.0 credentials
-   - Add authorized redirect URIs:
-     - `https://your-supabase-project.supabase.co/auth/v1/callback`
-     - `http://localhost:3000/auth/callback` (for development)
 
 ---
 
