@@ -31,7 +31,7 @@ export class EmailService {
       config.NODE_ENV === 'production' ||
       process.env.RAILWAY_ENVIRONMENT === 'production' ||
       !!process.env.RAILWAY_PUBLIC_DOMAIN;
-    return isProduction ? 'https://queryai-frontend.pages.dev' : 'http://localhost:3000';
+    return isProduction ? 'https://queryai.samabrains.com' : 'http://localhost:3000';
   }
 
   /**

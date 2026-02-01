@@ -31,7 +31,7 @@ function getFrontendUrl(): string {
     !!process.env.RAILWAY_PUBLIC_DOMAIN;
   let frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL;
   if (!frontendUrl || frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1')) {
-    frontendUrl = isProduction ? 'https://queryai-frontend.pages.dev' : 'http://localhost:3000';
+    frontendUrl = isProduction ? 'https://queryai.samabrains.com' : 'http://localhost:3000';
   }
   return frontendUrl;
 }
