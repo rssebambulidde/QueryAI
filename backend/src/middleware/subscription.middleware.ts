@@ -56,10 +56,15 @@ export const enforceQueryLimit = async (
         limit: limitCheck.limit,
       });
 
+      const isZeroLimit = limitCheck.limit === 0;
+      const message = isZeroLimit
+        ? 'Sorry, your query limit on this tier is zero. Upgrade to ask questions.'
+        : `Query limit reached. You have used ${limitCheck.used} of ${limitCheck.limit} queries this month. Upgrade for more.`;
+
       res.status(403).json({
         success: false,
         error: {
-          message: `Query limit exceeded. You have used ${limitCheck.used} of ${limitCheck.limit} queries this month.`,
+          message,
           code: 'QUERY_LIMIT_EXCEEDED',
           limit: limitCheck.limit,
           used: limitCheck.used,
@@ -101,10 +106,15 @@ export const enforceDocumentUploadLimit = async (
         limit: limitCheck.limit,
       });
 
+      const isZeroLimit = limitCheck.limit === 0;
+      const message = isZeroLimit
+        ? 'Your limit does not allow document upload on this tier. Upgrade to upload documents.'
+        : `Document upload limit reached. You have uploaded ${limitCheck.used} of ${limitCheck.limit} documents this month. Upgrade for more.`;
+
       res.status(403).json({
         success: false,
         error: {
-          message: `Document upload limit exceeded. You have uploaded ${limitCheck.used} of ${limitCheck.limit} documents this month.`,
+          message,
           code: 'DOCUMENT_UPLOAD_LIMIT_EXCEEDED',
           limit: limitCheck.limit,
           used: limitCheck.used,
@@ -146,10 +156,15 @@ export const enforceTopicLimit = async (
         limit: limitCheck.limit,
       });
 
+      const isZeroLimit = limitCheck.limit === 0;
+      const message = isZeroLimit
+        ? 'Sorry, your limit for topics on this tier is zero. Upgrade to create topics.'
+        : `Topic limit reached. You have created ${limitCheck.used} of ${limitCheck.limit} topics. Upgrade for more.`;
+
       res.status(403).json({
         success: false,
         error: {
-          message: `Topic limit exceeded. You have created ${limitCheck.used} of ${limitCheck.limit} topics.`,
+          message,
           code: 'TOPIC_LIMIT_EXCEEDED',
           limit: limitCheck.limit,
           used: limitCheck.used,
@@ -195,11 +210,19 @@ export const requireFeature = (
 
         const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
         const currentTier = subscriptionData?.subscription.tier || 'free';
+        const featureMessages: Record<string, string> = {
+          documentUpload: 'Your limit does not allow document upload on this tier. Upgrade to upload documents.',
+          embedding: 'Document embedding is not available on your plan. Upgrade to use this feature.',
+          analytics: 'Analytics is not available on your plan. Upgrade to view analytics.',
+          apiAccess: 'API access is not available on your plan. Upgrade for API access.',
+          whiteLabel: 'White-label is not available on your plan. Upgrade for white-label options.',
+        };
+        const message = featureMessages[feature] || `This feature requires a ${getRequiredTierForFeature(feature)} subscription. Your current tier is ${currentTier}. Upgrade to use it.`;
 
         res.status(403).json({
           success: false,
           error: {
-            message: `This feature requires a ${getRequiredTierForFeature(feature)} subscription. Your current tier is ${currentTier}.`,
+            message,
             code: 'FEATURE_NOT_AVAILABLE',
             feature,
             currentTier,

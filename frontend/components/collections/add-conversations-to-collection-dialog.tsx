@@ -189,11 +189,14 @@ export const AddConversationsToCollectionDialog: React.FC<AddConversationsToColl
           </div>
         </div>
 
-        {/* Content */}
-        <div className={cn(
-          "flex-1 overflow-y-auto min-h-0",
-          isMobile ? "p-4" : "p-4"
-        )}>
+        {/* Content - scrollable so footer (Add to Collection) stays visible on iPhone 7 */}
+        <div
+          className={cn(
+            "flex-1 overflow-y-auto min-h-0",
+            isMobile ? "p-4" : "p-4"
+          )}
+          style={isMobile ? { maxHeight: 'calc(100% - 180px)' } : undefined}
+        >
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">Loading conversations...</div>
           ) : filteredConversations.length === 0 ? (
@@ -253,11 +256,14 @@ export const AddConversationsToCollectionDialog: React.FC<AddConversationsToColl
           )}
         </div>
 
-        {/* Footer */}
-        <div className={cn(
-          "border-t border-gray-200 flex-shrink-0",
-          isMobile ? "flex-col p-4 space-y-3" : "flex items-center justify-between p-4"
-        )}>
+        {/* Footer - always visible on small screens (iPhone 7) */}
+        <div
+          className={cn(
+            "border-t border-gray-200 flex-shrink-0",
+            isMobile ? "flex flex-col p-4 space-y-3" : "flex items-center justify-between p-4"
+          )}
+          style={isMobile ? { paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0))', minHeight: 56 } : undefined}
+        >
           <div className={cn(
             "text-gray-600",
             isMobile ? "text-base text-center" : "text-sm"
@@ -266,7 +272,7 @@ export const AddConversationsToCollectionDialog: React.FC<AddConversationsToColl
           </div>
           <div className={cn(
             "flex items-center gap-2",
-            isMobile ? "w-full flex-col" : ""
+            isMobile ? "w-full flex-row flex-wrap justify-center" : ""
           )}>
             <Button
               onClick={onClose}

@@ -288,6 +288,99 @@ export class AuthService {
   }
 
   /**
+   * Request magic link for passwordless sign-in
+   * Sends an email with a link that signs the user in when clicked
+   */
+  static async requestMagicLink(email: string): Promise<void> {
+    try {
+      if (!email || typeof email !== 'string') {
+        throw new ValidationError('Email is required');
+      }
+
+      const trimmed = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmed)) {
+        throw new ValidationError('Invalid email format');
+      }
+
+      const frontendUrl = config.CORS_ORIGIN || config.API_BASE_URL;
+      const redirectUrl = `${frontendUrl}/auth/callback`;
+
+      logger.info(`Requesting magic link for: ${trimmed}`, { redirectUrl });
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: trimmed,
+        options: {
+          emailRedirectTo: redirectUrl,
+        },
+      });
+
+      if (error) {
+        logger.error('Magic link request error:', {
+          error: error.message,
+          code: error.code,
+        });
+        // Don't reveal if email exists; return without throwing for security
+        return;
+      }
+
+      logger.info(`Magic link email sent successfully for: ${trimmed}`);
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      logger.error('Magic link request error:', error);
+      // Don't reveal errors to prevent email enumeration
+    }
+  }
+
+  /**
+   * Invite a user by email (Supabase Auth admin invite).
+   * Sends the "Invite user" email; invitee clicks link and sets password on accept-invite page.
+   */
+  static async inviteUserByEmail(email: string): Promise<{ invited: boolean; error?: string }> {
+    try {
+      if (!email || typeof email !== 'string') {
+        throw new ValidationError('Email is required');
+      }
+
+      const trimmed = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmed)) {
+        throw new ValidationError('Invalid email format');
+      }
+
+      const frontendUrl = config.CORS_ORIGIN || config.API_BASE_URL;
+      const redirectTo = `${frontendUrl}/accept-invite`;
+
+      logger.info(`Inviting user by email: ${trimmed}`, { redirectTo });
+
+      const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(trimmed, {
+        redirectTo,
+      });
+
+      if (error) {
+        logger.error('Invite user error:', { error: error.message, code: error.code });
+        // Don't reveal if user already exists
+        if (error.message?.toLowerCase().includes('already been invited') ||
+            error.message?.toLowerCase().includes('already registered')) {
+          return { invited: true };
+        }
+        return { invited: false, error: error.message };
+      }
+
+      logger.info(`Invite email sent successfully for: ${trimmed}`, { userId: data?.user?.id });
+      return { invited: true };
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        throw error;
+      }
+      logger.error('Invite user error:', error);
+      return { invited: false, error: error instanceof Error ? error.message : 'Failed to send invite' };
+    }
+  }
+
+  /**
    * Verify JWT token and get user
    */
   static async verifyToken(token: string): Promise<{ userId: string; email: string } | null> {

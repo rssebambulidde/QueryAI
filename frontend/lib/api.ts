@@ -64,7 +64,12 @@ apiClient.interceptors.response.use(
       // Rate limit exceeded - return error immediately without retry
       return Promise.reject(error);
     }
-    
+
+    // Use backend user-friendly messages for 403 (limit/feature errors)
+    if (error.response?.status === 403 && error.response?.data?.error?.message) {
+      error.message = error.response.data.error.message;
+    }
+
     if (error.response?.status === 401) {
       // Token expired or invalid - try to refresh
       const originalRequest = error.config;
@@ -72,7 +77,7 @@ apiClient.interceptors.response.use(
       // Don't retry if this is already a refresh request or if we're on an auth page
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname;
-        const isAuthPage = currentPath === '/login' || currentPath === '/signup' || currentPath === '/forgot-password';
+        const isAuthPage = currentPath === '/login' || currentPath === '/signup' || currentPath === '/forgot-password' || currentPath === '/accept-invite';
         const isRefreshRequest = originalRequest?.url?.includes('/api/auth/refresh');
         
         if (isAuthPage || isRefreshRequest) {
@@ -364,8 +369,32 @@ export const authApi = {
     return response.data;
   },
 
+  requestMagicLink: async (email: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/magic-link', { email });
+    return response.data;
+  },
+
+  inviteUser: async (email: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/invite', { email });
+    return response.data;
+  },
+
+  /** Invite a friend from the signup page (no auth required). Rate-limited by IP. */
+  inviteFriend: async (email: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/invite-guest', { email });
+    return response.data;
+  },
+
   resetPassword: async (data: { password: string; accessToken: string; refreshToken: string }): Promise<ApiResponse<void>> => {
-    const response = await apiClient.post('/api/auth/reset-password', data);
+    const response = await apiClient.post(
+      '/api/auth/reset-password',
+      { password: data.password },
+      {
+        headers: {
+          Authorization: `Bearer ${data.accessToken}`,
+        },
+      }
+    );
     return response.data;
   },
 

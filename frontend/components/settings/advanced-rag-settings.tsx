@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Settings, Save, RotateCcw, ToggleLeft, ToggleRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { Settings, Save, RotateCcw, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
+
+const ADVANCED_RAG_LEARN_MORE_URL = '/help#advanced-rag';
 
 interface AdvancedRAGSettings {
   enableReranking: boolean;
@@ -94,47 +95,64 @@ export const AdvancedRAGSettings: React.FC<AdvancedRAGSettingsProps> = ({
     setExpandedSections(newExpanded);
   };
 
-  const ToggleSwitch: React.FC<{
+  const ToggleSwitchWithLearnMore: React.FC<{
     enabled: boolean;
     onChange: (enabled: boolean) => void;
     label: string;
     description: string;
-  }> = ({ enabled, onChange, label, description }) => (
+    explanation: string;
+  }> = ({ enabled, onChange, label, description, explanation }) => (
     <div className={cn(
-      "flex items-center justify-between border border-gray-200 rounded-lg hover:bg-gray-50 touch-manipulation min-h-[44px]",
+      "border border-gray-200 rounded-lg hover:bg-gray-50 touch-manipulation",
       isMobile ? "p-4" : "p-4"
     )}>
-      <div className="flex-1 min-w-0 pr-3">
-        <div className={cn(
-          "font-medium text-gray-900",
-          isMobile ? "text-base" : "text-sm"
-        )}>
-          {label}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className={cn(
+            "font-medium text-gray-900",
+            isMobile ? "text-base" : "text-sm"
+          )}>
+            {label}
+          </div>
+          <div className={cn(
+            "text-gray-500 mt-0.5",
+            isMobile ? "text-sm" : "text-xs"
+          )}>
+            {description}
+          </div>
+          <p className={cn(
+            "text-gray-600 mt-2",
+            isMobile ? "text-sm" : "text-xs"
+          )}>
+            {explanation}
+          </p>
+          <a
+            href={ADVANCED_RAG_LEARN_MORE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 mt-2 text-orange-600 hover:text-orange-700 text-xs font-medium"
+          >
+            Learn more <ExternalLink className="w-3 h-3" />
+          </a>
         </div>
-        <div className={cn(
-          "text-gray-500 mt-0.5",
-          isMobile ? "text-sm" : "text-xs"
-        )}>
-          {description}
-        </div>
-      </div>
-      <button
-        onClick={() => onChange(!enabled)}
-        className={cn(
-          'relative inline-flex items-center rounded-full transition-colors flex-shrink-0 touch-manipulation',
-          isMobile ? 'h-7 w-12' : 'h-6 w-11',
-          enabled ? 'bg-orange-600' : 'bg-gray-300'
-        )}
-        aria-label={`${label}: ${enabled ? 'enabled' : 'disabled'}`}
-      >
-        <span
+        <button
+          onClick={() => onChange(!enabled)}
           className={cn(
-            'inline-block rounded-full bg-white transition-transform shadow-sm',
-            isMobile ? 'h-6 w-6' : 'h-4 w-4',
-            enabled ? (isMobile ? 'translate-x-[18px]' : 'translate-x-6') : 'translate-x-1'
+            'relative inline-flex items-center rounded-full transition-colors flex-shrink-0 touch-manipulation mt-1',
+            isMobile ? 'h-7 w-12' : 'h-6 w-11',
+            enabled ? 'bg-orange-600' : 'bg-gray-300'
           )}
-        />
-      </button>
+          aria-label={`${label}: ${enabled ? 'enabled' : 'disabled'}`}
+        >
+          <span
+            className={cn(
+              'inline-block rounded-full bg-white transition-transform shadow-sm',
+              isMobile ? 'h-6 w-6' : 'h-4 w-4',
+              enabled ? (isMobile ? 'translate-x-[18px]' : 'translate-x-6') : 'translate-x-1'
+            )}
+          />
+        </button>
+      </div>
     </div>
   );
 
@@ -179,23 +197,26 @@ export const AdvancedRAGSettings: React.FC<AdvancedRAGSettingsProps> = ({
             "space-y-3",
             isMobile ? "px-4 pb-4" : "px-6 pb-6"
           )}>
-            <ToggleSwitch
+            <ToggleSwitchWithLearnMore
               enabled={settings.enableReranking}
               onChange={(enabled) => setSettings({ ...settings, enableReranking: enabled })}
               label="Enable Reranking"
               description="Re-rank retrieved chunks using cross-encoder for better relevance"
+              explanation="Reranking scores candidate chunks again with a more accurate model so the most relevant passages are sent to the AI. This improves answer quality when you have many similar chunks."
             />
-            <ToggleSwitch
+            <ToggleSwitchWithLearnMore
               enabled={settings.enableDeduplication}
               onChange={(enabled) => setSettings({ ...settings, enableDeduplication: enabled })}
               label="Enable Deduplication"
               description="Remove duplicate or highly similar chunks from results"
+              explanation="Deduplication merges or drops chunks that say almost the same thing, so the model sees less repetition and more unique information. Helps when multiple documents cover the same facts."
             />
-            <ToggleSwitch
+            <ToggleSwitchWithLearnMore
               enabled={settings.enableDiversityFilter}
               onChange={(enabled) => setSettings({ ...settings, enableDiversityFilter: enabled })}
               label="Enable Diversity Filter"
               description="Ensure retrieved chunks come from diverse sources"
+              explanation="The diversity filter spreads results across different documents or sections instead of taking many chunks from one place. Use it when you want the AI to consider multiple viewpoints or sources."
             />
           </div>
         )}
@@ -231,11 +252,12 @@ export const AdvancedRAGSettings: React.FC<AdvancedRAGSettingsProps> = ({
             "space-y-4",
             isMobile ? "px-4 pb-4" : "px-6 pb-6"
           )}>
-            <ToggleSwitch
+            <ToggleSwitchWithLearnMore
               enabled={settings.enableAdaptiveContext}
               onChange={(enabled) => setSettings({ ...settings, enableAdaptiveContext: enabled })}
               label="Enable Adaptive Context"
               description="Automatically adjust context window based on query complexity"
+              explanation="Adaptive context uses more chunks for complex or multi-part questions and fewer for simple ones. This balances accuracy and token usage so answers stay focused without wasting capacity."
             />
             
             <div>
@@ -271,11 +293,19 @@ export const AdvancedRAGSettings: React.FC<AdvancedRAGSettingsProps> = ({
                 <span>8,000</span>
               </div>
               <p className={cn(
-                "text-gray-500 mt-1.5",
+                "text-gray-600 mt-1.5",
                 isMobile ? "text-sm" : "text-xs"
               )}>
-                Maximum tokens allocated for context in each query
+                Maximum tokens allocated for context in each query. Higher values let the model see more document text but use more tokens and cost.
               </p>
+              <a
+                href={ADVANCED_RAG_LEARN_MORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 mt-1 text-orange-600 hover:text-orange-700 text-xs font-medium"
+              >
+                Learn more <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
 
             <div>
@@ -311,11 +341,19 @@ export const AdvancedRAGSettings: React.FC<AdvancedRAGSettingsProps> = ({
                 <span>16,000</span>
               </div>
               <p className={cn(
-                "text-gray-500 mt-1.5",
+                "text-gray-600 mt-1.5",
                 isMobile ? "text-sm" : "text-xs"
               )}>
-                Maximum total tokens for context window (including prompt)
+                Maximum total tokens for context window (including prompt). Caps how much document and conversation history can be sent to the model in one request.
               </p>
+              <a
+                href={ADVANCED_RAG_LEARN_MORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 mt-1 text-orange-600 hover:text-orange-700 text-xs font-medium"
+              >
+                Learn more <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
           </div>
         )}

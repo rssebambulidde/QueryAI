@@ -53,3 +53,26 @@ export const authLimiter = rateLimit({
     });
   },
 });
+
+// Stricter limiter for unauthenticated "invite a friend" (signup page) to prevent abuse
+export const inviteGuestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 invites per IP per 15 minutes
+  message: 'Too many invitations sent. Please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: {
+    trustProxy: true,
+  },
+  handler: (req: Request, res: Response) => {
+    logger.warn(`Invite guest rate limit exceeded for IP: ${req.ip}`);
+    const error = new RateLimitError('Too many invitations. Please wait 15 minutes before sending more.');
+    res.status(error.statusCode).json({
+      success: false,
+      error: {
+        message: error.message,
+        code: error.code,
+      },
+    });
+  },
+});

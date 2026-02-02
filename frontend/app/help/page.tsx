@@ -17,6 +17,8 @@ const sections = [
   { id: 'topics', title: 'Topics' },
   { id: 'settings', title: 'Settings' },
   { id: 'account', title: 'Account & privacy' },
+  { id: 'advanced-rag', title: 'Advanced RAG parameters' },
+  { id: 'resources', title: 'Resources' },
 ] as const;
 
 export default function HelpPage() {
@@ -200,6 +202,36 @@ export default function HelpPage() {
               Profile, Settings, Subscription, and <strong>Sign out</strong>. You can also toggle{' '}
               <strong>Private mode</strong> so that your activity is not used for product improvements (when available).
             </p>
+          </section>
+
+          <section id="advanced-rag" className="scroll-mt-8">
+            <h2 className="text-xl font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              9. Advanced RAG parameters
+            </h2>
+            <p>
+              In <strong>Settings → Advanced RAG</strong> you can tune how the RAG (retrieval-augmented generation) system works:
+            </p>
+            <ul className="list-disc pl-6 space-y-2 mt-2">
+              <li><strong>Enable Reranking</strong> – Re-ranks retrieved chunks with a cross-encoder so the most relevant passages are sent to the AI. Improves answer quality when you have many similar chunks.</li>
+              <li><strong>Enable Deduplication</strong> – Removes duplicate or highly similar chunks so the model sees less repetition and more unique information.</li>
+              <li><strong>Enable Diversity Filter</strong> – Spreads results across different documents or sections so the AI considers multiple viewpoints or sources.</li>
+              <li><strong>Enable Adaptive Context</strong> – Uses more chunks for complex questions and fewer for simple ones to balance accuracy and token usage.</li>
+              <li><strong>Token Budget / Max Context Tokens</strong> – Control how many tokens are allocated for context in each query and the total context window size.</li>
+            </ul>
+          </section>
+
+          <section id="resources" className="scroll-mt-8">
+            <h2 className="text-xl font-semibold text-gray-900 border-b border-gray-200 pb-2">
+              10. Resources
+            </h2>
+            <p>
+              Further reading and reference:
+            </p>
+            <ul className="list-disc pl-6 space-y-1 mt-2">
+              <li><a href="#advanced-rag" className="text-orange-600 hover:underline">Advanced RAG parameters</a> – How each RAG setting is used and how it helps the system (same content as in Settings).</li>
+              <li><Link href="/terms" className="text-orange-600 hover:underline">Terms of Service</Link></li>
+              <li><Link href="/privacy" className="text-orange-600 hover:underline">Privacy Policy</Link></li>
+            </ul>
           </section>
         </div>
 

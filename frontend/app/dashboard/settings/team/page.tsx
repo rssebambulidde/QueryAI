@@ -6,10 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { subscriptionApi } from '@/lib/api';
+import { subscriptionApi, authApi } from '@/lib/api';
+import { useToast } from '@/lib/hooks/use-toast';
 
 export default function TeamCollaborationPage() {
   const { user } = useAuthStore();
+  const { toast } = useToast();
   const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'starter' | 'premium' | 'pro' | 'enterprise'>('free');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,13 +44,16 @@ export default function TeamCollaborationPage() {
     setInviting(true);
     setError(null);
     try {
-      // TODO: Implement team invitation API endpoint
-      // const response = await teamApi.invite({ email: inviteEmail });
-      // For now, show a placeholder message
-      alert(`Team collaboration feature is coming soon! Invitation to ${inviteEmail} would be sent.`);
-      setInviteEmail('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to send invitation');
+      const response = await authApi.inviteUser(inviteEmail.trim());
+      if (response.success) {
+        toast.success('Invitation sent. They will receive an email to set up their account.');
+        setInviteEmail('');
+      } else {
+        setError(response.error?.message ?? response.message ?? 'Failed to send invitation');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to send invitation';
+      setError(msg);
     } finally {
       setInviting(false);
     }
@@ -127,7 +132,7 @@ export default function TeamCollaborationPage() {
             </Button>
           </div>
           <p className="text-sm text-gray-500 mt-2">
-            Team members will receive an email invitation to join your workspace.
+            They will receive an email with a link to set a password and join your workspace.
           </p>
         </div>
 
@@ -169,17 +174,6 @@ export default function TeamCollaborationPage() {
           )}
         </div>
 
-        {/* Feature Notice */}
-        <Alert className="mt-6 bg-blue-50 border-blue-200">
-          <AlertCircle className="h-4 w-4 text-blue-600" />
-          <div className="ml-2">
-            <p className="text-sm text-blue-800 font-medium">Feature Coming Soon</p>
-            <p className="text-sm text-blue-700 mt-1">
-              Team collaboration features are currently under development. Full functionality including team invitations,
-              shared workspaces, and permission management will be available soon.
-            </p>
-          </div>
-        </Alert>
       </div>
     </div>
   );

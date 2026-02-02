@@ -8,7 +8,7 @@ import { z } from 'zod';
 import Link from 'next/link';
 import { authApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Alert } from '@/components/ui/alert';
 
 const resetPasswordSchema = z.object({
@@ -133,18 +133,16 @@ export default function ResetPasswordPage() {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="rounded-md shadow-sm space-y-4">
-            <Input
+            <PasswordInput
               label="New Password"
-              type="password"
               autoComplete="new-password"
               placeholder="••••••••"
               error={errors.password?.message}
               {...register('password')}
             />
 
-            <Input
+            <PasswordInput
               label="Confirm Password"
-              type="password"
               autoComplete="new-password"
               placeholder="••••••••"
               error={errors.confirmPassword?.message}

@@ -89,7 +89,9 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
       });
 
       if (response.success && response.data) {
-        setUser(response.data.user);
+        const updatedUser = response.data.user;
+        setUser(updatedUser);
+        setAvatar(updatedUser?.avatar_url ?? avatarUrl ?? null);
         setAvatarFile(null);
         toast.success('Profile updated successfully');
       } else {
@@ -188,6 +190,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
                 src={avatar}
                 alt="Profile"
                 className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                key={avatar}
               />
             ) : (
               <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-gray-200">

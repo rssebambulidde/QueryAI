@@ -9,8 +9,9 @@ import { aiApi, QuestionRequest, QuestionResponse, documentApi, conversationApi,
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { useFilterStore } from '@/lib/store/filter-store';
+import { useAuthStore } from '@/lib/store/auth-store';
 import { Alert } from '@/components/ui/alert';
-import { MessageSquare, Settings } from 'lucide-react';
+import { MessageSquare, Settings, ChevronUp, ChevronDown } from 'lucide-react';
 import { UnifiedFilters } from './unified-filter-panel';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -97,6 +98,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   const [sourcePanelContext, setSourcePanelContext] = useState<{ sources: Source[]; query: string } | null>(null);
   const [isCitationSettingsOpen, setIsCitationSettingsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const isPausedRef = useRef(false);
   const pausedChunksRef = useRef<string[]>([]);
@@ -129,8 +131,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   const [previousCost, setPreviousCost] = useState<{ total: number } | null>(null);
   const { toast } = useToast();
   const { isMobile } = useMobile();
+  const { user } = useAuthStore();
   const { currentConversationId, createConversation, refreshConversations, conversations, updateConversationFilters, updateConversation } = useConversationStore();
   const { unifiedFilters, setUnifiedFilters, selectedTopic, setSelectedTopic } = useFilterStore();
+
+  const firstName = user?.full_name?.trim().split(/\s+/)[0] || null;
+  const timeGreeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  })();
+  const welcomeGreeting = firstName ? `${timeGreeting}, ${firstName}!` : timeGreeting + '!';
   
   // RAG settings state - use prop if provided, otherwise load from localStorage
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
@@ -965,7 +977,28 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       <ResearchModeBanner onExit={handleExitResearchMode} />
       <div className="flex flex-1 min-h-0">
         {/* Messages - left/center; sources sidebar opens on right when user clicks "N sources" */}
-        <div className="flex-1 min-w-0 overflow-y-auto">
+        <div ref={messagesContainerRef} className="flex-1 min-w-0 overflow-y-auto relative">
+          {/* Scroll to top/bottom - minimal arrows for long conversations */}
+          {messages.length > 3 && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => messagesContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="p-1.5 rounded bg-white/90 border border-gray-200 shadow-sm hover:bg-gray-50 text-gray-600 touch-manipulation min-w-[28px] min-h-[28px] flex items-center justify-center"
+                aria-label="Scroll to top"
+              >
+                <ChevronUp className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => messagesContainerRef.current?.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: 'smooth' })}
+                className="p-1.5 rounded bg-white/90 border border-gray-200 shadow-sm hover:bg-gray-50 text-gray-600 touch-manipulation min-w-[28px] min-h-[28px] flex items-center justify-center"
+                aria-label="Scroll to bottom"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
           {messages.length === 0 && (
             <div className="flex items-center justify-center h-full">
@@ -974,7 +1007,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
                   <MessageSquare className="w-8 h-8 text-orange-600" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  👋 Welcome to QueryAI!
+                  👋 {welcomeGreeting}
                 </h3>
                 <p className="text-gray-600 mb-1">
                   Start a conversation by asking a question.

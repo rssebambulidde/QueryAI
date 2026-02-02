@@ -39,7 +39,15 @@ export default function AuthCallbackPage() {
         return;
       }
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        let { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        // After magic link or OAuth redirect, session may not be in cache yet; retry once
+        if (!session?.user && typeof window !== 'undefined' && window.location.hash) {
+          await new Promise((r) => setTimeout(r, 400));
+          const retry = await supabase.auth.getSession();
+          session = retry.data.session;
+          error = retry.error;
+        }
         if (error) throw error;
         if (!session?.user) {
           throw new Error('No session');

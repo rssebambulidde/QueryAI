@@ -129,14 +129,15 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
       <div className={cn(
-        "bg-white shadow-xl w-full flex flex-col",
+        "bg-white shadow-xl w-full flex flex-col overflow-hidden",
         isMobile
-          ? "h-full rounded-none"
+          ? "h-full max-h-[100dvh] rounded-none"
           : "rounded-lg max-w-md mx-4 max-h-[80vh]"
       )}
       style={isMobile ? {
         marginTop: 'env(safe-area-inset-top, 0)',
-        marginBottom: 'env(safe-area-inset-bottom, 0)'
+        marginBottom: 'env(safe-area-inset-bottom, 0)',
+        minHeight: 0,
       } : {}}
       >
         {/* Header */}
@@ -161,11 +162,14 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
           </button>
         </div>
 
-        {/* Content */}
-        <div className={cn(
-          "flex-1 overflow-y-auto min-h-0",
-          isMobile ? "p-4" : "p-4"
-        )}>
+        {/* Content - scrollable so footer (Save) stays visible on iPhone 7 */}
+        <div
+          className={cn(
+            "flex-1 overflow-y-auto min-h-0",
+            isMobile ? "p-4" : "p-4"
+          )}
+          style={isMobile ? { maxHeight: 'calc(100% - 140px)' } : undefined}
+        >
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">Loading collections...</div>
           ) : collections.length === 0 ? (
@@ -236,11 +240,14 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
           )}
         </div>
 
-        {/* Footer */}
-        <div className={cn(
-          "flex items-center gap-2 border-t border-gray-200 flex-shrink-0",
-          isMobile ? "flex-col p-4" : "justify-end p-4"
-        )}>
+        {/* Footer - always visible on small screens (iPhone 7) */}
+        <div
+          className={cn(
+            "flex items-center gap-2 border-t border-gray-200 flex-shrink-0",
+            isMobile ? "flex-row flex-wrap justify-end p-4 gap-2" : "justify-end p-4"
+          )}
+          style={isMobile ? { paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0))', minHeight: 56 } : undefined}
+        >
           <Button
             onClick={onClose}
             variant="outline"

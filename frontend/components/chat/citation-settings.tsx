@@ -75,10 +75,12 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
         className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 flex flex-col overflow-hidden"
         style={{
           maxHeight: isMobile
-            ? 'min(90vh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 1rem))'
+            ? 'min(85vh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 2rem))'
             : '90vh',
           marginTop: isMobile ? 'max(0.5rem, env(safe-area-inset-top, 0))' : '0',
           marginBottom: isMobile ? 'max(0.5rem, env(safe-area-inset-bottom, 0))' : '0',
+          height: isMobile ? 'auto' : undefined,
+          minHeight: isMobile ? 0 : undefined,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -97,8 +99,11 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
           </button>
         </div>
 
-        {/* Content - Scrollable (footer stays visible on small screens) */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 min-h-0 space-y-6 overscroll-contain">
+        {/* Content - Scrollable; on small screens (e.g. iPhone 7) limit height so footer stays visible */}
+        <div
+          className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 min-h-0 space-y-6 overscroll-contain"
+          style={isMobile ? { maxHeight: 'calc(100% - 120px)' } : undefined}
+        >
           {/* Citation Style */}
           <div>
             <label className="block text-sm font-medium text-gray-900 mb-3">
@@ -236,13 +241,13 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
           </div>
         </div>
 
-        {/* Footer - Fixed at bottom, always visible (safe area on iPhone) */}
+        {/* Footer - Fixed at bottom, always visible (safe area on iPhone 7) */}
         <div
           className={cn(
-            'flex-shrink-0 flex items-center justify-between border-t border-gray-200 bg-gray-50',
-            isMobile ? 'flex-col gap-3 px-4 py-3' : 'flex-row px-6 py-4'
+            'flex-shrink-0 flex items-center justify-between border-t border-gray-200 bg-white',
+            isMobile ? 'flex-row gap-2 px-4 py-3 flex-wrap' : 'flex-row px-6 py-4'
           )}
-          style={isMobile ? { paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0))' } : undefined}
+          style={isMobile ? { paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0))', minHeight: 56 } : undefined}
         >
           <button
             onClick={reset}

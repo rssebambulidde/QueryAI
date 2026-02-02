@@ -39,40 +39,22 @@ Authentication → Settings → Email Auth → Enable Email Confirmations
 
 ---
 
-## 🔐 **Part 2: Password Reset Email Templates**
+## ✉️ **Part 1b: Confirm Signup Email Template**
 
-### Step 1: Access Email Templates
+When email confirmations are ON, new users receive this email. Customize it in **Authentication** → **Email Templates** → **Confirm signup**.
 
-1. In Supabase Dashboard, go to: **Authentication** → **Email Templates**
-2. You'll see several template options:
-   - **Confirm signup**
-   - **Magic Link**
-   - **Change Email Address**
-   - **Reset Password** ← **This is what we need**
-
-### Step 2: Configure Password Reset Template
-
-Click on **"Reset Password"** template.
-
-#### **Template Variables Available:**
-- `{{ .ConfirmationURL }}` - The password reset link
-- `{{ .Token }}` - The reset token (if needed)
-- `{{ .TokenHash }}` - Hashed token
-- `{{ .SiteURL }}` - Your site URL
-- `{{ .Email }}` - User's email address
-
-#### **Recommended Template:**
-
-**Subject:**
+### Subject
 ```
-Reset Your QueryAI Password
+Confirm your QueryAI signup
 ```
 
-**Body (HTML):**
+### Message body (HTML)
 ```html
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -91,14 +73,15 @@ Reset Your QueryAI Password
     .button {
       display: inline-block;
       padding: 12px 30px;
-      background-color: #007bff;
-      color: white;
+      background-color: #ea580c;
+      color: white !important;
       text-decoration: none;
-      border-radius: 5px;
+      border-radius: 6px;
       margin: 20px 0;
+      font-weight: 600;
     }
     .button:hover {
-      background-color: #0056b3;
+      background-color: #c2410c;
     }
     .footer {
       margin-top: 30px;
@@ -110,13 +93,396 @@ Reset Your QueryAI Password
 </head>
 <body>
   <div class="container">
-    <h2>Reset Your Password</h2>
+    <h2>Confirm your signup</h2>
+    <p>Hello,</p>
+    <p>Thanks for signing up for QueryAI. Click the button below to confirm your email and activate your account.</p>
+    <p><a href="{{ .ConfirmationURL }}" class="button">Confirm your mail</a></p>
+    <p><strong>This link will expire in 24 hours.</strong></p>
+    <p>If you didn't create an account, you can ignore this email.</p>
+    <div class="footer">
+      <p>This is an automated message from QueryAI. Please do not reply to this email.</p>
+      <p>&copy; 2026 QueryAI. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+```
+
+### Plain text (fallback)
+```
+Confirm your QueryAI signup
+
+Hello,
+
+Thanks for signing up for QueryAI. Follow this link to confirm your email and activate your account:
+
+{{ .ConfirmationURL }}
+
+This link will expire in 24 hours.
+
+If you didn't create an account, you can ignore this email.
+
+---
+This is an automated message from QueryAI. Please do not reply to this email.
+© 2026 QueryAI. All rights reserved.
+```
+
+---
+
+## ✉️ **Part 1c: Confirm Change of Email Template**
+
+When a user requests an email change, they receive this email at their **new** address. Customize it in **Authentication** → **Email Templates** → **Change Email Address**.
+
+### Subject
+```
+Confirm your new email for QueryAI
+```
+
+### Message body (HTML)
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .container {
+      background-color: #f9f9f9;
+      padding: 30px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 30px;
+      background-color: #ea580c;
+      color: white !important;
+      text-decoration: none;
+      border-radius: 6px;
+      margin: 20px 0;
+      font-weight: 600;
+    }
+    .button:hover {
+      background-color: #c2410c;
+    }
+    .footer {
+      margin-top: 30px;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Confirm Change of Email</h2>
+    <p>Hello,</p>
+    <p>You requested to change your QueryAI account email from <strong>{{ .Email }}</strong> to <strong>{{ .NewEmail }}</strong>.</p>
+    <p>Click the button below to confirm this change:</p>
+    <p><a href="{{ .ConfirmationURL }}" class="button">Change Email</a></p>
+    <p><strong>This link will expire in 24 hours.</strong></p>
+    <p>If you didn't request this change, please ignore this email and contact support if you have concerns.</p>
+    <div class="footer">
+      <p>This is an automated message from QueryAI. Please do not reply to this email.</p>
+      <p>&copy; 2026 QueryAI. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+```
+
+### Plain text (fallback)
+```
+Confirm your new email for QueryAI
+
+Hello,
+
+You requested to change your QueryAI account email from {{ .Email }} to {{ .NewEmail }}.
+
+Follow this link to confirm the change:
+{{ .ConfirmationURL }}
+
+This link will expire in 24 hours.
+
+If you didn't request this change, please ignore this email and contact support.
+
+---
+This is an automated message from QueryAI. Please do not reply to this email.
+© 2026 QueryAI. All rights reserved.
+```
+
+---
+
+## ✉️ **Part 1d: Magic Link Email Template**
+
+When a user signs in with a magic link (passwordless), they receive this email. Customize it in **Authentication** → **Email Templates** → **Magic Link**.
+
+### Subject
+```
+Log in to QueryAI
+```
+
+### Message body (HTML)
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .container {
+      background-color: #f9f9f9;
+      padding: 30px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 30px;
+      background-color: #ea580c;
+      color: white !important;
+      text-decoration: none;
+      border-radius: 6px;
+      margin: 20px 0;
+      font-weight: 600;
+    }
+    .button:hover {
+      background-color: #c2410c;
+    }
+    .footer {
+      margin-top: 30px;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Magic Link</h2>
+    <p>Hello,</p>
+    <p>Click the button below to log in to your QueryAI account. No password needed.</p>
+    <p><a href="{{ .ConfirmationURL }}" class="button">Log In</a></p>
+    <p><strong>This link will expire in 1 hour.</strong></p>
+    <p>If you didn't request this login link, you can ignore this email.</p>
+    <div class="footer">
+      <p>This is an automated message from QueryAI. Please do not reply to this email.</p>
+      <p>&copy; 2026 QueryAI. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+```
+
+### Plain text (fallback)
+```
+Log in to QueryAI
+
+Hello,
+
+Click the link below to log in to your QueryAI account. No password needed.
+
+{{ .ConfirmationURL }}
+
+This link will expire in 1 hour.
+
+If you didn't request this login link, you can ignore this email.
+
+---
+This is an automated message from QueryAI. Please do not reply to this email.
+© 2026 QueryAI. All rights reserved.
+```
+
+---
+
+## ✉️ **Part 1e: Invite User Email Template**
+
+When a user is invited to join (e.g. team or organization), they receive this email. Customize it in **Authentication** → **Email Templates** → **Invite user**.
+
+### Subject
+```
+You have been invited to QueryAI
+```
+
+### Message body (HTML)
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .container {
+      background-color: #f9f9f9;
+      padding: 30px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 30px;
+      background-color: #ea580c;
+      color: white !important;
+      text-decoration: none;
+      border-radius: 6px;
+      margin: 20px 0;
+      font-weight: 600;
+    }
+    .button:hover {
+      background-color: #c2410c;
+    }
+    .footer {
+      margin-top: 30px;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>You have been invited</h2>
+    <p>Hello,</p>
+    <p>You have been invited to create an account on QueryAI ({{ .SiteURL }}). Click the button below to accept the invite and set up your account.</p>
+    <p><a href="{{ .ConfirmationURL }}" class="button">Accept the invite</a></p>
+    <p><strong>This link will expire in 24 hours.</strong></p>
+    <p>If you didn't expect this invite, you can ignore this email.</p>
+    <div class="footer">
+      <p>This is an automated message from QueryAI. Please do not reply to this email.</p>
+      <p>&copy; 2026 QueryAI. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+```
+
+### Plain text (fallback)
+```
+You have been invited to QueryAI
+
+Hello,
+
+You have been invited to create an account on QueryAI ({{ .SiteURL }}). Follow this link to accept the invite and set up your account:
+
+{{ .ConfirmationURL }}
+
+This link will expire in 24 hours.
+
+If you didn't expect this invite, you can ignore this email.
+
+---
+This is an automated message from QueryAI. Please do not reply to this email.
+© 2026 QueryAI. All rights reserved.
+```
+
+---
+
+## 🔐 **Part 2: Password Reset Email Templates**
+
+### Step 1: Access Email Templates
+
+1. In Supabase Dashboard, go to: **Authentication** → **Email Templates**
+2. You'll see several template options:
+   - **Confirm signup**
+   - **Magic Link**
+   - **Change Email Address**
+   - **Reset Password** ← **This is what we need**
+
+### Step 2: Configure Password Reset Template
+
+Click on **"Reset Password"** template.
+
+#### **Template Variables Available:**
+- `{{ .ConfirmationURL }}` - The password reset link (use this in the button `href`)
+- `{{ .Token }}` - The reset token (if needed)
+- `{{ .TokenHash }}` - Hashed token
+- `{{ .SiteURL }}` - Your site URL
+- `{{ .Email }}` - User's email address
+
+> **Want only a "Reset Password" button (no copy-paste link)?**  
+> See **[SUPABASE_RESET_PASSWORD_EMAIL.md](./SUPABASE_RESET_PASSWORD_EMAIL.md)** for a button-only template and step-by-step Supabase instructions.
+
+#### **Recommended Template (button + optional link):**
+
+**Subject:**
+```
+Reset Your QueryAI Password
+```
+
+**Body (HTML) – button only, no copy-paste link:**
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .container {
+      background-color: #f9f9f9;
+      padding: 30px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    .button {
+      display: inline-block;
+      padding: 12px 30px;
+      background-color: #ea580c;
+      color: white !important;
+      text-decoration: none;
+      border-radius: 6px;
+      margin: 20px 0;
+      font-weight: 600;
+    }
+    .button:hover {
+      background-color: #c2410c;
+    }
+    .footer {
+      margin-top: 30px;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Reset Your QueryAI Password</h2>
     <p>Hello,</p>
     <p>We received a request to reset your password for your QueryAI account.</p>
     <p>Click the button below to reset your password:</p>
     <a href="{{ .ConfirmationURL }}" class="button">Reset Password</a>
-    <p>Or copy and paste this link into your browser:</p>
-    <p style="word-break: break-all; color: #007bff;">{{ .ConfirmationURL }}</p>
     <p><strong>This link will expire in 1 hour.</strong></p>
     <p>If you didn't request a password reset, please ignore this email or contact support if you have concerns.</p>
     <div class="footer">
@@ -148,6 +514,10 @@ This is an automated message from QueryAI. Please do not reply to this email.
 © 2026 QueryAI. All rights reserved.
 ```
 
+#### **Alternative: Button only (no link)**
+
+To show only the "Reset Password" button and remove the "Or copy and paste this link" paragraph, use the HTML from **[SUPABASE_RESET_PASSWORD_EMAIL.md](./SUPABASE_RESET_PASSWORD_EMAIL.md)**. That guide also covers redirect URLs and testing.
+
 ---
 
 ## 🔗 **Part 3: Configure Redirect URLs**
@@ -172,16 +542,23 @@ In **Redirect URLs**, add:
 ```
 http://localhost:3000
 http://localhost:3000/reset-password
+http://localhost:3000/auth/callback
+http://localhost:3000/accept-invite
 http://localhost:3001
 http://localhost:3001/reset-password
+http://localhost:3001/auth/callback
+http://localhost:3001/accept-invite
 ```
 
 **For Production (Railway):**
 ```
 https://your-app.railway.app
 https://your-app.railway.app/reset-password
+https://your-app.railway.app/auth/callback
+https://your-app.railway.app/accept-invite
 https://your-app.railway.app/api/auth/reset-password
 ```
+**Note:** `/auth/callback` is required for **magic link** sign-in (passwordless login). `/accept-invite` is required for **invite user** flow (invitee sets password and joins).
 
 **Important:** Replace `your-app.railway.app` with your actual Railway domain!
 
@@ -319,7 +696,7 @@ API_BASE_URL=https://your-app.railway.app
 - [ ] Email confirmations configured (ON for production, OFF for dev)
 - [ ] Password reset email template customized
 - [ ] Site URL set to Railway domain
-- [ ] Redirect URLs added (including `/reset-password`)
+- [ ] Redirect URLs added (including `/reset-password` and `/auth/callback` for magic link)
 - [ ] SMTP configured (for production)
 - [ ] Tested email confirmation (if enabled)
 - [ ] Tested password reset flow

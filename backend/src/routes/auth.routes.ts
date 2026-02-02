@@ -3,7 +3,7 @@ import multer from 'multer';
 import { AuthService, SignupData, LoginData } from '../services/auth.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
-import { authLimiter } from '../middleware/rateLimiter';
+import { authLimiter, inviteGuestLimiter } from '../middleware/rateLimiter';
 import { ValidationError } from '../types/error';
 import { StorageService } from '../services/storage.service';
 import { DatabaseService } from '../services/database.service';
@@ -144,6 +144,91 @@ router.post(
     res.status(200).json({
       success: true,
       message: 'If an account exists with this email, a password reset link has been sent',
+    });
+  })
+);
+
+/**
+ * POST /api/auth/magic-link
+ * Request magic link for passwordless sign-in
+ */
+router.post(
+  '/magic-link',
+  authLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { email } = req.body;
+
+    if (!email) {
+      throw new ValidationError('Email is required');
+    }
+
+    await AuthService.requestMagicLink(email.trim().toLowerCase());
+
+    // Always return success to prevent email enumeration
+    res.status(200).json({
+      success: true,
+      message: 'If an account exists with this email, a login link has been sent. Check your inbox.',
+    });
+  })
+);
+
+/**
+ * POST /api/auth/invite
+ * Invite a user by email (sends Supabase "Invite user" email). Requires authentication.
+ */
+router.post(
+  '/invite',
+  authenticate,
+  authLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { email } = req.body;
+
+    if (!email) {
+      throw new ValidationError('Email is required');
+    }
+
+    const result = await AuthService.inviteUserByEmail(email.trim().toLowerCase());
+
+    if (!result.invited && result.error) {
+      return res.status(400).json({
+        success: false,
+        message: result.error,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Invitation sent. They will receive an email to set up their account.',
+    });
+  })
+);
+
+/**
+ * POST /api/auth/invite-guest
+ * Invite a friend by email from the signup page (no auth required). Rate-limited by IP.
+ */
+router.post(
+  '/invite-guest',
+  inviteGuestLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { email } = req.body;
+
+    if (!email) {
+      throw new ValidationError('Email is required');
+    }
+
+    const result = await AuthService.inviteUserByEmail(email.trim().toLowerCase());
+
+    if (!result.invited && result.error) {
+      return res.status(400).json({
+        success: false,
+        message: result.error,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Invitation sent. Your friend will receive an email to set up their account.',
     });
   })
 );

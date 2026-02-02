@@ -6,9 +6,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
+import { UserPlus } from 'lucide-react';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { authApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Alert } from '@/components/ui/alert';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -16,7 +19,7 @@ import { cn } from '@/lib/utils';
 const signupSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  fullName: z.string().optional(),
+  fullName: z.string().min(1, 'Name is required'),
 });
 
 type SignupFormData = z.infer<typeof signupSchema>;
@@ -27,6 +30,10 @@ export default function SignupPage() {
     useAuthStore();
   const [showAlert, setShowAlert] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState(false);
 
   const {
     register,
@@ -52,6 +59,32 @@ export default function SignupPage() {
       return () => clearTimeout(timer);
     }
   }, [error, clearError]);
+
+  const onInviteFriend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = inviteEmail.trim();
+    if (!email) {
+      setInviteError('Please enter your friend\'s email address');
+      return;
+    }
+    setInviteError(null);
+    setInviteSuccess(false);
+    setInviting(true);
+    try {
+      const response = await authApi.inviteFriend(email);
+      if (response.success) {
+        setInviteSuccess(true);
+        setInviteEmail('');
+      } else {
+        setInviteError(response.error?.message ?? response.message ?? 'Failed to send invitation');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to send invitation';
+      setInviteError(msg);
+    } finally {
+      setInviting(false);
+    }
+  };
 
   const onSubmit = async (data: SignupFormData) => {
     setSuccessMessage(null);
@@ -120,7 +153,7 @@ export default function SignupPage() {
         <form className="mt-6 space-y-6" onSubmit={handleSubmit(onSubmit)}>
           <div className="rounded-md shadow-sm space-y-4">
             <Input
-              label="Full Name (Optional)"
+              label="Full Name"
               type="text"
               autoComplete="name"
               placeholder="John Doe"
@@ -137,9 +170,8 @@ export default function SignupPage() {
               {...register('email')}
             />
 
-            <Input
+            <PasswordInput
               label="Password"
-              type="password"
               autoComplete="new-password"
               placeholder="••••••••"
               error={errors.password?.message}
@@ -161,6 +193,42 @@ export default function SignupPage() {
             </Button>
           </div>
         </form>
+
+        {/* Invite a friend */}
+        <div className="mt-8 pt-8 border-t border-gray-200">
+          <p className="text-sm font-medium text-gray-700 mb-2">Invite a friend</p>
+          <p className="text-xs text-gray-500 mb-3">
+            Send them an invite so they can create an account and join the app.
+          </p>
+          {inviteSuccess && (
+            <Alert variant="success" className="mb-3">
+              Invitation sent. Your friend will receive an email to set up their account.
+            </Alert>
+          )}
+          {inviteError && (
+            <Alert variant="error" className="mb-3">{inviteError}</Alert>
+          )}
+          <form onSubmit={onInviteFriend} className="flex gap-2">
+            <Input
+              type="email"
+              placeholder="friend@example.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              className="flex-1"
+              disabled={inviting}
+              aria-label="Friend's email"
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={inviting}
+              className="shrink-0"
+            >
+              <UserPlus className={cn("w-4 h-4", isMobile ? "" : "mr-1.5")} />
+              {inviting ? 'Sending...' : 'Send invite'}
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );
