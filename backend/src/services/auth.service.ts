@@ -252,10 +252,12 @@ export class AuthService {
 
       // Request password reset (use regular client)
       // Use frontend URL for redirect (Supabase will redirect there with tokens)
-      // For now, use CORS_ORIGIN as frontend URL, or fallback to API_BASE_URL if not set
       const frontendUrl = config.CORS_ORIGIN || config.API_BASE_URL;
+      if (!frontendUrl || frontendUrl.includes('undefined')) {
+        logger.error('Password reset: CORS_ORIGIN and API_BASE_URL are not set. Set one in Railway/env so the reset link points to your app.');
+      }
       const redirectUrl = `${frontendUrl}/reset-password`;
-      
+
       logger.info(`Requesting password reset for: ${email}`, {
         redirectUrl,
         apiBaseUrl: config.API_BASE_URL,
@@ -304,6 +306,9 @@ export class AuthService {
       }
 
       const frontendUrl = config.CORS_ORIGIN || config.API_BASE_URL;
+      if (!frontendUrl || frontendUrl.includes('undefined')) {
+        logger.error('Magic link: CORS_ORIGIN and API_BASE_URL are not set. Set one in Railway/env so the email link points to your app.');
+      }
       const redirectUrl = `${frontendUrl}/auth/callback`;
 
       logger.info(`Requesting magic link for: ${trimmed}`, { redirectUrl });
@@ -316,15 +321,17 @@ export class AuthService {
       });
 
       if (error) {
-        logger.error('Magic link request error:', {
+        logger.error('Magic link request error (check Supabase Auth Logs and Redirect URLs):', {
           error: error.message,
           code: error.code,
+          status: error.status,
+          redirectUrl,
         });
         // Don't reveal if email exists; return without throwing for security
         return;
       }
 
-      logger.info(`Magic link email sent successfully for: ${trimmed}`);
+      logger.info(`Magic link email sent successfully for: ${trimmed}. If not received, check spam and Supabase Auth Logs.`);
     } catch (error) {
       if (error instanceof ValidationError) {
         throw error;
@@ -351,6 +358,9 @@ export class AuthService {
       }
 
       const frontendUrl = config.CORS_ORIGIN || config.API_BASE_URL;
+      if (!frontendUrl || frontendUrl.includes('undefined')) {
+        logger.error('Invite: CORS_ORIGIN and API_BASE_URL are not set. Set one in Railway/env so the invite link points to your app.');
+      }
       const redirectTo = `${frontendUrl}/accept-invite`;
 
       logger.info(`Inviting user by email: ${trimmed}`, { redirectTo });
@@ -360,7 +370,11 @@ export class AuthService {
       });
 
       if (error) {
-        logger.error('Invite user error:', { error: error.message, code: error.code });
+        logger.error('Invite user error (check Supabase Auth Logs and Redirect URLs):', {
+          error: error.message,
+          code: error.code,
+          redirectTo,
+        });
         // Don't reveal if user already exists
         if (error.message?.toLowerCase().includes('already been invited') ||
             error.message?.toLowerCase().includes('already registered')) {

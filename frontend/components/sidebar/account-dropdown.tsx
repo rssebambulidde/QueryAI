@@ -6,22 +6,10 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import {
-  User,
-  Search,
-  FileText,
-  Settings as SettingsIcon,
-  CreditCard,
-  Folder,
-  Tag,
-  Users,
-  Keyboard,
-  Bell,
-  Code,
   Sparkles,
   ArrowUpRight,
   LogOut,
   Shield,
-  ShieldCheck,
 } from 'lucide-react';
 
 interface AccountDropdownProps {
@@ -44,21 +32,8 @@ interface MenuItem {
   shortcut?: string;
 }
 
-const getMenuGroups = (subscriptionTier: string, isEnterprise: boolean, isSuperAdmin: boolean): MenuGroup[] => [
-  {
-    items: [
-      { label: 'Profile', icon: User, href: '/dashboard/settings/profile' },
-      { label: 'Search', icon: Search, href: '/dashboard/settings/search' },
-      { label: 'Citations', icon: FileText, href: '/dashboard/settings/citations' },
-      { label: 'Advanced RAG', icon: SettingsIcon, href: '/dashboard/settings/advanced' },
-      { label: 'Subscription', icon: CreditCard, href: '/dashboard/settings/subscription' },
-      { label: 'Documents', icon: Folder, href: '/dashboard/settings/documents' },
-      { label: 'Topics', icon: Tag, href: '/dashboard/settings/topics' },
-      ...(isEnterprise ? [{ label: 'Team Collaboration', icon: Users, href: '/dashboard/settings/team' }] : []),
-      ...(isSuperAdmin ? [{ label: 'Super Admin', icon: ShieldCheck, href: '/dashboard/settings/super-admin' }] : []),
-    ],
-  },
-];
+// Settings are in the sidebar (just above Account). No settings tabs in the account dropdown.
+const getMenuGroups = (_subscriptionTier: string, _isEnterprise: boolean, _isSuperAdmin: boolean): MenuGroup[] => [];
 
 export const AccountDropdown: React.FC<AccountDropdownProps> = ({
   isOpen,
@@ -266,12 +241,15 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
           </div>
         </div>
 
-        {/* Menu Items */}
+        {/* Menu Items (settings moved to sidebar - just above Account) */}
+        {(() => {
+          const isEnterprise = subscriptionTier === 'enterprise';
+          const groups = getMenuGroups(subscriptionTier, isEnterprise, isSuperAdmin);
+          const hasItems = groups.some(g => g.items.length > 0);
+          if (!hasItems) return null;
+          return (
         <div className="py-2 max-h-[420px] overflow-y-auto custom-scrollbar">
-          {(() => {
-            const isEnterprise = subscriptionTier === 'enterprise';
-            const groups = getMenuGroups(subscriptionTier, isEnterprise, isSuperAdmin);
-            return groups.map((group, groupIndex) => (
+          {groups.map((group, groupIndex) => (
               <div key={groupIndex}>
                 {group.items.map((item, itemIndex) => {
                   const Icon = item.icon;
@@ -310,9 +288,10 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
                   <div className="mx-5 my-1.5 border-t border-gray-100" />
                 )}
               </div>
-            ));
-          })()}
+            ))}
         </div>
+          );
+        })()}
 
         {/* Upgrade CTA */}
         {/* Only show upgrade button for free, starter, and premium users - hide for pro and enterprise */}

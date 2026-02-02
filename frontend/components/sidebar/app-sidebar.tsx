@@ -337,6 +337,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </span>
             )}
           </button>
+          <button
+            onClick={() => router.push('/dashboard/settings')}
+            className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
+            title="Settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
           {user?.role === 'super_admin' && (
             <button
               onClick={() => router.push('/dashboard/settings/super-admin')}
@@ -751,6 +758,20 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           )}
         </nav>
 
+      </div>
+
+      {/* Settings - just above Account (easy to find) */}
+      <div className="border-t border-gray-200 px-2 pt-2 pb-1 flex-shrink-0">
+        <button
+          onClick={() => router.push('/dashboard/settings')}
+          className={cn(
+            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+            'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+          )}
+        >
+          <Settings className="w-5 h-5" />
+          Settings
+        </button>
       </div>
 
       {/* Bottom Section - Account Button (always visible; safe area on mobile) */}
