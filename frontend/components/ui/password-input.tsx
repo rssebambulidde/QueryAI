@@ -25,7 +25,7 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
           <input
             type={visible ? 'text' : 'password'}
             className={cn(
-              'flex w-full rounded-lg border border-gray-300 bg-white pl-3 pr-10 py-2 text-sm ring-offset-white placeholder:text-gray-400',
+              'flex w-full rounded-lg border border-gray-300 bg-white pl-3 pr-12 py-2 text-sm ring-offset-white placeholder:text-gray-400',
               'min-h-[44px]',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2',
               'disabled:cursor-not-allowed disabled:opacity-50',
@@ -38,7 +38,8 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
           <button
             type="button"
             onClick={() => setVisible((v) => !v)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
+            title={visible ? 'Hide password' : 'Show password'}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md bg-gray-100 border border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
             aria-label={visible ? 'Hide password' : 'Show password'}
             tabIndex={-1}
           >

@@ -7,8 +7,29 @@ import { authLimiter, inviteGuestLimiter } from '../middleware/rateLimiter';
 import { ValidationError } from '../types/error';
 import { StorageService } from '../services/storage.service';
 import { DatabaseService } from '../services/database.service';
+import config from '../config/env';
 
 const router = Router();
+
+/**
+ * GET /api/auth/email-config
+ * Debug: check if redirect base URL is set (for magic link / invite emails).
+ * Returns only whether it's configured; does not expose the URL.
+ */
+router.get(
+  '/email-config',
+  (req: Request, res: Response) => {
+    const frontendUrl = config.CORS_ORIGIN || config.API_BASE_URL;
+    const configured = !!frontendUrl && !String(frontendUrl).includes('undefined');
+    res.status(200).json({
+      success: true,
+      redirectBaseUrlConfigured: configured,
+      hint: configured
+        ? 'Backend has a frontend URL. If emails still fail, check Supabase Auth Logs and Redirect URLs.'
+        : 'Set CORS_ORIGIN or API_BASE_URL in Railway to your frontend URL (e.g. https://your-app.vercel.app).',
+    });
+  }
+);
 
 /**
  * POST /api/auth/signup

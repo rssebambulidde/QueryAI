@@ -83,12 +83,18 @@ export default function ResetPasswordPage() {
         setError(response.error?.message || 'Failed to reset password');
       }
     } catch (err: unknown) {
-      const msg =
+      let msg =
         err &&
         typeof err === 'object' &&
         'response' in err
-          ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
+          ? (err as { response?: { data?: { error?: { message?: string } }; status?: number } }).response?.data?.error?.message
           : undefined;
+      const status = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { status?: number } }).response?.status
+        : undefined;
+      if (status === 401 || (msg && /invalid|expired|token|authorization/i.test(msg))) {
+        msg = 'This link may have expired. Please request a new password reset from the login page.';
+      }
       setError(msg || 'Failed to reset password. Please try again.');
     } finally {
       setIsLoading(false);
@@ -128,7 +134,16 @@ export default function ResetPasswordPage() {
         </div>
 
         {error && (
-          <Alert variant="error">{error}</Alert>
+          <Alert variant="error">
+            <div>
+              <p>{error}</p>
+              {(error.includes('expired') || error.includes('Invalid or expired')) && (
+                <Link href="/forgot-password" className="mt-2 inline-block text-sm font-medium text-orange-600 hover:text-orange-500 underline">
+                  Request new reset link
+                </Link>
+              )}
+            </div>
+          </Alert>
         )}
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>

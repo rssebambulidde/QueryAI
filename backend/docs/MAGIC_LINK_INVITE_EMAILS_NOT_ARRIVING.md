@@ -2,11 +2,22 @@
 
 If **magic link** (passwordless login) or **invite** emails are not reaching the inbox, work through this checklist.
 
+**Note:** Railway **Build Logs** only show compile/deploy. To debug magic link and invite, use **Deploy Logs** (runtime stdout) when you trigger the action, and the checklist below.
+
 ---
 
 ## 1. Backend: Frontend URL (Railway / env)
 
 The link inside the email is built from your **frontend URL**. If it’s wrong or missing, the email can still be sent but the link may be broken, or Supabase may not send.
+
+**Quick check:** Call your backend (no auth):
+
+```http
+GET https://queryai-production.up.railway.app/api/auth/email-config
+```
+
+- If `redirectBaseUrlConfigured: false` → set `CORS_ORIGIN` or `API_BASE_URL` in Railway (see below).
+- If `redirectBaseUrlConfigured: true` → backend has a URL; if emails still fail, check Supabase (sections 2–4).
 
 **Set one of these in Railway (backend service) → Variables:**
 
@@ -16,7 +27,7 @@ The link inside the email is built from your **frontend URL**. If it’s wrong o
 | or `API_BASE_URL` | `https://your-frontend-domain.com`  |
 
 - **No trailing slash.** Example: `https://queryai.vercel.app` not `https://queryai.vercel.app/`.
-- If both are unset or wrong, backend logs will show:  
+- If both are unset or wrong, **Deploy Logs** (not Build Logs) will show:  
   `Magic link: CORS_ORIGIN and API_BASE_URL are not set` or `Invite: CORS_ORIGIN and API_BASE_URL are not set`.
 
 After changing variables, redeploy the backend.
