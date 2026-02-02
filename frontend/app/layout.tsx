@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
   preload: true,
 });
 
-const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://queryai.com";
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://queryai.samabrains.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     default: "QueryAI - Fact Research Assistant | SamaBrains | Kampala, Uganda",
     template: "%s | QueryAI by SamaBrains",
   },
-  description: "QueryAI by SamaBrains Solution Company – fact research assistant for accurate, verified information. Real-time web search and document analysis. Source-cited answers. Based in Kampala, Uganda.",
+  description: "QueryAI by SamaBrains Solution – fact research assistant for accurate, verified information. Real-time web search and document analysis. Source-cited answers. Based in Kampala, Uganda.",
   keywords: "QueryAI, SamaBrains, fact research assistant, research tool, verified information, document research, fact-checking, source-cited research, Kampala, Uganda",
   authors: [{ name: "SamaBrains Solution Company", url: baseUrl }],
   creator: "SamaBrains Solution Company",
