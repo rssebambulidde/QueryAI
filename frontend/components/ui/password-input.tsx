@@ -25,7 +25,7 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
           <input
             type={visible ? 'text' : 'password'}
             className={cn(
-              'flex w-full rounded-lg border border-gray-300 bg-white pl-3 pr-12 py-2 text-sm ring-offset-white placeholder:text-gray-400',
+              'flex w-full rounded-lg border border-gray-300 bg-white pl-3 pr-12 py-2 text-sm ring-offset-white placeholder:text-gray-400 text-gray-900',
               'min-h-[44px]',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2',
               'disabled:cursor-not-allowed disabled:opacity-50',
