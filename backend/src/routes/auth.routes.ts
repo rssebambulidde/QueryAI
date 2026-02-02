@@ -196,7 +196,7 @@ router.post(
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Invitation sent. They will receive an email to set up their account.',
     });
@@ -226,7 +226,7 @@ router.post(
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Invitation sent. Your friend will receive an email to set up their account.',
     });
