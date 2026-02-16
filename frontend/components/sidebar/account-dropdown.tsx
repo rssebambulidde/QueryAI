@@ -294,9 +294,8 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
           );
         })()}
 
-        {/* Upgrade CTA */}
-        {/* Only show upgrade button for free, starter, and premium users - hide for pro and enterprise */}
-        {subscriptionTier !== 'enterprise' && subscriptionTier !== 'pro' && (
+        {/* Upgrade CTA — show when any higher tier exists */}
+        {subscriptionTier !== 'enterprise' && (
           <>
             <div className="border-t border-gray-100" />
             <div className="px-5 py-4 bg-gradient-to-r from-orange-50 to-orange-100/30">
@@ -314,6 +313,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
                       {subscriptionTier === 'free' && 'Unlock premium features'}
                       {subscriptionTier === 'starter' && 'Upgrade to Premium, Pro, or Enterprise'}
                       {subscriptionTier === 'premium' && 'Upgrade to Pro or Enterprise'}
+                      {subscriptionTier === 'pro' && 'Upgrade to Enterprise'}
                     </p>
                   </div>
                 </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin } from 'lucide-react';
+import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Settings, LogOut, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -109,6 +109,21 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       case 'premium': return 'Premium';
       case 'starter': return 'Starter';
       default: return 'Free';
+    }
+  };
+
+  // Tier hierarchy: free < starter < premium < pro < enterprise
+  const TIER_RANK: Record<string, number> = { free: 0, starter: 1, premium: 2, pro: 3, enterprise: 4 };
+  const currentRank = TIER_RANK[subscriptionTier] ?? 0;
+  const hasHigherTier = currentRank < 4; // anything below enterprise can upgrade
+
+  const getUpgradeText = () => {
+    switch (subscriptionTier) {
+      case 'free': return 'Unlock premium features';
+      case 'starter': return 'Upgrade to Premium, Pro, or Enterprise';
+      case 'premium': return 'Upgrade to Pro or Enterprise';
+      case 'pro': return 'Upgrade to Enterprise';
+      default: return '';
     }
   };
 
@@ -294,6 +309,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Folder className="w-5 h-5" />
           </button>
+          <button
+            onClick={() => router.push('/dashboard/settings')}
+            className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+            title="Settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
           {user?.role === 'super_admin' && (
             <button
               onClick={() => router.push('/dashboard/settings/super-admin')}
@@ -305,8 +327,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           )}
         </nav>
 
-        {/* Collapsed Account */}
-        <div className="border-t border-gray-100 p-2 flex justify-center">
+        {/* Collapsed Bottom — Account + Sign Out */}
+        <div className="border-t border-gray-100 p-2 flex flex-col items-center gap-1">
           <button
             ref={accountButtonRef}
             onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
@@ -320,6 +342,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 {getUserInitials()}
               </div>
             )}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50/50 transition-colors"
+            title="Sign Out"
+          >
+            <LogOut className="w-4 h-4" />
           </button>
           <AccountDropdown
             isOpen={isAccountDropdownOpen}
@@ -392,6 +421,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Folder className="w-[18px] h-[18px]" />
             Library
+          </button>
+          <button
+            onClick={() => router.push('/dashboard/settings')}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+          >
+            <Settings className="w-[18px] h-[18px]" />
+            Settings
           </button>
           {user?.role === 'super_admin' && (
             <button
@@ -645,23 +681,24 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         )}
       </div>
 
-      {/* ── Change 6: Simplified account section ── */}
+      {/* ── Bottom section: Upgrade, Account, Sign Out ── */}
       <div
         className="border-t border-gray-100 flex-shrink-0"
         style={isMobile ? { paddingBottom: 'max(0px, env(safe-area-inset-bottom))' } : undefined}
       >
-        {/* Upgrade CTA — only for non-pro/enterprise */}
-        {subscriptionTier !== 'enterprise' && subscriptionTier !== 'pro' && (
+        {/* Upgrade CTA — show when any higher tier exists */}
+        {hasHigherTier && (
           <button
             onClick={handleUpgrade}
-            className="w-full flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50 transition-colors border-b border-gray-100"
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50 transition-colors border-b border-gray-100 group"
           >
-            <span className="text-orange-500">&#9733;</span>
-            <span>Upgrade</span>
+            <Sparkles className="w-4 h-4 text-orange-500 group-hover:text-orange-600" />
+            <span className="flex-1 text-left">Upgrade</span>
+            <span className="text-[11px] text-gray-400">{getUpgradeText()}</span>
           </button>
         )}
 
-        {/* Account row */}
+        {/* Account row — opens dropdown for private mode & profile */}
         <button
           ref={accountButtonRef}
           onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
@@ -693,6 +730,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             'w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform',
             isAccountDropdownOpen && 'rotate-180'
           )} />
+        </button>
+
+        {/* Sign Out — directly visible, no dropdown needed */}
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] text-gray-500 hover:text-red-600 hover:bg-red-50/50 transition-colors border-t border-gray-100"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sign Out</span>
         </button>
 
         <AccountDropdown
