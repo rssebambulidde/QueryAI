@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Settings, LogOut, Sparkles } from 'lucide-react';
+import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -309,13 +309,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Folder className="w-5 h-5" />
           </button>
-          <button
-            onClick={() => router.push('/dashboard/settings')}
-            className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
-            title="Settings"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
           {user?.role === 'super_admin' && (
             <button
               onClick={() => router.push('/dashboard/settings/super-admin')}
@@ -327,7 +320,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           )}
         </nav>
 
-        {/* Collapsed Bottom — Account + Sign Out */}
+        {/* Collapsed Bottom — Account */}
         <div className="border-t border-gray-100 p-2 flex flex-col items-center gap-1">
           <button
             ref={accountButtonRef}
@@ -342,13 +335,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 {getUserInitials()}
               </div>
             )}
-          </button>
-          <button
-            onClick={handleLogout}
-            className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50/50 transition-colors"
-            title="Sign Out"
-          >
-            <LogOut className="w-4 h-4" />
           </button>
           <AccountDropdown
             isOpen={isAccountDropdownOpen}
@@ -421,13 +407,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Folder className="w-[18px] h-[18px]" />
             Library
-          </button>
-          <button
-            onClick={() => router.push('/dashboard/settings')}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-          >
-            <Settings className="w-[18px] h-[18px]" />
-            Settings
           </button>
           {user?.role === 'super_admin' && (
             <button
@@ -730,15 +709,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             'w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform',
             isAccountDropdownOpen && 'rotate-180'
           )} />
-        </button>
-
-        {/* Sign Out — directly visible, no dropdown needed */}
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-2.5 px-4 py-2 text-[13px] text-gray-500 hover:text-red-600 hover:bg-red-50/50 transition-colors border-t border-gray-100"
-        >
-          <LogOut className="w-4 h-4" />
-          <span>Sign Out</span>
         </button>
 
         <AccountDropdown
