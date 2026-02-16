@@ -19,9 +19,9 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
   className,
 }) => {
   const { isMobile } = useMobile();
-  const sidebarRef = useRef<HTMLDivElement>(null);
-  const startXRef = useRef<number | null>(null);
-  const currentXRef = useRef<number | null>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const startYRef = useRef<number | null>(null);
+  const currentYRef = useRef<number | null>(null);
   const isDraggingRef = useRef(false);
 
   // Close on escape key
@@ -38,7 +38,7 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
     return () => window.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
 
-  // Prevent body scroll when sidebar is open
+  // Prevent body scroll when sheet is open
   useEffect(() => {
     if (isOpen && isMobile) {
       document.body.style.overflow = 'hidden';
@@ -50,45 +50,44 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
     };
   }, [isOpen, isMobile]);
 
-  // Swipe to close functionality
+  // Swipe down to close (upward modal)
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!isMobile) return;
-    startXRef.current = e.touches[0].clientX;
-    currentXRef.current = e.touches[0].clientX;
+    startYRef.current = e.touches[0].clientY;
+    currentYRef.current = e.touches[0].clientY;
     isDraggingRef.current = true;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isMobile || !isDraggingRef.current || startXRef.current === null) return;
+    if (!isMobile || !isDraggingRef.current || startYRef.current === null) return;
 
-    currentXRef.current = e.touches[0].clientX;
-    const diff = currentXRef.current - startXRef.current;
+    currentYRef.current = e.touches[0].clientY;
+    const diff = currentYRef.current - startYRef.current;
 
-    // Only allow swiping left (closing)
-    if (diff < 0 && sidebarRef.current) {
-      const translateX = Math.max(diff, -sidebarRef.current.offsetWidth);
-      sidebarRef.current.style.transform = `translateX(${translateX}px)`;
+    // Only allow swiping down (closing)
+    if (diff > 0 && sheetRef.current) {
+      sheetRef.current.style.transform = `translateY(${diff}px)`;
     }
   };
 
   const handleTouchEnd = () => {
-    if (!isMobile || !isDraggingRef.current || startXRef.current === null || currentXRef.current === null) {
+    if (!isMobile || !isDraggingRef.current || startYRef.current === null || currentYRef.current === null) {
       return;
     }
 
-    const diff = currentXRef.current - startXRef.current;
-    const threshold = 100; // Minimum swipe distance to close
+    const diff = currentYRef.current - startYRef.current;
+    const threshold = 80; // Minimum swipe distance to close
 
-    if (diff < -threshold && sidebarRef.current) {
+    if (diff > threshold && sheetRef.current) {
       onClose();
-    } else if (sidebarRef.current) {
+    } else if (sheetRef.current) {
       // Snap back
-      sidebarRef.current.style.transform = '';
+      sheetRef.current.style.transform = '';
     }
 
     isDraggingRef.current = false;
-    startXRef.current = null;
-    currentXRef.current = null;
+    startYRef.current = null;
+    currentYRef.current = null;
   };
 
   if (!isMobile) {
@@ -109,15 +108,15 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
         />
       )}
 
-      {/* Sidebar */}
+      {/* Bottom sheet (upward modal) */}
       <div
-        ref={sidebarRef}
+        ref={sheetRef}
         className={cn(
-          'fixed top-0 left-0 h-full w-80 max-w-[85vw] bg-white z-50',
-          'flex flex-col',
-          'transform transition-transform duration-300 ease-in-out',
-          'shadow-xl',
-          isOpen ? 'translate-x-0' : '-translate-x-full',
+          'fixed left-0 right-0 bottom-0 max-h-[85vh] bg-white z-50',
+          'flex flex-col rounded-t-2xl',
+          'transform transition-transform duration-300 ease-out',
+          'shadow-2xl',
+          isOpen ? 'translate-y-0' : 'translate-y-full',
           className
         )}
         onTouchStart={handleTouchStart}
@@ -127,8 +126,12 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
         aria-modal="true"
         aria-label="Navigation menu"
       >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-2 pb-1 flex-shrink-0">
+          <div className="w-10 h-1 rounded-full bg-gray-300" aria-hidden="true" />
+        </div>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
+        <div className="flex items-center justify-between px-4 pb-3 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-lg font-semibold text-gray-900">Menu</h2>
           <button
             onClick={onClose}
@@ -141,7 +144,13 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
         </div>
 
         {/* Content — flex-1 min-h-0 so account section stays visible at bottom */}
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <div 
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col" 
+          style={{ 
+            maxHeight: 'calc(85vh - 80px)',
+            paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
+          }}
+        >
           {children}
         </div>
       </div>

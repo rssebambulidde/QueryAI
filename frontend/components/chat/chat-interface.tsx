@@ -136,13 +136,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   const { unifiedFilters, setUnifiedFilters, selectedTopic, setSelectedTopic } = useFilterStore();
 
   const firstName = user?.full_name?.trim().split(/\s+/)[0] || null;
-  const timeGreeting = (() => {
+  // Dynamic greeting: varies by time, first name, and new vs returning user
+  const welcomeGreeting = (() => {
+    const name = firstName || 'there';
     const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
-    return 'Good evening';
+    const isReturning = conversations.length > 0;
+    const seed = (h + new Date().getDate()) % 3;
+    if (isReturning) {
+      const options = [
+        `Nice to see you back, ${name}!`,
+        `Welcome back, ${name}!`,
+        h < 12 ? `Good morning, ${name}!` : h < 17 ? `Good afternoon, ${name}!` : `Good evening, ${name}!`,
+      ];
+      return options[seed];
+    }
+    const options = [
+      `Hi ${name}!`,
+      h < 12 ? `Good morning, ${name}!` : h < 17 ? `Good afternoon, ${name}!` : `Good evening, ${name}!`,
+      h < 12 ? `Good morning, ${name}!` : h < 17 ? `Good afternoon, ${name}!` : `Good evening, ${name}!`,
+    ];
+    return options[seed];
   })();
-  const welcomeGreeting = firstName ? `${timeGreeting}, ${firstName}!` : timeGreeting + '!';
   
   // RAG settings state - use prop if provided, otherwise load from localStorage
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
@@ -999,15 +1013,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
               </button>
             </div>
           )}
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 w-full">
           {messages.length === 0 && (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center max-w-md">
+            <div className="flex flex-col items-center justify-center min-h-[50vh] w-full">
+              <div className="text-center max-w-md mx-auto">
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full mb-4">
                   <MessageSquare className="w-8 h-8 text-orange-600" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  👋 {welcomeGreeting}
+                  {welcomeGreeting}
                 </h3>
                 <p className="text-gray-600 mb-1">
                   Start a conversation by asking a question.
@@ -1258,8 +1272,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
       />
 
       {/* Input - Centered layout */}
-      <div className="bg-white border-t border-gray-200 shadow-lg relative">
-        <div className="max-w-3xl mx-auto pb-4">
+      <div className="bg-white border-t border-gray-200 shadow-lg relative flex justify-center">
+        <div className="w-full max-w-3xl mx-auto px-4 pb-4">
           {/* Citation Settings Button */}
           <div className="flex items-center justify-end px-4 pt-2 pb-1">
             <button

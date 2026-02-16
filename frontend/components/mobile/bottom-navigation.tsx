@@ -10,6 +10,7 @@ import {
   User,
   X,
   ArrowUpCircle,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
@@ -255,6 +256,22 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
                 <p className="text-xs text-gray-500">Current plan</p>
                 <p className="font-medium text-gray-900">{getTierName(subscriptionTier)}</p>
               </div>
+              <button
+                onClick={() => {
+                  setAccountModalOpen(false);
+                  router.push('/dashboard/settings');
+                }}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-left touch-manipulation"
+                style={{ minHeight: '44px' }}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center">
+                    <Settings className="w-4.5 h-4.5 text-gray-600" />
+                  </div>
+                  <span className="font-medium text-gray-900">Settings</span>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              </button>
               {nextTier && (
                 <Button
                   onClick={handleUpgrade}

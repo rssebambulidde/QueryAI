@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, Settings, LogOut, User, ArrowUp, CreditCard, Star, Pin, ShieldCheck } from 'lucide-react';
+import { MessageSquare, Folder, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, LogOut, User, ArrowUp, CreditCard, Star, Pin, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -336,13 +336,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 {collections.length > 9 ? '9+' : collections.length}
               </span>
             )}
-          </button>
-          <button
-            onClick={() => router.push('/dashboard/settings')}
-            className="w-full flex items-center justify-center p-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-50"
-            title="Settings"
-          >
-            <Settings className="w-5 h-5" />
           </button>
           {user?.role === 'super_admin' && (
             <button
@@ -760,21 +753,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
       </div>
 
-      {/* Settings - just above Account (easy to find) */}
-      <div className="border-t border-gray-200 px-2 pt-2 pb-1 flex-shrink-0">
-        <button
-          onClick={() => router.push('/dashboard/settings')}
-          className={cn(
-            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-            'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-          )}
-        >
-          <Settings className="w-5 h-5" />
-          Settings
-        </button>
-      </div>
-
-      {/* Bottom Section - Account Button (always visible; safe area on mobile) */}
+      {/* Bottom Section - Account Button (Settings is inside account dropdown) */}
       <div
         className="border-t border-gray-200 p-2 flex-shrink-0 relative"
         style={isMobile ? { paddingBottom: 'max(8px, env(safe-area-inset-bottom))' } : undefined}

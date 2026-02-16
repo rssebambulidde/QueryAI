@@ -10,6 +10,7 @@ import {
   ArrowUpRight,
   LogOut,
   Shield,
+  Settings,
 } from 'lucide-react';
 
 interface AccountDropdownProps {
@@ -321,6 +322,20 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
             </div>
           </>
         )}
+
+        {/* Settings */}
+        <div className="border-t border-gray-100">
+          <button
+            onClick={() => handleMenuItemClick('/dashboard/settings')}
+            className="w-full flex items-center gap-3.5 px-5 py-3.5 text-sm text-gray-700 hover:text-gray-900 hover:bg-orange-50/50 transition-colors text-left touch-manipulation min-h-[44px] group"
+          >
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-gray-50 border border-gray-100">
+              <Settings className="w-4.5 h-4.5" />
+            </div>
+            <span className="font-medium">Settings</span>
+            <ArrowUpRight className="w-4 h-4 text-gray-300 ml-auto" />
+          </button>
+        </div>
 
         {/* Logout */}
         <div className="border-t border-gray-100">
