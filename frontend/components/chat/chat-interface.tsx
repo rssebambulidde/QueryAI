@@ -986,9 +986,72 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
     });
   };
 
+  const isEmpty = messages.length === 0;
+
   return (
     <div className="flex flex-col h-full bg-white">
       <ResearchModeBanner onExit={handleExitResearchMode} />
+
+      {/* Empty state: greeting + input centered together like Copilot */}
+      {isEmpty && (
+        <div className="flex flex-1 min-h-0 items-center justify-center">
+          <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full mb-4">
+                <MessageSquare className="w-8 h-8 text-orange-600" />
+              </div>
+              <h3 className="text-2xl font-semibold text-gray-900 mb-2">
+                {welcomeGreeting}
+              </h3>
+              <p className="text-gray-500">
+                I can search your documents and the web to provide comprehensive answers with sources.
+              </p>
+            </div>
+
+            {/* Research mode starters */}
+            {selectedTopic && (
+              <div className="px-4 pt-1 pb-2">
+                <span className="text-xs text-gray-500 mr-2">Try:</span>
+                <div className="flex overflow-x-auto gap-1.5 pb-2 scrollbar-hide justify-center flex-wrap">
+                  {(
+                    (dynamicStarters && dynamicStarters.length > 0
+                      ? dynamicStarters.slice(0, 4)
+                      : Array.isArray(selectedTopic.scope_config?.suggested_starters) &&
+                        selectedTopic.scope_config.suggested_starters.length > 0
+                      ? selectedTopic.scope_config.suggested_starters.slice(0, 4)
+                      : [
+                          `What are the key concepts in ${selectedTopic.name}?`,
+                          `How does ${selectedTopic.name} work in practice?`,
+                        ]
+                    ) as string[]
+                  ).map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => handleSend(q)}
+                      disabled={isLoading || isStreaming}
+                      className="flex-shrink-0 px-3 py-2 text-xs rounded-full bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100 disabled:opacity-50 touch-manipulation min-h-[44px] whitespace-nowrap"
+                    >
+                      {q.length > 50 ? q.slice(0, 47) + '...' : q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Centered input */}
+            <ChatInput
+              onSend={(msg) => handleSend(msg)}
+              disabled={isLoading || isStreaming}
+              placeholder="Ask me anything..."
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Conversation mode: messages + bottom input */}
+      {!isEmpty && (
+        <>
       <div className="flex flex-1 min-h-0">
         {/* Messages - left/center; sources sidebar opens on right when user clicks "N sources" */}
         <div ref={messagesContainerRef} className="flex-1 min-w-0 overflow-y-auto relative">
@@ -1014,24 +1077,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             </div>
           )}
           <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 w-full">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center min-h-[50vh] w-full">
-              <div className="text-center max-w-md mx-auto">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full mb-4">
-                  <MessageSquare className="w-8 h-8 text-orange-600" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  {welcomeGreeting}
-                </h3>
-                <p className="text-gray-600 mb-1">
-                  Start a conversation by asking a question.
-                </p>
-                <p className="text-sm text-gray-500">
-                  I can search your documents and the web to provide comprehensive answers with sources.
-                </p>
-              </div>
-            </div>
-          )}
 
           {messages.map((message, index) => {
             // Find the user question that preceded this assistant message
@@ -1254,24 +1299,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
         )}
       </div>
 
-      <ResearchSessionSummaryModal
-        open={showResearchSummaryModal}
-        onClose={handleCloseResearchSummaryModal}
-        onRequestSummary={async () => {
-          if (!currentConversationId || !selectedTopic) return null;
-          const r = await aiApi.researchSessionSummary(currentConversationId, selectedTopic.name);
-          return r.success && r.data ? r.data.summary : null;
-        }}
-        topicName={selectedTopic?.name || ''}
-      />
-
-      {/* Citation Settings Modal */}
-      <CitationSettings
-        isOpen={isCitationSettingsOpen}
-        onClose={() => setIsCitationSettingsOpen(false)}
-      />
-
-      {/* Input - Centered layout */}
+      {/* Input - Bottom bar (only when conversation has messages) */}
       <div className="bg-white border-t border-gray-200 shadow-lg relative flex justify-center">
         <div className="w-full max-w-3xl mx-auto px-4 pb-4">
           {/* Citation Settings Button */}
@@ -1286,7 +1314,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
             </button>
           </div>
 
-          {/* 6.1 Dynamic AI-generated or on-topic suggested starters when in research mode */}
+          {/* Research mode starters */}
           {selectedTopic && (
             <div className="px-4 pt-3 pb-1">
               <span className="text-xs text-gray-500 mr-2">Try:</span>
@@ -1323,6 +1351,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
           />
         </div>
       </div>
+      </>
+      )}
+
+      <ResearchSessionSummaryModal
+        open={showResearchSummaryModal}
+        onClose={handleCloseResearchSummaryModal}
+        onRequestSummary={async () => {
+          if (!currentConversationId || !selectedTopic) return null;
+          const r = await aiApi.researchSessionSummary(currentConversationId, selectedTopic.name);
+          return r.success && r.data ? r.data.summary : null;
+        }}
+        topicName={selectedTopic?.name || ''}
+      />
+
+      {/* Citation Settings Modal */}
+      <CitationSettings
+        isOpen={isCitationSettingsOpen}
+        onClose={() => setIsCitationSettingsOpen(false)}
+      />
     </div>
   );
 };
