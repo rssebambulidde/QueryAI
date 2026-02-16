@@ -321,7 +321,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         </nav>
 
         {/* Collapsed Bottom — Account */}
-        <div className="border-t border-gray-100 p-2 flex flex-col items-center gap-1">
+        <div className="border-t border-gray-100 p-2 flex flex-col items-center gap-1 relative">
           <button
             ref={accountButtonRef}
             onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
@@ -660,9 +660,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         )}
       </div>
 
-      {/* ── Bottom section: Upgrade, Account, Sign Out ── */}
+      {/* ── Bottom section: Upgrade, Account ── */}
       <div
-        className="border-t border-gray-100 flex-shrink-0"
+        className="border-t border-gray-100 flex-shrink-0 relative"
         style={isMobile ? { paddingBottom: 'max(0px, env(safe-area-inset-bottom))' } : undefined}
       >
         {/* Upgrade CTA — show when any higher tier exists */}
