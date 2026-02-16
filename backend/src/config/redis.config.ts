@@ -30,50 +30,69 @@ let redisClient: RedisClientType | null = null;
 let redisClientPromise: Promise<RedisClientType> | null = null;
 
 /**
- * Get Redis configuration from environment variables
+ * Shared reconnect strategy - limits retries to avoid log spam
  */
-export function getRedisConfig(): RedisConfig {
-  // Support both Redis URL and individual connection parameters
+function reconnectStrategy(retries: number): number | Error {
+  if (retries > 10) {
+    logger.error('Redis reconnection failed after 10 retries');
+    return new Error('Redis reconnection failed');
+  }
+  return Math.min(retries * 50, 3000);
+}
+
+/**
+ * Get Redis configuration from environment variables.
+ * Explicitly parses REDIS_URL into host/port/password to avoid libraries
+ * silently falling back to localhost when URL parsing fails.
+ */
+export function getRedisConfig(): any {
   const redisUrl = process.env.REDIS_URL;
-  
+
   if (redisUrl) {
-    // Parse Redis URL (format: redis://[username]:[password]@[host]:[port]/[database])
-    return {
-      url: redisUrl,
-      socket: {
-        reconnectStrategy: (retries: number) => {
-          if (retries > 10) {
-            logger.error('Redis reconnection failed after 10 retries');
-            return new Error('Redis reconnection failed');
-          }
-          // Exponential backoff: 50ms, 100ms, 200ms, 400ms, etc., max 3s
-          return Math.min(retries * 50, 3000);
+    try {
+      const parsed = new URL(redisUrl);
+      logger.info('Redis config from REDIS_URL', { host: parsed.hostname, port: parsed.port });
+      return {
+        url: redisUrl,
+        socket: {
+          host: parsed.hostname,
+          port: parseInt(parsed.port || '6379', 10),
+          reconnectStrategy,
+          connectTimeout: 10000,
         },
-        connectTimeout: 10000, // 10 seconds
-      },
-      maxRetriesPerRequest: 3,
-      enableReadyCheck: true,
-      enableOfflineQueue: false, // Don't queue commands when offline
-    };
+        password: parsed.password || undefined,
+        username: parsed.username || undefined,
+        database: parsed.pathname ? parseInt(parsed.pathname.slice(1) || '0', 10) : 0,
+        maxRetriesPerRequest: 3,
+        enableReadyCheck: true,
+        enableOfflineQueue: false,
+      };
+    } catch (e) {
+      logger.warn('Failed to parse REDIS_URL, using raw url', { url: redisUrl?.slice(0, 20) });
+      return {
+        url: redisUrl,
+        socket: { reconnectStrategy, connectTimeout: 10000 },
+        maxRetriesPerRequest: 3,
+        enableReadyCheck: true,
+        enableOfflineQueue: false,
+      };
+    }
   }
 
   // Fallback to individual connection parameters
+  const host = process.env.REDIS_HOST || 'localhost';
+  const port = parseInt(process.env.REDIS_PORT || '6379', 10);
+  logger.info('Redis config from individual params', { host, port });
   return {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    socket: {
+      host,
+      port,
+      reconnectStrategy,
+      connectTimeout: 10000,
+    },
     password: process.env.REDIS_PASSWORD || undefined,
     username: process.env.REDIS_USERNAME || undefined,
     database: parseInt(process.env.REDIS_DATABASE || '0', 10),
-    socket: {
-      reconnectStrategy: (retries: number) => {
-        if (retries > 10) {
-          logger.error('Redis reconnection failed after 10 retries');
-          return new Error('Redis reconnection failed');
-        }
-        return Math.min(retries * 50, 3000);
-      },
-      connectTimeout: 10000,
-    },
     maxRetriesPerRequest: 3,
     enableReadyCheck: true,
     enableOfflineQueue: false,
@@ -130,11 +149,18 @@ export async function createRedisClient(): Promise<RedisClientType> {
   }
 
   const redisConfig = getRedisConfig();
+  logger.info('Creating Redis client', { configKeys: Object.keys(redisConfig) });
   const client = createClient(redisConfig) as RedisClientType;
 
-  // Error handling
+  // Error handling - only log once to avoid log spam
+  let errorCount = 0;
   client.on('error', (err) => {
-    logger.error('Redis client error', { error: err.message });
+    errorCount++;
+    if (errorCount <= 3) {
+      logger.error('Redis client error', { error: err.message, count: errorCount });
+    } else if (errorCount === 4) {
+      logger.error('Redis client error (suppressing further errors)', { totalErrors: errorCount });
+    }
   });
 
   client.on('connect', () => {
