@@ -19,7 +19,7 @@ export interface AuthResponse {
   user: {
     id: string;
     email: string;
-    fullName?: string;
+    full_name?: string;
     role?: 'user' | 'admin' | 'super_admin';
     subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
   };
@@ -130,7 +130,7 @@ export class AuthService {
           user: {
             id: authData.user.id,
             email: authData.user.email!,
-            fullName: data.fullName,
+            full_name: data.fullName,
             role: profile?.role || 'user',
             subscriptionTier: subscription?.tier || 'free',
           },
