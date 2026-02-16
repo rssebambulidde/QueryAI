@@ -135,10 +135,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ ragSettings: propR
   const { currentConversationId, createConversation, refreshConversations, conversations, updateConversationFilters, updateConversation } = useConversationStore();
   const { unifiedFilters, setUnifiedFilters, selectedTopic, setSelectedTopic } = useFilterStore();
 
-  const firstName = user?.full_name?.trim().split(/\s+/)[0] || null;
+  const firstName = user?.full_name?.trim().split(/\s+/)[0]
+    || (user?.email ? user.email.split('@')[0].replace(/[._-]/g, ' ').split(' ')[0] : null);
+  const displayFirstName = firstName
+    ? firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase()
+    : null;
   // Dynamic greeting: varies by time, first name, and new vs returning user
   const welcomeGreeting = (() => {
-    const name = firstName || 'there';
+    const name = displayFirstName || 'there';
     const h = new Date().getHours();
     const isReturning = conversations.length > 0;
     const seed = (h + new Date().getDate()) % 3;

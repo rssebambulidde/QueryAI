@@ -146,7 +146,7 @@ export class AuthService {
         user: {
           id: authData.user.id,
           email: authData.user.email!,
-          fullName: profile?.full_name || data.fullName,
+          full_name: profile?.full_name || data.fullName,
           role: profile?.role || 'user',
           subscriptionTier: subscription?.tier || 'free',
         },
@@ -216,7 +216,7 @@ export class AuthService {
         user: {
           id: authData.user.id,
           email: authData.user.email!,
-          fullName: profile?.full_name,
+          full_name: profile?.full_name,
           role: profile?.role || 'user',
           subscriptionTier: subscription?.tier || 'free',
         },
