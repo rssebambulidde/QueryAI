@@ -17,8 +17,10 @@ COPY tsconfig.json ./
 COPY src ./src
 COPY public ./public
 
-# Build
 RUN npm run build
+
+# Expose port
+EXPOSE ${PORT:-3001}
 
 # Start
 CMD ["npm", "start"]
