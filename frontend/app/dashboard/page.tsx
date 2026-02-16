@@ -222,17 +222,16 @@ function DashboardContent() {
         />
       )}
       
-      <nav className="bg-white shadow-sm flex-shrink-0 border-b border-gray-200">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-3">
-              {/* Hamburger menu only on mobile (fixed position above) */}
-              {/* On desktop, sidebar is always visible, no hamburger needed */}
-              <h1 className="text-xl font-bold text-gray-900">QueryAI</h1>
+      {/* Top nav — only visible on mobile where sidebar is hidden */}
+      {isMobile && (
+        <nav className="bg-white flex-shrink-0 border-b border-gray-100">
+          <div className="px-4">
+            <div className="flex items-center h-12">
+              <h1 className="text-base font-semibold text-gray-900">QueryAI</h1>
             </div>
           </div>
-        </div>
-      </nav>
+        </nav>
+      )}
 
       <main className="flex-1 flex overflow-hidden relative">
         {/* Mobile Sidebar */}

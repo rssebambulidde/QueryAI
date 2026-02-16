@@ -96,8 +96,8 @@ router.post(
       useQueue: !!useQueue,
     });
 
-    // Use queue if requested
-    if (useQueue) {
+    // Use queue if requested and available (Redis must be configured)
+    if (useQueue && RequestQueueService.isAvailable()) {
       try {
         // Parse priority
         let queuePriority = QueuePriority.NORMAL;
@@ -720,6 +720,13 @@ router.post(
       conversationId: conversationId,
     };
 
+    if (!RequestQueueService.isAvailable()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Queue is not available. Redis is not configured. Use POST /api/ai/ask for direct processing.',
+      });
+    }
+
     // Parse priority
     let queuePriority = QueuePriority.NORMAL;
     if (priority) {
@@ -762,6 +769,12 @@ router.get(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
+    if (!RequestQueueService.isAvailable()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Queue is not available. Redis is not configured.',
+      });
+    }
     const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
     const userId = req.user?.id;
 
@@ -803,6 +816,12 @@ router.delete(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
+    if (!RequestQueueService.isAvailable()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Queue is not available. Redis is not configured.',
+      });
+    }
     const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
     const userId = req.user?.id;
 
@@ -844,6 +863,12 @@ router.get(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
+    if (!RequestQueueService.isAvailable()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Queue is not available. Redis is not configured.',
+      });
+    }
     const stats = await RequestQueueService.getQueueStats();
     const health = await RequestQueueService.getQueueHealth();
     const { RAGWorker } = await import('../workers/rag-worker');
@@ -869,6 +894,12 @@ router.get(
   authenticate,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
+    if (!RequestQueueService.isAvailable()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Queue is not available. Redis is not configured.',
+      });
+    }
     const { state = 'waiting', start = 0, end = 9 } = req.query;
     const userId = req.user?.id;
 

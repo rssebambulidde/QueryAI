@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Conversation } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { MessageSquare, Trash2, Edit2, Check, X, Folder, MoreVertical, Pin } from 'lucide-react';
+import { Trash2, Edit2, Check, X, Folder, MoreVertical, Pin } from 'lucide-react';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
@@ -33,21 +33,19 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(conversation.title || '');
   const [showMenu, setShowMenu] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { updateConversation } = useConversationStore();
   const { toast } = useToast();
   const { isMobile } = useMobile();
 
-  // Close menu on outside click (works for both mouse and touch)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowMenu(false);
       }
     };
-
     if (showMenu) {
-      // Listen to both mousedown and touchstart for better mobile support
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('touchstart', handleClickOutside);
       return () => {
@@ -85,16 +83,12 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   };
 
   const handleAddToCollection = () => {
-    if (onSaveToCollection) {
-      onSaveToCollection(conversation.id);
-    }
+    if (onSaveToCollection) onSaveToCollection(conversation.id);
     setShowMenu(false);
   };
 
   const handlePin = () => {
-    if (onPin) {
-      onPin(conversation.id);
-    }
+    if (onPin) onPin(conversation.id);
     setShowMenu(false);
   };
 
@@ -107,160 +101,119 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   return (
     <div
       className={cn(
-        'group relative px-4 py-3 cursor-pointer transition-colors hover:bg-gray-50',
-        isActive && 'bg-orange-50 border-l-4 border-l-orange-600'
+        'group relative flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors',
+        isActive
+          ? 'bg-gray-100 text-gray-900'
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
       )}
       onClick={onSelect}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="flex items-start gap-3">
-        <div className={cn(
-          'p-2 rounded-lg flex-shrink-0',
-          isActive ? 'bg-orange-100' : 'bg-gray-100'
-        )}>
-          <MessageSquare className={cn(
-            'w-4 h-4',
-            isActive ? 'text-orange-600' : 'text-gray-600'
-          )} />
+      {/* Inline editing mode */}
+      {isEditing ? (
+        <div className="flex items-center gap-1.5 w-full" onClick={(e) => e.stopPropagation()}>
+          <Input
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleEdit();
+              if (e.key === 'Escape') handleCancelEdit();
+            }}
+            className="h-7 text-[13px] flex-1"
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={(e) => { e.stopPropagation(); handleEdit(); }}
+            className="p-1 text-green-600 hover:bg-green-50 rounded"
+          >
+            <Check className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleCancelEdit(); }}
+            className="p-1 text-gray-500 hover:bg-gray-100 rounded"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
-        
-        <div className="flex-1 min-w-0">
-          {isEditing ? (
-            <div className="flex items-center gap-2 mb-1" onClick={(e) => e.stopPropagation()}>
-              <Input
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleEdit();
-                  if (e.key === 'Escape') handleCancelEdit();
-                }}
-                className="h-7 text-sm"
-                autoFocus
-                onClick={(e) => e.stopPropagation()}
-              />
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleEdit();
-                }}
-                className="p-1 text-green-600 hover:bg-green-50 rounded"
-              >
-                <Check className="w-4 h-4" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCancelEdit();
-                }}
-                className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-1 gap-2">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {isPinned && (
-                    <Pin className="w-3 h-3 text-orange-500 fill-orange-500 flex-shrink-0" />
-                  )}
-                  <h3 className={cn(
-                    'text-sm font-medium truncate',
-                    isActive ? 'text-orange-900' : 'text-gray-900'
-                  )}>
-                    {conversation.title || 'New Conversation'}
-                  </h3>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {conversation.topic_id && (
-                    <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 bg-orange-100 rounded">
-                      Research
-                    </span>
-                  )}
-                  <div className="relative" ref={menuRef}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowMenu(!showMenu);
-                      }}
-                      className={cn(
-                        "p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-opacity touch-manipulation",
-                        "min-w-[44px] min-h-[44px] flex items-center justify-center", // Touch target size
-                        isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100" // Always visible on mobile
-                      )}
-                      title="More options"
-                      aria-label="More options"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                    {showMenu && (
-                      <div className={cn(
-                        "absolute bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1",
-                        isMobile 
-                          ? "right-0 top-full mt-1 w-48 max-w-[calc(100vw-2rem)]" // Ensure menu doesn't overflow on mobile
-                          : "right-0 top-full mt-1 w-48"
-                      )}>
-                        {onPin && (
-                          <button
-                            onClick={handlePin}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[44px]"
-                            style={{ minHeight: '44px' }}
-                          >
-                            <Pin className={cn('w-4 h-4', isPinned && 'fill-current')} />
-                            {isPinned ? 'Unpin' : 'Pin'}
-                          </button>
-                        )}
-                        {onSaveToCollection && (
-                          <button
-                            onClick={handleAddToCollection}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[44px]"
-                            style={{ minHeight: '44px' }}
-                          >
-                            <Folder className="w-4 h-4" />
-                            Add to Collection
-                          </button>
-                        )}
-                        <button
-                          onClick={handleRename}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[44px]"
-                          style={{ minHeight: '44px' }}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                          Rename
-                        </button>
-                        <div className="border-t border-gray-100 my-1" />
-                        <button
-                          onClick={handleDelete}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left touch-manipulation min-h-[44px]"
-                          style={{ minHeight: '44px' }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              {conversation.lastMessage && (
-                <p className="text-xs text-gray-500 truncate mb-1">
-                  {conversation.lastMessage}
-                </p>
-              )}
-              
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <span>{formatTime(conversation.lastMessageAt || conversation.updated_at)}</span>
-                {conversation.messageCount !== undefined && conversation.messageCount > 0 && (
-                  <>
-                    <span>•</span>
-                    <span>{conversation.messageCount} messages</span>
-                  </>
-                )}
-              </div>
-            </>
+      ) : (
+        <>
+          {/* Pin indicator */}
+          {isPinned && (
+            <Pin className="w-3 h-3 text-gray-400 fill-gray-400 flex-shrink-0" />
           )}
-        </div>
-      </div>
+
+          {/* Title — primary content, clean and simple */}
+          <span className="flex-1 text-[13px] truncate">
+            {conversation.title || 'New Conversation'}
+          </span>
+
+          {/* Hover metadata: time stamp */}
+          <span className={cn(
+            'text-[11px] text-gray-400 flex-shrink-0 transition-opacity whitespace-nowrap',
+            (isHovered || isMobile) ? 'opacity-100' : 'opacity-0'
+          )}>
+            {formatTime(conversation.lastMessageAt || conversation.updated_at)}
+          </span>
+
+          {/* Context menu trigger */}
+          <div className="relative flex-shrink-0" ref={menuRef}>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+              className={cn(
+                'p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200/60 rounded transition-opacity',
+                isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              )}
+              title="More options"
+              aria-label="More options"
+            >
+              <MoreVertical className="w-3.5 h-3.5" />
+            </button>
+
+            {showMenu && (
+              <div className={cn(
+                'absolute bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1',
+                'right-0 top-full mt-1 w-44'
+              )}>
+                {onPin && (
+                  <button
+                    onClick={handlePin}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
+                  >
+                    <Pin className={cn('w-3.5 h-3.5', isPinned && 'fill-current')} />
+                    {isPinned ? 'Unpin' : 'Pin'}
+                  </button>
+                )}
+                {onSaveToCollection && (
+                  <button
+                    onClick={handleAddToCollection}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
+                  >
+                    <Folder className="w-3.5 h-3.5" />
+                    Add to Collection
+                  </button>
+                )}
+                <button
+                  onClick={handleRename}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  Rename
+                </button>
+                <div className="border-t border-gray-100 my-0.5" />
+                <button
+                  onClick={handleDelete}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-red-600 hover:bg-red-50 text-left touch-manipulation min-h-[36px]"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };
