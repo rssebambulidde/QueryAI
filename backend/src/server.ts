@@ -283,6 +283,15 @@ app.use(errorHandler);
 // Initialize request queue and worker
 async function initializeQueue() {
   try {
+    const { isRedisConfigured } = await import('./config/redis.config');
+    const redisUrl = process.env.REDIS_URL;
+    logger.info('Redis startup check', {
+      REDIS_URL_set: !!redisUrl,
+      REDIS_URL_host: redisUrl ? new URL(redisUrl).hostname : 'none',
+      REDIS_HOST: process.env.REDIS_HOST || 'not set',
+      isRedisConfigured: isRedisConfigured(),
+    });
+
     const { RequestQueueService } = await import('./services/request-queue.service');
     const { RAGWorker } = await import('./workers/rag-worker');
     

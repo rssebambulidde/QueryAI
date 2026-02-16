@@ -5,6 +5,7 @@
 
 import { Worker, WorkerOptions, Job } from 'bullmq';
 import logger from '../config/logger';
+import { isRedisConfigured } from '../config/redis.config';
 import { AIService } from '../services/ai.service';
 import { RAGRequestJobData, RAGRequestJobResult } from '../services/request-queue.service';
 
@@ -18,11 +19,24 @@ export class RAGWorker {
   private static readonly CONCURRENCY = 5; // Process up to 5 jobs concurrently
 
   /**
-   * Get Redis connection configuration
+   * Get Redis connection configuration for BullMQ (ioredis-compatible)
    */
   private static getRedisConnection(): any {
-    if (process.env.REDIS_URL) {
-      return process.env.REDIS_URL;
+    const redisUrl = process.env.REDIS_URL;
+    if (redisUrl) {
+      try {
+        const parsed = new URL(redisUrl);
+        return {
+          host: parsed.hostname,
+          port: parseInt(parsed.port || '6379', 10),
+          password: parsed.password || undefined,
+          username: parsed.username || undefined,
+          db: parsed.pathname ? parseInt(parsed.pathname.slice(1) || '0', 10) : 0,
+          maxRetriesPerRequest: null,
+        };
+      } catch {
+        return redisUrl;
+      }
     }
 
     return {
@@ -31,15 +45,22 @@ export class RAGWorker {
       password: process.env.REDIS_PASSWORD,
       username: process.env.REDIS_USERNAME,
       db: parseInt(process.env.REDIS_DATABASE || '0', 10),
+      maxRetriesPerRequest: null,
     };
   }
 
   /**
    * Initialize the worker
+   * Skips initialization when Redis is not configured (e.g. production without REDIS_URL)
    */
   static async initialize(): Promise<void> {
     if (this.worker) {
       return; // Already initialized
+    }
+
+    if (!isRedisConfigured()) {
+      logger.info('Redis not configured, skipping RAG worker initialization');
+      return;
     }
 
     try {

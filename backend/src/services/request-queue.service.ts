@@ -5,6 +5,7 @@
 
 import { Queue, QueueOptions, Job, JobsOptions } from 'bullmq';
 import logger from '../config/logger';
+import { isRedisConfigured } from '../config/redis.config';
 import { QuestionRequest } from './ai.service';
 
 /**
@@ -69,11 +70,24 @@ export class RequestQueueService {
   private static readonly ATTEMPT_DELAY = 5000; // 5 seconds
 
   /**
-   * Get Redis connection configuration
+   * Get Redis connection configuration for BullMQ (ioredis-compatible)
    */
   private static getRedisConnection(): any {
-    if (process.env.REDIS_URL) {
-      return process.env.REDIS_URL;
+    const redisUrl = process.env.REDIS_URL;
+    if (redisUrl) {
+      try {
+        const parsed = new URL(redisUrl);
+        return {
+          host: parsed.hostname,
+          port: parseInt(parsed.port || '6379', 10),
+          password: parsed.password || undefined,
+          username: parsed.username || undefined,
+          db: parsed.pathname ? parseInt(parsed.pathname.slice(1) || '0', 10) : 0,
+          maxRetriesPerRequest: null,
+        };
+      } catch {
+        return redisUrl;
+      }
     }
 
     return {
@@ -82,15 +96,22 @@ export class RequestQueueService {
       password: process.env.REDIS_PASSWORD,
       username: process.env.REDIS_USERNAME,
       db: parseInt(process.env.REDIS_DATABASE || '0', 10),
+      maxRetriesPerRequest: null,
     };
   }
 
   /**
    * Initialize the queue
+   * Skips initialization when Redis is not configured (e.g. production without REDIS_URL)
    */
   static async initialize(): Promise<void> {
     if (this.ragQueue) {
       return; // Already initialized
+    }
+
+    if (!isRedisConfigured()) {
+      logger.info('Redis not configured, skipping request queue initialization (RAG will process inline)');
+      return;
     }
 
     try {
@@ -128,6 +149,13 @@ export class RequestQueueService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Check if the queue is available (Redis configured and initialized)
+   */
+  static isAvailable(): boolean {
+    return this.ragQueue !== null;
   }
 
   /**
