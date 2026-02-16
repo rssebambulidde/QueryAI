@@ -62,8 +62,11 @@ interface EnvConfig {
   PAYPAL_PLAN_ID_PRO_ANNUAL?: string;
   PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL?: string;
 
-  // Frontend URL (for payment redirects)
+  // Frontend URL (for payment redirects, emails, CORS)
   FRONTEND_URL?: string;
+  // Production fallback URLs (used when FRONTEND_URL / API_BASE_URL are not set)
+  FRONTEND_FALLBACK_URL?: string;
+  BACKEND_FALLBACK_URL?: string;
 
   // Email Service (Brevo)
   BREVO_API_KEY?: string;
@@ -103,6 +106,8 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
     'PAYPAL_PLAN_ID_PREMIUM_ANNUAL',
     'PAYPAL_PLAN_ID_PRO_ANNUAL',
     'FRONTEND_URL',
+    'FRONTEND_FALLBACK_URL',
+    'BACKEND_FALLBACK_URL',
     'BREVO_API_KEY',
     'BREVO_SENDER_EMAIL',
     'BREVO_SENDER_NAME',
@@ -147,7 +152,18 @@ const config: EnvConfig = {
   PINECONE_INDEX_NAME: getEnvVar('PINECONE_INDEX_NAME', 'queryai-embeddings'),
 
   // Authentication
-  JWT_SECRET: getEnvVar('JWT_SECRET', 'your-secret-key-change-in-production'),
+  // JWT_SECRET is required in production — no default provided to prevent insecure deployments
+  JWT_SECRET: (() => {
+    const secret = process.env.JWT_SECRET;
+    const nodeEnv = process.env.NODE_ENV || 'development';
+    if (!secret && nodeEnv === 'production') {
+      throw new Error(
+        'FATAL: JWT_SECRET environment variable is required in production. ' +
+        'Set a strong, random secret (min 32 characters) before starting the server.'
+      );
+    }
+    return secret || 'dev-only-secret-not-for-production';
+  })(),
   JWT_EXPIRES_IN: getEnvVar('JWT_EXPIRES_IN', '7d'),
 
   // CORS - Support comma-separated origins for multiple frontends (Cloudflare Pages, etc.)
@@ -181,6 +197,9 @@ const config: EnvConfig = {
 
   // Frontend URL (for payment redirects) - Optional
   FRONTEND_URL: getEnvVar('FRONTEND_URL') || undefined,
+  // Production fallback URLs — set these instead of hardcoding domain names in route files
+  FRONTEND_FALLBACK_URL: getEnvVar('FRONTEND_FALLBACK_URL') || undefined,
+  BACKEND_FALLBACK_URL: getEnvVar('BACKEND_FALLBACK_URL') || undefined,
 
   // Email Service (Brevo) - Optional
   BREVO_API_KEY: getEnvVar('BREVO_API_KEY') || undefined,

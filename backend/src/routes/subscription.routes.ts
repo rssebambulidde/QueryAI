@@ -477,25 +477,13 @@ router.post(
     const trialEnd = new Date(now);
     trialEnd.setDate(trialEnd.getDate() + (trialDays as number));
 
-      const updated = await DatabaseService.updateSubscription(userId, {
-        tier: tier as 'premium' | 'pro',
-        status: 'active',
-        trial_end: trialEnd.toISOString(),
-        current_period_start: now.toISOString(),
-        current_period_end: trialEnd.toISOString(),
-      });
-
-      // Log subscription history
-      if (updated) {
-        await DatabaseService.logSubscriptionHistory(
-          subscription.id,
-          userId,
-          'tier_change',
-          { tier: subscription.tier },
-          { tier, trial_end: trialEnd.toISOString() },
-          `Started ${trialDays}-day trial for ${tier} tier`
-        );
-      }
+    const updated = await DatabaseService.updateSubscription(userId, {
+      tier: tier as 'premium' | 'pro',
+      status: 'active',
+      trial_end: trialEnd.toISOString(),
+      current_period_start: now.toISOString(),
+      current_period_end: trialEnd.toISOString(),
+    });
 
     // Log subscription history
     if (updated) {

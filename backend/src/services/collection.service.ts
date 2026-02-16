@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../config/database';
 import { Database } from '../types/database';
 import logger from '../config/logger';
 import { AppError, ValidationError, NotFoundError } from '../types/error';
+import { sanitizeLikeValue, validateSearchInput } from '../validation/sanitize';
 
 export interface CreateCollectionInput {
   user_id: string;
@@ -388,6 +389,12 @@ export class CollectionService {
       // Verify collection exists and belongs to user
       await this.getCollection(collectionId, userId);
 
+      const validatedQuery = validateSearchInput(searchQuery);
+      if (!validatedQuery) {
+        return [];
+      }
+      const sanitized = sanitizeLikeValue(validatedQuery);
+
       const { data, error } = await supabaseAdmin
         .from('collection_conversations')
         .select(`
@@ -402,7 +409,7 @@ export class CollectionService {
           )
         `)
         .eq('collection_id', collectionId)
-        .ilike('conversations.title', `%${searchQuery}%`);
+        .ilike('conversations.title', `%${sanitized}%`);
 
       if (error) {
         logger.error('Error searching collection conversations:', error);

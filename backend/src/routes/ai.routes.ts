@@ -290,7 +290,12 @@ router.post(
             topicDescription = topic.description ?? undefined;
             topicScopeConfig = topic.scope_config ?? null;
           }
-        } catch (_) {}
+        } catch (topicErr: any) {
+          logger.warn('Failed to fetch topic for off-topic pre-check', {
+            topicId: request.topicId,
+            error: topicErr?.message,
+          });
+        }
       }
       const preCheckEnabled =
         !!topicName &&

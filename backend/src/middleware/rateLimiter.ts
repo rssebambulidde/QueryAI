@@ -54,6 +54,29 @@ export const authLimiter = rateLimit({
   },
 });
 
+// Strict limiter for public form endpoints (enterprise inquiry, contact)
+export const publicFormLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // 5 submissions per IP per hour
+  message: 'Too many submissions from this IP. Please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: {
+    trustProxy: true,
+  },
+  handler: (req: Request, res: Response) => {
+    logger.warn(`Public form rate limit exceeded for IP: ${req.ip}`, { path: req.path });
+    const error = new RateLimitError('Too many submissions. Please wait before trying again.');
+    res.status(error.statusCode).json({
+      success: false,
+      error: {
+        message: error.message,
+        code: error.code,
+      },
+    });
+  },
+});
+
 // Stricter limiter for unauthenticated "invite a friend" (signup page) to prevent abuse
 export const inviteGuestLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

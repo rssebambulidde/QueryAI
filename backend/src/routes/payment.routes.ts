@@ -16,7 +16,7 @@ function getBaseUrl(): string {
     if (config.NODE_ENV === 'production') {
       baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
         ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-        : 'https://queryai-production.up.railway.app';
+        : config.BACKEND_FALLBACK_URL || config.API_BASE_URL;
     } else {
       baseUrl = 'http://localhost:3001';
     }
@@ -31,7 +31,9 @@ function getFrontendUrl(): string {
     !!process.env.RAILWAY_PUBLIC_DOMAIN;
   let frontendUrl = config.FRONTEND_URL || process.env.FRONTEND_URL;
   if (!frontendUrl || frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1')) {
-    frontendUrl = isProduction ? 'https://queryai.samabrains.com' : 'http://localhost:3000';
+    frontendUrl = isProduction
+      ? (config.FRONTEND_FALLBACK_URL || 'http://localhost:3000')
+      : 'http://localhost:3000';
   }
   return frontendUrl;
 }
@@ -867,9 +869,10 @@ router.post(
     const transmissionTime = req.headers['paypal-transmission-time'] as string;
 
     const hasVerificationHeaders = !!(authAlgo && certUrl && transmissionId && transmissionSig && transmissionTime);
-    const isProduction = config.NODE_ENV === 'production' || 
-                         process.env.RAILWAY_ENVIRONMENT === 'production' || 
-                         !!process.env.RAILWAY_PUBLIC_DOMAIN;
+
+    // Use an explicit opt-in flag for skipping verification (e.g., local dev with PayPal sandbox).
+    // This prevents accidental bypass if NODE_ENV is misconfigured in production.
+    const skipWebhookVerification = process.env.SKIP_WEBHOOK_VERIFICATION === 'true';
 
     // Verify webhook signature if headers are present
     if (hasVerificationHeaders) {
@@ -888,7 +891,6 @@ router.post(
           webhook_id: webhookEvent.id,
           transmissionId,
         });
-        // Return 403 Forbidden when verification fails - do not process webhook
         return res.status(403).json({ 
           success: false, 
           message: 'Webhook verification failed' 
@@ -898,32 +900,29 @@ router.post(
         event_type: eventType,
         webhook_id: webhookEvent.id,
       });
+    } else if (skipWebhookVerification) {
+      // Explicit opt-in: only allow unverified webhooks when SKIP_WEBHOOK_VERIFICATION=true
+      logger.warn('PayPal webhook missing verification headers — allowed via SKIP_WEBHOOK_VERIFICATION flag', {
+        event_type: eventType,
+        webhook_id: webhookEvent.id,
+      });
     } else {
-      // Missing verification headers
-      if (isProduction) {
-        // In production, reject webhooks without verification headers (security risk)
-        logger.error('PayPal webhook missing verification headers in production - rejecting', {
-          event_type: eventType,
-          webhook_id: webhookEvent.id,
-          headers: {
-            'paypal-auth-algo': authAlgo ? 'present' : 'missing',
-            'paypal-cert-url': certUrl ? 'present' : 'missing',
-            'paypal-transmission-id': transmissionId ? 'present' : 'missing',
-            'paypal-transmission-sig': transmissionSig ? 'present' : 'missing',
-            'paypal-transmission-time': transmissionTime ? 'present' : 'missing',
-          },
-        });
-        return res.status(401).json({ 
-          success: false, 
-          message: 'Webhook verification headers required' 
-        });
-      } else {
-        // In development/sandbox, log as warning but allow (for testing)
-        logger.warn('PayPal webhook missing verification headers (development mode - allowing)', {
-          event_type: eventType,
-          webhook_id: webhookEvent.id,
-        });
-      }
+      // Reject webhooks without verification headers (default secure behavior)
+      logger.error('PayPal webhook missing verification headers - rejecting', {
+        event_type: eventType,
+        webhook_id: webhookEvent.id,
+        headers: {
+          'paypal-auth-algo': authAlgo ? 'present' : 'missing',
+          'paypal-cert-url': certUrl ? 'present' : 'missing',
+          'paypal-transmission-id': transmissionId ? 'present' : 'missing',
+          'paypal-transmission-sig': transmissionSig ? 'present' : 'missing',
+          'paypal-transmission-time': transmissionTime ? 'present' : 'missing',
+        },
+      });
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Webhook verification headers required' 
+      });
     }
 
     if (eventType === 'PAYMENT.CAPTURE.COMPLETED' && resource) {

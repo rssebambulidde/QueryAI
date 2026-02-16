@@ -7,6 +7,7 @@ import { supabaseAdmin } from '../config/database';
 import { DatabaseService } from '../services/database.service';
 import logger from '../config/logger';
 import { apiLimiter } from '../middleware/rateLimiter';
+import { sanitizePostgrestValue, validateSearchInput } from '../validation/sanitize';
 
 const router = Router();
 
@@ -20,16 +21,21 @@ router.get(
   requireSuperAdmin,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { limit = 50, offset = 0, search } = req.query;
+    const { limit: rawLimit = '50', offset: rawOffset = '0', search } = req.query;
+
+    const parsedLimit = Math.min(Math.max(parseInt(rawLimit as string, 10) || 50, 1), 100);
+    const parsedOffset = Math.max(parseInt(rawOffset as string, 10) || 0, 0);
 
     let query = supabaseAdmin
       .from('user_profiles')
       .select('id, email, full_name, role, created_at, updated_at')
       .order('created_at', { ascending: false })
-      .range(parseInt(offset as string, 10), parseInt(offset as string, 10) + parseInt(limit as string, 10) - 1);
+      .range(parsedOffset, parsedOffset + parsedLimit - 1);
 
-    if (search) {
-      query = query.or(`email.ilike.%${search}%,full_name.ilike.%${search}%`);
+    const validatedSearch = validateSearchInput(search);
+    if (validatedSearch) {
+      const sanitized = sanitizePostgrestValue(validatedSearch);
+      query = query.or(`email.ilike.%${sanitized}%,full_name.ilike.%${sanitized}%`);
     }
 
     const { data: users, error } = await query;
@@ -62,13 +68,14 @@ router.get(
     const { id } = req.params;
     const userId = Array.isArray(id) ? id[0] : id;
 
-    const profile = await DatabaseService.getUserProfile(userId);
+    const [profile, subscription] = await Promise.all([
+      DatabaseService.getUserProfile(userId),
+      DatabaseService.getUserSubscription(userId),
+    ]);
+
     if (!profile) {
       throw new ValidationError('User not found');
     }
-
-    // Get subscription info
-    const subscription = await DatabaseService.getUserSubscription(userId);
 
     res.json({
       success: true,

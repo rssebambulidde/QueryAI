@@ -17,7 +17,7 @@ function getBaseUrl(): string {
     if (config.NODE_ENV === 'production') {
       baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
         ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-        : 'https://queryai-production.up.railway.app';
+        : config.BACKEND_FALLBACK_URL || config.API_BASE_URL;
     } else {
       baseUrl = 'http://localhost:3001';
     }
