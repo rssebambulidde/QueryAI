@@ -21,9 +21,7 @@ import { mapApiMessagesToUi, type ApiMessage, type LastResponseData } from './ch
 import { ChatMessageList } from './chat-message-list';
 import { ChatInputArea } from './chat-input-area';
 import { SourcesSidebar } from './sources-sidebar';
-import { ConversationExportDialog } from './conversation-export-dialog';
-import { Download, HelpCircle } from 'lucide-react';
-import { useChatKeyboardShortcuts, SHORTCUT_LIST } from '@/lib/hooks/useChatKeyboardShortcuts';
+// Conversation export and chat shortcut UI removed from this component
 import { useChatSend } from '@/lib/hooks/useChatSend';
 import { useDocumentUpload } from '@/lib/hooks/use-document-upload';
 import type { UploadStatus } from './chat-types';
@@ -97,8 +95,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   });
 
   const [showResearchSummaryModal, setShowResearchSummaryModal] = useState(false);
-  const [showExportDialog, setShowExportDialog] = useState(false);
-  const [showShortcutCard, setShowShortcutCard] = useState(false);
+  
   const [dynamicStarters, setDynamicStarters] = useState<string[] | null>(null);
   const [documentInfo, setDocumentInfo] = useState<{ totalCount: number; processedCount: number; processingCount: number }>({ totalCount: 0, processedCount: 0, processingCount: 0 });
   const [inlineUploadStatus, setInlineUploadStatus] = useState<UploadStatus | null>(null);
@@ -561,35 +558,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────
 
-  useChatKeyboardShortcuts({
-    focusInput: () => {
-      const ta = document.querySelector<HTMLTextAreaElement>('textarea[placeholder]');
-      if (ta) ta.focus();
-    },
-    sendMessage: () => {
-      const ta = document.querySelector<HTMLTextAreaElement>('textarea[placeholder]');
-      if (ta) {
-        ta.form?.requestSubmit?.();
-        const enterEvent = new KeyboardEvent('keypress', { key: 'Enter', bubbles: true });
-        ta.dispatchEvent(enterEvent);
-      }
-    },
-    cancelStreaming: () => {
-      if (isStreaming) handleCancelStreaming();
-    },
-    copyLastResponse: () => {
-      const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-      if (lastAssistant) {
-        navigator.clipboard.writeText(lastAssistant.content).then(() => toast.success('Copied last response')).catch(() => toast.error('Failed to copy'));
-      }
-    },
-    closeModal: () => {
-      setShowExportDialog(false);
-      setShowResearchSummaryModal(false);
-      setShowShortcutCard(false);
-      setSourcePanelContext(null);
-    },
-  });
+  // Keyboard shortcuts removed for the chat UI (feature intentionally disabled)
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Render
