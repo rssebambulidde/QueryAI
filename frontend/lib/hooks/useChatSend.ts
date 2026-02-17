@@ -280,6 +280,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
             }
             if (typeof chunk === 'object' && 'qualityScore' in chunk) {
               qualityScore = (chunk as { qualityScore?: number }).qualityScore;
+              console.log('[Chat] Received quality score:', qualityScore);
               continue;
             }
 
@@ -306,6 +307,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           }
 
           assistantMessage = { ...assistantMessage, followUpQuestions, isStreaming: false, isRefusal: isRefusal || undefined, qualityScore };
+          console.log('[Chat] Final assistant message with qualityScore:', qualityScore);
           setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
 
           setIsStreaming(false);

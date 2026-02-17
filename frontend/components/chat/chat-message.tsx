@@ -82,6 +82,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
     return () => clearInterval(interval);
   }, []);
 
+  // Debug: Log quality score for assistant messages
+  useEffect(() => {
+    if (!isUser && message.qualityScore !== undefined) {
+      console.log('[ChatMessage] Quality score for message:', message.id, '=', message.qualityScore, 'isStreaming:', isStreaming, 'message.isStreaming:', message.isStreaming);
+    }
+  }, [message.qualityScore, isUser, message.id, isStreaming, message.isStreaming]);
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -348,7 +355,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   size="sm"
                 />
               )}
-              {!isUser && !isStreaming && message.qualityScore !== undefined && (
+              {!isUser && !isStreaming && !message.isStreaming && message.qualityScore !== undefined && (
                 <ConfidenceBadge score={message.qualityScore} />
               )}
               {!isUser && !isStreaming && citationCount > 0 && (
