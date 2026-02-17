@@ -467,6 +467,7 @@ router.post(
                 model: request.model || 'gpt-4o-mini',
                 streaming: true,
                 ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
+                ...(qualityScore !== undefined && { qualityScore }),
               },
             });
           } else {
@@ -479,6 +480,7 @@ router.post(
                 model: request.model || 'gpt-4o-mini',
                 streaming: true,
                 ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
+                ...(qualityScore !== undefined && { qualityScore }),
               }
             );
           }

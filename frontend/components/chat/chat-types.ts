@@ -62,6 +62,7 @@ export type ApiMessage = {
     actionType?: string;
     isRefusal?: boolean;
     responseTime?: number;
+    qualityScore?: number;
     queryExpansion?: QuestionResponse['queryExpansion'];
     reranking?: QuestionResponse['reranking'];
     contextChunks?: QuestionResponse['contextChunks'];
@@ -103,6 +104,7 @@ export function mapApiMessagesToUi(apiMessages: ApiMessage[]): Message[] {
       isActionResponse: msg.metadata?.isActionResponse,
       isRefusal: msg.metadata?.isRefusal,
       responseTime: msg.metadata?.responseTime,
+      qualityScore: msg.metadata?.qualityScore,
     };
   });
 }
