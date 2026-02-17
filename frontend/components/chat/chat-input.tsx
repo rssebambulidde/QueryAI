@@ -14,6 +14,7 @@ interface UploadStatus {
   error?: string;
 }
 
+interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
