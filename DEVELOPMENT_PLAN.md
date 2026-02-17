@@ -879,6 +879,298 @@ CREATE TABLE topic_themes (
 
 ---
 
-**Document Version:** 1.0
-**Last Updated:** February 16, 2026
-**Next Review:** End of Sprint 2
+---
+
+## Sprint 4.2: Chat Component Gaps & Quality Fixes (Weeks 6-8)
+
+**Priority:** HIGH — Fixes dead code, surfaces hidden backend features, improves research UX
+**Estimated effort:** 12-15 days
+**Prerequisite:** Sprint 4.1 complete (chat-interface split done)
+
+> **Scope:** This sprint addresses 4 categories identified in the post-Sprint 4.1 review:
+> 1. Backend features not surfaced in the UI
+> 2. Dead code and disconnected features
+> 3. Code quality issues (duplication, large files, error handling)
+> 4. Missing UI features for a research assistant
+
+---
+
+### Phase A: Dead Code Cleanup & Code Quality (Days 1-3)
+
+> **Rationale:** Clean the codebase first so subsequent feature work builds on solid foundations.
+
+#### A.1 Remove Dead State Variables
+- **File:** `frontend/components/chat/chat-container.tsx` (633 lines)
+- **Tasks:**
+  - Remove `justLoadedConversationRef` — set but never read
+  - Remove `hasProcessedDocuments` — set but never used
+  - Either display `documentCount` (see C.1) or remove the 30-second polling interval that loads it
+- **Test:** Verify no runtime errors after removal; conversation loading unaffected
+
+#### A.2 Remove Duplicate / Redundant Filter Components
+- **Files affected:**
+  - `search-filters.tsx` (404 lines) — likely redundant with `unified-filter-panel.tsx`
+  - `horizontal-filter-bar.tsx` (577 lines) — duplicates filter logic from `unified-filter-panel.tsx`
+- **Tasks:**
+  - Audit all imports of `search-filters.tsx` and `horizontal-filter-bar.tsx` across the app
+  - If no unique functionality exists, delete both files
+  - If either has unique features, merge into `unified-filter-panel.tsx` (744 lines), then delete
+  - Update all imports to point to `unified-filter-panel.tsx`
+- **Test:** Verify filter functionality still works in all views that used the deleted components
+
+#### A.3 Fix Dead UI in Existing Components
+- **`source-panel.tsx` (703 lines):** "Card view" mode toggle exists but rendering is incomplete
+  - Task: Either complete the card view rendering or remove the toggle button
+  - Recommendation: Remove the toggle — list view is sufficient for sources
+- **`conversation-search.tsx` (284 lines):** Source-type filter is commented out
+  - Task: Either implement the filter or remove the commented code
+  - Recommendation: Implement it — useful for research assistant (filter by web vs document sources)
+- **`message-history-viewer.tsx` (292 lines):**
+  - `selectedMessageId` state is set but never used meaningfully — remove or wire to message highlighting
+  - Export only supports JSON; CSV/Markdown export paths are stubs — complete all 3 formats or remove stubs
+- **`rag-source-selector.tsx` (166 lines):** `isWebAvailable` is hardcoded to `true`
+  - Task: Check actual web search availability from backend config or user subscription tier
+- **Test:** All buttons in the UI either do something or don't exist
+
+#### A.4 Extract Shared Utilities (Eliminate Duplication)
+- **Country list** (copy-pasted in 3 files):
+  - Create `frontend/lib/constants/countries.ts`
+  - Export single `COUNTRY_LIST` array
+  - Update `search-filters.tsx` (if kept), `unified-filter-panel.tsx`, `horizontal-filter-bar.tsx` (if kept) to import
+- **Document download logic** (duplicated in 4 files):
+  - Create `frontend/lib/utils/download-document.ts`
+  - Export `downloadDocument(documentId, filename, api)` function
+  - Update `sources-sidebar.tsx`, `inline-citation.tsx`, `source-citation.tsx`, `source-panel.tsx` to use it
+- **Follow-up question parsing regex** (duplicated 3 times):
+  - Already in `chat-types.ts` — update `chat-container.tsx` (both occurrences) to import from there
+- **Title generation logic** (duplicated at lines ~283 and ~300 of `chat-container.tsx`):
+  - Extract into a single `generateConversationTitle(userMessage)` function
+- **Test:** All download, filter, and follow-up features work identically after refactor
+
+#### A.5 Fix Error Handling Gaps
+- **`chat-container.tsx`:** Replace 8+ silent `catch {}` blocks with user-visible toast notifications using `sonner`
+  - Pattern: `catch (err) { toast.error('Failed to [action]'); console.error('[action] failed:', err); }`
+- **`sources-sidebar.tsx`:** Download failure currently falls back to opening URL silently
+  - Task: Show toast "Download failed — opening in browser" when falling back
+- **`conversation-settings.tsx`:** Settings save failure is silent
+  - Task: Add error toast on save failure
+- **`research-session-summary-modal.tsx`:** Modal can be closed during loading, losing in-progress summary
+  - Task: Disable close button while summary is loading, or confirm before closing
+- **Test:** Trigger each error path manually; verify user sees feedback
+
+---
+
+### Phase B: Surface Backend Features in UI (Days 4-7)
+
+> **Rationale:** These backend capabilities already work — they just need frontend exposure.
+
+#### B.1 Display Answer Quality / Confidence Score
+- **Backend:** `calculateAnswerQualityScore()` already computes a 0-1 score
+- **Backend response field:** Check if `qualityScore` is already in the streaming/response payload; if not, add it
+- **Frontend tasks:**
+  - Create `frontend/components/chat/confidence-badge.tsx` (~50 lines)
+    - Renders a small badge: "High confidence" (green, >0.8), "Medium" (yellow, 0.5-0.8), "Low" (red, <0.5)
+    - Tooltip shows the exact score and brief explanation
+  - Add badge to each assistant message in `chat-message-list.tsx`
+- **Files modified:** `chat-message-list.tsx`, `chat-types.ts` (add `qualityScore` to `LastResponseData`)
+- **Test:** Send queries with varying source quality; verify badge reflects quality
+
+#### B.2 Display Document Count & Search Status
+- **Current state:** `documentCount` is polled every 30s in `chat-container.tsx` but never shown
+- **Frontend tasks:**
+  - Show document count in the input area: "Searching across N documents" or "No documents uploaded"
+  - When in research mode with a topic: show "Topic: X — N documents"
+  - Add a subtle processing indicator if any documents are still being processed
+- **Files modified:** `chat-input-area.tsx`, `chat-container.tsx` (pass `documentCount` as prop)
+- **Test:** Upload documents, verify count updates; verify shows 0 when no documents
+
+#### B.3 Wire Conversation Export Dialog into Chat
+- **Current state:** `conversation-export-dialog.tsx` (293 lines) exists but isn't accessible from the chat toolbar
+- **Frontend tasks:**
+  - Add "Export" button (download icon) to the chat header/toolbar area in `chat-container.tsx`
+  - Wire it to open `ConversationExportDialog` with current conversation data
+- **Files modified:** `chat-container.tsx`
+- **Test:** Open export dialog from chat; verify PDF/JSON/Markdown export works
+
+#### B.4 Expose Message Deletion
+- **Backend:** `deleteMessage` endpoint exists (`DELETE /api/conversations/:conversationId/messages/:messageId`)
+- **Frontend tasks:**
+  - Add "Delete message" option to message context menu / hover actions in `chat-message.tsx`
+  - Add confirmation dialog before deleting
+  - Optimistic UI: remove message immediately, restore on failure with toast
+- **Files modified:** `chat-message.tsx`, API client (verify `deleteMessage` method exists)
+- **Test:** Delete a message, verify it's removed from conversation; verify undo on API failure
+
+#### B.5 Expose Document Text Preview in Sources Sidebar
+- **Backend:** `/api/documents/:id/text` returns document text content
+- **Frontend tasks:**
+  - When user clicks a document source in `sources-sidebar.tsx` or `source-panel.tsx`:
+    - Fetch first ~500 chars of document text from API
+    - Show in an expandable preview card below the source title
+  - Include the relevant chunk text (already available in response metadata) as the preview
+- **Files modified:** `sources-sidebar.tsx`, `source-panel.tsx`
+- **Test:** Click a document source; verify excerpt appears; verify loading state
+
+---
+
+### Phase C: Research Assistant UI Features (Days 8-12)
+
+> **Rationale:** These features are what differentiate a research assistant from a generic chatbot.
+
+#### C.1 Add "Copy Response" Button to Messages
+- **Task:** Add a copy button (clipboard icon) to each assistant message in the hover action bar
+- **Implementation:**
+  - Use `navigator.clipboard.writeText()` with the raw markdown content
+  - Show toast "Copied to clipboard"
+  - Button changes to checkmark briefly after copy
+- **Files modified:** `chat-message.tsx` or `ai-action-buttons.tsx`
+- **Test:** Copy a message; paste in a text editor; verify markdown preserved
+
+#### C.2 Add Keyboard Shortcuts
+- **Task:** Create `frontend/lib/hooks/useChatKeyboardShortcuts.ts`
+- **Shortcuts:**
+  - `Ctrl/Cmd + K` — Focus search / new conversation
+  - `Ctrl/Cmd + Enter` — Send message (in addition to Enter)
+  - `Escape` — Cancel streaming, close modals
+  - `Ctrl/Cmd + Shift + C` — Copy last AI response
+- **Integration:** Hook into `chat-container.tsx` via `useEffect` with `keydown` listener
+- **UI:** Add a small "?" button in chat toolbar that shows shortcut reference card
+- **Files created:** `frontend/lib/hooks/useChatKeyboardShortcuts.ts`
+- **Files modified:** `chat-container.tsx`
+- **Test:** Verify each shortcut triggers the correct action; verify no conflicts with browser shortcuts
+
+#### C.3 Add Message Timestamps
+- **Current:** Timestamps exist in message data but aren't rendered
+- **Task:** Show relative timestamps ("2m ago", "1 hour ago", "Yesterday at 3:14 PM")
+- **Implementation:**
+  - Add timestamp display below each message bubble (subtle, gray text)
+  - Use `date-fns` `formatDistanceToNow()` or equivalent
+  - Update every 60 seconds for "ago" messages
+- **Files modified:** `chat-message.tsx`
+- **Test:** Send messages at different times; verify timestamps are correct and update
+
+#### C.4 Add Citation Count Badge
+- **Task:** Show a small badge on assistant messages indicating how many citations are in the response
+- **Implementation:**
+  - Count `[n]` patterns in the message content
+  - Show "3 sources cited" badge next to the confidence badge
+  - Clicking the badge scrolls to / opens the sources sidebar
+- **Files modified:** `chat-message.tsx` or `chat-message-list.tsx`
+- **Test:** Verify count matches actual citations; verify click opens sources panel
+
+#### C.5 Extract `handleSend` into `useChatSend` Hook
+- **Current:** `handleSend` in `chat-container.tsx` is ~250 lines of complex logic
+- **Task:** Create `frontend/lib/hooks/useChatSend.ts`
+  - Extract the entire send pipeline: message creation, API call, streaming handling, error recovery
+  - Accept config object with all dependencies (conversation state, topic, settings, etc.)
+  - Return `{ sendMessage, isStreaming, cancelStream, editMessage }` interface
+- **Benefit:** `chat-container.tsx` drops from 633 to ~400 lines; send logic becomes independently testable
+- **Files created:** `frontend/lib/hooks/useChatSend.ts`
+- **Files modified:** `chat-container.tsx`
+- **Test:** All existing send functionality works (normal send, streaming, edit+resend, cancel)
+
+#### C.6 Decompose Large Remaining Components
+- **`source-panel.tsx` (703 lines):**
+  - Split into `source-panel-header.tsx` (toolbar, view toggles) and `source-panel-list.tsx` (source rendering)
+  - Keep `source-panel.tsx` as the coordinator
+- **`enhanced-content-processor.tsx` (503 lines):**
+  - Extract citation parsing logic into `frontend/lib/utils/citation-parser.ts`
+  - Keep rendering logic in the component
+- **`unified-filter-panel.tsx` (744 lines):**
+  - After A.2 (deleting redundant filter components), extract topic creation modal into its own component
+  - Extract country list to shared constant (A.4)
+  - Target: < 400 lines
+- **Test:** Visual regression check — all components render identically
+
+---
+
+### Phase D: Stretch Goals (Days 13-15, if time permits)
+
+> **Rationale:** Higher-effort features that significantly improve research workflow. Move to next sprint if not completed.
+
+#### D.1 In-Chat Document Upload (Drag-and-Drop)
+- **Task:** Add drag-and-drop zone to `chat-input-area.tsx`
+- **Implementation:**
+  - Detect file drag over input area → show drop overlay
+  - On drop, call existing document upload API
+  - Show upload progress inline
+  - When upload + processing complete, auto-include document in next query context
+- **Files modified:** `chat-input-area.tsx`
+- **Backend:** Uses existing `/api/documents/upload` endpoint — no changes needed
+- **Test:** Drag PDF onto chat input; verify upload starts; verify document appears in source selector
+
+#### D.2 Semantic Document Search from Chat
+- **Backend:** `POST /api/search/semantic` already exists
+- **Frontend tasks:**
+  - Add a special prefix mode: typing `/search query` in chat input triggers document search instead of Q&A
+  - Display search results as a special message type (document cards with relevance scores)
+  - Clicking a result opens the document text preview (B.5)
+- **Files modified:** `chat-input-area.tsx`, `chat-container.tsx`, `chat-message.tsx` (new message type)
+- **Test:** Type `/search climate change`; verify document results appear with relevance scores
+
+#### D.3 Queue-Based Async Requests
+- **Backend:** `/api/ai/ask/queue`, job status polling, and cancellation endpoints exist
+- **Frontend tasks:**
+  - For long-running queries (based on document count or topic size), offer "Send to queue" option
+  - Show progress indicator with job status polling
+  - Allow cancellation of queued jobs
+- **Files modified:** `chat-container.tsx`, API client
+- **Test:** Queue a complex query; verify status polling; verify cancellation
+
+---
+
+### Sprint 4.2 Definition of Done
+
+- [ ] Zero dead state variables in `chat-container.tsx`
+- [ ] Zero duplicate filter components (max 1 filter panel implementation)
+- [ ] All UI buttons either work or are removed
+- [ ] Country list, download logic, follow-up regex — single source of truth
+- [ ] All `catch {}` blocks replaced with user-visible error feedback
+- [ ] Answer quality badge on assistant messages
+- [ ] Document count visible in input area
+- [ ] Conversation export accessible from chat toolbar
+- [ ] Message deletion working from chat UI
+- [ ] "Copy response" button on all assistant messages
+- [ ] Keyboard shortcuts (Ctrl+K, Ctrl+Enter, Escape)
+- [ ] Message timestamps visible
+- [ ] `handleSend` extracted to `useChatSend` hook
+- [ ] All chat-related files < 500 lines
+- [ ] `chat-container.tsx` < 450 lines
+
+---
+
+### Sprint 4.2 File Impact Summary
+
+| Action | File | Current Lines | Target Lines |
+|--------|------|---------------|--------------|
+| Modify | `chat-container.tsx` | 633 | ~400 |
+| Modify | `chat-input-area.tsx` | 88 | ~120 |
+| Modify | `chat-message.tsx` | 445 | ~350 |
+| Modify | `chat-message-list.tsx` | 213 | ~230 |
+| Modify | `sources-sidebar.tsx` | 54 | ~80 |
+| Modify | `source-panel.tsx` | 703 | ~350 |
+| Modify | `unified-filter-panel.tsx` | 744 | ~400 |
+| Modify | `chat-types.ts` | 147 | ~160 |
+| Modify | `enhanced-content-processor.tsx` | 503 | ~300 |
+| Modify | `conversation-settings.tsx` | 285 | ~285 |
+| Modify | `message-history-viewer.tsx` | 292 | ~280 |
+| Modify | `conversation-search.tsx` | 284 | ~290 |
+| Modify | `rag-source-selector.tsx` | 166 | ~170 |
+| Delete | `search-filters.tsx` | 404 | 0 |
+| Delete | `horizontal-filter-bar.tsx` | 577 | 0 |
+| Create | `confidence-badge.tsx` | — | ~50 |
+| Create | `source-panel-header.tsx` | — | ~100 |
+| Create | `source-panel-list.tsx` | — | ~250 |
+| Create | `lib/constants/countries.ts` | — | ~30 |
+| Create | `lib/utils/download-document.ts` | — | ~40 |
+| Create | `lib/utils/citation-parser.ts` | — | ~120 |
+| Create | `lib/hooks/useChatSend.ts` | — | ~250 |
+| Create | `lib/hooks/useChatKeyboardShortcuts.ts` | — | ~60 |
+
+**Net result:** ~981 lines removed from existing files; ~900 lines in new focused files. Total chat codebase goes from having 3 files > 600 lines to 0 files > 500 lines.
+
+---
+
+**Document Version:** 2.0
+**Last Updated:** February 17, 2026
+**Next Review:** End of Sprint 4.2
