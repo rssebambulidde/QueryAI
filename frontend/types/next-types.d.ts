@@ -26,7 +26,28 @@ declare module 'next/link' {
 
 declare module 'next' {
   export type Metadata = any;
+  export type NextConfig = any;
   export const metadata: any;
+  const _default: any;
+  export default _default;
+}
+
+declare module 'next/font/google' {
+  type FontOptions = Record<string, any>;
+  export function Geist(options?: FontOptions): any;
+  export function Geist_Mono(options?: FontOptions): any;
+  const _default: any;
+  export default _default;
+}
+
+declare module 'next/script' {
+  const _default: any;
+  export default _default;
+}
+
+declare module 'next/server' {
+  export const NextResponse: any;
+  export type NextRequest = any;
   const _default: any;
   export default _default;
 }

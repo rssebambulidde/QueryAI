@@ -594,43 +594,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       {/* Conversation mode */}
       {!isEmpty && (
         <>
-          {/* Chat toolbar */}
-          <div className="flex items-center justify-end gap-1 px-4 py-1.5 border-b border-gray-100 bg-gray-50/50">
-            <button
-              onClick={() => setShowExportDialog(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-              title="Export conversation"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Export
-            </button>
-            <div className="relative">
-              <button
-                onClick={() => setShowShortcutCard((v) => !v)}
-                className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                title="Keyboard shortcuts"
-              >
-                <HelpCircle className="w-3.5 h-3.5" />
-              </button>
-              {showShortcutCard && (
-                <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-lg border border-gray-200 shadow-lg z-50 p-3">
-                  <div className="text-xs font-semibold text-gray-700 mb-2">Keyboard Shortcuts</div>
-                  <div className="space-y-1.5">
-                    {SHORTCUT_LIST.map((s, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-500">{s.description}</span>
-                        <span className="flex gap-0.5">
-                          {s.keys.map((k) => (
-                            <kbd key={k} className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 text-[10px] font-mono text-gray-600">{k}</kbd>
-                          ))}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Chat toolbar removed (export and shortcuts hidden) */}
+          <div className="flex items-center justify-end gap-1 px-4 py-1.5 border-b border-gray-100 bg-gray-50/50" />
 
           <div className="flex flex-1 min-h-0">
             <ChatMessageList
@@ -702,14 +667,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         topicName={selectedTopic?.name || ''}
       />
       <CitationSettings isOpen={isCitationSettingsOpen} onClose={() => setIsCitationSettingsOpen(false)} />
-      {currentConversationId && (
-        <ConversationExportDialog
-          conversation={conversations.find((c) => c.id === currentConversationId) || { id: currentConversationId, user_id: '', title: 'Conversation', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }}
-          messages={messages as any}
-          isOpen={showExportDialog}
-          onClose={() => setShowExportDialog(false)}
-        />
-      )}
+      {/* Conversation export dialog removed from chat UI */}
     </div>
   );
 };
