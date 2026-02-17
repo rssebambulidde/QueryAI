@@ -104,8 +104,19 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   const { uploadFile } = useDocumentUpload({
     topicId: selectedTopic?.id,
-    onSuccess: () => {
-      setInlineUploadStatus((prev) => prev ? { ...prev, status: 'completed' } : null);
+    onProgress: (progress) => {
+      setInlineUploadStatus((prev) => prev ? { ...prev, progress } : { fileName: '', progress, status: 'uploading' });
+    },
+    onSuccess: (document) => {
+      setInlineUploadStatus((prev) => prev ? { ...prev, status: 'completed', progress: 100 } : null);
+      // Auto-include uploaded document in next query context
+      if (document && document.id) {
+        setRagSettings((prev) => ({
+          ...prev,
+          enableDocumentSearch: true,
+          documentIds: Array.from(new Set([...(prev.documentIds || []), document.id])),
+        }));
+      }
       setTimeout(() => setInlineUploadStatus(null), 3000);
       toast.success('Document uploaded — it will be available for search shortly');
     },
