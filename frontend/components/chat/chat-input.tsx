@@ -59,7 +59,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
-  const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyPress = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -124,7 +124,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           aria-label="Upload document"
           tabIndex={0}
           onClick={handlePlusClick}
-          disabled={uploadStatus && uploadStatus.status === 'uploading'}
+          disabled={uploadStatus?.status === 'uploading'}
         >
           <Plus className="w-5 h-5 text-gray-500" />
         </button>
@@ -134,7 +134,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           accept=".pdf,.txt,.csv,.docx,.doc,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
           style={{ display: 'none' }}
           onChange={handleFileChange}
-          disabled={uploadStatus && uploadStatus.status === 'uploading'}
+          disabled={uploadStatus?.status === 'uploading'}
         />
         {/* Input */}
         <div className="flex-1 relative">
