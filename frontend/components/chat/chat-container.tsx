@@ -111,11 +111,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       setInlineUploadStatus((prev) => prev ? { ...prev, status: 'completed', progress: 100 } : null);
       // Auto-include uploaded document in next query context
       if (document && document.id) {
-        setRagSettings((prev) => ({
-          ...prev,
-          enableDocumentSearch: true,
-          documentIds: Array.from(new Set([...(prev.documentIds || []), document.id])),
-        }));
+        const docId = document.id;
+        if (docId) {
+          setRagSettings((prev) => ({
+            ...prev,
+            enableDocumentSearch: true,
+            documentIds: Array.from(new Set([...(prev.documentIds || []), docId])) as string[],
+          }));
+        }
       }
       setTimeout(() => setInlineUploadStatus(null), 3000);
       toast.success('Document uploaded — it will be available for search shortly');
