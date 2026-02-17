@@ -82,16 +82,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
     return () => clearInterval(interval);
   }, []);
 
-  // Debug: Log quality score for assistant messages
-  useEffect(() => {
-    if (!isUser && message.qualityScore !== undefined) {
-      console.log('[ChatMessage] Quality score for message:', message.id, '=', message.qualityScore, 'isStreaming:', isStreaming, 'message.isStreaming:', message.isStreaming);
-    }
-    if (!isUser && citationCount > 0) {
-      console.log('[ChatMessage] Citation count for message:', message.id, '=', citationCount, 'isStreaming:', isStreaming, 'message.isStreaming:', message.isStreaming);
-    }
-  }, [message.qualityScore, citationCount, isUser, message.id, isStreaming, message.isStreaming]);
-
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -127,6 +117,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
     if (!matches) return 0;
     return new Set(matches).size;
   }, [message.content, isUser]);
+
+  // Debug: Log quality score and citation count for assistant messages
+  useEffect(() => {
+    if (!isUser && message.qualityScore !== undefined) {
+      console.log('[ChatMessage] Quality score for message:', message.id, '=', message.qualityScore, 'isStreaming:', isStreaming, 'message.isStreaming:', message.isStreaming);
+    }
+    if (!isUser && citationCount > 0) {
+      console.log('[ChatMessage] Citation count for message:', message.id, '=', citationCount, 'isStreaming:', isStreaming, 'message.isStreaming:', message.isStreaming);
+    }
+  }, [message.qualityScore, citationCount, isUser, message.id, isStreaming, message.isStreaming]);
 
   // Replace [Source N] and [Web Source N] patterns with hyperlinks using source titles
   // Also handles "Sources:" lines with multiple citations
