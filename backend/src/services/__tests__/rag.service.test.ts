@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import { RAGService, RAGOptions, RAGContext, DocumentContext } from '../rag.service';
+import { RetrievalOrchestratorService } from '../retrieval-orchestrator.service';
 
 // Mock all external dependencies
+jest.mock('../retrieval-orchestrator.service');
 jest.mock('../embedding.service');
 jest.mock('../pinecone.service');
 jest.mock('../search.service');
@@ -383,7 +385,7 @@ describe('RAGService', () => {
     };
 
     it('should retrieve document context from Pinecone', async () => {
-      const contexts = await RAGService.retrieveDocumentContext(mockQuery, baseOptions);
+      const contexts = await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, baseOptions);
 
       expect(contexts).toHaveLength(1);
       expect(contexts[0].documentId).toBe('doc-1');
@@ -393,7 +395,7 @@ describe('RAGService', () => {
     });
 
     it('should return empty array when document search is disabled', async () => {
-      const contexts = await RAGService.retrieveDocumentContext(mockQuery, {
+      const contexts = await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, {
         ...baseOptions,
         enableDocumentSearch: false,
       });
@@ -403,7 +405,7 @@ describe('RAGService', () => {
     });
 
     it('should expand query when query expansion is enabled', async () => {
-      await RAGService.retrieveDocumentContext(mockQuery, {
+      await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, {
         ...baseOptions,
         enableQueryExpansion: true,
         expansionStrategy: 'hybrid',
@@ -413,7 +415,7 @@ describe('RAGService', () => {
     });
 
     it('should use adaptive threshold when enabled', async () => {
-      await RAGService.retrieveDocumentContext(mockQuery, {
+      await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, {
         ...baseOptions,
         useAdaptiveThreshold: true,
       });
@@ -422,7 +424,7 @@ describe('RAGService', () => {
     });
 
     it('should filter by topicId when provided', async () => {
-      await RAGService.retrieveDocumentContext(mockQuery, {
+      await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, {
         ...baseOptions,
         topicId: mockTopicId,
       });
@@ -438,7 +440,7 @@ describe('RAGService', () => {
 
     it('should filter by documentIds when provided', async () => {
       const documentIds = ['doc-1', 'doc-2'];
-      await RAGService.retrieveDocumentContext(mockQuery, {
+      await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, {
         ...baseOptions,
         documentIds,
       });
@@ -453,7 +455,7 @@ describe('RAGService', () => {
     });
 
     it('should include document metadata in results', async () => {
-      const contexts = await RAGService.retrieveDocumentContext(mockQuery, baseOptions);
+      const contexts = await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, baseOptions);
 
       expect(contexts[0].documentName).toBe('AI Document');
       expect(contexts[0].author).toBe('John Doe');
@@ -464,7 +466,7 @@ describe('RAGService', () => {
     it('should handle Pinecone not configured', async () => {
       (isPineconeConfigured as any).mockReturnValueOnce(false);
 
-      const contexts = await RAGService.retrieveDocumentContext(mockQuery, baseOptions);
+      const contexts = await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, baseOptions);
 
       expect(contexts).toEqual([]);
     });
@@ -480,7 +482,7 @@ describe('RAGService', () => {
         attempts: 1,
       });
 
-      const contexts = await RAGService.retrieveDocumentContext(mockQuery, {
+      const contexts = await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, {
         ...baseOptions,
         enableKeywordSearch: true,
       });
@@ -497,7 +499,7 @@ describe('RAGService', () => {
         attempts: 2,
       });
 
-      const contexts = await RAGService.retrieveDocumentContext(mockQuery, baseOptions);
+      const contexts = await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, baseOptions);
 
       expect(contexts).toEqual([]);
     });
@@ -509,7 +511,7 @@ describe('RAGService', () => {
         fallbackEnabled: true,
       });
 
-      await RAGService.retrieveDocumentContext(mockQuery, {
+      await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, {
         ...baseOptions,
         useAdaptiveThreshold: true,
         minResults: 3,
@@ -534,7 +536,7 @@ describe('RAGService', () => {
         fallbackEnabled: true,
       });
 
-      const contexts = await RAGService.retrieveDocumentContext(mockQuery, baseOptions);
+      const contexts = await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, baseOptions);
 
       expect(contexts).toEqual([]);
     });
@@ -542,7 +544,7 @@ describe('RAGService', () => {
     it('should handle document metadata fetch failure gracefully', async () => {
       (DocumentService.getDocumentsBatch as any).mockResolvedValueOnce(new Map());
 
-      const contexts = await RAGService.retrieveDocumentContext(mockQuery, baseOptions);
+      const contexts = await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, baseOptions);
 
       expect(contexts).toHaveLength(1);
       expect(contexts[0].documentName).toBe('Unknown Document');
@@ -557,7 +559,7 @@ describe('RAGService', () => {
     };
 
     it('should retrieve document context using keyword search', async () => {
-      const results = await RAGService.retrieveDocumentContextKeyword(mockQuery, baseOptions);
+      const results = await RetrievalOrchestratorService.retrieveDocumentContextKeyword(mockQuery, baseOptions);
 
       expect(results).toHaveLength(1);
       expect(results[0].documentId).toBe('doc-1');
@@ -565,7 +567,7 @@ describe('RAGService', () => {
     });
 
     it('should return empty array when keyword search is disabled', async () => {
-      const results = await RAGService.retrieveDocumentContextKeyword(mockQuery, {
+      const results = await RetrievalOrchestratorService.retrieveDocumentContextKeyword(mockQuery, {
         ...baseOptions,
         enableKeywordSearch: false,
       });
@@ -575,7 +577,7 @@ describe('RAGService', () => {
     });
 
     it('should expand query when query expansion is enabled', async () => {
-      await RAGService.retrieveDocumentContextKeyword(mockQuery, {
+      await RetrievalOrchestratorService.retrieveDocumentContextKeyword(mockQuery, {
         ...baseOptions,
         enableQueryExpansion: true,
       });
@@ -588,7 +590,7 @@ describe('RAGService', () => {
         new Error('Keyword search failed')
       );
 
-      const results = await RAGService.retrieveDocumentContextKeyword(mockQuery, baseOptions);
+      const results = await RetrievalOrchestratorService.retrieveDocumentContextKeyword(mockQuery, baseOptions);
 
       expect(results).toEqual([]);
     });
@@ -606,7 +608,7 @@ describe('RAGService', () => {
     };
 
     it('should retrieve web search results', async () => {
-      const results = await RAGService.retrieveWebSearch(mockQuery, baseOptions);
+      const results = await RetrievalOrchestratorService.retrieveWebSearch(mockQuery, baseOptions);
 
       expect(results).toHaveLength(1);
       expect(results[0].title).toBe(mockWebSearchResult.title);
@@ -615,7 +617,7 @@ describe('RAGService', () => {
     });
 
     it('should return empty array when web search is disabled', async () => {
-      const results = await RAGService.retrieveWebSearch(mockQuery, {
+      const results = await RetrievalOrchestratorService.retrieveWebSearch(mockQuery, {
         ...baseOptions,
         enableWebSearch: false,
       });
@@ -625,7 +627,7 @@ describe('RAGService', () => {
     });
 
     it('should include access date in web results', async () => {
-      const results = await RAGService.retrieveWebSearch(mockQuery, baseOptions);
+      const results = await RetrievalOrchestratorService.retrieveWebSearch(mockQuery, baseOptions);
 
       const result = results[0] as any;
       expect(result.accessDate).toBeDefined();
@@ -633,7 +635,7 @@ describe('RAGService', () => {
     });
 
     it('should pass topic filter to search service', async () => {
-      await RAGService.retrieveWebSearch(mockQuery, {
+      await RetrievalOrchestratorService.retrieveWebSearch(mockQuery, {
         ...baseOptions,
         topic: 'AI',
       });
@@ -646,7 +648,7 @@ describe('RAGService', () => {
     });
 
     it('should pass time range filter to search service', async () => {
-      await RAGService.retrieveWebSearch(mockQuery, {
+      await RetrievalOrchestratorService.retrieveWebSearch(mockQuery, {
         ...baseOptions,
         timeRange: 'month',
       });
@@ -659,7 +661,7 @@ describe('RAGService', () => {
     });
 
     it('should pass date range filters to search service', async () => {
-      await RAGService.retrieveWebSearch(mockQuery, {
+      await RetrievalOrchestratorService.retrieveWebSearch(mockQuery, {
         ...baseOptions,
         startDate: '2024-01-01',
         endDate: '2024-12-31',
@@ -674,7 +676,7 @@ describe('RAGService', () => {
     });
 
     it('should pass country filter to search service', async () => {
-      await RAGService.retrieveWebSearch(mockQuery, {
+      await RetrievalOrchestratorService.retrieveWebSearch(mockQuery, {
         ...baseOptions,
         country: 'US',
       });
@@ -695,7 +697,7 @@ describe('RAGService', () => {
         attempts: 2,
       });
 
-      const results = await RAGService.retrieveWebSearch(mockQuery, baseOptions);
+      const results = await RetrievalOrchestratorService.retrieveWebSearch(mockQuery, baseOptions);
 
       expect(results).toEqual([]);
     });
@@ -709,7 +711,7 @@ describe('RAGService', () => {
         attempts: 1,
       });
 
-      const results = await RAGService.retrieveWebSearch(mockQuery, baseOptions);
+      const results = await RetrievalOrchestratorService.retrieveWebSearch(mockQuery, baseOptions);
 
       expect(results).toEqual([]);
     });
@@ -717,7 +719,7 @@ describe('RAGService', () => {
     it('should return empty array when no results found', async () => {
       (SearchService.search as any).mockResolvedValueOnce({ results: [] });
 
-      const results = await RAGService.retrieveWebSearch(mockQuery, baseOptions);
+      const results = await RetrievalOrchestratorService.retrieveWebSearch(mockQuery, baseOptions);
 
       expect(results).toEqual([]);
     });
@@ -1665,7 +1667,7 @@ describe('RAGService', () => {
         new Error('Expansion failed')
       );
 
-      const contexts = await RAGService.retrieveDocumentContext(mockQuery, {
+      const contexts = await RetrievalOrchestratorService.retrieveDocumentContext(mockQuery, {
         userId: mockUserId,
         enableDocumentSearch: true,
         enableQueryExpansion: true,
@@ -1679,7 +1681,7 @@ describe('RAGService', () => {
         new Error('Expansion failed')
       );
 
-      const results = await RAGService.retrieveDocumentContextKeyword(mockQuery, {
+      const results = await RetrievalOrchestratorService.retrieveDocumentContextKeyword(mockQuery, {
         userId: mockUserId,
         enableKeywordSearch: true,
         enableQueryExpansion: true,

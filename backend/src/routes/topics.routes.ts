@@ -4,6 +4,7 @@ import { CacheInvalidationService } from '../services/cache-invalidation.service
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { AppError, ValidationError } from '../types/error';
+import { validateUUIDParams } from '../validation/uuid';
 import { enforceTopicLimit } from '../middleware/subscription.middleware';
 import logger from '../config/logger';
 
@@ -35,6 +36,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const topicId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -91,6 +93,7 @@ router.post(
 router.put(
   '/:id',
   authenticate,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const topicId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -135,6 +138,7 @@ router.put(
 router.delete(
   '/:id',
   authenticate,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const topicId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;

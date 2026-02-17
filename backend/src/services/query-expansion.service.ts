@@ -120,7 +120,7 @@ export class QueryExpansionService {
     options: QueryExpansionOptions
   ): Promise<ExpandedQuery> {
     try {
-      const maxExpansions = options.maxExpansions || 5;
+      const maxExpansions = options.maxExpansions ?? 5;
       const context = options.context ? `\nContext: ${options.context}` : '';
 
       const prompt = `Given the following search query, generate ${maxExpansions} related terms, synonyms, or alternative phrasings that would help find relevant information. Return only the terms, separated by commas, without explanations.
@@ -219,7 +219,7 @@ Related terms:`;
       };
 
       const expandedTerms: string[] = [];
-      const maxExpansions = options.maxExpansions || 5;
+      const maxExpansions = options.maxExpansions ?? 5;
 
       for (const word of words) {
         if (synonymMap[word]) {
@@ -289,7 +289,7 @@ Related terms:`;
         embeddingExpansion.expandedTerms.forEach(term => allTerms.add(term));
       }
 
-      const expandedTerms = Array.from(allTerms).slice(0, options.maxExpansions || 5);
+      const expandedTerms = Array.from(allTerms).slice(0, options.maxExpansions ?? 5);
       const expandedQuery = expandedTerms.length > 0
         ? `${query} ${expandedTerms.join(' ')}`
         : query;

@@ -272,7 +272,7 @@ export class DocumentService {
       }
 
       if (options?.offset) {
-        query = query.range(options.offset, options.offset + (options.limit || 100) - 1);
+        query = query.range(options.offset, options.offset + (options.limit ?? 100) - 1);
       }
 
       const { data, error } = await query;

@@ -4,6 +4,7 @@ import { AppError } from '../types/error';
 import { ChunkService } from './chunk.service';
 import { getEmbeddingDimensions, DEFAULT_EMBEDDING_MODEL } from '../config/embedding.config';
 import { CircuitBreakerService } from './circuit-breaker.service';
+import { PineconeConfig, CircuitBreakerDefaults, RetrievalConfig } from '../config/thresholds.config';
 
 export interface VectorMetadata {
   userId: string;
@@ -130,7 +131,7 @@ export class PineconeService {
           documentId,
           chunkId: chunk.id,
           chunkIndex: chunk.chunkIndex,
-          content: chunk.content.substring(0, 1000), // Limit metadata size
+          content: chunk.content.substring(0, PineconeConfig.maxMetadataContentLength), // Limit metadata size
           createdAt: new Date().toISOString(),
           embeddingDimensions: embedding.length,
         };
@@ -156,7 +157,7 @@ export class PineconeService {
       });
 
       // Upsert in batches of 100 (Pinecone limit)
-      const batchSize = 100;
+      const batchSize = PineconeConfig.upsertBatchSize;
       const vectorIds: string[] = [];
 
       for (let i = 0; i < vectors.length; i += batchSize) {
@@ -171,10 +172,10 @@ export class PineconeService {
               await index.upsert(batch);
             },
             {
-              failureThreshold: 5,
-              resetTimeout: 60000, // 60 seconds
-              monitoringWindow: 60000,
-              timeout: 30000, // 30 seconds
+              failureThreshold: CircuitBreakerDefaults.failureThreshold,
+              resetTimeout: CircuitBreakerDefaults.resetTimeoutMs,
+              monitoringWindow: CircuitBreakerDefaults.monitoringWindowMs,
+              timeout: CircuitBreakerDefaults.operationTimeoutMs,
               errorFilter: (error) => {
                 // Only count server errors and connection issues as failures
                 return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
@@ -276,10 +277,10 @@ export class PineconeService {
           await index.deleteMany(vectorIds);
         },
         {
-          failureThreshold: 5,
-          resetTimeout: 60000,
-          monitoringWindow: 60000,
-          timeout: 30000,
+          failureThreshold: CircuitBreakerDefaults.failureThreshold,
+          resetTimeout: CircuitBreakerDefaults.resetTimeoutMs,
+          monitoringWindow: CircuitBreakerDefaults.monitoringWindowMs,
+          timeout: CircuitBreakerDefaults.operationTimeoutMs,
           errorFilter: (error) => {
             return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
           },
@@ -328,10 +329,10 @@ export class PineconeService {
               await index.deleteMany(vectorIds);
             },
             {
-              failureThreshold: 5,
-              resetTimeout: 60000,
-              monitoringWindow: 60000,
-              timeout: 30000,
+              failureThreshold: CircuitBreakerDefaults.failureThreshold,
+              resetTimeout: CircuitBreakerDefaults.resetTimeoutMs,
+              monitoringWindow: CircuitBreakerDefaults.monitoringWindowMs,
+              timeout: CircuitBreakerDefaults.operationTimeoutMs,
               errorFilter: (error) => {
                 return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
               },
@@ -367,10 +368,10 @@ export class PineconeService {
           });
         },
         {
-          failureThreshold: 5,
-          resetTimeout: 60000,
-          monitoringWindow: 60000,
-          timeout: 30000,
+          failureThreshold: CircuitBreakerDefaults.failureThreshold,
+          resetTimeout: CircuitBreakerDefaults.resetTimeoutMs,
+          monitoringWindow: CircuitBreakerDefaults.monitoringWindowMs,
+          timeout: CircuitBreakerDefaults.operationTimeoutMs,
           errorFilter: (error) => {
             return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
           },
@@ -433,8 +434,8 @@ export class PineconeService {
 
     try {
       const index = await getPineconeIndex();
-      const topK = options.topK || 10;
-      const minScore = options.minScore || 0.7;
+      const topK = options.topK ?? RetrievalConfig.defaults.topK;
+      const minScore = options.minScore ?? RetrievalConfig.minSimilarityScore;
 
       // Build filter
       const filter: any = {
@@ -471,10 +472,10 @@ export class PineconeService {
           });
         },
         {
-          failureThreshold: 5,
-          resetTimeout: 60000, // 60 seconds
-          monitoringWindow: 60000,
-          timeout: 30000, // 30 seconds
+          failureThreshold: CircuitBreakerDefaults.failureThreshold,
+          resetTimeout: CircuitBreakerDefaults.resetTimeoutMs,
+          monitoringWindow: CircuitBreakerDefaults.monitoringWindowMs,
+          timeout: CircuitBreakerDefaults.operationTimeoutMs,
           errorFilter: (error) => {
             // Only count server errors and connection issues as failures
             return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
@@ -509,7 +510,7 @@ export class PineconeService {
         queryTopK: topK,
         resultsCount: results.length,
         matchesBeforeFilter: queryResponse.matches?.length || 0,
-        minScore: options.minScore || 0.7,
+        minScore: options.minScore || RetrievalConfig.minSimilarityScore,
         userId: options.userId,
         filter,
       });

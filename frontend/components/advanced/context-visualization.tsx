@@ -1,16 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
-import { FileText, Edit2, X, Check, AlertCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import React from 'react';
+import { FileText, AlertCircle } from 'lucide-react';
 
 interface ContextVisualizationProps {
   chunks: ContextChunk[];
   tokenUsage: TokenUsage;
   selectionReasoning?: string;
-  onEdit?: (chunkId: string, content: string) => void;
-  onRemove?: (chunkId: string) => void;
-  onAdd?: (content: string) => void;
 }
 
 export interface ContextChunk {
@@ -41,15 +37,7 @@ export const ContextVisualization: React.FC<ContextVisualizationProps> = ({
   chunks,
   tokenUsage,
   selectionReasoning,
-  onEdit,
-  onRemove,
-  onAdd,
 }) => {
-  const [editingChunk, setEditingChunk] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newChunkContent, setNewChunkContent] = useState('');
-
   const selectedChunks = chunks.filter((c) => c.selected);
   const tokenPercentage = tokenUsage.maxTokens
     ? (tokenUsage.total / tokenUsage.maxTokens) * 100
@@ -57,32 +45,6 @@ export const ContextVisualization: React.FC<ContextVisualizationProps> = ({
   const budgetPercentage = tokenUsage.budget
     ? (tokenUsage.total / tokenUsage.budget) * 100
     : 0;
-
-  const handleStartEdit = (chunk: ContextChunk) => {
-    setEditingChunk(chunk.id);
-    setEditContent(chunk.content);
-  };
-
-  const handleSaveEdit = () => {
-    if (editingChunk && onEdit) {
-      onEdit(editingChunk, editContent);
-      setEditingChunk(null);
-      setEditContent('');
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingChunk(null);
-    setEditContent('');
-  };
-
-  const handleAddChunk = () => {
-    if (newChunkContent.trim() && onAdd) {
-      onAdd(newChunkContent.trim());
-      setNewChunkContent('');
-      setShowAddForm(false);
-    }
-  };
 
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
@@ -161,121 +123,31 @@ export const ContextVisualization: React.FC<ContextVisualizationProps> = ({
                 : 'bg-white border-gray-200 opacity-60'
             }`}
           >
-            <div className="flex justify-between items-start mb-2">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      chunk.source.type === 'document'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-purple-100 text-purple-800'
-                    }`}
-                  >
-                    {chunk.source.type}
-                  </span>
-                  <span className="text-xs font-semibold text-gray-900">
-                    {chunk.source.title}
-                  </span>
-                  <span className="text-xs text-gray-500">Score: {chunk.score.toFixed(3)}</span>
-                  <span className="text-xs text-gray-500">{chunk.tokens} tokens</span>
-                </div>
-                {editingChunk === chunk.id ? (
-                  <div className="space-y-2">
-                    <textarea
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      className="w-full p-2 border border-gray-300 rounded text-sm"
-                      rows={4}
-                    />
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={handleSaveEdit}>
-                        <Check className="w-3 h-3 mr-1" />
-                        Save
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={handleCancelEdit}>
-                        <X className="w-3 h-3 mr-1" />
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-700 line-clamp-3">{chunk.content}</p>
-                    {chunk.reasoning && (
-                      <p className="text-xs text-gray-500 mt-1 italic">
-                        {chunk.reasoning}
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-              {onEdit && editingChunk !== chunk.id && (
-                <div className="flex gap-1 ml-2">
-                  <button
-                    onClick={() => handleStartEdit(chunk)}
-                    className="p-1 text-gray-400 hover:text-gray-600"
-                    title="Edit chunk"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                  </button>
-                  {onRemove && (
-                    <button
-                      onClick={() => onRemove(chunk.id)}
-                      className="p-1 text-gray-400 hover:text-red-600"
-                      title="Remove chunk"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              )}
+            <div className="flex items-center gap-2 mb-1">
+              <span
+                className={`px-2 py-0.5 rounded text-xs font-medium ${
+                  chunk.source.type === 'document'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-purple-100 text-purple-800'
+                }`}
+              >
+                {chunk.source.type}
+              </span>
+              <span className="text-xs font-semibold text-gray-900">
+                {chunk.source.title}
+              </span>
+              <span className="text-xs text-gray-500">Score: {chunk.score.toFixed(3)}</span>
+              <span className="text-xs text-gray-500">{chunk.tokens} tokens</span>
             </div>
+            <p className="text-sm text-gray-700 line-clamp-3">{chunk.content}</p>
+            {chunk.reasoning && (
+              <p className="text-xs text-gray-500 mt-1 italic">
+                {chunk.reasoning}
+              </p>
+            )}
           </div>
         ))}
       </div>
-
-      {/* Add New Chunk */}
-      {onAdd && (
-        <div>
-          {showAddForm ? (
-            <div className="bg-white rounded p-3 border border-gray-200 space-y-2">
-              <textarea
-                value={newChunkContent}
-                onChange={(e) => setNewChunkContent(e.target.value)}
-                placeholder="Enter new context chunk..."
-                className="w-full p-2 border border-gray-300 rounded text-sm"
-                rows={3}
-              />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleAddChunk}>
-                  <Check className="w-3 h-3 mr-1" />
-                  Add
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setShowAddForm(false);
-                    setNewChunkContent('');
-                  }}
-                >
-                  <X className="w-3 h-3 mr-1" />
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowAddForm(true)}
-              className="w-full"
-            >
-              + Add Context Chunk
-            </Button>
-          )}
-        </div>
-      )}
     </div>
   );
 };

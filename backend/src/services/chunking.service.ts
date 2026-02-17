@@ -5,6 +5,7 @@ import { BoundaryDetectionService } from './boundary-detection.service';
 import { TextChunk, SectionInfo, ParagraphInfo } from '../types/chunk';
 import { DocumentTypeDetectionService, DocumentType } from './document-type-detection.service';
 import { getAdaptiveChunkingOptions, getChunkingConfig, calculateOverlapSize } from '../config/chunking.config';
+import { ChunkingConfig } from '../config/thresholds.config';
 
 // Re-export TextChunk for backward compatibility
 export type { TextChunk } from '../types/chunk';
@@ -31,9 +32,9 @@ export interface ChunkingOptions {
 const DEFAULT_OPTIONS: Required<Omit<ChunkingOptions, 'encodingType' | 'model' | 'strategy' | 'similarityThreshold' | 'enableSemanticChunking' | 'fallbackToSentence' | 'documentType' | 'filename' | 'fileType' | 'useAdaptiveSizing'>> & {
   encodingType: ChunkingOptions['encodingType'];
 } = {
-  maxChunkSize: 800, // ~600 words
-  overlapSize: 100, // ~75 words overlap
-  minChunkSize: 100, // ~75 words minimum
+  maxChunkSize: ChunkingConfig.maxChunkSize,
+  overlapSize: ChunkingConfig.overlapSize,
+  minChunkSize: ChunkingConfig.minChunkSize,
   encodingType: 'cl100k_base', // Default encoding for GPT-3.5/4 models
   respectParagraphBoundaries: true, // Default: respect paragraph boundaries
   respectSectionBoundaries: true, // Default: respect section boundaries
@@ -144,9 +145,9 @@ export class ChunkingService {
     if (!useAdaptive) {
       // Use provided options or defaults
       return {
-        maxChunkSize: options.maxChunkSize || DEFAULT_OPTIONS.maxChunkSize,
-        minChunkSize: options.minChunkSize || DEFAULT_OPTIONS.minChunkSize,
-        overlapSize: options.overlapSize || DEFAULT_OPTIONS.overlapSize,
+        maxChunkSize: options.maxChunkSize ?? ChunkingConfig.maxChunkSize,
+        minChunkSize: options.minChunkSize ?? ChunkingConfig.minChunkSize,
+        overlapSize: options.overlapSize ?? ChunkingConfig.overlapSize,
         strategy: options.strategy,
       };
     }
@@ -359,13 +360,13 @@ export class ChunkingService {
       const shouldBreakAtParagraph = opts.respectParagraphBoundaries && 
         currentChunk.length > 0 &&
         currentChunk[currentChunk.length - 1].paragraphIndex !== sentenceMeta.paragraphIndex &&
-        currentTokens + sentenceTokens > opts.maxChunkSize * 0.7; // Break if we're 70% full and at paragraph boundary
+        currentTokens + sentenceTokens > opts.maxChunkSize * ChunkingConfig.semanticSimilarityBreak;
 
       // Check if we should break at section boundary
       const shouldBreakAtSection = opts.respectSectionBoundaries &&
         currentChunk.length > 0 &&
         currentChunk[currentChunk.length - 1].section?.index !== sentenceMeta.section?.index &&
-        currentTokens + sentenceTokens > opts.maxChunkSize * 0.7;
+        currentTokens + sentenceTokens > opts.maxChunkSize * ChunkingConfig.semanticSimilarityBreak;
 
       // If adding this sentence would exceed max size, finalize current chunk
       // But try to avoid breaking within paragraphs unless absolutely necessary
@@ -523,7 +524,7 @@ export class ChunkingService {
         minChunkSize: opts.minChunkSize,
         encodingType: opts.encodingType,
         model: opts.model,
-        similarityThreshold: opts.similarityThreshold || 0.7,
+        similarityThreshold: opts.similarityThreshold || ChunkingConfig.semanticChunkingSimilarityThreshold,
         enableSemanticChunking: opts.enableSemanticChunking !== false,
         fallbackToSentence: opts.fallbackToSentence !== false,
       };

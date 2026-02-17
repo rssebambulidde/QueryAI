@@ -7,6 +7,7 @@
 import logger from '../config/logger';
 import { SearchResult } from './search.service';
 import * as crypto from 'crypto';
+import { WebDeduplicationConfig as WebDedupThresholds } from '../config/thresholds.config';
 
 export interface WebDeduplicationConfig {
   enabled: boolean; // Enable deduplication
@@ -53,13 +54,13 @@ export interface WebDeduplicationStats {
 export const DEFAULT_WEB_DEDUPLICATION_CONFIG: WebDeduplicationConfig = {
   enabled: true,
   urlExactMatch: true,
-  contentSimilarityThreshold: 0.85, // 85% similar content
-  titleSimilarityThreshold: 0.90, // 90% similar title
+  contentSimilarityThreshold: WebDedupThresholds.contentSimilarityThreshold,
+  titleSimilarityThreshold: WebDedupThresholds.titleSimilarityThreshold,
   preserveHighestScore: true,
   useContentHash: true,
   useJaccardSimilarity: true,
   useTitleMatching: true,
-  maxProcessingTimeMs: 150, // Target: <150ms
+  maxProcessingTimeMs: WebDedupThresholds.maxProcessingTimeMs,
 };
 
 /**
@@ -124,14 +125,14 @@ export class WebDeduplicationService {
         .toLowerCase()
         .replace(/[^\w\s]/g, ' ')
         .split(/\s+/)
-        .filter(w => w.length > 2) // Filter out very short words
+        .filter(w => w.length > WebDedupThresholds.minWordLength)
     );
     const words2 = new Set(
       text2
         .toLowerCase()
         .replace(/[^\w\s]/g, ' ')
         .split(/\s+/)
-        .filter(w => w.length > 2)
+        .filter(w => w.length > WebDedupThresholds.minWordLength)
     );
 
     if (words1.size === 0 && words2.size === 0) {
@@ -235,8 +236,7 @@ export class WebDeduplicationService {
 
     // Combine similarities (weighted average)
     if (config.useTitleMatching && titleSimilarity > 0) {
-      // Title similarity is more important (60% weight)
-      return contentSimilarity * 0.4 + titleSimilarity * 0.6;
+      return contentSimilarity * WebDedupThresholds.contentWeight + titleSimilarity * WebDedupThresholds.titleWeight;
     }
 
     return contentSimilarity;
@@ -361,7 +361,7 @@ export class WebDeduplicationService {
       let bestSimilarity = 0;
 
       // Check similarity with existing results (optimized: only check top N)
-      const checkLimit = Math.min(deduplicated.length, 20); // Limit comparisons for performance
+      const checkLimit = Math.min(deduplicated.length, WebDedupThresholds.maxComparisonLimit);
       for (let j = 0; j < checkLimit; j++) {
         const existing = deduplicated[j];
         const similarity = this.calculateResultSimilarity(result, existing, config);
@@ -459,7 +459,7 @@ export class WebDeduplicationService {
     // Step 3: Remove similar content duplicates (slower, but optimized)
     if (deduplicated.length > 1 && config.contentSimilarityThreshold < 1.0) {
       const remainingTime = config.maxProcessingTimeMs - (Date.now() - startTime);
-      if (remainingTime > 10) { // Only if we have time left
+      if (remainingTime > WebDedupThresholds.minRemainingTimeMs) {
         const similarResult = this.removeSimilarContentDuplicates(
           deduplicated,
           config.contentSimilarityThreshold,

@@ -6,6 +6,7 @@
 
 import { DocumentContext } from './rag.service';
 import logger from '../config/logger';
+import { DiversityConfig as DiversityThresholds } from '../config/thresholds.config';
 
 export interface DiversityConfig {
   enabled: boolean; // Enable diversity filtering
@@ -32,9 +33,9 @@ export interface DiversityResult extends DocumentContext {
  */
 export const DEFAULT_DIVERSITY_CONFIG: DiversityConfig = {
   enabled: true,
-  lambda: 0.7, // Default: 70% relevance, 30% diversity
-  maxResults: 10,
-  similarityThreshold: 0.7, // Documents with >70% similarity are considered similar
+  lambda: DiversityThresholds.lambda,
+  maxResults: DiversityThresholds.maxResults,
+  similarityThreshold: DiversityThresholds.similarityThreshold,
   useEmbeddingSimilarity: false, // Use text-based similarity by default
 };
 
@@ -174,8 +175,8 @@ export class DiversityFilterService {
     }
 
     const lambda = Math.max(0, Math.min(1, config.lambda));
-    const maxResults = config.maxResults || results.length;
-    const useEmbedding = config.useEmbeddingSimilarity || false;
+    const maxResults = config.maxResults ?? results.length;
+    const useEmbedding = config.useEmbeddingSimilarity ?? false;
 
     // Sort by relevance first (descending)
     const sortedResults = [...results].sort((a, b) => (b.score || 0) - (a.score || 0));

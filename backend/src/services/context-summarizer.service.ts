@@ -8,6 +8,7 @@ import { openai } from '../config/openai';
 import { TokenCountService } from './token-count.service';
 import logger from '../config/logger';
 import { RAGContext, DocumentContext } from './rag.service';
+import { SummarizationConfig as SummarizationThresholds } from '../config/thresholds.config';
 
 /**
  * Summarization configuration
@@ -60,13 +61,13 @@ export interface SummarizationOptions {
  */
 export const DEFAULT_SUMMARIZATION_CONFIG: SummarizationConfig = {
   enabled: true,
-  summarizationThreshold: 12000, // Summarize if exceeds 12000 tokens
-  maxSummaryTokens: 400, // Max tokens per summary
+  summarizationThreshold: SummarizationThresholds.threshold,
+  maxSummaryTokens: SummarizationThresholds.maxSummaryTokens,
   model: 'gpt-3.5-turbo',
-  temperature: 0.3, // Lower temperature for consistent summaries
+  temperature: SummarizationThresholds.temperature,
   preserveCitations: true,
   preserveKeyInfo: true,
-  maxSummarizationTimeMs: 3000, // 3 seconds max
+  maxSummarizationTimeMs: SummarizationThresholds.maxTimeMs,
   preserveMetadata: true,
   queryAware: true,
 };
@@ -414,9 +415,9 @@ export class ContextSummarizerService {
   }> {
     // Use faster configuration
     const quickConfig: Partial<SummarizationConfig> = {
-      maxSummaryTokens: 200, // Shorter summaries
-      temperature: 0.2, // Lower temperature for faster generation
-      maxSummarizationTimeMs: 2000, // 2 seconds max
+      maxSummaryTokens: SummarizationThresholds.quick.maxSummaryTokens,
+      temperature: SummarizationThresholds.quick.temperature,
+      maxSummarizationTimeMs: SummarizationThresholds.quick.maxTimeMs,
       ...options.config,
     };
 

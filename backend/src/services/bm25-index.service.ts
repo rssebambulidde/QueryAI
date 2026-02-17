@@ -326,11 +326,11 @@ export class BM25Index {
     scores.sort((a, b) => b.score - a.score);
 
     // Apply minScore filter
-    const minScore = options.minScore || 0;
+    const minScore = options.minScore ?? 0;
     const filteredScores = scores.filter(s => s.score >= minScore);
 
     // Get top K results
-    const topK = options.topK || 10;
+    const topK = options.topK ?? 10;
     const topResults = filteredScores.slice(0, topK);
 
     // Return results with documents

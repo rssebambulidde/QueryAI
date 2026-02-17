@@ -293,14 +293,19 @@ router.get(
   '/me',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
-    let profile = await DatabaseService.getUserProfile(req.user!.id);
+    let [profile, subscription] = await Promise.all([
+      DatabaseService.getUserProfile(req.user!.id),
+      DatabaseService.getUserSubscription(req.user!.id),
+    ]);
     // Ensure profile exists (e.g. for Google sign-in via signInWithIdToken)
     if (!profile) {
       await DatabaseService.createUserProfile(req.user!.id, req.user!.email || '', undefined);
       await DatabaseService.createDefaultSubscription(req.user!.id);
-      profile = await DatabaseService.getUserProfile(req.user!.id);
+      [profile, subscription] = await Promise.all([
+        DatabaseService.getUserProfile(req.user!.id),
+        DatabaseService.getUserSubscription(req.user!.id),
+      ]);
     }
-    const subscription = await DatabaseService.getUserSubscription(req.user!.id);
 
     res.status(200).json({
       success: true,
@@ -385,14 +390,14 @@ router.put(
       throw new ValidationError('No fields to update');
     }
 
-    const updatedProfile = await DatabaseService.updateUserProfile(userId, updates);
+    const [updatedProfile, subscription] = await Promise.all([
+      DatabaseService.updateUserProfile(userId, updates),
+      DatabaseService.getUserSubscription(userId),
+    ]);
 
     if (!updatedProfile) {
       throw new ValidationError('Failed to update profile');
     }
-
-    // Get subscription for response
-    const subscription = await DatabaseService.getUserSubscription(userId);
 
     logger.info('Profile updated', { userId, updates });
 

@@ -4,6 +4,7 @@
  */
 
 import logger from '../config/logger';
+import { WebRerankerConfig } from '../config/thresholds.config';
 import { SearchResult } from './search.service';
 
 export interface RerankingConfig {
@@ -48,10 +49,10 @@ export interface RerankingResult {
 export const DEFAULT_RERANKING_CONFIG: Required<Omit<RerankingConfig, 'trustedDomains'>> & {
   trustedDomains: string[];
 } = {
-  relevanceWeight: 0.4,
-  domainAuthorityWeight: 0.3,
-  freshnessWeight: 0.2,
-  originalScoreWeight: 0.1,
+  relevanceWeight: WebRerankerConfig.weights.relevance,
+  domainAuthorityWeight: WebRerankerConfig.weights.domainAuthority,
+  freshnessWeight: WebRerankerConfig.weights.freshness,
+  originalScoreWeight: WebRerankerConfig.weights.originalScore,
   trustedDomains: [
     'wikipedia.org',
     'edu',
@@ -65,11 +66,11 @@ export const DEFAULT_RERANKING_CONFIG: Required<Omit<RerankingConfig, 'trustedDo
     'ieee.org',
     'acm.org',
   ],
-  domainAuthorityBoost: 1.2,
-  freshnessDecayDays: 365,
-  maxFreshnessBoost: 1.3,
-  titleMatchWeight: 0.6,
-  contentMatchWeight: 0.4,
+  domainAuthorityBoost: WebRerankerConfig.boosts.domainAuthority,
+  freshnessDecayDays: WebRerankerConfig.freshnessDecayDays,
+  maxFreshnessBoost: WebRerankerConfig.boosts.maxFreshness,
+  titleMatchWeight: WebRerankerConfig.weights.titleMatch,
+  contentMatchWeight: WebRerankerConfig.weights.contentMatch,
 };
 
 /**
@@ -123,7 +124,7 @@ export class WebResultRerankerService {
   private static calculateDomainAuthorityScore(url: string): number {
     const domain = this.extractDomain(url);
     if (!domain) {
-      return 0.5; // Default score for invalid URLs
+      return WebRerankerConfig.defaultScore; // Default score for invalid URLs
     }
 
     // Check if domain is in trusted domains list
@@ -148,21 +149,21 @@ export class WebResultRerankerService {
     }
 
     // Score based on domain characteristics
-    let score = 0.5; // Base score
+    let score: number = WebRerankerConfig.defaultScore; // Base score
 
     // Boost for .edu, .gov, .org domains
     if (domain.endsWith('.edu') || domain.endsWith('.gov') || domain.endsWith('.org')) {
-      score = 0.8;
+      score = WebRerankerConfig.domainScores.eduGovOrg;
     }
 
     // Boost for .ac.uk, .edu.au (academic domains)
     if (domain.endsWith('.ac.uk') || domain.endsWith('.edu.au')) {
-      score = 0.9;
+      score = WebRerankerConfig.domainScores.academic;
     }
 
     // Penalize suspicious domains
     if (domain.includes('blogspot') || domain.includes('wordpress') || domain.includes('tumblr')) {
-      score = Math.min(score, 0.6);
+      score = Math.min(score, WebRerankerConfig.domainScores.suspicious);
     }
 
     // Normalize to 0-1 range
@@ -174,7 +175,7 @@ export class WebResultRerankerService {
    */
   private static calculateFreshnessScore(publishedDate?: string): number {
     if (!publishedDate) {
-      return 0.5; // Default score if no date available
+      return WebRerankerConfig.defaultScore; // Default score if no date available
     }
 
     try {
@@ -183,38 +184,38 @@ export class WebResultRerankerService {
       
       // Check if date is valid
       if (isNaN(published.getTime())) {
-        return 0.5; // Default score for invalid dates
+        return WebRerankerConfig.defaultScore; // Default score for invalid dates
       }
       
       const daysDiff = (now.getTime() - published.getTime()) / (1000 * 60 * 60 * 24);
 
       // Exclude future dates
       if (isNaN(daysDiff) || daysDiff < 0) {
-        return 0.3; // Penalize future dates or invalid calculations
+        return WebRerankerConfig.futureDatePenalty; // Penalize future dates or invalid calculations
       }
 
       // Calculate freshness score with decay
       const decayDays = this.config.freshnessDecayDays;
       const maxBoost = this.config.maxFreshnessBoost;
 
-      if (daysDiff <= 7) {
+      if (daysDiff <= WebRerankerConfig.freshnessTiers.veryRecent.days) {
         // Very recent (last week): maximum boost
-        return 1.0 * maxBoost;
-      } else if (daysDiff <= 30) {
+        return WebRerankerConfig.freshnessTiers.veryRecent.score * maxBoost;
+      } else if (daysDiff <= WebRerankerConfig.freshnessTiers.recent.days) {
         // Recent (last month): high boost
-        return 0.9 * maxBoost;
-      } else if (daysDiff <= 90) {
+        return WebRerankerConfig.freshnessTiers.recent.score * maxBoost;
+      } else if (daysDiff <= WebRerankerConfig.freshnessTiers.moderate.days) {
         // Recent (last 3 months): moderate boost
-        return 0.8 * maxBoost;
-      } else if (daysDiff <= 180) {
+        return WebRerankerConfig.freshnessTiers.moderate.score * maxBoost;
+      } else if (daysDiff <= WebRerankerConfig.freshnessTiers.somewhat.days) {
         // Somewhat recent (last 6 months): slight boost
-        return 0.7 * maxBoost;
-      } else if (daysDiff <= 365) {
+        return WebRerankerConfig.freshnessTiers.somewhat.score * maxBoost;
+      } else if (daysDiff <= WebRerankerConfig.freshnessTiers.withinYear.days) {
         // Within year: neutral
         return 1.0;
       } else {
         // Older: decay
-        const decayFactor = Math.max(0.3, 1.0 - (daysDiff - 365) / (decayDays - 365));
+        const decayFactor = Math.max(WebRerankerConfig.freshnessTiers.minDecayFactor, 1.0 - (daysDiff - 365) / (decayDays - 365));
         return decayFactor;
       }
     } catch (e) {
@@ -222,7 +223,7 @@ export class WebResultRerankerService {
         publishedDate,
         error: e,
       });
-      return 0.5; // Default score on error
+      return WebRerankerConfig.defaultScore; // Default score on error
     }
   }
 
@@ -240,11 +241,11 @@ export class WebResultRerankerService {
     // Extract query keywords
     const queryKeywords = queryLower
       .split(/\s+/)
-      .filter(word => word.length >= 3)
+      .filter(word => word.length >= WebRerankerConfig.minKeywordLength)
       .map(word => word.replace(/[^\w]/g, ''));
 
     if (queryKeywords.length === 0) {
-      return 0.5; // Default score if no keywords
+      return WebRerankerConfig.defaultScore; // Default score if no keywords
     }
 
     // Calculate title match score
@@ -310,7 +311,7 @@ export class WebResultRerankerService {
       const relevanceScore = this.calculateRelevanceScore(result, query);
       const domainAuthorityScore = this.calculateDomainAuthorityScore(result.url);
       const freshnessScore = this.calculateFreshnessScore(result.publishedDate);
-      const originalScore = result.score || 0.5; // Default to 0.5 if no score
+      const originalScore = result.score || WebRerankerConfig.defaultScore; // Default to 0.5 if no score
 
       // Normalize original score to 0-1 range (assuming Tavily scores are 0-1)
       const normalizedOriginalScore = Math.min(1.0, Math.max(0.0, originalScore));

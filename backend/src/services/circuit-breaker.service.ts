@@ -61,11 +61,11 @@ class CircuitBreaker {
     config?: CircuitBreakerConfig
   ) {
     this.config = {
-      failureThreshold: config?.failureThreshold || 5,
-      resetTimeout: config?.resetTimeout || 60000, // 60 seconds
-      monitoringWindow: config?.monitoringWindow || 60000, // 60 seconds
-      halfOpenMaxCalls: config?.halfOpenMaxCalls || 3,
-      timeout: config?.timeout || 30000, // 30 seconds
+      failureThreshold: config?.failureThreshold ?? 5,
+      resetTimeout: config?.resetTimeout ?? 60000, // 60 seconds
+      monitoringWindow: config?.monitoringWindow ?? 60000, // 60 seconds
+      halfOpenMaxCalls: config?.halfOpenMaxCalls ?? 3,
+      timeout: config?.timeout ?? 30000, // 30 seconds
       errorFilter: config?.errorFilter || (() => true), // Count all errors as failures
     };
   }
@@ -324,8 +324,8 @@ export class CircuitBreakerService {
       logger.info('Circuit breaker created', {
         circuit: name,
         config: {
-          failureThreshold: config?.failureThreshold || 5,
-          resetTimeout: config?.resetTimeout || 60000,
+          failureThreshold: config?.failureThreshold ?? 5,
+          resetTimeout: config?.resetTimeout ?? 60000,
         },
       });
     }

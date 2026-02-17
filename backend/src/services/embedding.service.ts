@@ -14,6 +14,7 @@ import {
   DEFAULT_EMBEDDING_MODEL,
   supportsDimensionReduction,
 } from '../config/embedding.config';
+import { EmbeddingConfig, CircuitBreakerDefaults, RetryDefaults } from '../config/thresholds.config';
 
 /**
  * Batch processing queue item
@@ -52,16 +53,16 @@ export class EmbeddingService {
   private static currentModel: EmbeddingModel | null = null;
 
   // Embedding cache configuration
-  private static readonly EMBEDDING_CACHE_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
+  private static readonly EMBEDDING_CACHE_TTL = EmbeddingConfig.cacheTtlSeconds;
   private static readonly EMBEDDING_CACHE_PREFIX = 'embedding';
 
   // Batch processing queue configuration
-  private static readonly DEFAULT_BATCH_SIZE = 100; // Default batch size for embeddings
-  private static readonly MAX_BATCH_SIZE = 2048; // OpenAI's max batch size
+  private static readonly DEFAULT_BATCH_SIZE = EmbeddingConfig.batchSize;
+  private static readonly MAX_BATCH_SIZE = EmbeddingConfig.maxBatchSize;
   private static readonly MIN_BATCH_SIZE = 1;
-  private static readonly BATCH_PROCESSING_INTERVAL = 100; // Process queue every 100ms
-  private static readonly MAX_QUEUE_SIZE = 10000; // Maximum items in queue
-  private static readonly MAX_BATCH_WAIT_TIME = 5000; // Max wait time before processing batch (5 seconds)
+  private static readonly BATCH_PROCESSING_INTERVAL = EmbeddingConfig.batchProcessingIntervalMs;
+  private static readonly MAX_QUEUE_SIZE = EmbeddingConfig.maxQueueSize;
+  private static readonly MAX_BATCH_WAIT_TIME = EmbeddingConfig.maxBatchWaitTimeMs;
 
   // Batch processing queue
   private static batchQueue: Map<string, BatchQueueItem[]> = new Map(); // Key: model:dimensions
@@ -332,7 +333,7 @@ export class EmbeddingService {
       this.processingTimes.push(processingTime);
       
       // Keep only last 100 processing times for average calculation
-      if (this.processingTimes.length > 100) {
+      if (this.processingTimes.length > EmbeddingConfig.maxProcessingTimeSamples) {
         this.processingTimes.shift();
       }
     }
@@ -402,7 +403,7 @@ export class EmbeddingService {
 
     if (supportsDimensionReduction(model) && dimensions) {
       const maxDimensions = modelSpec.dimensions;
-      const finalDimensions = Math.min(Math.max(dimensions, 256), maxDimensions);
+      const finalDimensions = Math.min(Math.max(dimensions, EmbeddingConfig.minDimensions), maxDimensions);
       requestParams.dimensions = finalDimensions;
     }
 
@@ -423,10 +424,10 @@ export class EmbeddingService {
             return response;
           },
           {
-            maxRetries: 3,
-            initialDelay: 1000,
-            multiplier: 2,
-            maxDelay: 10000,
+            maxRetries: RetryDefaults.maxRetries,
+            initialDelay: RetryDefaults.initialDelayMs,
+            multiplier: RetryDefaults.multiplier,
+            maxDelay: RetryDefaults.maxDelayMs,
             onRetry: (error, attempt, delay) => {
               logger.warn('Retrying embedding generation', {
                 attempt,
@@ -441,10 +442,10 @@ export class EmbeddingService {
         return retryResult.result;
       },
       {
-        failureThreshold: 5,
-        resetTimeout: 60000, // 60 seconds
-        monitoringWindow: 60000,
-        timeout: 30000, // 30 seconds
+        failureThreshold: CircuitBreakerDefaults.failureThreshold,
+        resetTimeout: CircuitBreakerDefaults.resetTimeoutMs,
+        monitoringWindow: CircuitBreakerDefaults.monitoringWindowMs,
+        timeout: CircuitBreakerDefaults.operationTimeoutMs,
         errorFilter: (error) => {
           // Only count server errors and rate limits as failures
           return error.status >= 500 || error.status === 429 || error.code === 'rate_limit_exceeded';
@@ -554,7 +555,7 @@ export class EmbeddingService {
             reject(new AppError('Embedding request timeout', 504, 'QUEUE_TIMEOUT'));
           }
         }
-      }, 30000); // 30 second timeout
+      }, EmbeddingConfig.queueTimeoutMs);
     });
   }
 
@@ -623,13 +624,13 @@ export class EmbeddingService {
           dimensions = maxDimensions;
         }
         // Minimum dimensions for text-embedding-3-* is typically 256
-        if (dimensions < 256) {
+        if (dimensions < EmbeddingConfig.minDimensions) {
           logger.warn('Requested dimensions below minimum, using minimum', {
             requested: dimensions,
-            minimum: 256,
+            minimum: EmbeddingConfig.minDimensions,
             model: embeddingModel,
           });
-          dimensions = 256;
+          dimensions = EmbeddingConfig.minDimensions;
         }
         requestParams.dimensions = dimensions;
       }
@@ -653,10 +654,10 @@ export class EmbeddingService {
               return response;
             },
             {
-              maxRetries: 3,
-              initialDelay: 1000,
-              multiplier: 2,
-              maxDelay: 10000,
+              maxRetries: RetryDefaults.maxRetries,
+              initialDelay: RetryDefaults.initialDelayMs,
+              multiplier: RetryDefaults.multiplier,
+              maxDelay: RetryDefaults.maxDelayMs,
               onRetry: (error, attempt, delay) => {
                 logger.warn('Retrying embedding generation', {
                   attempt,
@@ -671,10 +672,10 @@ export class EmbeddingService {
           return retryResult.result;
         },
         {
-          failureThreshold: 5,
-          resetTimeout: 60000,
-          monitoringWindow: 60000,
-          timeout: 30000,
+          failureThreshold: CircuitBreakerDefaults.failureThreshold,
+          resetTimeout: CircuitBreakerDefaults.resetTimeoutMs,
+          monitoringWindow: CircuitBreakerDefaults.monitoringWindowMs,
+          timeout: CircuitBreakerDefaults.operationTimeoutMs,
           errorFilter: (error) => {
             return error.status >= 500 || error.status === 429 || error.code === 'rate_limit_exceeded';
           },
@@ -840,7 +841,7 @@ export class EmbeddingService {
 
         if (supportsDimensionReduction(embeddingModel) && dimensions) {
           const maxDimensions = modelSpec.dimensions;
-          const finalDimensions = Math.min(Math.max(dimensions, 256), maxDimensions);
+          const finalDimensions = Math.min(Math.max(dimensions, EmbeddingConfig.minDimensions), maxDimensions);
           requestParams.dimensions = finalDimensions;
         }
 
@@ -861,10 +862,10 @@ export class EmbeddingService {
                 return response.data.map(item => item.embedding);
               },
               {
-                maxRetries: 3,
-                initialDelay: 1000,
-                multiplier: 2,
-                maxDelay: 10000,
+                maxRetries: RetryDefaults.maxRetries,
+                initialDelay: RetryDefaults.initialDelayMs,
+                multiplier: RetryDefaults.multiplier,
+                maxDelay: RetryDefaults.maxDelayMs,
                 onRetry: (error, attempt, delay) => {
                   logger.warn('Retrying batch embedding generation', {
                     attempt,
@@ -879,10 +880,10 @@ export class EmbeddingService {
             return retryResult.result;
           },
           {
-            failureThreshold: 5,
-            resetTimeout: 60000,
-            monitoringWindow: 60000,
-            timeout: 30000,
+            failureThreshold: CircuitBreakerDefaults.failureThreshold,
+            resetTimeout: CircuitBreakerDefaults.resetTimeoutMs,
+            monitoringWindow: CircuitBreakerDefaults.monitoringWindowMs,
+            timeout: CircuitBreakerDefaults.operationTimeoutMs,
             errorFilter: (error) => {
               return error.status >= 500 || error.status === 429 || error.code === 'rate_limit_exceeded';
             },

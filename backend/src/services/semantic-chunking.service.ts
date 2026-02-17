@@ -648,9 +648,9 @@ export class SemanticChunkingService {
     const { ChunkingService } = await import('./chunking.service');
     // Use sentence-based strategy explicitly to get synchronous result
     const sentenceChunks = ChunkingService.chunkText(text, {
-      maxChunkSize: options.maxChunkSize || 800,
-      overlapSize: options.overlapSize || 100,
-      minChunkSize: options.minChunkSize || 100,
+      maxChunkSize: options.maxChunkSize ?? 800,
+      overlapSize: options.overlapSize ?? 100,
+      minChunkSize: options.minChunkSize ?? 100,
       encodingType: options.encodingType,
       model: options.model,
       strategy: 'sentence' as const, // Explicitly use sentence-based for comparison

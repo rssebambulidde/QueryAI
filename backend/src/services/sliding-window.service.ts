@@ -7,6 +7,7 @@
 import { ConversationSummarizerService, ConversationSummarizationOptions } from './conversation-summarizer.service';
 import { TokenCountService, type EncodingType } from './token-count.service';
 import logger from '../config/logger';
+import { SlidingWindowConfig } from '../config/thresholds.config';
 
 /**
  * Sliding window options
@@ -38,9 +39,9 @@ export interface SlidingWindowResult {
  * Default sliding window options
  */
 const DEFAULT_SLIDING_WINDOW_OPTIONS: Required<Omit<SlidingWindowOptions, 'summarizationOptions'>> = {
-  windowSize: 10,
-  maxTotalTokens: 2000,
-  maxSummaryTokens: 1000,
+  windowSize: SlidingWindowConfig.windowSize,
+  maxTotalTokens: SlidingWindowConfig.maxTotalTokens,
+  maxSummaryTokens: SlidingWindowConfig.maxSummaryTokens,
   enableSummarization: true,
   model: 'gpt-3.5-turbo',
 };

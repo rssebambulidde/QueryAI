@@ -14,6 +14,7 @@ import {
   DEFAULT_RERANKING_CONFIG,
 } from '../config/reranking.config';
 import logger from '../config/logger';
+import { RerankingInternalConfig } from '../config/thresholds.config';
 
 export interface RerankedResult extends DocumentContext {
   originalScore: number; // Original score before re-ranking
@@ -42,7 +43,7 @@ export class RerankingService {
     const length = content.length;
     // Normalize: shorter documents get higher scores
     // Using inverse log scale: score = 1 / (1 + log(length / 100))
-    const normalizedLength = length / 100;
+    const normalizedLength = length / RerankingInternalConfig.lengthNormalizationDivisor;
     const score = 1 / (1 + Math.log10(Math.max(1, normalizedLength)));
     return Math.min(1, Math.max(0, score));
   }
@@ -78,8 +79,8 @@ export class RerankingService {
       
       // Extract semantic and keyword scores if available (from hybrid search)
       // For now, we'll use the combined score and estimate components
-      const semanticScore = originalScore * 0.6; // Estimate
-      const keywordScore = originalScore * 0.4; // Estimate
+      const semanticScore = originalScore * RerankingInternalConfig.semanticEstimateWeight; // Estimate
+      const keywordScore = originalScore * RerankingInternalConfig.keywordEstimateWeight; // Estimate
       
       // Calculate weighted re-ranked score
       const rerankedScore =
@@ -172,7 +173,7 @@ export class RerankingService {
       const crossEncoderScore = crossEncoderResult?.rerankedScore || 0;
       const scoreBasedScore = scoreBasedResult?.rerankedScore || 0;
 
-      const combinedScore = crossEncoderScore * 0.7 + scoreBasedScore * 0.3;
+      const combinedScore = crossEncoderScore * RerankingInternalConfig.crossEncoderWeight + scoreBasedScore * RerankingInternalConfig.scoreBasedWeight;
 
       return {
         ...result,
@@ -209,8 +210,8 @@ export class RerankingService {
   ): Promise<RerankedResult[]> {
     const config = getRerankingConfig();
     const strategy = options.strategy || config.strategy;
-    const topK = options.topK || config.topK;
-    const maxResults = options.maxResults || config.maxResults;
+    const topK = options.topK ?? config.topK;
+    const maxResults = options.maxResults ?? config.maxResults;
     const minScore = options.minScore ?? config.minScore ?? 0;
 
     // Take top-K results to re-rank
@@ -282,7 +283,7 @@ export class RerankingService {
     improvement: number; // Percentage improvement
     averageRankChange: number; // Average change in rank
   } {
-    const topN = Math.min(5, originalResults.length, rerankedResults.length);
+    const topN = Math.min(RerankingInternalConfig.precisionTopN, originalResults.length, rerankedResults.length);
     
     const originalTopN = originalResults.slice(0, topN);
     const rerankedTopN = rerankedResults.slice(0, topN);

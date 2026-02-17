@@ -3,6 +3,7 @@ import { CollectionService, CreateCollectionInput, UpdateCollectionInput } from 
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { AppError, ValidationError } from '../types/error';
+import { validateUUIDParams } from '../validation/uuid';
 
 const router = Router();
 
@@ -32,6 +33,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -84,6 +86,7 @@ router.post(
 router.put(
   '/:id',
   authenticate,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -111,6 +114,7 @@ router.put(
 router.delete(
   '/:id',
   authenticate,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -131,6 +135,7 @@ router.delete(
 router.post(
   '/:id/conversations/:conversationId',
   authenticate,
+  validateUUIDParams('id', 'conversationId'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -152,6 +157,7 @@ router.post(
 router.delete(
   '/:id/conversations/:conversationId',
   authenticate,
+  validateUUIDParams('id', 'conversationId'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -173,6 +179,7 @@ router.delete(
 router.get(
   '/:id/search',
   authenticate,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const collectionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;

@@ -15,6 +15,7 @@ import { apiLimiter } from '../middleware/rateLimiter';
 import { enforceDocumentUploadLimit, requireFeature } from '../middleware/subscription.middleware';
 import { logDocumentUploadUsage } from '../middleware/usageCounter.middleware';
 import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
+import { validateUUIDParams, assertUUID } from '../validation/uuid';
 
 const router = Router();
 
@@ -96,7 +97,7 @@ router.post(
     const initialStatus = (req.query.autoExtract === 'true') ? 'processing' : 'stored';
     
     // Get topicId from form data if provided
-    const topicId = req.body.topicId || undefined;
+    const topicId = req.body.topicId ? assertUUID(req.body.topicId, 'topicId') : undefined;
     
     // Validate topicId if provided
     if (topicId) {
@@ -167,7 +168,7 @@ router.post(
               size: img.size,
             })) : undefined, // Store image metadata (not full data URLs)
             imageCount: result.images?.length || 0,
-            ocr: result.ocrUsed || false, // Mark if OCR was used
+            ocr: result.ocrUsed ?? false, // Mark if OCR was used
           },
         });
 
@@ -210,7 +211,7 @@ router.post(
                     size: img.size,
                   })) : undefined,
                   imageCount: result.images?.length || 0,
-                  ocr: result.ocrUsed || false,
+                  ocr: result.ocrUsed ?? false,
                   embedding: metadata,
                   chunkCount: chunks.length,
                   embeddedAt: new Date().toISOString(),
@@ -483,6 +484,7 @@ router.get(
 router.get(
   '/:id/text',
   authenticate,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
@@ -520,6 +522,7 @@ router.get(
 router.patch(
   '/:id',
   authenticate,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
@@ -571,6 +574,7 @@ router.patch(
 router.post(
   '/:id/extract',
   authenticate,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
@@ -647,6 +651,7 @@ router.post(
 router.post(
   '/:id/process',
   authenticate,
+  validateUUIDParams('id'),
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
@@ -1239,6 +1244,7 @@ router.post(
 router.post(
   '/:id/clear-processing',
   authenticate,
+  validateUUIDParams('id'),
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;

@@ -211,8 +211,8 @@ export class ErrorRecoveryService {
     const startTime = Date.now();
     const category = this.categorizeError(error);
     const strategy = this.determineRecoveryStrategy(error, service, config);
-    const maxAttempts = config?.maxAttempts || 3;
-    const retryDelay = config?.retryDelay || 1000;
+    const maxAttempts = config?.maxAttempts ?? 3;
+    const retryDelay = config?.retryDelay ?? 1000;
 
     this.stats.totalAttempts++;
     this.stats.recoveriesByCategory[category] = (this.stats.recoveriesByCategory[category] || 0) + 1;

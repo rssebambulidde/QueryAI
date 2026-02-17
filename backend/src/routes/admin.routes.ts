@@ -8,6 +8,7 @@ import { DatabaseService } from '../services/database.service';
 import logger from '../config/logger';
 import { apiLimiter } from '../middleware/rateLimiter';
 import { sanitizePostgrestValue, validateSearchInput } from '../validation/sanitize';
+import { validateUUIDParams } from '../validation/uuid';
 
 const router = Router();
 
@@ -64,6 +65,7 @@ router.get(
   authenticate,
   requireSuperAdmin,
   apiLimiter,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = Array.isArray(id) ? id[0] : id;
@@ -104,6 +106,7 @@ router.put(
   authenticate,
   requireSuperAdmin,
   apiLimiter,
+  validateUUIDParams('id'),
   asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = Array.isArray(id) ? id[0] : id;

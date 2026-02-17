@@ -18,6 +18,7 @@ import {
   getFilteringABTestConfig,
 } from '../config/filtering.config';
 import logger from '../config/logger';
+import { CacheTtlConfig, SearchConfig, RetrievalConfig, CircuitBreakerDefaults, RetryDefaults } from '../config/thresholds.config';
 import { AppError, ValidationError } from '../types/error';
 
 export type TimeRange = 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
@@ -197,7 +198,7 @@ export interface SearchResponse {
 }
 
 // Cache configuration for Tavily searches
-const TAVILY_CACHE_TTL = 86400; // 24 hours in seconds (for Tavily results)
+const TAVILY_CACHE_TTL = CacheTtlConfig.search; // 24 hours in seconds (for Tavily results)
 const CACHE_PREFIX = 'tavily'; // Cache key prefix for Tavily searches
 
 // Cache statistics for Tavily searches
@@ -222,7 +223,7 @@ function generateCacheKey(request: SearchRequest): string {
   const parts = [
     request.query.toLowerCase().trim(),
     request.topic || '',
-    request.maxResults || 5,
+    request.maxResults ?? RetrievalConfig.defaults.maxWebResults,
     (request.includeDomains || []).sort().join(','),
     (request.excludeDomains || []).sort().join(','),
     request.timeRange || '',
@@ -248,7 +249,7 @@ export class SearchService {
         throw new ValidationError('Search query is required');
       }
 
-      if (request.query.length > 500) {
+      if (request.query.length > SearchConfig.maxQueryLength) {
         throw new ValidationError('Search query is too long (max 500 characters)');
       }
 
@@ -297,7 +298,7 @@ export class SearchService {
 
       if (enableQueryRewriting) {
         const rewritingOptions = request.queryRewritingOptions || {
-          maxVariations: 3,
+          maxVariations: SearchConfig.maxQueryVariations,
           useCache: true,
           context: request.optimizationContext,
         };
@@ -386,13 +387,13 @@ export class SearchService {
             topic: request.topic,
             timeRange: request.timeRange,
             country: request.country,
-            maxResults: request.maxResults || 5,
+            maxResults: request.maxResults ?? RetrievalConfig.defaults.maxWebResults,
           });
         }
 
         // Build Tavily search options
         const tavilyOptions: any = {
-          maxResults: request.maxResults || 5,
+          maxResults: request.maxResults ?? RetrievalConfig.defaults.maxWebResults,
           includeDomains: request.includeDomains,
           excludeDomains: request.excludeDomains,
           searchDepth: 'basic', // Options: 'basic' or 'advanced'
@@ -426,10 +427,10 @@ export class SearchService {
                 return await client.search(searchQuery, tavilyOptions);
               },
               {
-                maxRetries: 3,
-                initialDelay: 1000,
+                maxRetries: RetryDefaults.maxRetries,
+                initialDelay: RetryDefaults.initialDelayMs,
                 multiplier: 2,
-                maxDelay: 10000,
+                maxDelay: RetryDefaults.maxDelayMs,
                 onRetry: (error, attempt, delay) => {
                   logger.warn('Retrying Tavily search', {
                     attempt,
@@ -443,10 +444,10 @@ export class SearchService {
             return retryResult.result;
           },
           {
-            failureThreshold: 5,
-            resetTimeout: 60000, // 60 seconds
-            monitoringWindow: 60000,
-            timeout: 30000, // 30 seconds
+            failureThreshold: CircuitBreakerDefaults.failureThreshold,
+            resetTimeout: CircuitBreakerDefaults.resetTimeoutMs,
+            monitoringWindow: CircuitBreakerDefaults.monitoringWindowMs,
+            timeout: CircuitBreakerDefaults.operationTimeoutMs,
             errorFilter: (error) => {
               // Only count server errors as failures
               return error.status >= 500 || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
@@ -813,7 +814,7 @@ export class SearchService {
       // Quality scoring and filtering if enabled
       const enableQualityScoring = request.enableQualityScoring ?? false; // Default to false
       const filterByQuality = request.filterByQuality ?? false; // Default to false
-      const minQualityScore = request.minQualityScore ?? 0.5; // Default threshold
+      const minQualityScore = request.minQualityScore ?? RetrievalConfig.qualityThreshold; // Default threshold
       
       if (enableQualityScoring && finalResults.length > 0) {
         const startTime = Date.now();
@@ -852,7 +853,7 @@ export class SearchService {
       // Domain authority scoring and filtering if enabled
       const enableDomainAuthority = request.enableDomainAuthority ?? true; // Default to true
       const filterByAuthority = request.filterByAuthority ?? false; // Default to false
-      const minAuthorityScore = request.minAuthorityScore ?? 0.5; // Default threshold
+      const minAuthorityScore = request.minAuthorityScore ?? RetrievalConfig.authorityThreshold; // Default threshold
       const prioritizeAuthoritative = request.prioritizeAuthoritative ?? true; // Default to true
       
       if (enableDomainAuthority && finalResults.length > 0) {
@@ -939,7 +940,7 @@ export class SearchService {
         if (deduplicationResult.stats.performanceWarning) {
           logger.warn('Deduplication exceeded target time', {
             processingTimeMs: deduplicationResult.stats.processingTimeMs,
-            targetTime: 150,
+            targetTime: SearchConfig.deduplicationTargetMs,
           });
         }
       }

@@ -8,6 +8,7 @@ import { openai } from '../config/openai';
 import { TokenCountService } from './token-count.service';
 import logger from '../config/logger';
 import { RAGContext, DocumentContext } from './rag.service';
+import { CompressionConfig as CompressionThresholds } from '../config/thresholds.config';
 
 export type CompressionStrategy = 'summarization' | 'extraction' | 'truncation' | 'hybrid';
 
@@ -57,16 +58,16 @@ export interface CompressionOptions {
  */
 export const DEFAULT_COMPRESSION_CONFIG: CompressionConfig = {
   enabled: true,
-  maxContextTokens: 8000, // Target: 8000 tokens
-  compressionThreshold: 10000, // Compress if exceeds 10000 tokens
+  maxContextTokens: CompressionThresholds.maxTokens,
+  compressionThreshold: CompressionThresholds.compressionThreshold,
   strategy: 'hybrid', // Use hybrid strategy by default
   preserveKeyInfo: true,
-  maxCompressionTimeMs: 2000, // 2 seconds max
+  maxCompressionTimeMs: CompressionThresholds.maxCompressionTimeMs,
   summarizationModel: 'gpt-3.5-turbo',
-  summarizationMaxTokens: 500, // Max tokens per summary
-  summarizationTemperature: 0.3, // Lower temperature for more consistent summaries
+  summarizationMaxTokens: CompressionThresholds.summarizationMaxTokens,
+  summarizationTemperature: CompressionThresholds.summarizationTemperature,
   extractKeyPoints: true,
-  maxKeyPoints: 5,
+  maxKeyPoints: CompressionThresholds.maxKeyPoints,
   truncationStrategy: 'smart',
   preserveHeaders: true,
 };
@@ -131,7 +132,7 @@ export class ContextCompressorService {
       return text;
     }
 
-    const targetChars = Math.floor((maxTokens / currentTokens) * text.length * 0.9); // 90% to be safe
+    const targetChars = Math.floor((maxTokens / currentTokens) * text.length * CompressionThresholds.truncationSafetyMargin);
 
     if (strategy === 'start') {
       // Keep end
@@ -295,7 +296,7 @@ export class ContextCompressorService {
         compressedContent = await this.summarizeContent(context.content, query, config, model);
         // Verify it's actually shorter
         const compressedTokens = TokenCountService.countTokensForModel(compressedContent, model);
-        if (compressedTokens >= currentTokens * 0.9) {
+        if (compressedTokens >= currentTokens * CompressionThresholds.compressionEffectivenessThreshold) {
           // Summarization didn't help much, use truncation
           compressedContent = this.truncateText(
             context.content,
@@ -355,7 +356,7 @@ export class ContextCompressorService {
       try {
         compressedContent = await this.summarizeContent(result.content, query, config, model);
         const compressedTokens = TokenCountService.countTokensForModel(compressedContent, model);
-        if (compressedTokens >= currentTokens * 0.9) {
+        if (compressedTokens >= currentTokens * CompressionThresholds.compressionEffectivenessThreshold) {
           compressedContent = this.truncateText(
             result.content,
             targetTokens,

@@ -4,6 +4,7 @@ import { MessageService } from '../services/message.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
 import { AppError } from '../types/error';
+import { validateUUIDParams } from '../validation/uuid';
 import logger from '../config/logger';
 
 const router = Router();
@@ -26,7 +27,7 @@ router.get(
     const conversations = await ConversationService.getUserConversations(userId, {
       limit,
       offset,
-      includeMetadata: includeMetadata || true, // Default to true for UI
+      includeMetadata: includeMetadata ?? true, // Default to true for UI
     });
 
     res.json({
@@ -65,6 +66,7 @@ router.post(
  */
 router.get(
   '/:id',
+  validateUUIDParams('id'),
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
     const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -88,6 +90,7 @@ router.get(
  */
 router.put(
   '/:id',
+  validateUUIDParams('id'),
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
     const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -126,6 +129,7 @@ router.put(
  */
 router.delete(
   '/:id',
+  validateUUIDParams('id'),
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
     const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -145,6 +149,7 @@ router.delete(
  */
 router.get(
   '/:id/messages',
+  validateUUIDParams('id'),
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
     const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -169,6 +174,7 @@ router.get(
  */
 router.post(
   '/:id/messages',
+  validateUUIDParams('id'),
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
     const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;

@@ -8,6 +8,7 @@ import { enforceQueryLimit } from '../middleware/subscription.middleware';
 import { logQueryUsage } from '../middleware/usageCounter.middleware';
 import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
 import { ValidationError } from '../types/error';
+import { assertUUID, validateUUIDArray, isValidUUID } from '../validation/uuid';
 import logger from '../config/logger';
 
 const router = Router();
@@ -56,6 +57,11 @@ router.post(
       throw new ValidationError('Question is required');
     }
 
+    // Validate UUID params from body
+    if (topicId) assertUUID(topicId, 'topicId');
+    if (documentIds) validateUUIDArray(documentIds, 'documentIds');
+    if (conversationId) assertUUID(conversationId, 'conversationId');
+
     const userId = req.user?.id;
     if (!userId) {
       throw new ValidationError('User not authenticated');
@@ -70,7 +76,7 @@ router.post(
       maxTokens,
       enableSearch: enableSearch !== false, // Default to true
       topic: topic?.trim(),
-      maxSearchResults: maxSearchResults || 5,
+      maxSearchResults: maxSearchResults ?? 5,
       timeRange,
       startDate,
       endDate,
@@ -80,8 +86,8 @@ router.post(
       enableWebSearch: enableWebSearch !== false, // Default to true
       topicId: topicId,
       documentIds: documentIds,
-      maxDocumentChunks: maxDocumentChunks || 5,
-      minScore: minScore || 0.5,
+      maxDocumentChunks: maxDocumentChunks ?? 5,
+      minScore: minScore ?? 0.5,
       // Conversation management
       conversationId: conversationId,
     };
@@ -205,6 +211,11 @@ router.post(
       throw new ValidationError('Question is required');
     }
 
+    // Validate UUID params from body
+    if (topicId) assertUUID(topicId, 'topicId');
+    if (documentIds) validateUUIDArray(documentIds, 'documentIds');
+    if (conversationId) assertUUID(conversationId, 'conversationId');
+
     const userId = req.user?.id;
     if (!userId) {
       throw new ValidationError('User not authenticated');
@@ -219,7 +230,7 @@ router.post(
       maxTokens,
       enableSearch: enableSearch !== false, // Default to true
       topic: topic?.trim(),
-      maxSearchResults: maxSearchResults || 5,
+      maxSearchResults: maxSearchResults ?? 5,
       timeRange,
       startDate,
       endDate,
@@ -229,8 +240,8 @@ router.post(
       enableWebSearch: enableWebSearch !== false, // Default to true
       topicId: topicId,
       documentIds: documentIds,
-      maxDocumentChunks: maxDocumentChunks || 5,
-      minScore: minScore || 0.5,
+      maxDocumentChunks: maxDocumentChunks ?? 5,
+      minScore: minScore ?? 0.5,
       // Conversation management
       conversationId: conversationId,
     };
@@ -354,9 +365,9 @@ router.post(
             documentIds: request.documentIds,
             enableDocumentSearch: request.enableDocumentSearch !== false,
             enableWebSearch: request.enableWebSearch !== false,
-            maxDocumentChunks: request.maxDocumentChunks || 5,
-            maxWebResults: request.maxSearchResults || 5,
-            minScore: request.minScore || 0.5,
+            maxDocumentChunks: request.maxDocumentChunks ?? 5,
+            maxWebResults: request.maxSearchResults ?? 5,
+            minScore: request.minScore ?? 0.5,
             topic: request.topic,
             timeRange: request.timeRange,
             startDate: request.startDate,
@@ -387,44 +398,20 @@ router.post(
         res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
       }
       
-      // Parse follow-up questions from the complete answer (lenient: FOLLOW_UP_QUESTIONS/Follow-up, bullets - * •)
+      // Parse follow-up questions from the complete answer using ResponseProcessorService
       let followUpQuestions: string[] | undefined;
-      let followUpMatch = fullAnswer.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
-      if (followUpMatch) {
-        const questionsText = followUpMatch[1];
-        followUpQuestions = questionsText
-          .split('\n')
-          .map(line => line.replace(/^[-*•]\s+/, '').trim())
-          .filter(q => q.length > 0)
-          .slice(0, 4);
-        fullAnswer = fullAnswer.substring(0, followUpMatch.index).trim();
-      } else {
-        // Fallback: extract 1–4 bullet lines from the end (model sometimes varies FOLLOW_UP format)
-        const tail = fullAnswer.slice(-700);
-        const bulletLines = tail.split(/\n/).filter((l) => /^\s*[-*•]\s+.{10,}/.test(l));
-        if (bulletLines.length >= 1 && bulletLines.length <= 6) {
-          followUpQuestions = bulletLines
-            .map((l) => l.replace(/^\s*[-*•]\s+/, '').trim())
-            .filter((q) => q.length > 5 && q.length < 200)
-            .slice(0, 4);
-          if (followUpQuestions.length >= 1) {
-            const idx = tail.indexOf(bulletLines[0]);
-            if (idx >= 0) {
-              const start = Math.max(0, fullAnswer.length - 700 + idx);
-              fullAnswer = fullAnswer.substring(0, start).trim();
-            }
-          }
-        }
-      }
-
-      // Mandatory follow-ups: if still none, generate from latest Q&A (research or not)
-      if ((!followUpQuestions || followUpQuestions.length === 0) && fullAnswer) {
-        try {
-          const generated = await AIService.generateFollowUpQuestions(request.question, fullAnswer, topicName);
-          if (generated.length > 0) followUpQuestions = generated;
-        } catch (genErr: any) {
-          logger.warn('Follow-up questions fallback failed in streaming', { error: genErr?.message });
-        }
+      try {
+        const { ResponseProcessorService } = await import('../services/response-processor.service');
+        const followUpResult = await ResponseProcessorService.processFollowUpQuestions(
+          fullAnswer,
+          request.question,
+          topicName
+        );
+        followUpQuestions = followUpResult.questions.length > 0 ? followUpResult.questions : undefined;
+        fullAnswer = followUpResult.answer;
+      } catch (followUpErr: any) {
+        logger.warn('Follow-up questions processing failed in streaming', { error: followUpErr?.message });
+        // Continue without follow-ups on error
       }
       
       // Send follow-up questions (required on every response)
@@ -613,6 +600,8 @@ router.post(
       throw new ValidationError('conversationId and topicName are required');
     }
 
+    assertUUID(conversationId, 'conversationId');
+
     const userId = req.user?.id;
     if (!userId) {
       throw new ValidationError('User not authenticated');
@@ -641,6 +630,8 @@ router.get(
     if (!topicId) {
       throw new ValidationError('topicId is required');
     }
+
+    assertUUID(topicId, 'topicId');
 
     const userId = req.user?.id;
     if (!userId) {
@@ -697,6 +688,11 @@ router.post(
       throw new ValidationError('Question is required');
     }
 
+    // Validate UUID params from body
+    if (topicId) assertUUID(topicId, 'topicId');
+    if (documentIds) validateUUIDArray(documentIds, 'documentIds');
+    if (conversationId) assertUUID(conversationId, 'conversationId');
+
     const userId = req.user?.id;
     if (!userId) {
       throw new ValidationError('User not authenticated');
@@ -711,7 +707,7 @@ router.post(
       maxTokens,
       enableSearch: enableSearch !== false,
       topic: topic?.trim(),
-      maxSearchResults: maxSearchResults || 5,
+      maxSearchResults: maxSearchResults ?? 5,
       timeRange,
       startDate,
       endDate,
@@ -720,8 +716,8 @@ router.post(
       enableWebSearch: enableWebSearch !== false,
       topicId: topicId,
       documentIds: documentIds,
-      maxDocumentChunks: maxDocumentChunks || 5,
-      minScore: minScore || 0.5,
+      maxDocumentChunks: maxDocumentChunks ?? 5,
+      minScore: minScore ?? 0.5,
       conversationId: conversationId,
     };
 

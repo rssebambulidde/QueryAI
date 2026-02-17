@@ -9,6 +9,7 @@ import { ChunkService } from './chunk.service';
 import { DocumentService } from './document.service';
 import logger from '../config/logger';
 import { AppError } from '../types/error';
+import { RetrievalConfig } from '../config/thresholds.config';
 import { Database } from '../types/database';
 
 export interface KeywordSearchResult {
@@ -152,8 +153,8 @@ export class KeywordSearchService {
         userId: options.userId,
         topicId: options.topicId,
         documentIds: options.documentIds,
-        topK: options.topK || 10,
-        minScore: options.minScore || 0,
+        topK: options.topK || RetrievalConfig.defaults.topK,
+        minScore: options.minScore ?? 0,
       });
 
       if (results.length === 0) {

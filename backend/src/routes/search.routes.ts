@@ -41,10 +41,10 @@ router.post(
     // Perform semantic search
     const results = await PineconeService.search(queryEmbedding, {
       userId,
-      topK: topK || 10,
+      topK: topK ?? 10,
       topicId: topicId || undefined,
       documentIds: documentIds || undefined,
-      minScore: minScore || 0.7,
+      minScore: minScore ?? 0.7,
     });
 
     res.status(200).json({

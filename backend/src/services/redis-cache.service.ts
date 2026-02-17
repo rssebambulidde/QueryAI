@@ -154,7 +154,7 @@ export class RedisCacheService {
     try {
       const client = await getRedisClient();
       const cacheKey = this.generateKey(key, options?.prefix);
-      const ttl = options?.ttl || 3600; // Default 1 hour
+      const ttl = options?.ttl ?? 3600; // Default 1 hour
       
       // Serialize value to JSON
       const serialized = JSON.stringify(value);
@@ -584,7 +584,7 @@ export class RedisCacheService {
     try {
       const client = await getRedisClient();
       const cacheKey = this.generateKey(key, options?.prefix);
-      const ttl = options?.ttl || 3600;
+      const ttl = options?.ttl ?? 3600;
       
       // Create entry with embedding
       const entry: SimilarityCacheEntry<T> = {

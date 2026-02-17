@@ -151,8 +151,8 @@ export class MessageService {
         throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
       }
 
-      const limit = options?.limit || 100;
-      const offset = options?.offset || 0;
+      const limit = options?.limit ?? 100;
+      const offset = options?.offset ?? 0;
 
       const { data, error } = await supabaseAdmin
         .from('messages')

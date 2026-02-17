@@ -15,6 +15,7 @@ import {
   getABTestConfig,
 } from '../config/search.config';
 import logger from '../config/logger';
+import { HybridSearchConfig } from '../config/thresholds.config';
 
 export interface HybridSearchResult extends DocumentContext {
   semanticScore?: number; // Original semantic score
@@ -94,7 +95,7 @@ export class HybridSearchService {
    */
   private static deduplicateResults(
     results: HybridSearchResult[],
-    threshold: number = 0.85
+    threshold: number = HybridSearchConfig.deduplicationThreshold
   ): HybridSearchResult[] {
     if (results.length === 0) {
       return [];

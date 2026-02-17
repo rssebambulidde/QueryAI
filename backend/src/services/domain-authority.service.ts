@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import logger from '../config/logger';
+import { DomainAuthorityConfig as DomainAuthThresholds } from '../config/thresholds.config';
 import { SearchResult } from './search.service';
 
 export interface DomainAuthorityEntry {
@@ -61,10 +62,10 @@ export interface DomainAuthorityConfig {
 export const DEFAULT_DOMAIN_AUTHORITY_CONFIG: Required<Omit<DomainAuthorityConfig, 'customDomainScores'>> & {
   customDomainScores: Record<string, number>;
 } = {
-  authorityWeight: 0.3,
-  minAuthorityScore: 0.5,
-  highAuthorityBoost: 1.2,
-  lowAuthorityPenalty: 0.9,
+  authorityWeight: DomainAuthThresholds.authorityWeight,
+  minAuthorityScore: DomainAuthThresholds.minAuthorityScore,
+  highAuthorityBoost: DomainAuthThresholds.highAuthorityBoost,
+  lowAuthorityPenalty: DomainAuthThresholds.lowAuthorityPenalty,
   enabled: true,
   customDomainScores: {},
 };
@@ -111,7 +112,7 @@ export class DomainAuthorityService {
         lastUpdated: new Date().toISOString(),
         domains: {},
         domainPatterns: {},
-        categoryWeights: { default: 0.5 },
+        categoryWeights: { default: DomainAuthThresholds.defaultCategoryWeight },
       };
     }
   }
@@ -168,8 +169,8 @@ export class DomainAuthorityService {
   static getDomainAuthorityScore(url: string): DomainAuthorityScore {
     if (!this.config.enabled) {
       return {
-        score: 0.5,
-        rawScore: 50,
+        score: DomainAuthThresholds.defaultScore,
+        rawScore: DomainAuthThresholds.defaultRawScore,
         source: 'default',
       };
     }
@@ -177,8 +178,8 @@ export class DomainAuthorityService {
     const domain = this.extractDomain(url);
     if (!domain) {
       return {
-        score: 0.5,
-        rawScore: 50,
+        score: DomainAuthThresholds.defaultScore,
+        rawScore: DomainAuthThresholds.defaultRawScore,
         source: 'default',
       };
     }
@@ -187,7 +188,7 @@ export class DomainAuthorityService {
     if (this.config.customDomainScores[domain]) {
       const rawScore = this.config.customDomainScores[domain];
       return {
-        score: rawScore / 100,
+        score: rawScore / DomainAuthThresholds.rawScoreNormalizer,
         rawScore,
         source: 'exact',
         matchedDomain: domain,
@@ -200,7 +201,7 @@ export class DomainAuthorityService {
     if (db.domains[domain]) {
       const entry = db.domains[domain];
       const tierWeight = db.categoryWeights[entry.tier] || db.categoryWeights.default;
-      const normalizedScore = (entry.authorityScore / 100) * tierWeight;
+      const normalizedScore = (entry.authorityScore / DomainAuthThresholds.rawScoreNormalizer) * tierWeight;
       
       return {
         score: normalizedScore,
@@ -217,7 +218,7 @@ export class DomainAuthorityService {
       const regex = new RegExp(pattern.pattern);
       if (regex.test(domain)) {
         const tierWeight = db.categoryWeights[pattern.tier] || db.categoryWeights.default;
-        const normalizedScore = (pattern.authorityScore / 100) * tierWeight;
+        const normalizedScore = (pattern.authorityScore / DomainAuthThresholds.rawScoreNormalizer) * tierWeight;
         
         return {
           score: normalizedScore,
@@ -234,14 +235,14 @@ export class DomainAuthorityService {
     const tld = domain.split('.').pop() || '';
     if (tld === 'edu' || tld === 'gov' || tld === 'org') {
       const tldScores: Record<string, number> = {
-        edu: 85,
-        gov: 90,
-        org: 70,
+        edu: DomainAuthThresholds.tldScores.edu,
+        gov: DomainAuthThresholds.tldScores.gov,
+        org: DomainAuthThresholds.tldScores.org,
       };
-      const rawScore = tldScores[tld] || 50;
+      const rawScore = tldScores[tld] || DomainAuthThresholds.tldScores.default;
       
       return {
-        score: rawScore / 100,
+        score: rawScore / DomainAuthThresholds.rawScoreNormalizer,
         rawScore,
         category: tld === 'edu' ? 'academic' : tld === 'gov' ? 'government' : 'organization',
         source: 'tld',
@@ -251,8 +252,8 @@ export class DomainAuthorityService {
 
     // Default score for unknown domains
     return {
-      score: 0.5,
-      rawScore: 50,
+      score: DomainAuthThresholds.defaultScore,
+      rawScore: DomainAuthThresholds.defaultRawScore,
       source: 'default',
     };
   }
@@ -262,7 +263,7 @@ export class DomainAuthorityService {
    */
   static scoreResultWithAuthority(
     result: SearchResult,
-    baseScore: number = 0.5
+    baseScore: number = DomainAuthThresholds.defaultScore
   ): { score: number; authorityScore: DomainAuthorityScore } {
     const authorityScore = this.getDomainAuthorityScore(result.url);
     
@@ -272,7 +273,7 @@ export class DomainAuthorityService {
     if (authorityScore.score >= this.config.minAuthorityScore) {
       // High authority: apply boost
       finalScore = baseScore * this.config.highAuthorityBoost;
-    } else if (authorityScore.score < 0.3) {
+    } else if (authorityScore.score < DomainAuthThresholds.lowAuthorityThreshold) {
       // Low authority: apply penalty
       finalScore = baseScore * this.config.lowAuthorityPenalty;
     }
@@ -294,7 +295,7 @@ export class DomainAuthorityService {
     baseScores?: number[]
   ): Array<{ result: SearchResult; score: number; authorityScore: DomainAuthorityScore }> {
     return results.map((result, index) => {
-      const baseScore = baseScores?.[index] ?? (result.score || 0.5);
+      const baseScore = baseScores?.[index] ?? (result.score || DomainAuthThresholds.defaultScore);
       const scored = this.scoreResultWithAuthority(result, baseScore);
       return {
         result,
@@ -328,7 +329,7 @@ export class DomainAuthorityService {
    */
   static filterByAuthority(
     results: SearchResult[],
-    minAuthorityScore: number = 0.5
+    minAuthorityScore: number = DomainAuthThresholds.minAuthorityScore
   ): SearchResult[] {
     return results.filter(result => {
       const authorityScore = this.getDomainAuthorityScore(result.url);

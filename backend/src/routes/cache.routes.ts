@@ -140,8 +140,8 @@ router.post(
 
     const invalidationOptions: InvalidationOptions = {
       invalidateRAG: options?.invalidateRAG !== false,
-      invalidateEmbeddings: options?.invalidateEmbeddings || false,
-      invalidateSearch: options?.invalidateSearch || false,
+      invalidateEmbeddings: options?.invalidateEmbeddings ?? false,
+      invalidateSearch: options?.invalidateSearch ?? false,
       reason: options?.reason || 'Document cache invalidation',
     };
 
@@ -222,7 +222,7 @@ router.post(
 
     const invalidationOptions: InvalidationOptions = {
       invalidateRAG: options?.invalidateRAG !== false,
-      invalidateAll: options?.invalidateAll || false,
+      invalidateAll: options?.invalidateAll ?? false,
       reason: options?.reason || 'User cache invalidation',
     };
 
@@ -260,8 +260,8 @@ router.post(
 
     const invalidationOptions: InvalidationOptions = {
       invalidateRAG: options?.invalidateRAG !== false,
-      invalidateEmbeddings: options?.invalidateEmbeddings || false,
-      invalidateSearch: options?.invalidateSearch || false,
+      invalidateEmbeddings: options?.invalidateEmbeddings ?? false,
+      invalidateSearch: options?.invalidateSearch ?? false,
       reason: options?.reason || `Time-based invalidation (${maxAgeSeconds}s)`,
     };
 
@@ -302,8 +302,8 @@ router.post(
       pattern?: string;
     } = {
       invalidateRAG: options?.invalidateRAG !== false,
-      invalidateEmbeddings: options?.invalidateEmbeddings || false,
-      invalidateSearch: options?.invalidateSearch || false,
+      invalidateEmbeddings: options?.invalidateEmbeddings ?? false,
+      invalidateSearch: options?.invalidateSearch ?? false,
       cacheType: cacheType || 'all',
       pattern: pattern || '*',
       reason: options?.reason || 'Manual cache invalidation',

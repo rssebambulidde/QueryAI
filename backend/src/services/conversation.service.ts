@@ -122,8 +122,8 @@ export class ConversationService {
     }
   ): Promise<ConversationWithMetadata[]> {
     try {
-      const limit = options?.limit || 50;
-      const offset = options?.offset || 0;
+      const limit = options?.limit ?? 50;
+      const offset = options?.offset ?? 0;
 
       let query = supabaseAdmin
         .from('conversations')

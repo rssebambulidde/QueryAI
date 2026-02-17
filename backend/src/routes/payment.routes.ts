@@ -97,12 +97,13 @@ router.post(
 
     const billingPeriod = (bp === 'annual' ? 'annual' : 'monthly') as 'monthly' | 'annual';
 
-    const userProfile = await DatabaseService.getUserProfile(userId);
+    const [userProfile, subscription] = await Promise.all([
+      DatabaseService.getUserProfile(userId),
+      DatabaseService.getUserSubscription(userId),
+    ]);
     if (!userProfile) {
       throw new ValidationError('User profile not found');
     }
-
-    const subscription = await DatabaseService.getUserSubscription(userId);
 
     const currency = (req.body.currency || 'USD') as string;
     if (!['USD', 'UGX'].includes(currency.toUpperCase())) {
@@ -1211,9 +1212,11 @@ router.post(
           // Send failure notification email
           try {
             const { EmailService } = await import('../services/email.service');
-            const userProfile = await DatabaseService.getUserProfile(subscription.user_id);
+            const [userProfile, updatedSubscription] = await Promise.all([
+              DatabaseService.getUserProfile(subscription.user_id),
+              DatabaseService.getUserSubscription(subscription.user_id),
+            ]);
             if (userProfile) {
-              const updatedSubscription = await DatabaseService.getUserSubscription(subscription.user_id);
               if (updatedSubscription) {
                 await EmailService.sendFailedRenewalNotificationEmail(
                   userProfile.email,

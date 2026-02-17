@@ -7,15 +7,16 @@
 import crypto from 'crypto';
 import { RedisCacheService, type CacheOptions } from './redis-cache.service';
 import logger from '../config/logger';
+import { CacheTtlConfig } from '../config/thresholds.config';
 
 /** Default TTL by prefix (seconds). */
 const TIERED_TTL: Record<string, number> = {
-  rag: 1800,
-  embedding: 86400, // 24h
-  search: 900,
-  llm: 3600,
-  cache: 3600,
-  system: 86400 * 7,
+  rag: CacheTtlConfig.ragMixed,
+  embedding: CacheTtlConfig.embeddingTiered,
+  search: CacheTtlConfig.searchTiered,
+  llm: CacheTtlConfig.llmResponse,
+  cache: CacheTtlConfig.defaultFallback,
+  system: CacheTtlConfig.system,
 };
 
 /** Max key segment length before hashing. */
@@ -82,7 +83,7 @@ export const CacheKeyBuilder = {
  */
 export function getTieredTtl(prefix: string, override?: number): number {
   if (override != null && override > 0) return override;
-  return TIERED_TTL[prefix] ?? 3600;
+  return TIERED_TTL[prefix] ?? CacheTtlConfig.defaultFallback;
 }
 
 export interface GetOrSetOptions extends CacheOptions {

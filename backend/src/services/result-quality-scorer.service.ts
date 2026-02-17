@@ -4,6 +4,7 @@
  */
 
 import logger from '../config/logger';
+import { QualityScorerConfig, RetrievalConfig } from '../config/thresholds.config';
 import { SearchResult } from './search.service';
 
 export interface QualityMetrics {
@@ -53,20 +54,20 @@ export interface QualityScoringConfig {
  * Default quality scoring configuration
  */
 export const DEFAULT_QUALITY_CONFIG: Required<QualityScoringConfig> = {
-  contentLengthWeight: 0.25,
-  readabilityWeight: 0.30,
-  structureWeight: 0.25,
-  completenessWeight: 0.20,
-  minContentLength: 50,
-  optimalContentLength: 500,
-  maxContentLength: 5000,
-  minWordsPerSentence: 5,
-  maxWordsPerSentence: 25,
-  minSentences: 3,
-  minParagraphs: 1,
+  contentLengthWeight: QualityScorerConfig.weights.contentLength,
+  readabilityWeight: QualityScorerConfig.weights.readability,
+  structureWeight: QualityScorerConfig.weights.structure,
+  completenessWeight: QualityScorerConfig.weights.completeness,
+  minContentLength: QualityScorerConfig.content.minLength,
+  optimalContentLength: QualityScorerConfig.content.optimalLength,
+  maxContentLength: QualityScorerConfig.content.maxLength,
+  minWordsPerSentence: QualityScorerConfig.readability.minWordsPerSentence,
+  maxWordsPerSentence: QualityScorerConfig.readability.maxWordsPerSentence,
+  minSentences: QualityScorerConfig.readability.minSentences,
+  minParagraphs: QualityScorerConfig.structure.minParagraphs,
   requireTitle: true,
-  minWordCount: 20,
-  optimalWordCount: 200,
+  minWordCount: QualityScorerConfig.content.minWordCount,
+  optimalWordCount: QualityScorerConfig.content.optimalWordCount,
 };
 
 /**
@@ -157,11 +158,11 @@ export class ResultQualityScorerService {
     let sentenceLengthScore = 1.0;
     if (avgWordsPerSentence < minWords) {
       // Too short sentences (likely incomplete or fragmented)
-      sentenceLengthScore = Math.max(0.3, avgWordsPerSentence / minWords);
+      sentenceLengthScore = Math.max(QualityScorerConfig.readability.minSentenceLengthScore, avgWordsPerSentence / minWords);
     } else if (avgWordsPerSentence > maxWords) {
       // Too long sentences (likely hard to read)
       const excess = avgWordsPerSentence - maxWords;
-      const penalty = Math.min(0.5, excess / maxWords);
+      const penalty = Math.min(QualityScorerConfig.readability.maxLongSentencePenalty, excess / maxWords);
       sentenceLengthScore = 1.0 - penalty;
     }
 
@@ -169,7 +170,7 @@ export class ResultQualityScorerService {
     let sentenceCountScore = Math.min(1.0, sentenceCount / minSentences);
 
     // Combine scores
-    const readabilityScore = (sentenceLengthScore * 0.6 + sentenceCountScore * 0.4);
+    const readabilityScore = (sentenceLengthScore * QualityScorerConfig.readability.sentenceLengthWeight + sentenceCountScore * QualityScorerConfig.readability.sentenceCountWeight);
 
     return Math.min(1.0, Math.max(0.0, readabilityScore));
   }
@@ -187,11 +188,11 @@ export class ResultQualityScorerService {
     // Title presence (30% weight)
     if (this.config.requireTitle) {
       if (title && title.trim().length > 0 && title !== 'Untitled') {
-        score += 0.3;
+        score += QualityScorerConfig.structure.titlePresenceScore;
       }
     } else {
       // If title not required, give base score
-      score += 0.3;
+      score += QualityScorerConfig.structure.titlePresenceScore;
     }
 
     // Paragraph structure (40% weight)
@@ -199,10 +200,10 @@ export class ResultQualityScorerService {
     if (paragraphCount >= minParagraphs) {
       // Good structure with multiple paragraphs
       const paragraphScore = Math.min(1.0, paragraphCount / Math.max(2, minParagraphs));
-      score += 0.4 * paragraphScore;
+      score += QualityScorerConfig.structure.paragraphScoreWeight * paragraphScore;
     } else {
       // Single paragraph or no clear structure
-      score += 0.4 * (paragraphCount / minParagraphs);
+      score += QualityScorerConfig.structure.paragraphScoreWeight * (paragraphCount / minParagraphs);
     }
 
     // Content formatting (30% weight)
@@ -214,10 +215,10 @@ export class ResultQualityScorerService {
       content.includes('<h') ||
       content.includes('#');
     if (hasFormatting) {
-      score += 0.3;
+      score += QualityScorerConfig.structure.formattingScore;
     } else if (paragraphCount > 1) {
       // Multiple paragraphs indicate some structure
-      score += 0.15;
+      score += QualityScorerConfig.structure.multipleParagraphsBonus;
     }
 
     return Math.min(1.0, Math.max(0.0, score));
@@ -247,12 +248,12 @@ export class ResultQualityScorerService {
     } else if (contentLength <= maxLength) {
       // Good length, slight penalty for being long
       const excess = contentLength - optimalLength;
-      const penalty = Math.min(0.3, excess / (maxLength - optimalLength));
+      const penalty = Math.min(QualityScorerConfig.completeness.moderateLengthPenalty, excess / (maxLength - optimalLength));
       lengthScore = 1.0 - penalty;
     } else {
       // Too long - likely verbose or contains noise
       const excess = contentLength - maxLength;
-      const penalty = Math.min(0.5, excess / maxLength);
+      const penalty = Math.min(QualityScorerConfig.completeness.severeLengthPenalty, excess / maxLength);
       lengthScore = 1.0 - penalty;
     }
 
@@ -267,12 +268,12 @@ export class ResultQualityScorerService {
     } else {
       // More words than optimal (still good, but slight penalty)
       const excess = wordCount - optimalWords;
-      const penalty = Math.min(0.2, excess / optimalWords);
+      const penalty = Math.min(QualityScorerConfig.completeness.excessWordPenalty, excess / optimalWords);
       wordScore = 1.0 - penalty;
     }
 
     // Combine length and word scores
-    const completenessScore = (lengthScore * 0.6 + wordScore * 0.4);
+    const completenessScore = (lengthScore * QualityScorerConfig.completeness.lengthWeight + wordScore * QualityScorerConfig.completeness.wordCountWeight);
 
     return Math.min(1.0, Math.max(0.0, completenessScore));
   }
@@ -291,12 +292,12 @@ export class ResultQualityScorerService {
       return 1.0;
     } else if (contentLength <= maxLength) {
       const excess = contentLength - optimalLength;
-      const penalty = Math.min(0.3, excess / (maxLength - optimalLength));
+      const penalty = Math.min(QualityScorerConfig.completeness.moderateLengthPenalty, excess / (maxLength - optimalLength));
       return 1.0 - penalty;
     } else {
       const excess = contentLength - maxLength;
-      const penalty = Math.min(0.5, excess / maxLength);
-      return Math.max(0.3, 1.0 - penalty);
+      const penalty = Math.min(QualityScorerConfig.completeness.severeLengthPenalty, excess / maxLength);
+      return Math.max(QualityScorerConfig.completeness.minContentLengthScore, 1.0 - penalty);
     }
   }
 
@@ -352,7 +353,7 @@ export class ResultQualityScorerService {
    */
   static filterByQuality(
     results: SearchResult[],
-    minQualityScore: number = 0.5,
+    minQualityScore: number = RetrievalConfig.qualityThreshold,
     config?: Partial<QualityScoringConfig>
   ): SearchResult[] {
     if (minQualityScore <= 0) {
@@ -382,7 +383,7 @@ export class ResultQualityScorerService {
    */
   static filterAndSortByQuality(
     results: SearchResult[],
-    minQualityScore: number = 0.5,
+    minQualityScore: number = RetrievalConfig.qualityThreshold,
     config?: Partial<QualityScoringConfig>
   ): SearchResult[] {
     const filtered = this.filterByQuality(results, minQualityScore, config);

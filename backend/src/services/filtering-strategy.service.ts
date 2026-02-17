@@ -531,7 +531,7 @@ export class FilteringStrategyService {
         filtered,
         strategy,
         options.cutoffDate,
-        options.isStrict || false
+        options.isStrict ?? false
       );
     }
 

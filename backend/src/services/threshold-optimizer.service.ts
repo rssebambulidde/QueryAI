@@ -5,6 +5,7 @@
  */
 
 import logger from '../config/logger';
+import { ThresholdOptimizerConfig } from '../config/thresholds.config';
 
 export type QueryType = 'factual' | 'conceptual' | 'procedural' | 'exploratory' | 'unknown';
 
@@ -49,20 +50,20 @@ export interface ThresholdResult {
  * Default threshold configuration
  */
 export const DEFAULT_THRESHOLD_CONFIG: ThresholdConfig = {
-  defaultThreshold: 0.7,
-  minThreshold: 0.3,
-  maxThreshold: 0.95,
+  defaultThreshold: ThresholdOptimizerConfig.defaults.threshold,
+  minThreshold: ThresholdOptimizerConfig.defaults.minThreshold,
+  maxThreshold: ThresholdOptimizerConfig.defaults.maxThreshold,
   adaptiveEnabled: true,
   fallbackEnabled: true,
   queryTypeThresholds: {
-    factual: 0.75, // Higher threshold for factual queries (need precise matches)
-    conceptual: 0.65, // Lower threshold for conceptual queries (broader matches)
-    procedural: 0.70, // Standard threshold for how-to queries
-    exploratory: 0.60, // Lower threshold for exploratory queries (cast wider net)
-    unknown: 0.70, // Default for unknown query types
+    factual: ThresholdOptimizerConfig.queryTypeThresholds.factual,
+    conceptual: ThresholdOptimizerConfig.queryTypeThresholds.conceptual,
+    procedural: ThresholdOptimizerConfig.queryTypeThresholds.procedural,
+    exploratory: ThresholdOptimizerConfig.queryTypeThresholds.exploratory,
+    unknown: ThresholdOptimizerConfig.queryTypeThresholds.unknown,
   },
   useDistributionAnalysis: true,
-  percentileThreshold: 0.75, // Use 75th percentile
+  percentileThreshold: ThresholdOptimizerConfig.percentileThreshold,
 };
 
 /**
@@ -219,8 +220,8 @@ export class ThresholdOptimizerService {
     threshold = Math.max(config.minThreshold, Math.min(config.maxThreshold, threshold));
 
     // If distribution is tight (low std dev), use mean-based threshold
-    if (distribution.stdDev < 0.1 && distribution.mean > 0.5) {
-      threshold = Math.max(threshold, distribution.mean - 0.1);
+    if (distribution.stdDev < ThresholdOptimizerConfig.distribution.lowStdDevThreshold && distribution.mean > ThresholdOptimizerConfig.distribution.meanThreshold) {
+      threshold = Math.max(threshold, distribution.mean - ThresholdOptimizerConfig.distribution.meanAdjustment);
     }
 
     return threshold;
@@ -238,8 +239,8 @@ export class ThresholdOptimizerService {
     }
   ): ThresholdResult {
     const config = this.config;
-    const minResults = options?.minResults || 3;
-    const maxResults = options?.maxResults || 10;
+    const minResults = options?.minResults ?? ThresholdOptimizerConfig.minResults;
+    const maxResults = options?.maxResults ?? ThresholdOptimizerConfig.maxResults;
 
     // If adaptive is disabled, use default
     if (!config.adaptiveEnabled) {
@@ -255,7 +256,7 @@ export class ThresholdOptimizerService {
     const queryType = this.detectQueryType(query);
     let threshold = config.queryTypeThresholds[queryType];
     let strategy: ThresholdResult['strategy'] = 'query-type';
-    let confidence = 0.7;
+    let confidence: number = ThresholdOptimizerConfig.confidence.default;
     let reasoning = `Query type: ${queryType}, using type-specific threshold`;
 
     // If we have initial results, analyze distribution
@@ -270,7 +271,7 @@ export class ThresholdOptimizerService {
       if (adaptiveThreshold >= config.minThreshold && adaptiveThreshold <= config.maxThreshold) {
         threshold = adaptiveThreshold;
         strategy = 'distribution';
-        confidence = 0.8;
+        confidence = ThresholdOptimizerConfig.confidence.distributionBased;
         reasoning = `Distribution-based threshold (mean: ${distribution.mean.toFixed(3)}, p75: ${distribution.percentiles.p75.toFixed(3)})`;
       }
     }
@@ -284,10 +285,10 @@ export class ThresholdOptimizerService {
         const originalThreshold = threshold;
         threshold = Math.max(
           config.minThreshold,
-          threshold - 0.1 // Lower by 0.1
+          threshold - ThresholdOptimizerConfig.adjustDown
         );
         strategy = 'fallback';
-        confidence = 0.6;
+        confidence = ThresholdOptimizerConfig.confidence.fallback;
         reasoning = `Fallback: Lowered threshold from ${originalThreshold.toFixed(3)} to ${threshold.toFixed(3)} to get more results (had ${resultCount}, need ${minResults})`;
       }
       
@@ -296,10 +297,10 @@ export class ThresholdOptimizerService {
         const originalThreshold = threshold;
         threshold = Math.min(
           config.maxThreshold,
-          threshold + 0.05 // Raise by 0.05
+          threshold + ThresholdOptimizerConfig.adjustUpSmall
         );
         strategy = 'fallback';
-        confidence = 0.6;
+        confidence = ThresholdOptimizerConfig.confidence.fallback;
         reasoning = `Fallback: Raised threshold from ${originalThreshold.toFixed(3)} to ${threshold.toFixed(3)} to get fewer results (had ${resultCount}, want max ${maxResults})`;
       }
     }
@@ -329,9 +330,9 @@ export class ThresholdOptimizerService {
     }
   ): Promise<ThresholdResult> {
     const config = this.config;
-    const minResults = options?.minResults || 3;
-    const maxResults = options?.maxResults || 10;
-    const maxIterations = options?.maxIterations || 5;
+    const minResults = options?.minResults ?? ThresholdOptimizerConfig.minResults;
+    const maxResults = options?.maxResults ?? ThresholdOptimizerConfig.maxResults;
+    const maxIterations = options?.maxIterations ?? ThresholdOptimizerConfig.maxIterations;
 
     // Start with query-type based threshold
     const queryType = this.detectQueryType(query);
@@ -357,7 +358,7 @@ export class ThresholdOptimizerService {
         return {
           threshold,
           strategy: 'adaptive',
-          confidence: 0.9,
+          confidence: ThresholdOptimizerConfig.confidence.optimized,
           reasoning: `Optimized threshold after ${iteration + 1} iterations`,
           queryType,
         };
@@ -378,13 +379,13 @@ export class ThresholdOptimizerService {
         // Too few results, lower threshold
         threshold = Math.max(
           config.minThreshold,
-          threshold - 0.05
+          threshold - ThresholdOptimizerConfig.adjustDownSmall
         );
       } else if (resultCount > maxResults) {
         // Too many results, raise threshold
         threshold = Math.min(
           config.maxThreshold,
-          threshold + 0.05
+          threshold + ThresholdOptimizerConfig.adjustUpSmall
         );
       } else {
         // In range, we're done
@@ -398,7 +399,7 @@ export class ThresholdOptimizerService {
     return {
       threshold: bestThreshold,
       strategy: 'adaptive',
-      confidence: 0.7,
+      confidence: ThresholdOptimizerConfig.confidence.default,
       reasoning: `Optimized threshold after ${iteration} iterations (best: ${bestResultCount} results)`,
       queryType,
     };

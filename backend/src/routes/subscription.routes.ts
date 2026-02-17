@@ -5,6 +5,7 @@ import { requireSuperAdmin } from '../middleware/authorization.middleware';
 import { checkSubscription } from '../middleware/subscription.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ValidationError } from '../types/error';
+import { validateUUIDParams } from '../validation/uuid';
 import logger from '../config/logger';
 import { DatabaseService } from '../services/database.service';
 
@@ -522,6 +523,7 @@ router.post(
 router.get(
   '/invoice/:paymentId',
   authenticate,
+  validateUUIDParams('paymentId'),
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {

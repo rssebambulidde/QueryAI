@@ -6,6 +6,7 @@
 
 import { DocumentContext } from './rag.service';
 import logger from '../config/logger';
+import { DeduplicationConfig as DeduplicationThresholds } from '../config/thresholds.config';
 
 export interface DeduplicationConfig {
   enabled: boolean; // Enable deduplication
@@ -48,8 +49,8 @@ export interface DeduplicationStats {
 export const DEFAULT_DEDUPLICATION_CONFIG: DeduplicationConfig = {
   enabled: true,
   exactDuplicateThreshold: 1.0, // Exact match
-  nearDuplicateThreshold: 0.95, // 95% similar
-  similarityThreshold: 0.85, // 85% similar
+  nearDuplicateThreshold: DeduplicationThresholds.nearDuplicateThreshold,
+  similarityThreshold: DeduplicationThresholds.similarityThreshold,
   useContentHash: true, // Fast exact duplicate detection
   useFuzzyMatching: true, // Better near-duplicate detection
   preserveHighestScore: true, // Keep highest scoring duplicate
@@ -174,7 +175,7 @@ export class DeduplicationService {
       const charSimilarity = this.calculateCharacterSimilarity(doc1.content, doc2.content);
       const wordSimilarity = this.calculateJaccardSimilarity(doc1.content, doc2.content);
       // Combine both metrics (weighted average)
-      return (charSimilarity * 0.6 + wordSimilarity * 0.4);
+      return (charSimilarity * DeduplicationThresholds.charSimilarityWeight + wordSimilarity * DeduplicationThresholds.wordSimilarityWeight);
     }
 
     // Use word-based Jaccard similarity
@@ -395,7 +396,7 @@ export class DeduplicationService {
    */
   static quickDeduplicate(
     results: DocumentContext[],
-    threshold: number = 0.95
+    threshold: number = DeduplicationThresholds.nearDuplicateThreshold
   ): DocumentContext[] {
     if (results.length === 0) {
       return [];

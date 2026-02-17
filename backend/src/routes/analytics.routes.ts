@@ -8,6 +8,7 @@ import { authenticate } from '../middleware/auth.middleware';
 import { requireSuperAdmin } from '../middleware/authorization.middleware';
 import { apiLimiter } from '../middleware/rateLimiter';
 import { ValidationError } from '../types/error';
+import { validateUUIDParams } from '../validation/uuid';
 import { DatabaseService } from '../services/database.service';
 import logger from '../config/logger';
 
@@ -129,6 +130,7 @@ router.post(
   '/alerts/:id/acknowledge',
   authenticate,
   requireSuperAdmin,
+  validateUUIDParams('id'),
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;

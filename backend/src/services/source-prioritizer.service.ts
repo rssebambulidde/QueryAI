@@ -5,6 +5,7 @@
  */
 
 import logger from '../config/logger';
+import { SourcePrioritizerConfig } from '../config/thresholds.config';
 import { RAGContext, DocumentContext } from './rag.service';
 import { DomainAuthorityService } from './domain-authority.service';
 
@@ -93,19 +94,19 @@ export interface PrioritizationStats {
  * Default prioritization rules
  */
 export const DEFAULT_PRIORITIZATION_RULES: PrioritizationRules = {
-  documentWeight: 0.6, // Documents are more important (user's own content)
-  webWeight: 0.4,
-  relevanceWeight: 0.4,
-  authorityWeight: 0.3,
-  recencyWeight: 0.2,
-  qualityWeight: 0.1,
+  documentWeight: SourcePrioritizerConfig.weights.document,
+  webWeight: SourcePrioritizerConfig.weights.web,
+  relevanceWeight: SourcePrioritizerConfig.weights.relevance,
+  authorityWeight: SourcePrioritizerConfig.weights.authority,
+  recencyWeight: SourcePrioritizerConfig.weights.recency,
+  qualityWeight: SourcePrioritizerConfig.weights.quality,
   preferDocuments: true,
   preferAuthoritative: true,
   preferRecent: true,
-  recentThresholdDays: 30,
-  recentBoost: 1.2,
-  highAuthorityThreshold: 0.7,
-  highAuthorityBoost: 1.3,
+  recentThresholdDays: SourcePrioritizerConfig.thresholds.recentDays,
+  recentBoost: SourcePrioritizerConfig.boosts.recent,
+  highAuthorityThreshold: SourcePrioritizerConfig.thresholds.highAuthority,
+  highAuthorityBoost: SourcePrioritizerConfig.boosts.highAuthority,
 };
 
 /**
@@ -117,7 +118,7 @@ export class SourcePrioritizerService {
    */
   private static calculateFreshnessScore(publishedDate?: string): number {
     if (!publishedDate) {
-      return 0.5; // Default freshness score if no date
+      return SourcePrioritizerConfig.documentDefaults.relevanceScore;
     }
 
     try {
@@ -125,27 +126,27 @@ export class SourcePrioritizerService {
       const now = new Date();
       
       if (isNaN(published.getTime()) || published > now) {
-        return 0.5; // Invalid or future date
+        return SourcePrioritizerConfig.documentDefaults.relevanceScore;
       }
       
       const daysDiff = (now.getTime() - published.getTime()) / (1000 * 60 * 60 * 24);
       
       // Calculate freshness: more recent = higher score
-      if (daysDiff <= 7) {
-        return 1.0; // Very recent (last week)
-      } else if (daysDiff <= 30) {
-        return 0.9; // Recent (last month)
-      } else if (daysDiff <= 90) {
-        return 0.8; // Recent (last 3 months)
-      } else if (daysDiff <= 365) {
-        return 0.7; // Within year
+      if (daysDiff <= SourcePrioritizerConfig.freshnessTiers.veryRecent.days) {
+        return SourcePrioritizerConfig.freshnessTiers.veryRecent.score;
+      } else if (daysDiff <= SourcePrioritizerConfig.freshnessTiers.recent.days) {
+        return SourcePrioritizerConfig.freshnessTiers.recent.score;
+      } else if (daysDiff <= SourcePrioritizerConfig.freshnessTiers.moderate.days) {
+        return SourcePrioritizerConfig.freshnessTiers.moderate.score;
+      } else if (daysDiff <= SourcePrioritizerConfig.freshnessTiers.withinYear.days) {
+        return SourcePrioritizerConfig.freshnessTiers.withinYear.score;
       } else {
         // Older: decay
-        const decay = Math.max(0.3, 1.0 - (daysDiff - 365) / 365);
+        const decay = Math.max(SourcePrioritizerConfig.freshnessTiers.minDecayFactor, 1.0 - (daysDiff - 365) / 365);
         return decay;
       }
     } catch (e) {
-      return 0.5; // Default freshness score on error
+      return SourcePrioritizerConfig.documentDefaults.relevanceScore;
     }
   }
 
@@ -157,13 +158,13 @@ export class SourcePrioritizerService {
     rules: PrioritizationRules
   ): number {
     // Documents have high base authority (user's own content)
-    const authorityScore = 0.9; // High authority for user documents
+    const authorityScore = SourcePrioritizerConfig.documentDefaults.authorityScore;
     
     // Use relevance score from document
-    const relevanceScore = doc.score || 0.5;
+    const relevanceScore = doc.score || SourcePrioritizerConfig.documentDefaults.relevanceScore;
     
     // Documents are typically not time-sensitive, so freshness is neutral
-    const freshnessScore = 0.7; // Neutral freshness for documents
+    const freshnessScore = SourcePrioritizerConfig.documentDefaults.freshnessScore;
     
     // Calculate priority based on rules
     let priority = 
@@ -194,7 +195,7 @@ export class SourcePrioritizerService {
     }
     
     // Use relevance score if available
-    const relevanceScore = result.score || 0.5;
+    const relevanceScore = result.score || SourcePrioritizerConfig.documentDefaults.relevanceScore;
     
     // Calculate freshness score
     const freshnessScore = this.calculateFreshnessScore(result.publishedDate);
@@ -206,7 +207,7 @@ export class SourcePrioritizerService {
       freshnessScore * rules.recencyWeight;
     
     // Apply boosts
-    if (rules.preferRecent && freshnessScore >= 0.8) {
+    if (rules.preferRecent && freshnessScore >= SourcePrioritizerConfig.thresholds.recentFreshness) {
       // Recent content boost
       priority *= rules.recentBoost;
     }
@@ -227,14 +228,14 @@ export class SourcePrioritizerService {
    */
   private static calculateWeight(priority: number, maxPriority: number): number {
     if (maxPriority === 0) {
-      return 0.5; // Default weight if no priorities
+      return SourcePrioritizerConfig.documentDefaults.relevanceScore;
     }
     
     // Normalize weight based on priority relative to max
     const normalizedPriority = priority / maxPriority;
     
     // Weight ranges from 0.3 to 1.0 (even low priority sources get some weight)
-    return 0.3 + (normalizedPriority * 0.7);
+    return SourcePrioritizerConfig.priorityWeightBase + (normalizedPriority * SourcePrioritizerConfig.priorityWeightRange);
   }
 
   /**
@@ -259,9 +260,9 @@ export class SourcePrioritizerService {
         priority,
         weight: 0, // Will be calculated after we know max priority
         metadata: {
-          relevanceScore: doc.score || 0.5,
-          authorityScore: 0.9, // Documents have high authority
-          freshnessScore: 0.7, // Neutral freshness
+          relevanceScore: doc.score || SourcePrioritizerConfig.documentDefaults.relevanceScore,
+          authorityScore: SourcePrioritizerConfig.documentDefaults.authorityScore,
+          freshnessScore: SourcePrioritizerConfig.documentDefaults.freshnessScore,
         },
       };
     });
@@ -322,7 +323,7 @@ export class SourcePrioritizerService {
       ? prioritizedWeb.reduce((sum, w) => sum + w.priority, 0) / prioritizedWeb.length
       : 0;
 
-    const highPriorityThreshold = 0.7;
+    const highPriorityThreshold = SourcePrioritizerConfig.thresholds.highPriority;
     const highPriorityDocs = prioritizedDocuments.filter(d => d.priority >= highPriorityThreshold).length;
     const highPriorityWeb = prioritizedWeb.filter(w => w.priority >= highPriorityThreshold).length;
 
@@ -362,34 +363,34 @@ export class SourcePrioritizerService {
     const presets: Record<string, PrioritizationRules> = {
       'documents-first': {
         ...DEFAULT_PRIORITIZATION_RULES,
-        documentWeight: 0.8,
-        webWeight: 0.2,
+        documentWeight: SourcePrioritizerConfig.presets.documentsFirst.documentWeight,
+        webWeight: SourcePrioritizerConfig.presets.documentsFirst.webWeight,
         preferDocuments: true,
       },
       'web-first': {
         ...DEFAULT_PRIORITIZATION_RULES,
-        documentWeight: 0.3,
-        webWeight: 0.7,
+        documentWeight: SourcePrioritizerConfig.presets.webFirst.documentWeight,
+        webWeight: SourcePrioritizerConfig.presets.webFirst.webWeight,
         preferDocuments: false,
       },
       'balanced': {
         ...DEFAULT_PRIORITIZATION_RULES,
-        documentWeight: 0.5,
-        webWeight: 0.5,
+        documentWeight: SourcePrioritizerConfig.presets.balanced.documentWeight,
+        webWeight: SourcePrioritizerConfig.presets.balanced.webWeight,
       },
       'authority-first': {
         ...DEFAULT_PRIORITIZATION_RULES,
-        authorityWeight: 0.5,
-        relevanceWeight: 0.3,
+        authorityWeight: SourcePrioritizerConfig.presets.authorityFirst.authorityWeight,
+        relevanceWeight: SourcePrioritizerConfig.presets.authorityFirst.relevanceWeight,
         preferAuthoritative: true,
-        highAuthorityBoost: 1.5,
+        highAuthorityBoost: SourcePrioritizerConfig.presets.authorityFirst.highAuthorityBoost,
       },
       'recent-first': {
         ...DEFAULT_PRIORITIZATION_RULES,
-        recencyWeight: 0.4,
-        relevanceWeight: 0.3,
+        recencyWeight: SourcePrioritizerConfig.presets.recentFirst.recencyWeight,
+        relevanceWeight: SourcePrioritizerConfig.presets.recentFirst.relevanceWeight,
         preferRecent: true,
-        recentBoost: 1.5,
+        recentBoost: SourcePrioritizerConfig.presets.recentFirst.recentBoost,
       },
     };
 

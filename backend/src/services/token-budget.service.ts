@@ -7,31 +7,13 @@
 import { TokenCountService, type EncodingType } from './token-count.service';
 import logger from '../config/logger';
 import { RAGContext, DocumentContext } from './rag.service';
+import { TokenBudgetConfig } from '../config/thresholds.config';
 
 /**
  * Model token limits (total context window)
  * These are the maximum tokens including both input and output
  */
-const MODEL_TOKEN_LIMITS: Record<string, number> = {
-  // GPT-3.5 models
-  'gpt-3.5-turbo': 16385,
-  'gpt-3.5-turbo-16k': 16385,
-  'gpt-3.5-turbo-1106': 16385,
-  'gpt-3.5-turbo-0125': 16385,
-  
-  // GPT-4 models
-  'gpt-4': 8192,
-  'gpt-4-32k': 32768,
-  'gpt-4-turbo': 128000,
-  'gpt-4-turbo-preview': 128000,
-  'gpt-4-0125-preview': 128000,
-  'gpt-4-1106-preview': 128000,
-  'gpt-4o': 128000,
-  'gpt-4o-mini': 128000,
-  
-  // Default fallback
-  'default': 16385,
-};
+const MODEL_TOKEN_LIMITS: Record<string, number> = TokenBudgetConfig.modelTokenLimits;
 
 /**
  * Default allocation ratios for context components
@@ -49,12 +31,12 @@ export interface BudgetAllocation {
  * Default budget allocation
  */
 export const DEFAULT_BUDGET_ALLOCATION: BudgetAllocation = {
-  documentContext: 0.50, // 50% for document context
-  webResults: 0.20, // 20% for web results
-  systemPrompt: 0.05, // 5% for system prompt
-  userPrompt: 0.05, // 5% for user prompt
-  responseReserve: 0.15, // 15% reserve for response
-  overhead: 0.05, // 5% overhead for formatting
+  documentContext: TokenBudgetConfig.allocation.documentContext,
+  webResults: TokenBudgetConfig.allocation.webResults,
+  systemPrompt: TokenBudgetConfig.allocation.systemPrompt,
+  userPrompt: TokenBudgetConfig.allocation.userPrompt,
+  responseReserve: TokenBudgetConfig.allocation.responseReserve,
+  overhead: TokenBudgetConfig.allocation.overhead,
 };
 
 /**
@@ -150,7 +132,7 @@ export class TokenBudgetService {
     
     // Validate allocation ratios sum to 1.0
     const totalRatio = Object.values(allocation).reduce((sum, val) => sum + val, 0);
-    if (Math.abs(totalRatio - 1.0) > 0.01) {
+    if (Math.abs(totalRatio - 1.0) > TokenBudgetConfig.allocationTolerance) {
       logger.warn('Budget allocation ratios do not sum to 1.0', {
         totalRatio,
         allocation,
@@ -363,8 +345,8 @@ export class TokenBudgetService {
       } else {
         // Try to fit a truncated version
         const remainingTokens = budget.remaining.documentContext - documentTokens;
-        if (remainingTokens > 100) { // Only if we have meaningful space
-          const truncatedContent = this.truncateToTokens(doc.content, remainingTokens - 50, encodingType); // Reserve 50 for metadata
+        if (remainingTokens > TokenBudgetConfig.minRemainingTokens) { // Only if we have meaningful space
+          const truncatedContent = this.truncateToTokens(doc.content, remainingTokens - TokenBudgetConfig.documentMetadataReserve, encodingType);
           trimmedContext.documentContexts.push({
             ...doc,
             content: truncatedContent + '...',
@@ -392,8 +374,8 @@ export class TokenBudgetService {
       } else {
         // Try to fit a truncated version
         const remainingTokens = budget.remaining.webResults - webTokens;
-        if (remainingTokens > 100) { // Only if we have meaningful space
-          const truncatedContent = this.truncateToTokens(result.content, remainingTokens - 100, encodingType); // Reserve 100 for title/URL
+        if (remainingTokens > TokenBudgetConfig.minRemainingTokens) { // Only if we have meaningful space
+          const truncatedContent = this.truncateToTokens(result.content, remainingTokens - TokenBudgetConfig.webResultMetadataReserve, encodingType);
           trimmedContext.webSearchResults.push({
             ...result,
             content: truncatedContent + '...',
@@ -436,7 +418,7 @@ export class TokenBudgetService {
     }
     
     // Simple truncation: estimate characters per token (4 chars per token average)
-    const estimatedChars = Math.floor(maxTokens * 4);
+    const estimatedChars = Math.floor(maxTokens * TokenBudgetConfig.charsPerToken);
     const truncated = text.substring(0, Math.min(estimatedChars, text.length));
     
     // Refine by counting actual tokens
