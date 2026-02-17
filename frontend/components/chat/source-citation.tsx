@@ -4,7 +4,7 @@ import React from 'react';
 import { Source } from '@/lib/api';
 import { ExternalLink, FileText, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { documentApi } from '@/lib/api';
+import { downloadDocument } from '@/lib/utils/download-document';
 
 interface SourceCitationProps {
   source: Source;
@@ -16,42 +16,8 @@ export const SourceCitation: React.FC<SourceCitationProps> = ({ source, index, c
   const handleDocumentClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (source.documentId) {
-      try {
-        // Try to get download URL
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-        const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-        
-        const response = await fetch(`${API_URL}/api/documents/${source.documentId}/download`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        
-        if (response.ok) {
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = source.title || 'document';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-        } else {
-          // If download fails, try to open the document URL if available
-          if (source.url) {
-            window.open(source.url, '_blank');
-          }
-        }
-      } catch (error) {
-        console.error('Failed to download document:', error);
-        // Fallback: open URL if available
-        if (source.url) {
-          window.open(source.url, '_blank');
-        }
-      }
+      await downloadDocument(source.documentId, source.title || 'document', source.url);
     } else if (source.url) {
-      // If no documentId but has URL, open it
       window.open(source.url, '_blank');
     }
   };

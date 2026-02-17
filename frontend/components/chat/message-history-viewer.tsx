@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Message, Source } from '@/lib/api';
-import { Search, Download, FileText, Globe, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Download, FileText, Globe, Clock, ChevronDown, ChevronUp, FileJson, FileCode } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -93,32 +93,36 @@ export const MessageHistoryViewer: React.FC<MessageHistoryViewerProps> = ({
     });
   };
 
-  const handleExportMessage = (message: MessageWithSources) => {
-    const exportData = {
-      conversation: {
-        id: conversation.id,
-        title: conversation.title,
-      },
-      message: {
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        created_at: message.created_at,
-        sources: message.sources || [],
-      },
-      exported_at: new Date().toISOString(),
-    };
-
-    const json = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
+  const downloadBlob = (content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `message-${message.id.slice(0, 8)}.json`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportConversation = (format: 'json' | 'markdown' | 'csv') => {
+    const prefix = (conversation.title || 'conversation').replace(/[^a-zA-Z0-9-_ ]/g, '').slice(0, 50);
+
+    if (format === 'json') {
+      const json = exportConversationToJson(conversation, messages, { includeSources: true });
+      downloadBlob(json, `${prefix}.json`, 'application/json');
+    } else if (format === 'markdown') {
+      const md = exportConversationToMarkdown(conversation, messages, { includeSources: true });
+      downloadBlob(md, `${prefix}.md`, 'text/markdown');
+    } else if (format === 'csv') {
+      const header = 'Role,Timestamp,Content,Sources\n';
+      const rows = messages.map((msg) => {
+        const sources = (msg.sources as Source[] | undefined)?.map((s) => s.title || s.url || '').join('; ') || '';
+        const escaped = (s: string) => `"${s.replace(/"/g, '""')}"`;
+        return [escaped(msg.role), escaped(msg.created_at), escaped(msg.content), escaped(sources)].join(',');
+      });
+      downloadBlob(header + rows.join('\n'), `${prefix}.csv`, 'text/csv');
+    }
   };
 
   const formatTime = (dateString: string): string => {
@@ -135,8 +139,19 @@ export const MessageHistoryViewer: React.FC<MessageHistoryViewerProps> = ({
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-gray-900">Message History</h3>
-          <div className="text-sm text-gray-500">
-            {filteredMessages.length} message{filteredMessages.length !== 1 ? 's' : ''}
+          <div className="flex items-center gap-2">
+            <div className="text-sm text-gray-500 mr-2">
+              {filteredMessages.length} message{filteredMessages.length !== 1 ? 's' : ''}
+            </div>
+            <Button variant="outline" size="sm" onClick={() => handleExportConversation('json')} className="h-7 px-2 text-xs" title="Export as JSON">
+              <FileJson className="w-3 h-3 mr-1" />JSON
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => handleExportConversation('markdown')} className="h-7 px-2 text-xs" title="Export as Markdown">
+              <FileCode className="w-3 h-3 mr-1" />MD
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => handleExportConversation('csv')} className="h-7 px-2 text-xs" title="Export as CSV">
+              <Download className="w-3 h-3 mr-1" />CSV
+            </Button>
           </div>
         </div>
 
@@ -213,14 +228,6 @@ export const MessageHistoryViewer: React.FC<MessageHistoryViewerProps> = ({
                           )}
                         </div>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleExportMessage(message)}
-                        className="h-7 px-2"
-                      >
-                        <Download className="w-3 h-3" />
-                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"

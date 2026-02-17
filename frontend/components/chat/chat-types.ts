@@ -13,6 +13,42 @@ import type { QueryExpansionSettings } from '@/components/advanced/query-expansi
 import type { RerankingSettings } from '@/components/advanced/reranking-controls';
 import type { UnifiedFilters } from './unified-filter-panel';
 
+// ─── Shared regex / helpers ──────────────────────────────────────────────────
+
+/** Regex to extract follow-up questions from assistant response text. */
+export const FOLLOW_UP_REGEX =
+  /(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i;
+
+/** Parse follow-up questions from raw assistant text, returning cleaned array (max 4). */
+export function parseFollowUpQuestions(text: string): { cleanedText: string; questions: string[] } | null {
+  const m = text.match(FOLLOW_UP_REGEX);
+  if (!m) return null;
+  const cleanedText = text.substring(0, m.index).trim();
+  const questions = m[1]
+    .split('\n')
+    .map((l) => l.replace(/^[-*•]\s+/, '').trim())
+    .filter((q) => q.length > 0)
+    .slice(0, 4);
+  return { cleanedText, questions };
+}
+
+/**
+ * Generate a concise conversation title from a user message.
+ * Strips trailing punctuation, truncates at word boundary to 60 chars.
+ */
+export function generateConversationTitle(
+  userMessage: string,
+  fallbackTopicName?: string | null,
+): string {
+  let title = userMessage.trim().replace(/[?]+$/, '').trim();
+  if (title.length > 60) {
+    const cut = title.substring(0, 60).lastIndexOf(' ');
+    title = cut > 20 ? title.substring(0, cut) + '...' : title.substring(0, 57) + '...';
+  }
+  if (!title) title = fallbackTopicName || 'New Conversation';
+  return title;
+}
+
 // ─── API → UI message mapping ────────────────────────────────────────────────
 
 export type ApiMessage = {
@@ -51,17 +87,10 @@ export function mapApiMessagesToUi(apiMessages: ApiMessage[]): Message[] {
     let content = msg.content;
     let followUpQuestions: string[] | undefined = msg.metadata?.followUpQuestions;
     if (!followUpQuestions) {
-      const followUpMatch = content.match(
-        /(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i,
-      );
-      if (followUpMatch) {
-        content = content.substring(0, followUpMatch.index).trim();
-        const questionsText = followUpMatch[1];
-        followUpQuestions = questionsText
-          .split('\n')
-          .map((line) => line.replace(/^[-*•]\s+/, '').trim())
-          .filter((q) => q.length > 0)
-          .slice(0, 4);
+      const parsed = parseFollowUpQuestions(content);
+      if (parsed) {
+        content = parsed.cleanedText;
+        followUpQuestions = parsed.questions;
       }
     }
     return {
@@ -118,6 +147,7 @@ export interface ChatMessageListProps {
   previousCost: { total: number } | null;
   // Message handlers
   onEditMessage: (messageId: string, newContent: string) => void;
+  onDeleteMessage: (messageId: string) => void;
   onFollowUpClick: (question: string) => void;
   onExitResearchMode: () => void;
   onOpenSources: (sources: Source[], query: string) => void;
@@ -127,6 +157,19 @@ export interface ChatMessageListProps {
   onResumeStreaming: () => void;
   onCancelStreaming: () => void;
   onRetryStreaming: () => void;
+}
+
+export interface DocumentInfo {
+  totalCount: number;
+  processedCount: number;
+  processingCount: number;
+}
+
+export interface UploadStatus {
+  fileName: string;
+  progress: number;
+  status: 'uploading' | 'processing' | 'completed' | 'error';
+  error?: string;
 }
 
 export interface ChatInputAreaProps {
@@ -139,6 +182,22 @@ export interface ChatInputAreaProps {
   onOpenCitationSettings: () => void;
   /** Render the "empty-state" centred variant instead of the bottom-bar variant */
   variant: 'empty' | 'conversation';
+  /** Document count information for search status display */
+  documentInfo?: DocumentInfo;
+  /** Callback when files are dropped onto the input */
+  onFilesDrop?: (files: File[]) => void;
+  /** Current upload status to display inline */
+  uploadStatus?: UploadStatus | null;
+  /** Dismiss upload status display */
+  onDismissUpload?: () => void;
+  /** Whether to show the "Send to queue" option */
+  showQueueOption?: boolean;
+  /** Callback to send a message via queue */
+  onSendToQueue?: (content: string) => void;
+  /** Active queue job ID for cancel button */
+  activeQueueJobId?: string | null;
+  /** Cancel active queue job */
+  onCancelQueueJob?: () => void;
 }
 
 export interface SourcesSidebarProps {

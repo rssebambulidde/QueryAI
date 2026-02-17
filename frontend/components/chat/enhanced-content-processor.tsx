@@ -10,6 +10,8 @@ import { InlineCitation, CitationMatch } from './inline-citation';
 import { parseCitations, getCitationNumbers } from '@/lib/citation-parser';
 import { useCitationPreferencesStore } from '@/lib/store/citation-preferences-store';
 import { CitationRenderer } from '@/lib/citation-renderer';
+import { getMarkdownComponents } from '@/lib/utils/markdown-components';
+import { FootnoteRenderer } from './footnote-renderer';
 
 interface EnhancedContentProcessorProps {
   content: string;
@@ -344,103 +346,6 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
       },
     };
 
-    // Render footnotes if needed
-    const renderFootnotes = () => {
-      if (preferences.style === 'footnote' && citationNumbers.length > 0) {
-        if (preferences.format === 'html') {
-          return (
-            <div
-              className="mt-6 pt-4 border-t border-gray-200"
-              dangerouslySetInnerHTML={{
-                __html: `<h4 class="text-sm font-semibold text-gray-700 mb-3">Footnotes</h4>` +
-                  CitationRenderer.renderFootnotes(
-                    citations,
-                    sources!,
-                    citationNumbers,
-                    preferences.format
-                  ),
-              }}
-            />
-          );
-        }
-        
-        if (preferences.format === 'plain') {
-          return (
-            <div className="mt-6 pt-4 border-t border-gray-200">
-              <h4 className="text-sm font-semibold text-gray-700 mb-3">Footnotes</h4>
-              <div className="text-sm text-gray-600 whitespace-pre-line">
-                {CitationRenderer.renderFootnotes(
-                  citations,
-                  sources!,
-                  citationNumbers,
-                  preferences.format
-                )}
-              </div>
-            </div>
-          );
-        }
-        
-        // Markdown format
-        return (
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">Footnotes</h4>
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeHighlight]}
-              components={getMarkdownComponents(isUser)}
-            >
-              {CitationRenderer.renderFootnotes(
-                citations,
-                sources!,
-                citationNumbers,
-                preferences.format
-              )}
-            </ReactMarkdown>
-          </div>
-        );
-      }
-      
-      // Show footnotes for inline style if enabled
-      if (preferences.style === 'inline' && showFootnotes && citationNumbers.length > 0) {
-        return (
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <h4 className="text-sm font-semibold text-gray-700 mb-3">Sources</h4>
-            <ol className="space-y-2">
-              {citationNumbers.map((num) => {
-                const citation = citations.find(c => c.number === num);
-                if (!citation) return null;
-                const source = sources![citation.sourceIndex];
-                if (!source) return null;
-                return (
-                  <li key={num} className="text-sm text-gray-600 flex gap-2">
-                    <span className="font-medium text-gray-700 flex-shrink-0">{num}.</span>
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900">{source.title || `Source ${num}`}</div>
-                      {source.url && (
-                        <a
-                          href={source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-orange-600 hover:text-orange-700 underline"
-                        >
-                          {source.url}
-                        </a>
-                      )}
-                      {source.snippet && (
-                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{source.snippet}</p>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        );
-      }
-      
-      return null;
-    };
-
     return (
       <div className={wrapperClass}>
         <ReactMarkdown
@@ -450,7 +355,15 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
         >
           {processedContent}
         </ReactMarkdown>
-        {renderFootnotes()}
+        <FootnoteRenderer
+          citations={citations}
+          sources={sources!}
+          citationNumbers={citationNumbers}
+          style={preferences.style}
+          format={preferences.format}
+          showFootnotes={showFootnotes}
+          isUser={isUser}
+        />
       </div>
     );
   };
@@ -458,64 +371,3 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
   return renderContentWithInlineCitations();
 };
 
-// Markdown components: neat, well-aligned AI response typography
-const getMarkdownComponents = (isUser: boolean) => ({
-  h1: ({ node, ...props }: any) => (
-    <h1 className="text-xl font-bold mt-5 mb-2.5 first:mt-0 text-gray-900 text-left" {...props} />
-  ),
-  h2: ({ node, ...props }: any) => (
-    <h2 className="text-lg font-bold mt-4 mb-2 first:mt-0 text-gray-900 text-left" {...props} />
-  ),
-  h3: ({ node, ...props }: any) => (
-    <h3 className="text-base font-semibold mt-3 mb-1.5 first:mt-0 text-gray-900 text-left" {...props} />
-  ),
-  h4: ({ node, ...props }: any) => (
-    <h4 className="text-[15px] font-semibold mt-2.5 mb-1 first:mt-0 text-gray-900 text-left" {...props} />
-  ),
-  ul: ({ node, ...props }: any) => (
-    <ul className="list-disc list-outside ml-4 my-3 space-y-1.5 text-left" {...props} />
-  ),
-  ol: ({ node, ...props }: any) => (
-    <ol className="list-decimal list-outside ml-4 my-3 space-y-1.5 text-left" {...props} />
-  ),
-  li: ({ node, ...props }: any) => (
-    <li className="pl-1 [&>p]:my-0.5" {...props} />
-  ),
-  p: ({ node, ...props }: any) => (
-    <p className="my-3 first:mt-0 last:mb-0 text-left text-justify" {...props} />
-  ),
-  code: ({ node, inline, className, children, ...props }: any) => {
-    if (inline) {
-      return (
-        <code className="bg-gray-100 text-orange-600 px-1.5 py-0.5 rounded text-sm font-mono align-baseline break-words" {...props}>
-          {children}
-        </code>
-      );
-    }
-    return (
-      <pre className="overflow-x-auto max-w-full my-3">
-        <code className={`block p-3 rounded-lg text-sm font-mono bg-gray-900 text-gray-100 ${className || ''}`} {...props}>
-          {children}
-        </code>
-      </pre>
-    );
-  },
-  blockquote: ({ node, ...props }: any) => (
-    <blockquote className="border-l-4 border-gray-300 pl-4 my-3 italic text-gray-600 text-left" {...props} />
-  ),
-  a: ({ node, href, title, children, ...props }: any) => (
-    <a
-      className="text-orange-600 hover:text-orange-700 underline underline-offset-2 font-medium"
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={title}
-      {...props}
-    >
-      {children}
-    </a>
-  ),
-  strong: ({ node, ...props }: any) => <strong className="font-semibold text-gray-900" {...props} />,
-  em: ({ node, ...props }: any) => <em className="italic" {...props} />,
-  hr: ({ node, ...props }: any) => <hr className="my-4 border-gray-200" {...props} />,
-});

@@ -450,7 +450,7 @@ export const aiApi = {
       maxRetries?: number;
       retryDelay?: number;
     }
-  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean }, void, unknown> {
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number }, void, unknown> {
     const maxRetries = options?.maxRetries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000;
     let retryCount = 0;
@@ -514,6 +514,9 @@ export const aiApi = {
                   }
                   if (data.followUpQuestions) {
                     yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal };
+                  }
+                  if (data.qualityScore !== undefined) {
+                    yield { qualityScore: data.qualityScore };
                   }
                   if (data.done) {
                     return;
@@ -581,6 +584,63 @@ export const aiApi = {
   },
 };
 
+// ─── Search API ──────────────────────────────────────────────────────────────
+
+export interface SemanticSearchResult {
+  id: string;
+  documentId: string;
+  title?: string;
+  content: string;
+  score: number;
+  metadata?: Record<string, any>;
+}
+
+export const searchApi = {
+  semantic: async (query: string, options?: { topK?: number; topicId?: string; documentIds?: string[]; minScore?: number }): Promise<ApiResponse<{ query: string; results: SemanticSearchResult[]; count: number }>> => {
+    const response = await apiClient.post('/api/search/semantic', { query, ...options });
+    return response.data;
+  },
+};
+
+// ─── Queue API ───────────────────────────────────────────────────────────────
+
+export interface QueueJobSubmitResult {
+  jobId: string;
+  status: string;
+  priority?: number;
+}
+
+export interface QueueJobStatus {
+  id: string;
+  state: string;
+  progress?: number;
+  result?: { success: boolean; answer?: string; sources?: Source[]; error?: string; processingTime?: number };
+  error?: string;
+  timestamp?: number;
+}
+
+export const queueApi = {
+  submit: async (request: QuestionRequest, priority?: 'low' | 'normal' | 'high' | 'urgent'): Promise<ApiResponse<QueueJobSubmitResult>> => {
+    const response = await apiClient.post('/api/ai/ask/queue', { ...request, priority });
+    return response.data;
+  },
+
+  getStatus: async (jobId: string): Promise<ApiResponse<QueueJobStatus>> => {
+    const response = await apiClient.get(`/api/ai/queue/job/${jobId}`);
+    return response.data;
+  },
+
+  cancel: async (jobId: string): Promise<ApiResponse<boolean>> => {
+    const response = await apiClient.delete(`/api/ai/queue/job/${jobId}`);
+    return response.data;
+  },
+
+  getStats: async (): Promise<ApiResponse<any>> => {
+    const response = await apiClient.get('/api/ai/queue/stats');
+    return response.data;
+  },
+};
+
 // Document API
 export const documentApi = {
   list: async (): Promise<ApiResponse<DocumentItem[]>> => {
@@ -637,6 +697,11 @@ export const documentApi = {
     const response = await apiClient.patch(`/api/documents/${documentId}`, data);
     return response.data;
   },
+
+  getText: async (documentId: string): Promise<ApiResponse<{ documentId: string; text: string; stats: { length: number; wordCount: number; pageCount?: number; paragraphCount?: number }; extractedAt: string }>> => {
+    const response = await apiClient.get(`/api/documents/${documentId}/text`);
+    return response.data;
+  },
 };
 
 // Conversation API
@@ -677,6 +742,11 @@ export const conversationApi = {
 
   saveMessage: async (id: string, data: { role: 'user' | 'assistant'; content: string; sources?: Source[]; metadata?: Record<string, any> }): Promise<ApiResponse<Message>> => {
     const response = await apiClient.post(`/api/conversations/${id}/messages`, data);
+    return response.data;
+  },
+
+  deleteMessage: async (conversationId: string, messageId: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/conversations/${conversationId}/messages/${messageId}`);
     return response.data;
   },
 };

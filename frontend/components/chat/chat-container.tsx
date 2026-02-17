@@ -1,10 +1,9 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { flushSync } from 'react-dom';
 import type { Message } from './chat-message';
 import type { RAGSettings } from './rag-source-selector';
-import { aiApi, QuestionRequest, QuestionResponse, documentApi, conversationApi, topicApi, Source } from '@/lib/api';
+import { aiApi, conversationApi, topicApi, documentApi, searchApi, queueApi, QuestionRequest, Source } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { useFilterStore } from '@/lib/store/filter-store';
@@ -18,10 +17,16 @@ import { CitationSettings } from './citation-settings';
 import type { QueryExpansionSettings } from '@/components/advanced/query-expansion-display';
 import type { RerankingSettings } from '@/components/advanced/reranking-controls';
 
-import { mapApiMessagesToUi, type ApiMessage, type LastResponseData, type SendOptions } from './chat-types';
+import { mapApiMessagesToUi, type ApiMessage, type LastResponseData } from './chat-types';
 import { ChatMessageList } from './chat-message-list';
 import { ChatInputArea } from './chat-input-area';
 import { SourcesSidebar } from './sources-sidebar';
+import { ConversationExportDialog } from './conversation-export-dialog';
+import { Download, HelpCircle } from 'lucide-react';
+import { useChatKeyboardShortcuts, SHORTCUT_LIST } from '@/lib/hooks/useChatKeyboardShortcuts';
+import { useChatSend } from '@/lib/hooks/useChatSend';
+import { useDocumentUpload } from '@/lib/hooks/use-document-upload';
+import type { UploadStatus } from './chat-types';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -45,11 +50,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   const [isCitationSettingsOpen, setIsCitationSettingsOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const isPausedRef = useRef(false);
-  const pausedChunksRef = useRef<string[]>([]);
-  const responseTimeStartRef = useRef<number | null>(null);
-  const previousResponseTimeRef = useRef<number | null>(null);
 
   // Advanced features
   const [queryExpansionEnabled, setQueryExpansionEnabled] = useState(false);
@@ -96,10 +96,74 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     return { enableDocumentSearch: true, enableWebSearch: true, maxDocumentChunks: 5, minScore: 0.5, maxWebResults: 5 };
   });
 
-  const [documentCount, setDocumentCount] = useState(0);
-  const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
   const [showResearchSummaryModal, setShowResearchSummaryModal] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showShortcutCard, setShowShortcutCard] = useState(false);
   const [dynamicStarters, setDynamicStarters] = useState<string[] | null>(null);
+  const [documentInfo, setDocumentInfo] = useState<{ totalCount: number; processedCount: number; processingCount: number }>({ totalCount: 0, processedCount: 0, processingCount: 0 });
+  const [inlineUploadStatus, setInlineUploadStatus] = useState<UploadStatus | null>(null);
+
+  // ── Document drag-and-drop upload ──────────────────────────────────────
+
+  const { uploadFile } = useDocumentUpload({
+    topicId: selectedTopic?.id,
+    onSuccess: () => {
+      setInlineUploadStatus((prev) => prev ? { ...prev, status: 'completed' } : null);
+      setTimeout(() => setInlineUploadStatus(null), 3000);
+      toast.success('Document uploaded — it will be available for search shortly');
+    },
+    onError: (err) => {
+      setInlineUploadStatus((prev) => prev ? { ...prev, status: 'error', error: err.message } : null);
+    },
+  });
+
+  const handleFilesDrop = async (files: File[]) => {
+    for (const file of files) {
+      setInlineUploadStatus({ fileName: file.name, progress: 0, status: 'uploading' });
+      try {
+        await uploadFile(file);
+      } catch {
+        // Error handled by onError callback
+      }
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Send / streaming hook
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const {
+    sendMessage: handleSend,
+    cancelStream: handleCancelStreaming,
+    pauseStream: handlePauseStreaming,
+    resumeStream: handleResumeStreaming,
+    retryStream: handleRetryStreaming,
+    editMessage: handleEditMessage,
+    previousResponseTimeRef,
+  } = useChatSend({
+    messages,
+    currentConversationId,
+    unifiedFilters,
+    ragSettings,
+    queryExpansionEnabled,
+    queryExpansionSettings,
+    rerankingEnabled,
+    rerankingSettings,
+    setMessages,
+    setIsLoading,
+    setIsStreaming,
+    setStreamingState,
+    setError,
+    setUnifiedFilters,
+    setLastResponseData,
+    setPreviousTokenUsage,
+    setPreviousCost,
+    createConversation,
+    updateConversationFilters,
+    updateConversation,
+    refreshConversations,
+    toast,
+  });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Derived values
@@ -159,9 +223,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
-  // Track conversation-load to avoid auto-opening sources
-  const justLoadedConversationRef = useRef(false);
-
   // Topic-change messages
   const prevTopicIdRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
@@ -187,7 +248,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   useEffect(() => {
     const loadConversationData = async () => {
       if (currentConversationId) {
-        justLoadedConversationRef.current = true;
         setSourcePanelContext(null);
         try {
           const messagesResponse = await conversationApi.getMessages(currentConversationId);
@@ -202,7 +262,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
               try {
                 const topicResponse = await topicApi.get(conversation.topic_id);
                 if (topicResponse.success && topicResponse.data) { loadedTopic = topicResponse.data; setSelectedTopic(loadedTopic); }
-              } catch { setSelectedTopic(null); }
+              } catch (err) { console.error('Failed to load topic:', err); setSelectedTopic(null); }
             } else { setSelectedTopic(null); }
             const oldFilters = conversation.metadata?.filters || {};
             setUnifiedFilters({
@@ -215,7 +275,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
               country: oldFilters.country,
             });
           }
-        } catch {
+        } catch (err) {
+          console.error('Failed to load conversation:', err);
+          toast.error('Failed to load conversation data');
           setMessages([]);
           setUnifiedFilters({ topicId: null, topic: null });
           setSelectedTopic(null);
@@ -230,23 +292,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     loadConversationData();
   }, [currentConversationId, setUnifiedFilters, setSelectedTopic]);
 
-  // Load document count
-  useEffect(() => {
-    const loadDocumentCount = async () => {
-      try {
-        const response = await documentApi.list();
-        if (response.success && response.data) {
-          const processedDocs = response.data.filter((doc) => doc.status === 'processed' || doc.status === 'embedded');
-          setDocumentCount(processedDocs.length);
-          setHasProcessedDocuments(processedDocs.length > 0);
-        }
-      } catch { /* silent */ }
-    };
-    loadDocumentCount();
-    const interval = setInterval(loadDocumentCount, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
   // Persist RAG settings
   useEffect(() => {
     if (typeof window !== 'undefined' && !propRagSettings) {
@@ -254,291 +299,203 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     }
   }, [ragSettings, propRagSettings]);
 
+  // Load document count for search status display
+  useEffect(() => {
+    const loadDocumentInfo = async () => {
+      try {
+        const response = await documentApi.list();
+        if (response.success && response.data) {
+          const docs = response.data;
+          const processed = docs.filter((d) => d.status === 'processed' || d.status === 'embedded');
+          const processing = docs.filter((d) => d.status === 'processing' || d.status === 'embedding' || d.status === 'extracted');
+          setDocumentInfo({ totalCount: docs.length, processedCount: processed.length, processingCount: processing.length });
+        }
+      } catch (err) { console.error('Failed to load document info:', err); }
+    };
+    loadDocumentInfo();
+    const interval = setInterval(loadDocumentInfo, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Handlers
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const handleSend = async (content: string, filters?: UnifiedFilters, options?: SendOptions) => {
-    if (!content.trim() || isLoading) return;
+  // ── /search command ────────────────────────────────────────────────────
 
-    const isResend = options?.isResend === true;
-    const activeFilters: UnifiedFilters = filters !== undefined ? filters : unifiedFilters;
-
-    const searchFilters = {
-      topic: activeFilters.topic?.name || activeFilters.keyword,
-      timeRange: activeFilters.timeRange,
-      startDate: activeFilters.startDate,
-      endDate: activeFilters.endDate,
-      country: activeFilters.country,
-    };
-
-    if (currentConversationId) {
-      try { await updateConversationFilters(currentConversationId, searchFilters); setUnifiedFilters(activeFilters); }
-      catch { /* continue */ }
-    } else { setUnifiedFilters(activeFilters); }
-
-    let conversationId = currentConversationId;
-    if (!conversationId && !isResend) {
-      try {
-        let title = content.trim().replace(/[?]+$/, '').trim();
-        if (title.length > 60) { const c = title.substring(0, 60).lastIndexOf(' '); title = c > 20 ? title.substring(0, c) + '...' : title.substring(0, 57) + '...'; }
-        if (!title) title = activeFilters.topic?.name || 'New Conversation';
-        const newConversation = await createConversation(title, activeFilters.topicId || undefined);
-        conversationId = newConversation.id;
-        if (Object.keys(searchFilters).length > 0) {
-          try { await updateConversationFilters(conversationId, searchFilters); setUnifiedFilters(activeFilters); } catch { /* silent */ }
-        }
-      } catch (err: any) { toast.error(err.message || 'Failed to create conversation'); return; }
+  const handleSemanticSearch = async (query: string) => {
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: `/search ${query}`, timestamp: new Date() };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await searchApi.semantic(query, {
+        topK: 10,
+        topicId: selectedTopic?.id,
+        minScore: 0.5,
+      });
+      const searchResults = (result.data?.results || []).map((r: any) => ({
+        id: r.id,
+        documentId: r.documentId || r.metadata?.documentId,
+        title: r.metadata?.title || r.metadata?.filename || r.title,
+        content: r.content || r.metadata?.text || '',
+        score: r.score,
+      }));
+      const assistantMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: searchResults.length > 0
+          ? `Found ${searchResults.length} document result${searchResults.length !== 1 ? 's' : ''} for "${query}":`
+          : `No documents found matching "${query}". Try a different query or upload more documents.`,
+        timestamp: new Date(),
+        searchResults: searchResults.length > 0 ? searchResults : undefined,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (err: any) {
+      console.error('Semantic search failed:', err);
+      toast.error(err.message || 'Document search failed');
+      setMessages((prev) => [...prev, {
+        id: (Date.now() + 1).toString(), role: 'assistant',
+        content: 'Document search failed. Please try again.',
+        timestamp: new Date(),
+      }]);
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    if (!isResend) {
-      const userMessage: Message = { id: Date.now().toString(), role: 'user', content, timestamp: new Date() };
-      const isFirstMessage = messages.length === 0;
-      setMessages((prev) => [...prev, userMessage]);
-      if (conversationId && isFirstMessage) {
-        try {
-          let title = content.trim().replace(/[?]+$/, '').trim();
-          if (!title && activeFilters.topic?.name) title = activeFilters.topic.name;
-          if (!title) title = content.trim().slice(0, 50) || 'New Conversation';
-          if (title.length > 60) { const c = title.substring(0, 60).lastIndexOf(' '); title = c > 20 ? title.substring(0, c) + '...' : title.substring(0, 57) + '...'; }
-          if (title) await updateConversation(conversationId, title);
-        } catch { /* silent */ }
-      }
-    }
+  // ── Queue-based async send ──────────────────────────────────────────────
+
+  const [activeQueueJobId, setActiveQueueJobId] = useState<string | null>(null);
+
+  const handleQueueSend = async (content: string) => {
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content, timestamp: new Date() };
+    setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
     setError(null);
 
+    const assistantMsg: Message = {
+      id: (Date.now() + 1).toString(),
+      role: 'assistant',
+      content: 'Your request has been queued for processing...',
+      timestamp: new Date(),
+      isStreaming: true,
+    };
+    setMessages((prev) => [...prev, assistantMsg]);
+
     try {
-      const conversationHistory = isResend && options?.resendHistory
-        ? options.resendHistory
-        : messages.map((msg) => ({ role: msg.role, content: msg.content }));
-
-      setIsStreaming(true);
-      setStreamingState('streaming');
-      isPausedRef.current = false;
-      pausedChunksRef.current = [];
-      abortControllerRef.current = new AbortController();
-
-      let assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: '',
-        timestamp: new Date(),
-        isStreaming: true,
-      };
-
-      responseTimeStartRef.current = Date.now();
-      setMessages((prev) => [...prev, assistantMessage]);
-
       const request: QuestionRequest = {
         question: content,
-        conversationHistory,
-        conversationId: conversationId ?? undefined,
+        conversationHistory: messages.map((m) => ({ role: m.role, content: m.content })),
+        conversationId: currentConversationId ?? undefined,
         enableDocumentSearch: ragSettings.enableDocumentSearch,
         enableWebSearch: ragSettings.enableWebSearch,
-        documentIds: ragSettings.documentIds,
-        maxDocumentChunks: ragSettings.maxDocumentChunks,
-        minScore: ragSettings.minScore,
-        topicId: activeFilters.topicId || activeFilters.topic?.id,
-        enableSearch: ragSettings.enableWebSearch,
-        topic: activeFilters.topic?.name || activeFilters.keyword,
-        timeRange: activeFilters.timeRange,
-        startDate: activeFilters.startDate,
-        endDate: activeFilters.endDate,
-        country: activeFilters.country,
-        maxSearchResults: ragSettings.maxWebResults,
-        ...(isResend && options?.resendUserMessageId && { resendUserMessageId: options.resendUserMessageId }),
-        enableQueryExpansion: queryExpansionEnabled,
-        queryExpansionSettings: queryExpansionEnabled ? queryExpansionSettings : undefined,
-        enableReranking: rerankingEnabled,
-        rerankingSettings: rerankingEnabled ? rerankingSettings : undefined,
+        topicId: selectedTopic?.id,
+        topic: selectedTopic?.name || unifiedFilters.keyword,
       };
 
-      try {
-        let followUpQuestions: string[] | undefined;
-        let isRefusal = false;
+      const response = await queueApi.submit(request, 'normal');
+      if (!response.success || !response.data?.jobId) {
+        throw new Error(response.message || 'Failed to queue request');
+      }
 
-        const handleStreamError = (streamErr: Error) => {
-          console.error('Stream error:', streamErr);
-          if (streamErr.name !== 'AbortError') { setStreamingState('error'); setError(streamErr.message || 'Streaming error occurred'); }
-        };
+      const jobId = response.data.jobId;
+      setActiveQueueJobId(jobId);
 
-        for await (const chunk of aiApi.askStream(request, {
-          signal: abortControllerRef.current.signal,
-          onError: handleStreamError,
-          maxRetries: 3,
-          retryDelay: 1000,
-        })) {
-          if (isPausedRef.current) { if (typeof chunk === 'string') pausedChunksRef.current.push(chunk); continue; }
+      // Poll for status
+      let completed = false;
+      let pollCount = 0;
+      const maxPolls = 120; // ~2 minutes at 1s intervals
 
-          if (pausedChunksRef.current.length > 0) {
-            const paused = pausedChunksRef.current.splice(0);
-            for (const p of paused) assistantMessage = { ...assistantMessage, content: assistantMessage.content + p };
-            setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+      while (!completed && pollCount < maxPolls) {
+        await new Promise((r) => setTimeout(r, 1000));
+        pollCount++;
+
+        try {
+          const statusResponse = await queueApi.getStatus(jobId);
+          const status = statusResponse.data;
+          if (!status) continue;
+
+          if (status.state === 'completed' && status.result) {
+            const answer = status.result.answer || 'No answer generated.';
+            setMessages((prev) => {
+              const u = [...prev];
+              u[u.length - 1] = {
+                ...u[u.length - 1],
+                content: answer,
+                sources: status.result!.sources,
+                isStreaming: false,
+              };
+              return u;
+            });
+            completed = true;
+          } else if (status.state === 'failed') {
+            throw new Error('Queue job failed');
+          } else {
+            // Update progress
+            const progress = status.progress ?? 0;
+            setMessages((prev) => {
+              const u = [...prev];
+              u[u.length - 1] = {
+                ...u[u.length - 1],
+                content: `Processing your request... ${progress > 0 ? `(${progress}%)` : ''}`,
+              };
+              return u;
+            });
           }
-
-          if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
-            followUpQuestions = chunk.followUpQuestions;
-            if ((chunk as { refusal?: boolean }).refusal) isRefusal = true;
-            continue;
-          }
-
-          if (typeof chunk === 'string') {
-            assistantMessage = { ...assistantMessage, content: assistantMessage.content + chunk };
-            setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
-          }
+        } catch (pollErr) {
+          console.error('Queue poll error:', pollErr);
         }
+      }
 
-        // Flush remaining paused chunks
-        if (pausedChunksRef.current.length > 0) {
-          const paused = pausedChunksRef.current.splice(0);
-          for (const p of paused) assistantMessage = { ...assistantMessage, content: assistantMessage.content + p };
-          setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
-        }
-
-        // Extract follow-ups from text if not received via structured chunk
-        if (!followUpQuestions) {
-          const m = assistantMessage.content.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
-          if (m) {
-            assistantMessage.content = assistantMessage.content.substring(0, m.index).trim();
-            followUpQuestions = m[1].split('\n').map((l) => l.replace(/^[-*•]\s+/, '').trim()).filter((q) => q.length > 0).slice(0, 4);
-          }
-        }
-
-        assistantMessage = { ...assistantMessage, followUpQuestions, isStreaming: false, isRefusal: isRefusal || undefined };
-        setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
-
-        setIsStreaming(false);
-        setIsLoading(false);
-        setStreamingState('completed');
-        abortControllerRef.current = null;
-
-        const responseTime = responseTimeStartRef.current ? Date.now() - responseTimeStartRef.current : null;
-        if (responseTime !== null) previousResponseTimeRef.current = responseTime;
-
+      if (!completed) {
         setMessages((prev) => {
           const u = [...prev];
-          if (u.length > 0 && u[u.length - 1].role === 'assistant') {
-            u[u.length - 1] = { ...u[u.length - 1], isStreaming: false, responseTime: responseTime || undefined };
-          }
+          u[u.length - 1] = { ...u[u.length - 1], content: 'Request is taking longer than expected. It will complete in the background.', isStreaming: false };
           return u;
         });
-        responseTimeStartRef.current = null;
-
-        // Reload persisted messages
-        if (conversationId) {
-          try {
-            const messagesResponse = await conversationApi.getMessages(conversationId);
-            if (messagesResponse.success && messagesResponse.data) {
-              setMessages(mapApiMessagesToUi(messagesResponse.data));
-              const lastMsg = messagesResponse.data[messagesResponse.data.length - 1];
-              if (lastMsg?.metadata) {
-                const md = lastMsg.metadata;
-                setLastResponseData({ queryExpansion: md.queryExpansion, reranking: md.reranking, contextChunks: md.contextChunks, selectionReasoning: md.selectionReasoning, usage: md.usage, cost: md.cost });
-                if (md.usage) setPreviousTokenUsage({ totalTokens: md.usage.totalTokens });
-                if (md.cost) setPreviousCost({ total: md.cost.total });
-              }
-            }
-          } catch { /* continue — messages already in local state */ }
-        }
-
-        refreshConversations();
-      } catch (streamError: any) {
-        if (streamError.name === 'AbortError' || abortControllerRef.current?.signal.aborted) {
-          setStreamingState('cancelled'); setIsStreaming(false); setIsLoading(false);
-          setMessages((prev) => prev.slice(0, -1));
-          abortControllerRef.current = null;
-          return;
-        }
-
-        // Non-streaming fallback
-        console.warn('Streaming failed, falling back to non-streaming:', streamError);
-        setIsStreaming(false);
-        setStreamingState('error');
-
-        const fallbackResponse = await aiApi.ask(request);
-        if (fallbackResponse.success && fallbackResponse.data) {
-          let answer = fallbackResponse.data.answer;
-          let followUpQuestions = fallbackResponse.data.followUpQuestions;
-          if (!followUpQuestions) {
-            const m = answer.match(/(?:FOLLOW_UP_QUESTIONS|Follow[- ]?up questions?):\s*\n((?:[-*•]\s+[^\n]+\n?)+)/i);
-            if (m) { answer = answer.substring(0, m.index).trim(); followUpQuestions = m[1].split('\n').map((l) => l.replace(/^[-*•]\s+/, '').trim()).filter((q) => q.length > 0).slice(0, 4); }
-          }
-          const fallbackTime = responseTimeStartRef.current ? Date.now() - responseTimeStartRef.current : null;
-          if (fallbackTime !== null) previousResponseTimeRef.current = fallbackTime;
-
-          let assistantMessage: Message = {
-            id: (Date.now() + 1).toString(), role: 'assistant', content: answer, timestamp: new Date(),
-            sources: fallbackResponse.data.sources, followUpQuestions,
-            isRefusal: fallbackResponse.data?.refusal ? true : undefined,
-            responseTime: fallbackTime || undefined,
-          };
-          setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
-          setIsLoading(false);
-          responseTimeStartRef.current = null;
-
-          const md = (fallbackResponse.data as any).metadata || {};
-          setLastResponseData({ queryExpansion: md.queryExpansion, reranking: md.reranking, contextChunks: md.contextChunks, selectionReasoning: md.selectionReasoning, usage: fallbackResponse.data.usage, cost: md.cost });
-          if (fallbackResponse.data.usage) setPreviousTokenUsage({ totalTokens: fallbackResponse.data.usage.totalTokens });
-          if (md.cost) setPreviousCost({ total: md.cost.total });
-
-          if (conversationId) {
-            try {
-              const messagesResponse = await conversationApi.getMessages(conversationId);
-              if (messagesResponse.success && messagesResponse.data) {
-                setMessages(mapApiMessagesToUi(messagesResponse.data));
-                const lastMsg = messagesResponse.data[messagesResponse.data.length - 1];
-                if (lastMsg?.metadata) {
-                  const lmd = lastMsg.metadata;
-                  setLastResponseData({ queryExpansion: lmd.queryExpansion, reranking: lmd.reranking, contextChunks: lmd.contextChunks, selectionReasoning: lmd.selectionReasoning, usage: lmd.usage, cost: lmd.cost });
-                  if (lmd.usage) setPreviousTokenUsage({ totalTokens: lmd.usage.totalTokens });
-                  if (lmd.cost) setPreviousCost({ total: lmd.cost.total });
-                }
-              }
-            } catch { /* continue */ }
-          }
-          refreshConversations();
-        } else {
-          throw streamError;
-        }
       }
     } catch (err: any) {
+      console.error('Queue send failed:', err);
+      toast.error(err.message || 'Failed to queue request');
+      setMessages((prev) => {
+        const u = [...prev];
+        u[u.length - 1] = { ...u[u.length - 1], content: 'Failed to process queued request. Try sending normally instead.', isStreaming: false };
+        return u;
+      });
+    } finally {
       setIsLoading(false);
-      setIsStreaming(false);
-      setStreamingState('error');
-      abortControllerRef.current = null;
-
-      let errorMessage = 'Failed to get AI response';
-      let showUpgradeLink = false;
-
-      if (err.response?.status === 429) {
-        const ed = err.response?.data?.error;
-        const tier = ed?.tier || 'free';
-        const limit = ed?.limit || 0;
-        const retryAfter = ed?.retryAfter;
-        errorMessage = `Rate limit exceeded. Your ${tier} tier allows ${limit} requests per 15 minutes.`;
-        if (retryAfter) errorMessage += ` Please try again in ${Math.ceil(retryAfter / 60)} minutes.`;
-        if (tier === 'free') errorMessage += ' Upgrade to premium for higher limits.';
-        showUpgradeLink = true;
-      } else if (err.response?.status === 403) {
-        const ed = err.response?.data?.error;
-        const code = ed?.code || 'FORBIDDEN';
-        if (code === 'QUERY_LIMIT_EXCEEDED') { errorMessage = `You have reached your query limit. You've used ${ed?.used || 0} of ${ed?.limit || 0} queries this month.`; showUpgradeLink = true; }
-        else if (code === 'DOCUMENT_UPLOAD_LIMIT_EXCEEDED') { errorMessage = `Document upload limit reached. You've uploaded ${ed?.used || 0} of ${ed?.limit || 0} documents this month.`; showUpgradeLink = true; }
-        else if (code === 'TOPIC_LIMIT_EXCEEDED') { errorMessage = `Topic limit reached. You've created ${ed?.used || 0} of ${ed?.limit || 0} topics.`; showUpgradeLink = true; }
-        else if (code === 'FEATURE_NOT_AVAILABLE') { errorMessage = `This feature requires a ${ed?.requiredTier || 'premium'} subscription. Your current tier is ${ed?.currentTier || 'free'}.`; showUpgradeLink = true; }
-        else { errorMessage = ed?.message || 'Access denied. This feature may require a premium subscription.'; showUpgradeLink = true; }
-      } else if (err.message) { errorMessage = err.message; }
-      else if (err.response?.data?.error?.message) { errorMessage = err.response.data.error.message; }
-
-      setError(errorMessage);
-      toast.error(errorMessage);
-      setMessages((prev) => prev.slice(0, -1));
-
-      if (showUpgradeLink && typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('navigateToSubscription'));
-      }
+      setActiveQueueJobId(null);
     }
+  };
+
+  const handleCancelQueueJob = async () => {
+    if (!activeQueueJobId) return;
+    try {
+      await queueApi.cancel(activeQueueJobId);
+      toast.success('Queued request cancelled');
+      setMessages((prev) => prev.slice(0, -1));
+    } catch (err) {
+      console.error('Failed to cancel queue job:', err);
+      toast.error('Failed to cancel request');
+    }
+    setActiveQueueJobId(null);
+    setIsLoading(false);
+  };
+
+  /** Intercepts /search and /queue commands, otherwise delegates to the send hook */
+  const handleUserInput = async (content: string) => {
+    const searchMatch = content.match(/^\/search\s+(.+)/i);
+    if (searchMatch) {
+      await handleSemanticSearch(searchMatch[1].trim());
+      return;
+    }
+    const queueMatch = content.match(/^\/queue\s+(.+)/i);
+    if (queueMatch) {
+      await handleQueueSend(queueMatch[1].trim());
+      return;
+    }
+    await handleSend(content);
   };
 
   // ── Research mode ────────────────────────────────────────────────────────
@@ -558,37 +515,22 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     setSelectedTopic(null);
   };
 
-  // ── Streaming controls ───────────────────────────────────────────────────
+  // ── Delete message (optimistic) ──────────────────────────────────────────
 
-  const handlePauseStreaming = () => { if (streamingState === 'streaming') { isPausedRef.current = true; setStreamingState('paused'); } };
-  const handleResumeStreaming = () => { if (streamingState === 'paused') { isPausedRef.current = false; setStreamingState('streaming'); } };
-  const handleCancelStreaming = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort(); setStreamingState('cancelled'); setIsStreaming(false); setIsLoading(false);
-      setMessages((prev) => prev.slice(0, -1)); abortControllerRef.current = null;
-    }
-  };
-  const handleRetryStreaming = async () => {
-    if (messages.length === 0) return;
-    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-    if (!lastUser) return;
-    setMessages((prev) => prev.filter((m) => !(m.role === 'assistant' && m.isStreaming)));
-    setStreamingState('streaming'); setError(null);
-    await handleSend(lastUser.content);
-  };
-
-  // ── Edit message ─────────────────────────────────────────────────────────
-
-  const handleEditMessage = async (messageId: string, newContent: string) => {
+  const handleDeleteMessage = async (messageId: string) => {
     const idx = messages.findIndex((m) => m.id === messageId);
     if (idx === -1) return;
-    const msg = messages[idx];
-    if (msg.role !== 'user') return;
-    const resendHistory = messages.slice(0, idx).map((m) => ({ role: m.role, content: m.content }));
-    flushSync(() => {
-      setMessages((prev) => { const u = prev.slice(0, idx + 1); u[idx] = { ...msg, content: newContent }; return u; });
-    });
-    await handleSend(newContent, undefined, { isResend: true, resendUserMessageId: msg.id, resendHistory });
+    const deletedMessage = messages[idx];
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    if (currentConversationId) {
+      try {
+        await conversationApi.deleteMessage(currentConversationId, messageId);
+      } catch (err) {
+        console.error('Failed to delete message:', err);
+        toast.error('Failed to delete message');
+        setMessages((prev) => { const u = [...prev]; u.splice(idx, 0, deletedMessage); return u; });
+      }
+    }
   };
 
   // ── Action response (summary / essay / report) ──────────────────────────
@@ -617,6 +559,38 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     }
   };
 
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+
+  useChatKeyboardShortcuts({
+    focusInput: () => {
+      const ta = document.querySelector<HTMLTextAreaElement>('textarea[placeholder]');
+      if (ta) ta.focus();
+    },
+    sendMessage: () => {
+      const ta = document.querySelector<HTMLTextAreaElement>('textarea[placeholder]');
+      if (ta) {
+        ta.form?.requestSubmit?.();
+        const enterEvent = new KeyboardEvent('keypress', { key: 'Enter', bubbles: true });
+        ta.dispatchEvent(enterEvent);
+      }
+    },
+    cancelStreaming: () => {
+      if (isStreaming) handleCancelStreaming();
+    },
+    copyLastResponse: () => {
+      const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+      if (lastAssistant) {
+        navigator.clipboard.writeText(lastAssistant.content).then(() => toast.success('Copied last response')).catch(() => toast.error('Failed to copy'));
+      }
+    },
+    closeModal: () => {
+      setShowExportDialog(false);
+      setShowResearchSummaryModal(false);
+      setShowShortcutCard(false);
+      setSourcePanelContext(null);
+    },
+  });
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Render
   // ═══════════════════════════════════════════════════════════════════════════
@@ -629,7 +603,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       {isEmpty && (
         <ChatInputArea
           variant="empty"
-          onSend={(msg) => handleSend(msg)}
+          onSend={(msg) => handleUserInput(msg)}
           disabled={isLoading || isStreaming}
           selectedTopic={selectedTopic}
           dynamicStarters={dynamicStarters}
@@ -637,12 +611,58 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           isStreaming={isStreaming}
           onOpenCitationSettings={() => setIsCitationSettingsOpen(true)}
           welcomeGreeting={welcomeGreeting}
+          documentInfo={documentInfo}
+          onFilesDrop={handleFilesDrop}
+          uploadStatus={inlineUploadStatus}
+          onDismissUpload={() => setInlineUploadStatus(null)}
+          showQueueOption={documentInfo.processedCount >= 20 || !!selectedTopic}
+          onSendToQueue={handleQueueSend}
+          activeQueueJobId={activeQueueJobId}
+          onCancelQueueJob={handleCancelQueueJob}
         />
       )}
 
       {/* Conversation mode */}
       {!isEmpty && (
         <>
+          {/* Chat toolbar */}
+          <div className="flex items-center justify-end gap-1 px-4 py-1.5 border-b border-gray-100 bg-gray-50/50">
+            <button
+              onClick={() => setShowExportDialog(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+              title="Export conversation"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowShortcutCard((v) => !v)}
+                className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                title="Keyboard shortcuts"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </button>
+              {showShortcutCard && (
+                <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-lg border border-gray-200 shadow-lg z-50 p-3">
+                  <div className="text-xs font-semibold text-gray-700 mb-2">Keyboard Shortcuts</div>
+                  <div className="space-y-1.5">
+                    {SHORTCUT_LIST.map((s, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">{s.description}</span>
+                        <span className="flex gap-0.5">
+                          {s.keys.map((k) => (
+                            <kbd key={k} className="px-1.5 py-0.5 rounded bg-gray-100 border border-gray-200 text-[10px] font-mono text-gray-600">{k}</kbd>
+                          ))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex flex-1 min-h-0">
             <ChatMessageList
               messages={messages}
@@ -663,6 +683,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
               previousTokenUsage={previousTokenUsage}
               previousCost={previousCost}
               onEditMessage={handleEditMessage}
+              onDeleteMessage={handleDeleteMessage}
               onFollowUpClick={(q) => handleSend(q)}
               onExitResearchMode={handleExitResearchMode}
               onOpenSources={(sources, query) => setSourcePanelContext({ sources, query })}
@@ -681,13 +702,21 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
           <ChatInputArea
             variant="conversation"
-            onSend={(msg) => handleSend(msg)}
+            onSend={(msg) => handleUserInput(msg)}
             disabled={isLoading || isStreaming}
             selectedTopic={selectedTopic}
             dynamicStarters={dynamicStarters}
             isLoading={isLoading}
             isStreaming={isStreaming}
             onOpenCitationSettings={() => setIsCitationSettingsOpen(true)}
+            documentInfo={documentInfo}
+            onFilesDrop={handleFilesDrop}
+            uploadStatus={inlineUploadStatus}
+            onDismissUpload={() => setInlineUploadStatus(null)}
+            showQueueOption={documentInfo.processedCount >= 20 || !!selectedTopic}
+            onSendToQueue={handleQueueSend}
+            activeQueueJobId={activeQueueJobId}
+            onCancelQueueJob={handleCancelQueueJob}
           />
         </>
       )}
@@ -704,6 +733,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         topicName={selectedTopic?.name || ''}
       />
       <CitationSettings isOpen={isCitationSettingsOpen} onClose={() => setIsCitationSettingsOpen(false)} />
+      {currentConversationId && (
+        <ConversationExportDialog
+          conversation={conversations.find((c) => c.id === currentConversationId) || { id: currentConversationId, user_id: '', title: 'Conversation', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }}
+          messages={messages as any}
+          isOpen={showExportDialog}
+          onClose={() => setShowExportDialog(false)}
+        />
+      )}
     </div>
   );
 };

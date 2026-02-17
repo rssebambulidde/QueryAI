@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Filter, X, Calendar, MapPin, Hash, Tag, Plus, Sparkles, Info, Check } from 'lucide-react';
-import { TimeRange, Topic, topicApi } from '@/lib/api';
-import { useToast } from '@/lib/hooks/use-toast';
+import { Filter, X, Calendar, MapPin, Hash, Tag, Plus, Sparkles, Info } from 'lucide-react';
+import { TimeRange, Topic } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
+import { TopicCreationModal } from './topic-creation-modal';
+import { KeywordTopicSuggestions } from './keyword-topic-suggestions';
 
 export interface UnifiedFilters {
   // Persistent (Topic)
@@ -39,250 +40,7 @@ const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
 ];
 
 // Complete list of all countries with ISO 3166-1 alpha-2 codes
-const COUNTRIES: { code: string; name: string }[] = [
-  { code: 'AF', name: 'Afghanistan' },
-  { code: 'AL', name: 'Albania' },
-  { code: 'DZ', name: 'Algeria' },
-  { code: 'AS', name: 'American Samoa' },
-  { code: 'AD', name: 'Andorra' },
-  { code: 'AO', name: 'Angola' },
-  { code: 'AI', name: 'Anguilla' },
-  { code: 'AQ', name: 'Antarctica' },
-  { code: 'AG', name: 'Antigua and Barbuda' },
-  { code: 'AR', name: 'Argentina' },
-  { code: 'AM', name: 'Armenia' },
-  { code: 'AW', name: 'Aruba' },
-  { code: 'AU', name: 'Australia' },
-  { code: 'AT', name: 'Austria' },
-  { code: 'AZ', name: 'Azerbaijan' },
-  { code: 'BS', name: 'Bahamas' },
-  { code: 'BH', name: 'Bahrain' },
-  { code: 'BD', name: 'Bangladesh' },
-  { code: 'BB', name: 'Barbados' },
-  { code: 'BY', name: 'Belarus' },
-  { code: 'BE', name: 'Belgium' },
-  { code: 'BZ', name: 'Belize' },
-  { code: 'BJ', name: 'Benin' },
-  { code: 'BM', name: 'Bermuda' },
-  { code: 'BT', name: 'Bhutan' },
-  { code: 'BO', name: 'Bolivia' },
-  { code: 'BA', name: 'Bosnia and Herzegovina' },
-  { code: 'BW', name: 'Botswana' },
-  { code: 'BV', name: 'Bouvet Island' },
-  { code: 'BR', name: 'Brazil' },
-  { code: 'IO', name: 'British Indian Ocean Territory' },
-  { code: 'BN', name: 'Brunei Darussalam' },
-  { code: 'BG', name: 'Bulgaria' },
-  { code: 'BF', name: 'Burkina Faso' },
-  { code: 'BI', name: 'Burundi' },
-  { code: 'KH', name: 'Cambodia' },
-  { code: 'CM', name: 'Cameroon' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'CV', name: 'Cape Verde' },
-  { code: 'KY', name: 'Cayman Islands' },
-  { code: 'CF', name: 'Central African Republic' },
-  { code: 'TD', name: 'Chad' },
-  { code: 'CL', name: 'Chile' },
-  { code: 'CN', name: 'China' },
-  { code: 'CX', name: 'Christmas Island' },
-  { code: 'CC', name: 'Cocos (Keeling) Islands' },
-  { code: 'CO', name: 'Colombia' },
-  { code: 'KM', name: 'Comoros' },
-  { code: 'CG', name: 'Congo' },
-  { code: 'CD', name: 'Congo, Democratic Republic' },
-  { code: 'CK', name: 'Cook Islands' },
-  { code: 'CR', name: 'Costa Rica' },
-  { code: 'CI', name: 'Côte d\'Ivoire' },
-  { code: 'HR', name: 'Croatia' },
-  { code: 'CU', name: 'Cuba' },
-  { code: 'CY', name: 'Cyprus' },
-  { code: 'CZ', name: 'Czech Republic' },
-  { code: 'DK', name: 'Denmark' },
-  { code: 'DJ', name: 'Djibouti' },
-  { code: 'DM', name: 'Dominica' },
-  { code: 'DO', name: 'Dominican Republic' },
-  { code: 'EC', name: 'Ecuador' },
-  { code: 'EG', name: 'Egypt' },
-  { code: 'SV', name: 'El Salvador' },
-  { code: 'GQ', name: 'Equatorial Guinea' },
-  { code: 'ER', name: 'Eritrea' },
-  { code: 'EE', name: 'Estonia' },
-  { code: 'ET', name: 'Ethiopia' },
-  { code: 'FK', name: 'Falkland Islands' },
-  { code: 'FO', name: 'Faroe Islands' },
-  { code: 'FJ', name: 'Fiji' },
-  { code: 'FI', name: 'Finland' },
-  { code: 'FR', name: 'France' },
-  { code: 'GF', name: 'French Guiana' },
-  { code: 'PF', name: 'French Polynesia' },
-  { code: 'TF', name: 'French Southern Territories' },
-  { code: 'GA', name: 'Gabon' },
-  { code: 'GM', name: 'Gambia' },
-  { code: 'GE', name: 'Georgia' },
-  { code: 'DE', name: 'Germany' },
-  { code: 'GH', name: 'Ghana' },
-  { code: 'GI', name: 'Gibraltar' },
-  { code: 'GR', name: 'Greece' },
-  { code: 'GL', name: 'Greenland' },
-  { code: 'GD', name: 'Grenada' },
-  { code: 'GP', name: 'Guadeloupe' },
-  { code: 'GU', name: 'Guam' },
-  { code: 'GT', name: 'Guatemala' },
-  { code: 'GG', name: 'Guernsey' },
-  { code: 'GN', name: 'Guinea' },
-  { code: 'GW', name: 'Guinea-Bissau' },
-  { code: 'GY', name: 'Guyana' },
-  { code: 'HT', name: 'Haiti' },
-  { code: 'HM', name: 'Heard Island and McDonald Islands' },
-  { code: 'VA', name: 'Holy See (Vatican City)' },
-  { code: 'HN', name: 'Honduras' },
-  { code: 'HK', name: 'Hong Kong' },
-  { code: 'HU', name: 'Hungary' },
-  { code: 'IS', name: 'Iceland' },
-  { code: 'IN', name: 'India' },
-  { code: 'ID', name: 'Indonesia' },
-  { code: 'IR', name: 'Iran' },
-  { code: 'IQ', name: 'Iraq' },
-  { code: 'IE', name: 'Ireland' },
-  { code: 'IM', name: 'Isle of Man' },
-  { code: 'IL', name: 'Israel' },
-  { code: 'IT', name: 'Italy' },
-  { code: 'JM', name: 'Jamaica' },
-  { code: 'JP', name: 'Japan' },
-  { code: 'JE', name: 'Jersey' },
-  { code: 'JO', name: 'Jordan' },
-  { code: 'KZ', name: 'Kazakhstan' },
-  { code: 'KE', name: 'Kenya' },
-  { code: 'KI', name: 'Kiribati' },
-  { code: 'KP', name: 'Korea, North' },
-  { code: 'KR', name: 'Korea, South' },
-  { code: 'KW', name: 'Kuwait' },
-  { code: 'KG', name: 'Kyrgyzstan' },
-  { code: 'LA', name: 'Laos' },
-  { code: 'LV', name: 'Latvia' },
-  { code: 'LB', name: 'Lebanon' },
-  { code: 'LS', name: 'Lesotho' },
-  { code: 'LR', name: 'Liberia' },
-  { code: 'LY', name: 'Libya' },
-  { code: 'LI', name: 'Liechtenstein' },
-  { code: 'LT', name: 'Lithuania' },
-  { code: 'LU', name: 'Luxembourg' },
-  { code: 'MO', name: 'Macao' },
-  { code: 'MK', name: 'North Macedonia' },
-  { code: 'MG', name: 'Madagascar' },
-  { code: 'MW', name: 'Malawi' },
-  { code: 'MY', name: 'Malaysia' },
-  { code: 'MV', name: 'Maldives' },
-  { code: 'ML', name: 'Mali' },
-  { code: 'MT', name: 'Malta' },
-  { code: 'MH', name: 'Marshall Islands' },
-  { code: 'MQ', name: 'Martinique' },
-  { code: 'MR', name: 'Mauritania' },
-  { code: 'MU', name: 'Mauritius' },
-  { code: 'YT', name: 'Mayotte' },
-  { code: 'MX', name: 'Mexico' },
-  { code: 'FM', name: 'Micronesia' },
-  { code: 'MD', name: 'Moldova' },
-  { code: 'MC', name: 'Monaco' },
-  { code: 'MN', name: 'Mongolia' },
-  { code: 'ME', name: 'Montenegro' },
-  { code: 'MS', name: 'Montserrat' },
-  { code: 'MA', name: 'Morocco' },
-  { code: 'MZ', name: 'Mozambique' },
-  { code: 'MM', name: 'Myanmar' },
-  { code: 'NA', name: 'Namibia' },
-  { code: 'NR', name: 'Nauru' },
-  { code: 'NP', name: 'Nepal' },
-  { code: 'NL', name: 'Netherlands' },
-  { code: 'NC', name: 'New Caledonia' },
-  { code: 'NZ', name: 'New Zealand' },
-  { code: 'NI', name: 'Nicaragua' },
-  { code: 'NE', name: 'Niger' },
-  { code: 'NG', name: 'Nigeria' },
-  { code: 'NU', name: 'Niue' },
-  { code: 'NF', name: 'Norfolk Island' },
-  { code: 'MP', name: 'Northern Mariana Islands' },
-  { code: 'NO', name: 'Norway' },
-  { code: 'OM', name: 'Oman' },
-  { code: 'PK', name: 'Pakistan' },
-  { code: 'PW', name: 'Palau' },
-  { code: 'PS', name: 'Palestine' },
-  { code: 'PA', name: 'Panama' },
-  { code: 'PG', name: 'Papua New Guinea' },
-  { code: 'PY', name: 'Paraguay' },
-  { code: 'PE', name: 'Peru' },
-  { code: 'PH', name: 'Philippines' },
-  { code: 'PN', name: 'Pitcairn' },
-  { code: 'PL', name: 'Poland' },
-  { code: 'PT', name: 'Portugal' },
-  { code: 'PR', name: 'Puerto Rico' },
-  { code: 'QA', name: 'Qatar' },
-  { code: 'RE', name: 'Réunion' },
-  { code: 'RO', name: 'Romania' },
-  { code: 'RU', name: 'Russia' },
-  { code: 'RW', name: 'Rwanda' },
-  { code: 'SH', name: 'Saint Helena' },
-  { code: 'KN', name: 'Saint Kitts and Nevis' },
-  { code: 'LC', name: 'Saint Lucia' },
-  { code: 'PM', name: 'Saint Pierre and Miquelon' },
-  { code: 'VC', name: 'Saint Vincent and the Grenadines' },
-  { code: 'WS', name: 'Samoa' },
-  { code: 'SM', name: 'San Marino' },
-  { code: 'ST', name: 'São Tomé and Príncipe' },
-  { code: 'SA', name: 'Saudi Arabia' },
-  { code: 'SN', name: 'Senegal' },
-  { code: 'RS', name: 'Serbia' },
-  { code: 'SC', name: 'Seychelles' },
-  { code: 'SL', name: 'Sierra Leone' },
-  { code: 'SG', name: 'Singapore' },
-  { code: 'SK', name: 'Slovakia' },
-  { code: 'SI', name: 'Slovenia' },
-  { code: 'SB', name: 'Solomon Islands' },
-  { code: 'SO', name: 'Somalia' },
-  { code: 'ZA', name: 'South Africa' },
-  { code: 'GS', name: 'South Georgia and South Sandwich Islands' },
-  { code: 'SS', name: 'South Sudan' },
-  { code: 'ES', name: 'Spain' },
-  { code: 'LK', name: 'Sri Lanka' },
-  { code: 'SD', name: 'Sudan' },
-  { code: 'SR', name: 'Suriname' },
-  { code: 'SJ', name: 'Svalbard and Jan Mayen' },
-  { code: 'SZ', name: 'Eswatini' },
-  { code: 'SE', name: 'Sweden' },
-  { code: 'CH', name: 'Switzerland' },
-  { code: 'SY', name: 'Syria' },
-  { code: 'TW', name: 'Taiwan' },
-  { code: 'TJ', name: 'Tajikistan' },
-  { code: 'TH', name: 'Thailand' },
-  { code: 'TL', name: 'Timor-Leste' },
-  { code: 'TG', name: 'Togo' },
-  { code: 'TK', name: 'Tokelau' },
-  { code: 'TO', name: 'Tonga' },
-  { code: 'TT', name: 'Trinidad and Tobago' },
-  { code: 'TN', name: 'Tunisia' },
-  { code: 'TR', name: 'Turkey' },
-  { code: 'TM', name: 'Turkmenistan' },
-  { code: 'TC', name: 'Turks and Caicos Islands' },
-  { code: 'TV', name: 'Tuvalu' },
-  { code: 'UG', name: 'Uganda' },
-  { code: 'UA', name: 'Ukraine' },
-  { code: 'AE', name: 'United Arab Emirates' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'US', name: 'United States' },
-  { code: 'UM', name: 'United States Minor Outlying Islands' },
-  { code: 'UY', name: 'Uruguay' },
-  { code: 'UZ', name: 'Uzbekistan' },
-  { code: 'VU', name: 'Vanuatu' },
-  { code: 'VE', name: 'Venezuela' },
-  { code: 'VN', name: 'Vietnam' },
-  { code: 'VG', name: 'Virgin Islands, British' },
-  { code: 'VI', name: 'Virgin Islands, U.S.' },
-  { code: 'WF', name: 'Wallis and Futuna' },
-  { code: 'EH', name: 'Western Sahara' },
-  { code: 'YE', name: 'Yemen' },
-  { code: 'ZM', name: 'Zambia' },
-  { code: 'ZW', name: 'Zimbabwe' },
-];
+import { COUNTRY_LIST as COUNTRIES } from '@/lib/constants/countries';
 
 export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
   filters,
@@ -294,12 +52,10 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
   disabled = false,
   onLoadTopics,
 }) => {
-  const { toast } = useToast();
   const { isMobile } = useMobile();
   const [showTopicDropdown, setShowTopicDropdown] = useState(false);
   const [showCreateTopic, setShowCreateTopic] = useState(false);
-  const [newTopicName, setNewTopicName] = useState('');
-  const [newTopicDescription, setNewTopicDescription] = useState('');
+  const [createTopicInitialName, setCreateTopicInitialName] = useState('');
   const [useCustomDates, setUseCustomDates] = useState(false);
   const [showKeywordSuggestion, setShowKeywordSuggestion] = useState(false);
   const topicDropdownRef = useRef<HTMLDivElement>(null);
@@ -338,42 +94,16 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
     });
   };
 
-  const handleCreateTopic = async () => {
-    if (!newTopicName.trim()) {
-      toast.error('Topic name is required');
-      return;
-    }
-
-    try {
-      const response = await topicApi.create({
-        name: newTopicName.trim(),
-        description: newTopicDescription.trim() || undefined,
-      });
-
-      if (response.success && response.data) {
-        toast.success('Topic created successfully');
-        const newTopic = response.data;
-        setNewTopicName('');
-        setNewTopicDescription('');
-        setShowCreateTopic(false);
-        
-        // Auto-select the new topic
-        handleTopicSelect(newTopic);
-        
-        // Reload topics list
-        if (onLoadTopics) {
-          onLoadTopics();
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create topic');
-    }
+  const handleTopicCreated = (newTopic: Topic) => {
+    setShowCreateTopic(false);
+    setCreateTopicInitialName('');
+    handleTopicSelect(newTopic);
+    if (onLoadTopics) onLoadTopics();
   };
 
-  const handleSaveKeywordAsTopic = async () => {
+  const handleSaveKeywordAsTopic = () => {
     if (!filters.keyword || !filters.keyword.trim()) return;
-    
-    setNewTopicName(filters.keyword.trim());
+    setCreateTopicInitialName(filters.keyword.trim());
     setShowCreateTopic(true);
     setShowKeywordSuggestion(false);
   };
@@ -557,58 +287,13 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
           )}
 
           {/* Create Topic Modal */}
-          {showCreateTopic && (
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-gray-900">Create New Topic</span>
-                <button
-                  onClick={() => {
-                    setShowCreateTopic(false);
-                    setNewTopicName('');
-                    setNewTopicDescription('');
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-              <input
-                type="text"
-                value={newTopicName}
-                onChange={(e) => setNewTopicName(e.target.value)}
-                placeholder="Topic name (e.g., Bank of Uganda)"
-                disabled={disabled}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 placeholder-gray-400"
-              />
-              <textarea
-                value={newTopicDescription}
-                onChange={(e) => setNewTopicDescription(e.target.value)}
-                placeholder="Description (optional)"
-                disabled={disabled}
-                rows={2}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 placeholder-gray-400 resize-none"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleCreateTopic}
-                  disabled={disabled || !newTopicName.trim()}
-                  className="flex-1 px-3 py-1.5 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Create
-                </button>
-                <button
-                  onClick={() => {
-                    setShowCreateTopic(false);
-                    setNewTopicName('');
-                    setNewTopicDescription('');
-                  }}
-                  className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+          <TopicCreationModal
+            isOpen={showCreateTopic}
+            initialName={createTopicInitialName}
+            disabled={disabled}
+            onClose={() => { setShowCreateTopic(false); setCreateTopicInitialName(''); }}
+            onCreated={handleTopicCreated}
+          />
         </div>
 
         {/* Divider */}
@@ -651,45 +336,14 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
               )}
             </div>
             
-            {/* Smart Suggestions */}
-            {showKeywordSuggestion && (
-              <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-amber-900">Save as Topic?</p>
-                    <p className="text-xs text-amber-700 mt-1">
-                      Create a topic "{filters.keyword}" to organize conversations and filter documents.
-                    </p>
-                    <button
-                      onClick={handleSaveKeywordAsTopic}
-                      className="mt-2 text-xs text-amber-700 hover:text-amber-900 font-medium underline"
-                    >
-                      Create topic →
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Matching Topics Suggestion */}
-            {matchingTopics.length > 0 && !selectedTopic && (
-              <div className="mt-2 space-y-1">
-                <p className="text-xs text-gray-600">Did you mean:</p>
-                {matchingTopics.slice(0, 3).map((topic) => (
-                  <button
-                    key={topic.id}
-                    onClick={() => handleTopicSelect(topic)}
-                    className="w-full text-left px-2 py-1.5 text-xs bg-orange-50 border border-orange-200 rounded hover:bg-orange-100 transition-colors"
-                  >
-                    <div className="font-medium text-orange-900">{topic.name}</div>
-                    {topic.description && (
-                      <div className="text-orange-700 mt-0.5">{topic.description}</div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+            <KeywordTopicSuggestions
+              keyword={filters.keyword}
+              showKeywordSuggestion={showKeywordSuggestion}
+              matchingTopics={matchingTopics}
+              selectedTopic={selectedTopic}
+              onSaveKeywordAsTopic={handleSaveKeywordAsTopic}
+              onTopicSelect={handleTopicSelect}
+            />
           </div>
 
           {/* Time Range Filter */}

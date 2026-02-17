@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
-import { Copy, Edit2, Check, X, Layers } from 'lucide-react';
+import { Copy, Edit2, Check, X, Layers, Trash2, BookOpen } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
@@ -14,8 +14,18 @@ import { AIActionButtons } from './ai-action-buttons';
 import { Source, aiApi } from '@/lib/api';
 import { exportToPdf } from '@/lib/export-pdf';
 import { ResponseTimeIndicator } from '@/components/health/response-time-indicator';
+import { ConfidenceBadge } from './confidence-badge';
 import { useMobile } from '@/lib/hooks/use-mobile';
+import { formatRelativeTime } from '@/lib/utils/relative-time';
 import 'highlight.js/styles/github-dark.css';
+
+export interface SearchResult {
+  id: string;
+  documentId: string;
+  title?: string;
+  content: string;
+  score: number;
+}
 
 export interface ChatMessageType {
   id: string;
@@ -29,6 +39,8 @@ export interface ChatMessageType {
   isRefusal?: boolean; // true when response is an off-topic refusal (11.1)
   isTopicChangeMessage?: boolean; // synthetic "Research mode disabled" / "topic now" – hide action buttons
   responseTime?: number; // Response time in milliseconds
+  qualityScore?: number; // Answer quality score (0-1)
+  searchResults?: SearchResult[]; // Results from /search command
 }
 
 // Keep Message as an alias for backward compatibility
@@ -48,9 +60,10 @@ interface ChatMessageProps {
   isStreaming?: boolean; // Whether the message is currently streaming
   selectedTopicName?: string | null; // For refusal hint (11.2)
   onExitResearchMode?: () => void; // For refusal hint "exit research mode" action
+  onDelete?: (messageId: string) => void;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onActionResponse, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onActionResponse, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode, onDelete }) => {
   const { isMobile } = useMobile();
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
@@ -58,12 +71,23 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
   const [editContent, setEditContent] = useState(message.content);
   const [isHovered, setIsHovered] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [justCopied, setJustCopied] = useState(false);
+  const [, setTimeTick] = useState(0);
   const { toast } = useToast();
+
+  // Re-render every 60s to keep relative timestamps fresh
+  useEffect(() => {
+    const interval = setInterval(() => setTimeTick((t) => t + 1), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
+      setJustCopied(true);
       toast.success('Copied to clipboard');
+      setTimeout(() => setJustCopied(false), 2000);
     } catch (error) {
       toast.error('Failed to copy');
     }
@@ -85,6 +109,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
     setIsEditing(false);
     setEditContent(message.content);
   };
+
+  // Count unique citation references in the message
+  const citationCount = useMemo(() => {
+    if (isUser) return 0;
+    const matches = message.content.match(/\[(?:Web Source |Document |Source )?\d+\]/g);
+    if (!matches) return 0;
+    return new Set(matches).size;
+  }, [message.content, isUser]);
 
   // Replace [Source N] and [Web Source N] patterns with hyperlinks using source titles
   // Also handles "Sources:" lines with multiple citations
@@ -249,6 +281,42 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </span>
               </div>
+            ) : message.searchResults && message.searchResults.length > 0 ? (
+              <div>
+                <p className="text-sm text-gray-600 mb-3">{message.content}</p>
+                <div className="space-y-2">
+                  {message.searchResults.map((result, idx) => (
+                    <div
+                      key={result.id || idx}
+                      className="p-3 rounded-lg border border-gray-200 hover:border-orange-300 hover:bg-orange-50/30 transition-colors cursor-pointer"
+                      onClick={() => {
+                        if (result.documentId) {
+                          onOpenSources?.([{
+                            type: 'document',
+                            title: result.title || `Document result ${idx + 1}`,
+                            snippet: result.content.slice(0, 300),
+                            score: result.score,
+                            documentId: result.documentId,
+                          }], '');
+                        }
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <h4 className="text-sm font-medium text-gray-900 line-clamp-1">
+                          {result.title || `Document result ${idx + 1}`}
+                        </h4>
+                        <span className={cn(
+                          'flex-shrink-0 px-1.5 py-0.5 text-xs font-medium rounded',
+                          result.score >= 0.8 ? 'bg-green-100 text-green-700' : result.score >= 0.6 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
+                        )}>
+                          {(result.score * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-600 line-clamp-3">{result.content.slice(0, 300)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : (
               <>
                 <EnhancedContentProcessor
@@ -268,11 +336,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   'text-xs opacity-70',
                   isUser ? 'text-orange-100' : 'text-gray-500'
                 )}
+                title={message.timestamp.toLocaleString()}
               >
-                {message.timestamp.toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+                {formatRelativeTime(message.timestamp)}
               </div>
               {!isUser && message.responseTime !== undefined && (
                 <ResponseTimeIndicator
@@ -281,6 +347,19 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   showTrend={true}
                   size="sm"
                 />
+              )}
+              {!isUser && !isStreaming && message.qualityScore !== undefined && (
+                <ConfidenceBadge score={message.qualityScore} />
+              )}
+              {!isUser && !isStreaming && citationCount > 0 && (
+                <button
+                  onClick={() => onOpenSources?.(message.sources ?? [], '')}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-medium leading-tight hover:bg-blue-100 transition-colors"
+                  title="View cited sources"
+                >
+                  <BookOpen className="w-3 h-3" />
+                  {citationCount} source{citationCount !== 1 ? 's' : ''} cited
+                </button>
               )}
             </div>
             <div
@@ -294,12 +373,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                 className={cn(
                   'rounded hover:bg-opacity-20 transition-colors touch-manipulation',
                   'min-w-[44px] min-h-[44px] flex items-center justify-center',
-                  isUser ? 'text-orange-100 hover:bg-white p-1.5' : 'text-gray-400 hover:bg-gray-100 p-1.5'
+                  justCopied
+                    ? 'text-green-500 p-1.5'
+                    : isUser ? 'text-orange-100 hover:bg-white p-1.5' : 'text-gray-400 hover:bg-gray-100 p-1.5'
                 )}
-                title="Copy message"
+                title={justCopied ? 'Copied!' : 'Copy message'}
                 aria-label="Copy message"
               >
-                <Copy className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                {justCopied ? <Check className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> : <Copy className="w-4 h-4 sm:w-3.5 sm:h-3.5" />}
               </button>
               {isUser && onEdit && !isEditing && (
                 <button
@@ -314,6 +395,39 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                 >
                   <Edit2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 </button>
+              )}
+              {onDelete && !showDeleteConfirm && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className={cn(
+                    'rounded hover:bg-opacity-20 transition-colors touch-manipulation',
+                    'min-w-[44px] min-h-[44px] flex items-center justify-center',
+                    isUser ? 'text-orange-100 hover:bg-white p-1.5' : 'text-gray-400 hover:bg-red-50 hover:text-red-500 p-1.5'
+                  )}
+                  title="Delete message"
+                  aria-label="Delete message"
+                >
+                  <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                </button>
+              )}
+              {showDeleteConfirm && (
+                <div className="flex items-center gap-1 bg-red-50 rounded-lg px-2 py-1 border border-red-200">
+                  <span className="text-xs text-red-600 mr-1">Delete?</span>
+                  <button
+                    onClick={() => { onDelete?.(message.id); setShowDeleteConfirm(false); }}
+                    className="p-1 rounded hover:bg-red-100 text-red-600 touch-manipulation min-w-[28px] min-h-[28px] flex items-center justify-center"
+                    title="Confirm delete"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="p-1 rounded hover:bg-gray-100 text-gray-500 touch-manipulation min-w-[28px] min-h-[28px] flex items-center justify-center"
+                    title="Cancel"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               )}
               {/* Ellipsis menu for assistant messages with actions */}
               {!isUser && onActionResponse && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (

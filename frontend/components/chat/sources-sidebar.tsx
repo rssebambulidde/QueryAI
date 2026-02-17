@@ -4,6 +4,7 @@ import React, { useCallback } from 'react';
 import type { Source } from '@/lib/api';
 import { SourcePanel } from './source-panel';
 import type { SourcesSidebarProps } from './chat-types';
+import { downloadDocument } from '@/lib/utils/download-document';
 
 /**
  * Perplexity-style sources sidebar.
@@ -18,25 +19,7 @@ export const SourcesSidebar: React.FC<SourcesSidebarProps> = ({
 }) => {
   const handleSourceClick = useCallback((source: Source & { documentId?: string }) => {
     if (source.type === 'document' && source.documentId) {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-      fetch(`${API_URL}/api/documents/${source.documentId}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error('Download failed'))))
-        .then((blob) => {
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = source.title || 'document';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-        })
-        .catch(() => {
-          if (source.url) window.open(source.url, '_blank');
-        });
+      downloadDocument(source.documentId, source.title || 'document', source.url);
     } else if (source.url) {
       window.open(source.url, '_blank');
     }

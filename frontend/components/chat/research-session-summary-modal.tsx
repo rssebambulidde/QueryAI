@@ -67,7 +67,7 @@ export const ResearchSessionSummaryModal: React.FC<ResearchSessionSummaryModalPr
         "fixed inset-0 z-50 flex items-center justify-center bg-black/50",
         isMobile && "p-0"
       )} 
-      onClick={handleNo}
+      onClick={phase === 'loading' ? undefined : handleNo}
     >
       <div
         className={cn(
@@ -97,9 +97,11 @@ export const ResearchSessionSummaryModal: React.FC<ResearchSessionSummaryModalPr
           <button
             type="button"
             onClick={phase === 'result' ? handleCloseResult : handleNo}
+            disabled={phase === 'loading'}
             className={cn(
               "text-gray-400 hover:text-gray-600 rounded touch-manipulation",
-              isMobile ? "p-2 min-w-[44px] min-h-[44px]" : "p-1"
+              isMobile ? "p-2 min-w-[44px] min-h-[44px]" : "p-1",
+              phase === 'loading' && "opacity-50 cursor-not-allowed"
             )}
           >
             <X className={cn(isMobile ? "w-6 h-6" : "w-5 h-5")} />

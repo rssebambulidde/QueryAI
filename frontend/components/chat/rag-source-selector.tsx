@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { FileText, Globe, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
@@ -31,13 +31,9 @@ export const RAGSourceSelector: React.FC<RAGSourceSelectorProps> = ({
   className,
 }) => {
   const { isMobile } = useMobile();
-  const [isDocumentAvailable, setIsDocumentAvailable] = useState(hasProcessedDocuments);
-  const [isWebAvailable, setIsWebAvailable] = useState(true); // Assume web is available
-
-  // Update availability when document count changes
-  useEffect(() => {
-    setIsDocumentAvailable(hasProcessedDocuments && documentCount > 0);
-  }, [hasProcessedDocuments, documentCount]);
+  const isDocumentAvailable = hasProcessedDocuments && documentCount > 0;
+  // Web search is always available (no backend config endpoint to check)
+  const isWebAvailable = true;
 
   const handleDocumentToggle = () => {
     if (!isDocumentAvailable) return; // Don't toggle if not available

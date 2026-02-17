@@ -41,6 +41,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   previousCost,
   // Handlers
   onEditMessage,
+  onDeleteMessage,
   onFollowUpClick,
   onExitResearchMode,
   onOpenSources,
@@ -116,6 +117,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                     : undefined
                 }
                 isStreaming={isStreaming && isLastMessage}
+                onDelete={onDeleteMessage}
               />
 
               {/* Advanced features after the last assistant message */}

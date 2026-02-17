@@ -205,4 +205,31 @@ router.post(
   })
 );
 
+/**
+ * DELETE /api/conversations/:id/messages/:messageId
+ * Delete a message from a conversation
+ */
+router.delete(
+  '/:id/messages/:messageId',
+  validateUUIDParams('id', 'messageId'),
+  asyncHandler(async (req, res) => {
+    const userId = req.user!.id;
+    const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const messageId = Array.isArray(req.params.messageId) ? req.params.messageId[0] : req.params.messageId;
+
+    // Verify conversation belongs to user
+    const conversation = await ConversationService.getConversation(conversationId, userId);
+    if (!conversation) {
+      throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
+    }
+
+    await MessageService.deleteMessage(messageId, userId);
+
+    res.json({
+      success: true,
+      message: 'Message deleted successfully',
+    });
+  })
+);
+
 export default router;

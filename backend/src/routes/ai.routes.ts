@@ -414,9 +414,27 @@ router.post(
         // Continue without follow-ups on error
       }
       
+      // Calculate answer quality score
+      let qualityScore: number | undefined;
+      try {
+        const { ResponseProcessorService } = await import('../services/response-processor.service');
+        qualityScore = ResponseProcessorService.calculateAnswerQualityScore(
+          fullAnswer,
+          sources || [],
+          followUpQuestions || []
+        );
+      } catch (qualityErr: any) {
+        logger.warn('Quality score calculation failed', { error: qualityErr?.message });
+      }
+
       // Send follow-up questions (required on every response)
       if (followUpQuestions && followUpQuestions.length > 0) {
         res.write(`data: ${JSON.stringify({ followUpQuestions })}\n\n`);
+      }
+
+      // Send quality score
+      if (qualityScore !== undefined) {
+        res.write(`data: ${JSON.stringify({ qualityScore })}\n\n`);
       }
 
       // Save messages to conversation if conversationId provided and userId available

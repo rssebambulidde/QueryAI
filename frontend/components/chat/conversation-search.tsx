@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Search, X, Filter, Calendar, SortAsc, SortDesc, FileText, Globe } from 'lucide-react';
+import { Search, X, Filter, Calendar, SortAsc, SortDesc } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -9,15 +9,12 @@ import { Conversation } from '@/lib/api';
 
 export type SortOption = 'date' | 'title' | 'messageCount';
 export type SortDirection = 'asc' | 'desc';
-export type SourceTypeFilter = 'all' | 'document' | 'web';
-
 export interface ConversationFilters {
   searchQuery: string;
   dateRange?: {
     start?: Date;
     end?: Date;
   };
-  sourceType: SourceTypeFilter;
   sortBy: SortOption;
   sortDirection: SortDirection;
 }
@@ -35,7 +32,6 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
 }) => {
   const [filters, setFilters] = useState<ConversationFilters>({
     searchQuery: '',
-    sourceType: 'all',
     sortBy: 'date',
     sortDirection: 'desc',
   });
@@ -69,16 +65,6 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
         }
         return true;
       });
-    }
-
-    // Source type filter (check if conversation has messages with specific source types)
-    if (filters.sourceType !== 'all') {
-      // This would require checking message sources, which we don't have in the list
-      // For now, we'll skip this filter or implement it when we have source data
-      // filtered = filtered.filter((conv) => {
-      //   // Check if conversation has sources of the specified type
-      //   return true; // Placeholder
-      // });
     }
 
     // Sort
@@ -137,7 +123,6 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
   const clearFilters = () => {
     setFilters({
       searchQuery: '',
-      sourceType: 'all',
       sortBy: 'date',
       sortDirection: 'desc',
     });
@@ -148,8 +133,7 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
   const hasActiveFilters =
     filters.searchQuery ||
     filters.dateRange?.start ||
-    filters.dateRange?.end ||
-    filters.sourceType !== 'all';
+    filters.dateRange?.end;
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -192,7 +176,6 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
                 filters.searchQuery && '1',
                 filters.dateRange?.start && '1',
                 filters.dateRange?.end && '1',
-                filters.sourceType !== 'all' && '1',
               ]
                 .filter(Boolean)
                 .length}
@@ -262,31 +245,6 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
                   className="h-8 text-xs"
                 />
               </div>
-            </div>
-          </div>
-
-          {/* Source Type Filter */}
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-2">
-              Source Type
-            </label>
-            <div className="flex items-center gap-2">
-              {(['all', 'document', 'web'] as SourceTypeFilter[]).map((type) => (
-                <Button
-                  key={type}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setFilters((prev) => ({ ...prev, sourceType: type }))}
-                  className={cn(
-                    'flex items-center gap-1.5',
-                    filters.sourceType === type && 'bg-orange-50 border-orange-300'
-                  )}
-                >
-                  {type === 'document' && <FileText className="w-3.5 h-3.5" />}
-                  {type === 'web' && <Globe className="w-3.5 h-3.5" />}
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                </Button>
-              ))}
             </div>
           </div>
 

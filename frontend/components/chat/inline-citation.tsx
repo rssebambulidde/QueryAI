@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Source } from '@/lib/api';
 import { ExternalLink, FileText, Download, ChevronDown, ChevronUp, X, Globe, File } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { documentApi } from '@/lib/api';
+import { downloadDocument } from '@/lib/utils/download-document';
 
 export interface CitationMatch {
   type: 'web' | 'document';
@@ -73,35 +73,7 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
     e.preventDefault();
     e.stopPropagation();
     if (source.documentId) {
-      try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-        const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-        
-        const response = await fetch(`${API_URL}/api/documents/${source.documentId}/download`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        
-        if (response.ok) {
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = source.title || 'document';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-        } else if (source.url) {
-          window.open(source.url, '_blank');
-        }
-      } catch (error) {
-        console.error('Failed to download document:', error);
-        if (source.url) {
-          window.open(source.url, '_blank');
-        }
-      }
+      await downloadDocument(source.documentId, source.title || 'document', source.url);
     } else if (source.url) {
       window.open(source.url, '_blank');
     }
