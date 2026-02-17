@@ -44,7 +44,7 @@ import type { QuestionRequest, QuestionResponse, Source } from './ai.service';
 const LLM_CACHE_TTL = 3600;
 const LLM_CACHE_PREFIX = 'llm';
 
-interface LLMCacheStats {
+export interface LLMCacheStats {
   hits: number;
   misses: number;
   sets: number;

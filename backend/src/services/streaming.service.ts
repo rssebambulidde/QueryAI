@@ -76,7 +76,7 @@ export class StreamingService {
     if (error instanceof OpenAI.APIError) {
       return {
         message: error.message || 'OpenAI API error',
-        code: error.code,
+        code: error.code ?? undefined,
         status: error.status,
       };
     }
