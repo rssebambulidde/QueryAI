@@ -7,6 +7,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { FileText, File, FileCode, FileType, Download, Eye, Trash2, Upload, X, CheckCircle2, Clock, AlertCircle, RefreshCw, Play, Eraser, Settings, Tag, Edit2, CheckSquare, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+
 import { DocumentViewer } from './document-viewer';
 import { DocumentMetadataEditor } from './document-metadata-editor';
 import { DocumentSearch } from './document-search';
@@ -15,6 +16,7 @@ import { UploadProgress } from './upload-progress';
 import { useDocumentUpload } from '@/lib/hooks/use-document-upload';
 import { MobileUpload } from '@/components/mobile/mobile-upload';
 import { useMobile } from '@/lib/hooks/use-mobile';
+import { DocumentListSkeleton } from './document-skeleton';
 
 const formatBytes = (bytes: number): string => {
   if (!bytes || bytes <= 0) return '0 B';
@@ -142,21 +144,44 @@ export const DocumentManager = () => {
     loadTopics();
   }, []);
 
-  // Auto-refresh every 5 seconds if there are documents with 'processing' or 'embedding' status
+  // Exponential backoff polling for processing documents
   useEffect(() => {
-    const hasProcessing = documents.some(doc => 
-      doc.status === 'processing' || doc.status === 'embedding'
-    );
-    if (!hasProcessing) {
-      return; // No processing documents, no need to set up interval
+    let timeoutId: NodeJS.Timeout | null = null;
+    let startTime = Date.now();
+    let pollCount = 0;
+    let stopped = false;
+    const backoffIntervals = [2000, 4000, 8000, 16000, 30000];
+    let intervalIdx = 0;
+
+    function poll() {
+      if (stopped) return;
+      const hasProcessing = documents.some(doc => doc.status === 'processing' || doc.status === 'embedding');
+      if (!hasProcessing) return;
+      const elapsed = Date.now() - startTime;
+      if (elapsed > 10 * 60 * 1000) { // 10 minutes
+        setShowProcessingTimeout(true);
+        return;
+      }
+      loadDocuments(false);
+      pollCount++;
+      if (intervalIdx < backoffIntervals.length - 1) {
+        intervalIdx++;
+      }
+      timeoutId = setTimeout(poll, backoffIntervals[intervalIdx]);
     }
 
-    const interval = setInterval(() => {
-      loadDocuments(false); // Don't show loading spinner for auto-refresh
-    }, 5000);
+    if (documents.some(doc => doc.status === 'processing' || doc.status === 'embedding')) {
+      setShowProcessingTimeout(false);
+      poll();
+    }
 
-    return () => clearInterval(interval);
+    return () => {
+      stopped = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [documents, loadDocuments]);
+
+  const [showProcessingTimeout, setShowProcessingTimeout] = useState(false);
 
   const handleFileSelect = (file: File) => {
     const maxSize = 10 * 1024 * 1024; // 10MB
@@ -560,9 +585,13 @@ export const DocumentManager = () => {
       {/* Documents List */}
       <div className="border-t border-gray-100 pt-4">
         {isLoading ? (
+          <div className="py-8">
+            <DocumentListSkeleton count={6} />
+          </div>
+        ) : showProcessingTimeout ? (
           <div className="flex flex-col items-center justify-center py-8">
-            <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-orange-600 border-r-transparent mb-2"></div>
-            <p className="text-sm text-gray-500">Loading documents...</p>
+            <AlertCircle className="w-8 h-8 text-orange-500 mb-2" />
+            <p className="text-sm text-orange-600">Processing may take longer than expected. Please check back later or refresh the page.</p>
           </div>
         ) : filteredDocuments.length === 0 ? (
           <div className="text-center py-8">

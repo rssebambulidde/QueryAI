@@ -83,7 +83,7 @@ export const ChatInputArea: React.FC<
           />
 
           {/* Centred input */}
-          <ChatInput onSend={onSend} disabled={disabled} placeholder="Ask me anything..." onFilesDrop={onFilesDrop} uploadStatus={uploadStatus} onDismissUpload={onDismissUpload} showQueueOption={showQueueOption} onSendToQueue={onSendToQueue} activeQueueJobId={activeQueueJobId} onCancelQueueJob={onCancelQueueJob} />
+          <ChatInput onSend={onSend} disabled={disabled} placeholder="Ask me anything..." showQueueOption={showQueueOption} onSendToQueue={onSendToQueue} activeQueueJobId={activeQueueJobId} onCancelQueueJob={onCancelQueueJob} />
         </div>
       </div>
     );
@@ -118,7 +118,7 @@ export const ChatInputArea: React.FC<
           className="px-4 pt-3 pb-1"
         />
 
-        <ChatInput onSend={onSend} disabled={disabled} placeholder="Ask me anything..." onFilesDrop={onFilesDrop} uploadStatus={uploadStatus} onDismissUpload={onDismissUpload} showQueueOption={showQueueOption} onSendToQueue={onSendToQueue} activeQueueJobId={activeQueueJobId} onCancelQueueJob={onCancelQueueJob} />
+        <ChatInput onSend={onSend} disabled={disabled} placeholder="Ask me anything..." showQueueOption={showQueueOption} onSendToQueue={onSendToQueue} activeQueueJobId={activeQueueJobId} onCancelQueueJob={onCancelQueueJob} />
       </div>
     </div>
   );

@@ -200,9 +200,14 @@ function DashboardContent() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+        <div className="w-full max-w-md mx-auto">
+          <div className="animate-pulse space-y-6">
+            <div className="h-8 bg-gray-200 rounded w-1/2 mx-auto" />
+            <div className="h-6 bg-gray-100 rounded w-1/3 mx-auto" />
+            <div className="h-40 bg-gray-100 rounded" />
+            <div className="h-6 bg-gray-100 rounded w-1/4 mx-auto" />
+            <div className="h-6 bg-gray-100 rounded w-1/4 mx-auto" />
+          </div>
         </div>
       </div>
     );

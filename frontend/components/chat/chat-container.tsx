@@ -364,10 +364,18 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err: any) {
       console.error('Semantic search failed:', err);
-      toast.error(err.message || 'Document search failed');
+      let errorMsg = err.message || 'Document search failed.';
+      if (err.response?.status === 429) {
+        errorMsg = 'Rate limit exceeded. Try again in 30s.';
+      } else if (err.response?.status === 403) {
+        errorMsg = err.response?.data?.error?.message || 'Subscription limit reached. Upgrade your plan to continue.';
+      } else if (err.message?.toLowerCase().includes('network')) {
+        errorMsg = 'Network error. Please check your connection and retry.';
+      }
+      setError(errorMsg);
       setMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(), role: 'assistant',
-        content: 'Document search failed. Please try again.',
+        content: errorMsg,
         timestamp: new Date(),
       }]);
     } finally {
@@ -468,10 +476,20 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       }
     } catch (err: any) {
       console.error('Queue send failed:', err);
-      toast.error(err.message || 'Failed to queue request');
+      let errorMsg = err.message || 'Failed to queue request.';
+      if (err.response?.status === 429) {
+        errorMsg = 'Rate limit exceeded. Try again in 30s.';
+      } else if (err.response?.status === 403) {
+        errorMsg = err.response?.data?.error?.message || 'Subscription limit reached. Upgrade your plan to continue.';
+      } else if (err.message?.toLowerCase().includes('network')) {
+        errorMsg = 'Network error. Please check your connection and retry.';
+      } else if (err.message?.toLowerCase().includes('stream')) {
+        errorMsg = 'Streaming failure. Response interrupted.';
+      }
+      setError(errorMsg);
       setMessages((prev) => {
         const u = [...prev];
-        u[u.length - 1] = { ...u[u.length - 1], content: 'Failed to process queued request. Try sending normally instead.', isStreaming: false };
+        u[u.length - 1] = { ...u[u.length - 1], content: errorMsg, isStreaming: false };
         return u;
       });
     } finally {
