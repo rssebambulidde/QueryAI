@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
-import { Copy, Edit2, Check, X, Layers, Trash2, BookOpen } from 'lucide-react';
+import { Copy, Edit2, Check, X, Trash2, BookOpen } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
@@ -511,31 +511,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
           </div>
         </div>
 
-        {/* "N sources" pill (Perplexity-style) - shown below message for ALL assistant responses with sources
-            This includes responses to original questions AND responses to related questions */}
-        {!isUser && 
-         !message.isActionResponse && 
-         !message.isTopicChangeMessage && 
-         !isStreaming && 
-         !message.isStreaming && 
-         hasSources && 
-         onOpenSources && (
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={() => onOpenSources(message.sources!, userQuestion)}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-full text-sm font-medium',
-                'bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors touch-manipulation',
-                'min-h-[44px]'
-              )}
-              aria-label={`View ${message.sources!.length} sources`}
-            >
-              <Layers className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-gray-500" />
-              {message.sources!.length} sources
-            </button>
-          </div>
-        )}
 
         {/* Follow-up Questions for Assistant Messages - Show AI-generated questions */}
         {!isUser && onFollowUpClick && message.followUpQuestions && message.followUpQuestions.length > 0 && !message.isActionResponse && (

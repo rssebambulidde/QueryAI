@@ -3,7 +3,7 @@
 import React from 'react';
 import { ChatInput } from './chat-input';
 import { ResearchModeBar } from './research-mode-bar';
-import { MessageSquare, Settings, FileText, Loader2 } from 'lucide-react';
+import { MessageSquare, FileText, Loader2 } from 'lucide-react';
 import type { ChatInputAreaProps } from './chat-types';
 import { cn } from '@/lib/utils';
 
@@ -93,32 +93,20 @@ export const ChatInputArea: React.FC<
   return (
     <div className="bg-white border-t border-gray-200 shadow-lg relative flex justify-center">
       <div className="w-full max-w-3xl mx-auto px-4 pb-4">
-        {/* Citation settings + document status */}
-        <div className="flex items-center justify-between px-4 pt-2 pb-1">
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-            {docStatus && (
-              <>
-                {documentInfo!.processingCount > 0 ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <FileText className="w-3 h-3" />
-                )}
-                {selectedTopic ? `Topic: ${selectedTopic.name} \u2014 ${docStatus}` : docStatus}
-                {documentInfo!.processingCount > 0 && (
-                  <span className="text-amber-500">({documentInfo!.processingCount} processing)</span>
-                )}
-              </>
+        {/* Document status */}
+        {docStatus && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-400 px-4 pt-2 pb-1">
+            {documentInfo!.processingCount > 0 ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <FileText className="w-3 h-3" />
+            )}
+            {selectedTopic ? `Topic: ${selectedTopic.name} \u2014 ${docStatus}` : docStatus}
+            {documentInfo!.processingCount > 0 && (
+              <span className="text-amber-500">({documentInfo!.processingCount} processing)</span>
             )}
           </div>
-          <button
-            onClick={onOpenCitationSettings}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-            title="Citation settings"
-          >
-            <Settings className="w-3.5 h-3.5" />
-            Citation Settings
-          </button>
-        </div>
+        )}
 
         {/* Research-mode starters (horizontal scroll) */}
         <ResearchModeBar
