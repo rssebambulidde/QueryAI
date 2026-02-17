@@ -137,68 +137,68 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
 
                   {lastResponseData.reranking && (
                     <RerankingControls
-                      enabled={rerankingEnabled}
-                      onToggle={onRerankingEnabledChange}
-                      onSettingsChange={onRerankingSettingsChange}
-                      settings={rerankingSettings}
-                      impact={lastResponseData.reranking.impact}
-                      preview={lastResponseData.reranking.preview}
-                    />
-                  )}
+                      {/* Error banner */}
+                      {error && (
+                        <EnhancedErrorBanner error={error} onRetry={onRetryStreaming} />
+                      )}
 
-                  {lastResponseData.contextChunks && lastResponseData.contextChunks.length > 0 && (
-                    <ContextVisualization
-                      chunks={lastResponseData.contextChunks}
-                      tokenUsage={{
-                        total: lastResponseData.usage?.totalTokens || 0,
-                        prompt: lastResponseData.usage?.promptTokens || 0,
-                        completion: lastResponseData.usage?.completionTokens || 0,
-                        context: lastResponseData.contextChunks.reduce(
-                          (sum: number, chunk: { tokens: number }) => sum + chunk.tokens,
-                          0,
-                        ),
-                      }}
-                      selectionReasoning={lastResponseData.selectionReasoning}
-                    />
-                  )}
+              // Enhanced error banner component
+              function EnhancedErrorBanner({ error, onRetry }: { error: string; onRetry?: () => void }) {
+                const [countdown, setCountdown] = useState<number | null>(null);
+                useEffect(() => {
+                  if (error.includes('429') || error.toLowerCase().includes('rate limit')) {
+                    // Extract seconds from error message if present, else default to 30
+                    const match = error.match(/(\d+)(s| seconds?)/i);
+                    const seconds = match ? parseInt(match[1], 10) : 30;
+                    setCountdown(seconds);
+                    if (seconds > 0) {
+                      const interval = setInterval(() => {
+                        setCountdown((c) => (c && c > 0 ? c - 1 : 0));
+                      }, 1000);
+                      return () => clearInterval(interval);
+                    }
+                  } else {
+                    setCountdown(null);
+                  }
+                }, [error]);
 
-                  {lastResponseData.usage && (
-                    <TokenUsageDisplay
-                      tokenUsage={{
-                        promptTokens: lastResponseData.usage.promptTokens,
-                        completionTokens: lastResponseData.usage.completionTokens,
-                        totalTokens: lastResponseData.usage.totalTokens,
-                      }}
-                      previousUsage={previousTokenUsage || undefined}
-                      showAlerts={true}
-                    />
-                  )}
+                // Streaming interruption detection
+                const isStreamingInterrupted = error.toLowerCase().includes('stream') && error.toLowerCase().includes('interrupted');
+                const isNetworkError = error.toLowerCase().includes('network');
+                const isRateLimit = error.includes('429') || error.toLowerCase().includes('rate limit');
+                const isSubscription = error.includes('403') || error.toLowerCase().includes('subscription') || error.toLowerCase().includes('plan') || error.toLowerCase().includes('tier') || error.toLowerCase().includes('limit');
 
-                  {lastResponseData.cost && (
-                    <CostEstimation
-                      cost={lastResponseData.cost}
-                      previousCost={previousCost || undefined}
-                      showAlerts={true}
-                    />
-                  )}
-                </div>
-              )}
-
-              {showControls && (
-                <div className="flex justify-start mb-4">
-                  <StreamingControls
-                    state={streamingState}
-                    onPause={onPauseStreaming}
-                    onResume={onResumeStreaming}
-                    onCancel={onCancelStreaming}
-                    onRetry={onRetryStreaming}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-
+                return (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm text-red-800">{error}</p>
+                      {isRateLimit && (
+                        <div className="flex items-center gap-2 text-orange-700 text-sm">
+                          <span>Rate limit hit. Try again{countdown !== null ? ` in ${countdown}s` : ''}.</span>
+                        </div>
+                      )}
+                      {isStreamingInterrupted && (
+                        <div className="flex items-center gap-2 text-orange-700 text-sm">
+                          <span>Streaming interrupted. Please retry.</span>
+                        </div>
+                      )}
+                      {isNetworkError && (
+                        <div className="flex items-center gap-2 text-orange-700 text-sm">
+                          <span>Network error. Please check your connection.</span>
+                        </div>
+                      )}
+                      {isSubscription && (
+                        <div className="flex items-center gap-2 text-orange-700 text-sm">
+                          <span>Subscription or plan limit reached.</span>
+                        </div>
+                      )}
+                      {onRetry && (
+                        <button onClick={onRetry} className="mt-2 px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 transition">Retry</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
         {/* Error banner */}
         {error && (
           <EnhancedErrorBanner error={error} onRetry={onRetryStreaming} />
