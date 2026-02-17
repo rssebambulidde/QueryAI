@@ -87,7 +87,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
     if (!isUser && message.qualityScore !== undefined) {
       console.log('[ChatMessage] Quality score for message:', message.id, '=', message.qualityScore, 'isStreaming:', isStreaming, 'message.isStreaming:', message.isStreaming);
     }
-  }, [message.qualityScore, isUser, message.id, isStreaming, message.isStreaming]);
+    if (!isUser && citationCount > 0) {
+      console.log('[ChatMessage] Citation count for message:', message.id, '=', citationCount, 'isStreaming:', isStreaming, 'message.isStreaming:', message.isStreaming);
+    }
+  }, [message.qualityScore, citationCount, isUser, message.id, isStreaming, message.isStreaming]);
 
   const handleCopy = async () => {
     try {
@@ -336,8 +339,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
           </div>
 
           {/* Timestamp, Response Time, and Actions */}
-          <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between mt-2 flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <div
                 className={cn(
                   'text-xs opacity-70',
@@ -358,7 +361,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               {!isUser && !isStreaming && !message.isStreaming && message.qualityScore !== undefined && (
                 <ConfidenceBadge score={message.qualityScore} />
               )}
-              {!isUser && !isStreaming && citationCount > 0 && (
+              {!isUser && !isStreaming && !message.isStreaming && citationCount > 0 && (
                 <button
                   onClick={() => onOpenSources?.(message.sources ?? [], '')}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-medium leading-tight hover:bg-blue-100 transition-colors"
