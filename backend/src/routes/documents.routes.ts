@@ -771,6 +771,7 @@ router.post(
                     embeddingCount: embeddings.length,
                   });
 
+                  const { EmbeddingService: EmbSvc } = await import('../services/embedding.service');
                   const vectorIds = await PineconeService.upsertVectors(
                     documentId,
                     createdChunks.map(chunk => ({
@@ -780,7 +781,9 @@ router.post(
                     })),
                     embeddings,
                     userId,
-                    document?.topic_id || undefined
+                    document?.topic_id || undefined,
+                    undefined,
+                    EmbSvc.getCurrentModel()
                   );
 
                   logger.info('Vectors stored in Pinecone successfully', {
@@ -881,6 +884,7 @@ router.post(
           
           // Step 2: Store embeddings in Pinecone
           try {
+            const { EmbeddingService: EmbSvcReproc } = await import('../services/embedding.service');
             const vectorIds = await PineconeService.upsertVectors(
               documentId,
               createdChunks.map(chunk => ({
@@ -890,7 +894,9 @@ router.post(
               })),
               embeddings,
               userId,
-              document?.topic_id || undefined
+              document?.topic_id || undefined,
+              undefined,
+              EmbSvcReproc.getCurrentModel()
             );
 
             logger.info('Vectors stored in Pinecone', {

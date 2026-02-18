@@ -409,7 +409,8 @@ export class RetrievalOrchestratorService {
             topicId: options.topicId,
             documentIds: options.documentIds,
             minScore: RetrievalConfig.broadAnalysisMinScore,
-            embeddingModel,
+            // NOTE: Do NOT filter by embeddingModel — vectors stored before this
+            // field was added to metadata would be incorrectly excluded.
           },
           embeddingDimensions
         ).catch(() => []);
@@ -462,7 +463,8 @@ export class RetrievalOrchestratorService {
               topicId: options.topicId,
               documentIds: options.documentIds,
               minScore,
-              embeddingModel,
+              // NOTE: Do NOT filter by embeddingModel — vectors stored before this
+              // field was added to metadata would be incorrectly excluded.
             },
             embeddingDimensions
           ),
@@ -499,7 +501,7 @@ export class RetrievalOrchestratorService {
               topicId: options.topicId,
               documentIds: options.documentIds,
               minScore,
-              embeddingModel,
+              // NOTE: Do NOT filter by embeddingModel
             },
             embeddingDimensions
           ),

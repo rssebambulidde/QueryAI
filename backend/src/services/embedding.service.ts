@@ -1012,7 +1012,8 @@ export class EmbeddingService {
         embeddings,
         userId,
         topicId,
-        embeddingDimensions
+        embeddingDimensions,
+        this.getCurrentModel()
       );
 
       logger.info('Vectors stored in Pinecone', {
