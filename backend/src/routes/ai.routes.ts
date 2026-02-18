@@ -87,7 +87,7 @@ router.post(
       topicId: topicId,
       documentIds: documentIds,
       maxDocumentChunks: maxDocumentChunks ?? 5,
-      minScore: minScore ?? 0.5,
+      minScore: minScore, // Keep as undefined when not provided — lets adaptive threshold run
       // Conversation management
       conversationId: conversationId,
     };
@@ -241,7 +241,7 @@ router.post(
       topicId: topicId,
       documentIds: documentIds,
       maxDocumentChunks: maxDocumentChunks ?? 5,
-      minScore: minScore ?? 0.5,
+      minScore: minScore, // Keep as undefined when not provided — lets adaptive threshold run
       // Conversation management
       conversationId: conversationId,
     };
@@ -362,13 +362,17 @@ router.post(
           const { RAGService } = await import('../services/rag.service');
           const ragOptions: any = {
             userId,
-            topicId: request.topicId,
+            // When specific documentIds are provided (e.g. docs-only mode), omit topicId
+            // so it doesn't double-filter vectors that may lack topicId metadata.
+            topicId: (request.documentIds && request.documentIds.length > 0) ? undefined : request.topicId,
             documentIds: request.documentIds,
             enableDocumentSearch: request.enableDocumentSearch !== false,
             enableWebSearch: request.enableWebSearch !== false,
             maxDocumentChunks: request.maxDocumentChunks ?? 5,
             maxWebResults: request.maxSearchResults ?? 5,
-            minScore: request.minScore ?? 0.7,
+            // Leave minScore as undefined when not provided so adaptive threshold runs.
+            // Adaptive threshold dynamically calculates the best score for this query.
+            minScore: request.minScore,
             topic: request.topic,
             timeRange: request.timeRange,
             startDate: request.startDate,
@@ -763,7 +767,7 @@ router.post(
       topicId: topicId,
       documentIds: documentIds,
       maxDocumentChunks: maxDocumentChunks ?? 5,
-      minScore: minScore ?? 0.5,
+      minScore: minScore, // Keep as undefined when not provided — lets adaptive threshold run
       conversationId: conversationId,
     };
 

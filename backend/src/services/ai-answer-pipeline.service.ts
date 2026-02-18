@@ -410,13 +410,16 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         try {
           const ragOptions: RAGOptions = {
             userId,
-            topicId: request.topicId,
+            // When specific documentIds are provided, omit topicId to avoid filtering out
+            // vectors that don't have topicId metadata (documents not assigned to a topic).
+            topicId: (request.documentIds && request.documentIds.length > 0) ? undefined : request.topicId,
             documentIds: request.documentIds,
             enableDocumentSearch: request.enableDocumentSearch !== false,
             enableWebSearch: request.enableWebSearch !== false,
             maxDocumentChunks: request.maxDocumentChunks ?? 5,
             maxWebResults: request.maxSearchResults ?? 5,
-            minScore: request.minScore ?? 0.7,
+            // Leave minScore as undefined when not provided — lets adaptive threshold run.
+            minScore: request.minScore,
             topic: request.topic,
             timeRange: request.timeRange,
             startDate: request.startDate,
@@ -1327,13 +1330,16 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         try {
           const ragOptions: RAGOptions = {
             userId,
-            topicId: request.topicId,
+            // When specific documentIds are provided, omit topicId to avoid filtering out
+            // vectors that don't have topicId metadata (documents not assigned to a topic).
+            topicId: (request.documentIds && request.documentIds.length > 0) ? undefined : request.topicId,
             documentIds: request.documentIds,
             enableDocumentSearch: request.enableDocumentSearch !== false,
             enableWebSearch: request.enableWebSearch !== false,
             maxDocumentChunks: request.maxDocumentChunks ?? 5,
             maxWebResults: request.maxSearchResults ?? 5,
-            minScore: request.minScore ?? 0.7,
+            // Leave minScore as undefined when not provided — lets adaptive threshold run.
+            minScore: request.minScore,
             topic: request.topic,
             timeRange: request.timeRange,
             startDate: request.startDate,
