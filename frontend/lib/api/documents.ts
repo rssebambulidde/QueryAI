@@ -10,7 +10,8 @@ export const documentApi = {
     const formData = new FormData();
     formData.append('file', file);
     if (topicId) formData.append('topicId', topicId);
-    const response = await apiClient.post('/api/documents/upload', formData, {
+    // Auto-extract text and auto-embed for RAG search
+    const response = await apiClient.post('/api/documents/upload?autoExtract=true&autoEmbed=true', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
