@@ -192,6 +192,12 @@ export interface ChatInputAreaProps {
   uploadStatus?: UploadStatus | null;
   /** Dismiss upload status display */
   onDismissUpload?: () => void;
+  /** Callback when user selects a file for upload */
+  onFileSelect?: (file: File) => void;
+  /** Cancel current upload */
+  onCancelUpload?: () => void;
+  /** Retry failed upload */
+  onRetryUpload?: () => void;
   /** Whether to show the "Send to queue" option */
   showQueueOption?: boolean;
   /** Callback to send a message via queue */

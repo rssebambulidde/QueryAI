@@ -99,10 +99,11 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   const [dynamicStarters, setDynamicStarters] = useState<string[] | null>(null);
   const [documentInfo, setDocumentInfo] = useState<{ totalCount: number; processedCount: number; processingCount: number }>({ totalCount: 0, processedCount: 0, processingCount: 0 });
   const [inlineUploadStatus, setInlineUploadStatus] = useState<UploadStatus | null>(null);
+  const [lastUploadFile, setLastUploadFile] = useState<File | null>(null);
 
   // ── Document drag-and-drop upload ──────────────────────────────────────
 
-  const { uploadFile } = useDocumentUpload({
+  const { uploadFile, cancelUpload } = useDocumentUpload({
     topicId: selectedTopic?.id,
     onProgress: (progress) => {
       setInlineUploadStatus((prev) => prev ? { ...prev, progress } : { fileName: '', progress, status: 'uploading' });
@@ -131,8 +132,42 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   const handleFilesDrop = async (files: File[]) => {
     for (const file of files) {
       setInlineUploadStatus({ fileName: file.name, progress: 0, status: 'uploading' });
+      setLastUploadFile(file);
       try {
         await uploadFile(file);
+      } catch {
+        // Error handled by onError callback
+      }
+    }
+  };
+
+  // Handle file selection from ChatInput
+  const handleFileSelect = async (file: File) => {
+    setInlineUploadStatus({ fileName: file.name, progress: 0, status: 'uploading' });
+    setLastUploadFile(file);
+    try {
+      await uploadFile(file);
+    } catch {
+      // Error handled by onError callback
+    }
+  };
+
+  // Cancel current upload
+  const handleCancelUpload = () => {
+    if (inlineUploadStatus?.status === 'uploading') {
+      // Cancel via abort (hook will handle cleanup)
+      cancelUpload('inline-upload');
+      setInlineUploadStatus(null);
+      setLastUploadFile(null);
+    }
+  };
+
+  // Retry failed upload
+  const handleRetryUpload = async () => {
+    if (lastUploadFile && inlineUploadStatus?.status === 'error') {
+      setInlineUploadStatus({ fileName: lastUploadFile.name, progress: 0, status: 'uploading' });
+      try {
+        await uploadFile(lastUploadFile);
       } catch {
         // Error handled by onError callback
       }
@@ -615,7 +650,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           documentInfo={documentInfo}
           onFilesDrop={handleFilesDrop}
           uploadStatus={inlineUploadStatus}
-          onDismissUpload={() => setInlineUploadStatus(null)}
+          onDismissUpload={() => { setInlineUploadStatus(null); setLastUploadFile(null); }}
+          onFileSelect={handleFileSelect}
+          onCancelUpload={handleCancelUpload}
+          onRetryUpload={handleRetryUpload}
           showQueueOption={documentInfo.processedCount >= 20 || !!selectedTopic}
           onSendToQueue={handleQueueSend}
           activeQueueJobId={activeQueueJobId}
@@ -678,7 +716,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             documentInfo={documentInfo}
             onFilesDrop={handleFilesDrop}
             uploadStatus={inlineUploadStatus}
-            onDismissUpload={() => setInlineUploadStatus(null)}
+            onDismissUpload={() => { setInlineUploadStatus(null); setLastUploadFile(null); }}
+            onFileSelect={handleFileSelect}
+            onCancelUpload={handleCancelUpload}
+            onRetryUpload={handleRetryUpload}
             showQueueOption={documentInfo.processedCount >= 20 || !!selectedTopic}
             onSendToQueue={handleQueueSend}
             activeQueueJobId={activeQueueJobId}
