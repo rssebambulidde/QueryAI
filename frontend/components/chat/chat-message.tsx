@@ -11,6 +11,7 @@ import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
 import { EnhancedContentProcessor } from './enhanced-content-processor';
 import { AIActionButtons } from './ai-action-buttons';
+import { SourceBreakdown } from './source-breakdown';
 import { Source, aiApi } from '@/lib/api';
 import { exportToPdf } from '@/lib/export-pdf';
 import { ResponseTimeIndicator } from '@/components/health/response-time-indicator';
@@ -328,6 +329,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               </>
             )}
           </div>
+
+          {/* Source type breakdown (documents vs web) */}
+          {!isUser && !isStreaming && !message.isStreaming && hasSources && (
+            <SourceBreakdown sources={message.sources || []} className="mt-3" />
+          )}
 
           {/* Timestamp, Response Time, and Actions */}
           <div className="flex items-center justify-between mt-2 flex-wrap gap-2">

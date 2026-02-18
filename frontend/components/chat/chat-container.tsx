@@ -98,6 +98,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   
   const [dynamicStarters, setDynamicStarters] = useState<string[] | null>(null);
   const [documentInfo, setDocumentInfo] = useState<{ totalCount: number; processedCount: number; processingCount: number }>({ totalCount: 0, processedCount: 0, processingCount: 0 });
+  const [documents, setDocuments] = useState<import('@/lib/api').DocumentItem[]>([]);
   const [inlineUploadStatus, setInlineUploadStatus] = useState<UploadStatus | null>(null);
   const [lastUploadFile, setLastUploadFile] = useState<File | null>(null);
 
@@ -375,6 +376,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           const processed = docs.filter((d) => d.status === 'processed' || d.status === 'embedded');
           const processing = docs.filter((d) => d.status === 'processing' || d.status === 'embedding' || d.status === 'extracted');
           setDocumentInfo({ totalCount: docs.length, processedCount: processed.length, processingCount: processing.length });
+          setDocuments(docs);
         }
       } catch (err) { console.error('Failed to load document info:', err); }
     };
@@ -679,6 +681,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           onSendToQueue={handleQueueSend}
           activeQueueJobId={activeQueueJobId}
           onCancelQueueJob={handleCancelQueueJob}
+          ragSettings={ragSettings}
+          onRagSettingsChange={setRagSettings}
+          documents={documents}
         />
       )}
 
@@ -745,8 +750,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             showQueueOption={documentInfo.processedCount >= 20 || !!selectedTopic}
             onSendToQueue={handleQueueSend}
             activeQueueJobId={activeQueueJobId}
-            onCancelQueueJob={handleCancelQueueJob}
-          />
+            onCancelQueueJob={handleCancelQueueJob}          ragSettings={ragSettings}
+          onRagSettingsChange={setRagSettings}
+          documents={documents}          />
         </>
       )}
 

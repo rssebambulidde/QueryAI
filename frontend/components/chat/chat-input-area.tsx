@@ -3,7 +3,10 @@
 import React from 'react';
 import { ChatInput } from './chat-input';
 import { ResearchModeBar } from './research-mode-bar';
-import { MessageSquare, FileText, Loader2 } from 'lucide-react';
+import { ProcessingStatusBadge } from './processing-status-badge';
+import { DocsOnlyToggle } from './docs-only-toggle';
+import { DocumentQuickSelect } from './document-quick-select';
+import { MessageSquare } from 'lucide-react';
 import type { ChatInputAreaProps } from './chat-types';
 import { cn } from '@/lib/utils';
 
@@ -38,12 +41,35 @@ export const ChatInputArea: React.FC<
   onSendToQueue,
   activeQueueJobId,
   onCancelQueueJob,
+  ragSettings,
+  onRagSettingsChange,
+  documents,
 }) => {
-  const docStatus = documentInfo && documentInfo.processedCount > 0
-    ? `Searching across ${documentInfo.processedCount} document${documentInfo.processedCount !== 1 ? 's' : ''}`
-    : documentInfo && documentInfo.totalCount > 0
-      ? 'Documents processing...'
-      : null;
+  const processedDocs = (documents || []).filter(
+    (d) => d.status === 'processed' || d.status === 'embedded'
+  );
+  const docsOnly = ragSettings?.enableDocumentSearch === true && ragSettings?.enableWebSearch === false;
+
+  const handleDocsOnlyToggle = (newDocsOnly: boolean) => {
+    if (onRagSettingsChange && ragSettings) {
+      onRagSettingsChange({
+        ...ragSettings,
+        enableDocumentSearch: true,
+        enableWebSearch: !newDocsOnly,
+      });
+    }
+  };
+
+  const handleDocumentSelectionChange = (ids: string[]) => {
+    if (onRagSettingsChange && ragSettings) {
+      onRagSettingsChange({
+        ...ragSettings,
+        enableDocumentSearch: true,
+        documentIds: ids.length > 0 ? ids : undefined,
+      });
+    }
+  };
+
   // ── Empty-state variant ──────────────────────────────────────────────────
   if (variant === 'empty') {
     return (
@@ -60,20 +86,37 @@ export const ChatInputArea: React.FC<
             <p className="text-gray-500">
               I can search your documents and the web to provide comprehensive answers with sources.
             </p>
-            {docStatus && (
-              <div className="mt-2 inline-flex items-center gap-1.5 text-xs text-gray-400">
-                {documentInfo!.processingCount > 0 ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <FileText className="w-3 h-3" />
-                )}
-                {selectedTopic ? `Topic: ${selectedTopic.name} \u2014 ${docStatus}` : docStatus}
-                {documentInfo!.processingCount > 0 && (
-                  <span className="text-amber-500">({documentInfo!.processingCount} processing)</span>
+            {documentInfo && documentInfo.totalCount > 0 && (
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <ProcessingStatusBadge
+                  totalCount={documentInfo.totalCount}
+                  processedCount={documentInfo.processedCount}
+                  processingCount={documentInfo.processingCount}
+                />
+                {selectedTopic && (
+                  <span className="text-xs text-gray-400">
+                    in {selectedTopic.name}
+                  </span>
                 )}
               </div>
             )}
           </div>
+
+          {/* Docs-only toggle + document picker (empty state) */}
+          {processedDocs.length > 0 && (
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <DocsOnlyToggle
+                docsOnly={docsOnly}
+                onToggle={handleDocsOnlyToggle}
+                processedCount={processedDocs.length}
+              />
+              <DocumentQuickSelect
+                documents={processedDocs}
+                selectedIds={ragSettings?.documentIds || []}
+                onSelectionChange={handleDocumentSelectionChange}
+              />
+            </div>
+          )}
 
           {/* Research-mode starters (centred) */}
           <ResearchModeBar
@@ -111,18 +154,35 @@ export const ChatInputArea: React.FC<
   return (
     <div className="bg-white border-t border-gray-200 shadow-lg relative flex justify-center">
       <div className="w-full max-w-3xl mx-auto px-4 pb-4">
-        {/* Document status */}
-        {docStatus && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-400 px-4 pt-2 pb-1">
-            {documentInfo!.processingCount > 0 ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <FileText className="w-3 h-3" />
+        {/* Document processing status */}
+        {documentInfo && documentInfo.totalCount > 0 && (
+          <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+            <ProcessingStatusBadge
+              totalCount={documentInfo.totalCount}
+              processedCount={documentInfo.processedCount}
+              processingCount={documentInfo.processingCount}
+            />
+            {selectedTopic && (
+              <span className="text-xs text-gray-400">
+                in {selectedTopic.name}
+              </span>
             )}
-            {selectedTopic ? `Topic: ${selectedTopic.name} \u2014 ${docStatus}` : docStatus}
-            {documentInfo!.processingCount > 0 && (
-              <span className="text-amber-500">({documentInfo!.processingCount} processing)</span>
-            )}
+          </div>
+        )}
+
+        {/* Docs-only toggle + document picker (conversation mode) */}
+        {processedDocs.length > 0 && (
+          <div className="flex items-center gap-2 px-4 pt-1 pb-1">
+            <DocsOnlyToggle
+              docsOnly={docsOnly}
+              onToggle={handleDocsOnlyToggle}
+              processedCount={processedDocs.length}
+            />
+            <DocumentQuickSelect
+              documents={processedDocs}
+              selectedIds={ragSettings?.documentIds || []}
+              onSelectionChange={handleDocumentSelectionChange}
+            />
           </div>
         )}
 

@@ -6,12 +6,13 @@
  * a single location without circular dependencies.
  */
 
-import type { Source, QuestionResponse, Topic } from '@/lib/api';
+import type { Source, QuestionResponse, Topic, DocumentItem } from '@/lib/api';
 import type { Message } from './chat-message';
 import type { StreamingState } from './streaming-controls';
 import type { QueryExpansionSettings } from '@/components/advanced/query-expansion-display';
 import type { RerankingSettings } from '@/components/advanced/reranking-controls';
 import type { UnifiedFilters } from './unified-filter-panel';
+import type { RAGSettings } from './rag-source-selector';
 
 // ─── Shared regex / helpers ──────────────────────────────────────────────────
 
@@ -212,6 +213,12 @@ export interface ChatInputAreaProps {
   activeQueueJobId?: string | null;
   /** Cancel active queue job */
   onCancelQueueJob?: () => void;
+  /** RAG settings for docs-only toggle and document selection */
+  ragSettings?: RAGSettings;
+  /** Callback to update RAG settings */
+  onRagSettingsChange?: (settings: RAGSettings) => void;
+  /** Available documents for quick-select picker */
+  documents?: DocumentItem[];
 }
 
 export interface SourcesSidebarProps {
