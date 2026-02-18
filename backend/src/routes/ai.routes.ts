@@ -352,9 +352,10 @@ router.post(
         }
       }
 
-      // Retrieve RAG context first to get sources
+      // Retrieve RAG context first to get sources and avoid double retrieval
       let sources: any[] | undefined = undefined;
       let ragContext: any = null;
+      let formattedRagContext: string | undefined = undefined;
       
       if (userId) {
         try {
@@ -367,7 +368,7 @@ router.post(
             enableWebSearch: request.enableWebSearch !== false,
             maxDocumentChunks: request.maxDocumentChunks ?? 5,
             maxWebResults: request.maxSearchResults ?? 5,
-            minScore: request.minScore ?? 0.5,
+            minScore: request.minScore ?? 0.7,
             topic: request.topic,
             timeRange: request.timeRange,
             startDate: request.startDate,
@@ -381,11 +382,36 @@ router.post(
           
           ragContext = await RAGService.retrieveContext(request.question, ragOptions);
           sources = RAGService.extractSources(ragContext);
+          
+          // Pre-format context to pass to stream generator (avoids double RAG retrieval)
+          formattedRagContext = await RAGService.formatContextForPrompt(ragContext, {
+            enableRelevanceOrdering: true,
+            enableContextSummarization: true,
+            enableContextCompression: true,
+            enableSourcePrioritization: true,
+            enableTokenBudgeting: true,
+            tokenBudgetOptions: { model: request.model || 'gpt-3.5-turbo' },
+            query: request.question,
+            model: request.model || 'gpt-3.5-turbo',
+            userId: userId,
+          });
         } catch (ragError: any) {
           logger.warn('Failed to retrieve RAG context for sources in streaming', {
             error: ragError.message,
           });
         }
+      }
+      
+      // Pass pre-retrieved RAG context to avoid double retrieval in stream generator
+      if (formattedRagContext) {
+        request._preRetrievedRagContext = formattedRagContext;
+      }
+      
+      // Send sources early via SSE so frontend can display them while streaming
+      if (sources && sources.length > 0) {
+        res.write(`data: ${JSON.stringify({ sources })}
+
+`);
       }
       
       // Stream the response and collect full answer

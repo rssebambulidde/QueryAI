@@ -133,6 +133,31 @@ export class ChunkService {
   }
 
   /**
+   * Get chunk IDs for a document (used for Pinecone vector deletion)
+   */
+  static async getChunkIdsByDocument(documentId: string): Promise<string[]> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('document_chunks')
+        .select('id')
+        .eq('document_id', documentId);
+
+      if (error) {
+        logger.error('Failed to get chunk IDs', {
+          error: error.message,
+          documentId,
+        });
+        return [];
+      }
+
+      return (data || []).map((chunk: { id: string }) => chunk.id);
+    } catch (error: any) {
+      logger.error('Unexpected error getting chunk IDs', { error: error.message });
+      return [];
+    }
+  }
+
+  /**
    * Delete all chunks for a document
    */
   static async deleteChunksByDocument(documentId: string): Promise<void> {

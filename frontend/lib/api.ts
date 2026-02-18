@@ -450,7 +450,7 @@ export const aiApi = {
       maxRetries?: number;
       retryDelay?: number;
     }
-  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number }, void, unknown> {
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[] }, void, unknown> {
     const maxRetries = options?.maxRetries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000;
     let retryCount = 0;
@@ -509,6 +509,9 @@ export const aiApi = {
               if (line.startsWith('data: ')) {
                 try {
                   const data = JSON.parse(line.slice(6));
+                  if (data.sources) {
+                    yield { sources: data.sources };
+                  }
                   if (data.chunk) {
                     yield data.chunk;
                   }

@@ -743,8 +743,9 @@ router.post(
             .then(async ({ chunks, embeddings, metadata }) => {
               // Delete existing chunks and vectors before creating new ones
               try {
-                // Delete existing Pinecone vectors
-                await PineconeService.deleteDocumentVectors(documentId);
+                // Fetch chunk IDs for reliable Pinecone vector deletion
+                const existingChunkIds = await ChunkService.getChunkIdsByDocument(documentId);
+                await PineconeService.deleteDocumentVectors(documentId, existingChunkIds.length > 0 ? existingChunkIds : undefined);
                 await ChunkService.deleteChunksByDocument(documentId);
               } catch (error: any) {
                 logger.warn('No existing chunks to delete or error deleting', { documentId, error: error.message });
@@ -867,8 +868,9 @@ router.post(
         .then(async ({ chunks, embeddings, metadata }) => {
           // Delete existing chunks and vectors before creating new ones
           try {
-            // Delete existing Pinecone vectors
-            await PineconeService.deleteDocumentVectors(documentId);
+            // Fetch chunk IDs for reliable Pinecone vector deletion
+            const existingChunkIds = await ChunkService.getChunkIdsByDocument(documentId);
+            await PineconeService.deleteDocumentVectors(documentId, existingChunkIds.length > 0 ? existingChunkIds : undefined);
             await ChunkService.deleteChunksByDocument(documentId);
           } catch (error: any) {
             logger.warn('No existing chunks to delete or error deleting', { documentId, error: error.message });
@@ -1441,7 +1443,9 @@ router.delete(
 
         // Delete chunks and Pinecone vectors first (if they exist)
         try {
-          await PineconeService.deleteDocumentVectors(id);
+          // Fetch chunk IDs before deletion for reliable Pinecone vector removal
+          const chunkIds = await ChunkService.getChunkIdsByDocument(id);
+          await PineconeService.deleteDocumentVectors(id, chunkIds.length > 0 ? chunkIds : undefined);
           await ChunkService.deleteChunksByDocument(id);
         } catch (chunkError: any) {
           // If chunks don't exist, that's okay - just log and continue
@@ -1502,7 +1506,9 @@ router.delete(
       if (document) {
         // Delete chunks and Pinecone vectors first (if they exist)
         try {
-          await PineconeService.deleteDocumentVectors(document.id);
+          // Fetch chunk IDs before deletion for reliable Pinecone vector removal
+          const chunkIds = await ChunkService.getChunkIdsByDocument(document.id);
+          await PineconeService.deleteDocumentVectors(document.id, chunkIds.length > 0 ? chunkIds : undefined);
           await ChunkService.deleteChunksByDocument(document.id);
         } catch (chunkError: any) {
           logger.warn('No chunks to delete', { documentId: document.id, error: chunkError.message });

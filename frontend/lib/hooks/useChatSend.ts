@@ -247,6 +247,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           let followUpQuestions: string[] | undefined;
           let isRefusal = false;
           let qualityScore: number | undefined;
+          let streamSources: Source[] | undefined;
 
           const handleStreamError = (streamErr: Error) => {
             console.error('Stream error:', streamErr);
@@ -273,6 +274,15 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
               setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
             }
 
+            if (typeof chunk === 'object' && 'sources' in chunk) {
+              streamSources = (chunk as { sources?: Source[] }).sources;
+              // Update assistant message with sources immediately
+              if (streamSources) {
+                assistantMessage = { ...assistantMessage, sources: streamSources };
+                setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+              }
+              continue;
+            }
             if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
               followUpQuestions = chunk.followUpQuestions;
               if ((chunk as { refusal?: boolean }).refusal) isRefusal = true;
@@ -305,7 +315,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
             }
           }
 
-          assistantMessage = { ...assistantMessage, followUpQuestions, isStreaming: false, isRefusal: isRefusal || undefined, qualityScore };
+          assistantMessage = { ...assistantMessage, followUpQuestions, isStreaming: false, isRefusal: isRefusal || undefined, qualityScore, sources: streamSources || assistantMessage.sources };
           setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
 
           setIsStreaming(false);

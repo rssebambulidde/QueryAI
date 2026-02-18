@@ -1313,10 +1313,17 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         }
       }
 
-      // Retrieve RAG context
+      // Retrieve RAG context (or use pre-retrieved context from streaming route)
       let ragContext: string | undefined;
 
-      if (userId) {
+      // Use pre-retrieved context if available (avoids double RAG retrieval in streaming)
+      if (request._preRetrievedRagContext) {
+        ragContext = request._preRetrievedRagContext;
+        logger.info('Using pre-retrieved RAG context for streaming', {
+          userId,
+          contextLength: ragContext.length,
+        });
+      } else if (userId) {
         try {
           const ragOptions: RAGOptions = {
             userId,

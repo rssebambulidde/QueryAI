@@ -102,6 +102,8 @@ export interface QuestionRequest {
   enableCitationParsing?: boolean;
   citationParseOptions?: import('./citation-parser.service').CitationParseOptions;
   conversationId?: string;
+  /** Pre-retrieved RAG context (used by streaming route to avoid double retrieval) */
+  _preRetrievedRagContext?: string;
 }
 
 export interface Source {
