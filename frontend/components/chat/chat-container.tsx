@@ -174,6 +174,26 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     }
   };
 
+  // Handle multiple files selection
+  const handleFilesSelect = async (files: File[]) => {
+    // Upload files sequentially (first one shows progress)
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setInlineUploadStatus({ 
+        fileName: file.name + (files.length > 1 ? ` (${i + 1}/${files.length})` : ''), 
+        progress: 0, 
+        status: 'uploading' 
+      });
+      setLastUploadFile(file);
+      try {
+        await uploadFile(file);
+      } catch {
+        // Error handled by onError callback
+        break; // Stop on first error
+      }
+    }
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Send / streaming hook
   // ═══════════════════════════════════════════════════════════════════════════
@@ -652,6 +672,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           uploadStatus={inlineUploadStatus}
           onDismissUpload={() => { setInlineUploadStatus(null); setLastUploadFile(null); }}
           onFileSelect={handleFileSelect}
+          onFilesSelect={handleFilesSelect}
           onCancelUpload={handleCancelUpload}
           onRetryUpload={handleRetryUpload}
           showQueueOption={documentInfo.processedCount >= 20 || !!selectedTopic}
@@ -718,6 +739,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             uploadStatus={inlineUploadStatus}
             onDismissUpload={() => { setInlineUploadStatus(null); setLastUploadFile(null); }}
             onFileSelect={handleFileSelect}
+            onFilesSelect={handleFilesSelect}
             onCancelUpload={handleCancelUpload}
             onRetryUpload={handleRetryUpload}
             showQueueOption={documentInfo.processedCount >= 20 || !!selectedTopic}

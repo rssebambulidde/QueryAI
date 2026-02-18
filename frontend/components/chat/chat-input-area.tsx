@@ -31,6 +31,7 @@ export const ChatInputArea: React.FC<
   uploadStatus,
   onDismissUpload,
   onFileSelect,
+  onFilesSelect,
   onCancelUpload,
   onRetryUpload,
   showQueueOption,
@@ -95,6 +96,7 @@ export const ChatInputArea: React.FC<
             activeQueueJobId={activeQueueJobId}
             onCancelQueueJob={onCancelQueueJob}
             onFileSelect={onFileSelect}
+            onFilesSelect={onFilesSelect}
             uploadStatus={uploadStatus}
             onCancelUpload={onCancelUpload}
             onRetryUpload={onRetryUpload}
@@ -143,6 +145,7 @@ export const ChatInputArea: React.FC<
           activeQueueJobId={activeQueueJobId}
           onCancelQueueJob={onCancelQueueJob}
           onFileSelect={onFileSelect}
+          onFilesSelect={onFilesSelect}
           uploadStatus={uploadStatus}
           onCancelUpload={onCancelUpload}
           onRetryUpload={onRetryUpload}

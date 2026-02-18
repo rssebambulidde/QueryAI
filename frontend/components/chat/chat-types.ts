@@ -172,6 +172,10 @@ export interface UploadStatus {
   progress: number;
   status: 'uploading' | 'processing' | 'completed' | 'error';
   error?: string;
+  /** Estimated time remaining in seconds */
+  eta?: number;
+  /** Upload speed in bytes per second */
+  speed?: number;
 }
 
 export interface ChatInputAreaProps {
@@ -194,6 +198,8 @@ export interface ChatInputAreaProps {
   onDismissUpload?: () => void;
   /** Callback when user selects a file for upload */
   onFileSelect?: (file: File) => void;
+  /** Callback when user selects multiple files for upload */
+  onFilesSelect?: (files: File[]) => void;
   /** Cancel current upload */
   onCancelUpload?: () => void;
   /** Retry failed upload */
