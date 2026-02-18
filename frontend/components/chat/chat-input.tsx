@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, KeyboardEvent, useRef } from 'react';
+import React, { useState, KeyboardEvent, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Plus, Square, Loader2, X, RefreshCw } from 'lucide-react';
+import { Send, Plus, Square, Loader2, X, RefreshCw, Paperclip } from 'lucide-react';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
@@ -78,7 +78,27 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const { isMobile } = useMobile();
   const [message, setMessage] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [showUploadMenu, setShowUploadMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const plusButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        showUploadMenu &&
+        menuRef.current &&
+        !menuRef.current.contains(e.target as Node) &&
+        plusButtonRef.current &&
+        !plusButtonRef.current.contains(e.target as Node)
+      ) {
+        setShowUploadMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showUploadMenu]);
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
@@ -95,6 +115,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handlePlusClick = () => {
+    setShowUploadMenu((prev) => !prev);
+  };
+
+  const handleAddFilesClick = () => {
+    setShowUploadMenu(false);
     if (fileInputRef.current) fileInputRef.current.click();
   };
 
@@ -133,10 +158,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const isUploadComplete = uploadStatus?.status === 'completed';
 
   return (
-    <div className="relative py-3">
+    <div className="relative py-3 px-4">
       {/* Validation error banner */}
       {validationError && (
-        <div className="mb-2 mx-4 flex items-center justify-between gap-2 px-3 py-2 bg-red-50 rounded-lg border border-red-200 text-xs">
+        <div className="mb-2 flex items-center justify-between gap-2 px-3 py-2 bg-red-50 rounded-lg border border-red-200 text-xs">
           <span className="text-red-700">{validationError}</span>
           <button
             type="button"
@@ -151,7 +176,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
       {/* Upload status banner */}
       {uploadStatus && (
-        <div className="mb-2 mx-4 flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 text-xs">
+        <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 text-xs">
           <span className="font-medium text-gray-700 truncate max-w-[150px]">{uploadStatus.fileName}</span>
 
           {isUploading && (
@@ -221,36 +246,58 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      <div className="flex items-center gap-2 pl-1 pr-4">
-        {/* Plus button for upload - positioned at extreme left */}
-        <button
-          type="button"
-          className={cn(
-            'w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-colors',
-            isUploading ? 'cursor-not-allowed' : 'hover:bg-gray-100'
-          )}
-          aria-label="Upload document"
-          tabIndex={0}
-          onClick={handlePlusClick}
-          disabled={isUploading}
-        >
-          {isUploading ? (
-            <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
-          ) : (
-            <Plus className="w-5 h-5 text-gray-400" />
-          )}
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.txt,.csv,.docx,.doc,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
-          style={{ display: 'none' }}
-          onChange={handleFileChange}
-          disabled={isUploading}
-        />
+      <div className="flex items-center gap-2">
+        {/* Input container with + button inside */}
+        <div className="flex-1 relative flex items-center border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-transparent">
+          {/* Plus button inside input */}
+          <div className="relative">
+            <button
+              ref={plusButtonRef}
+              type="button"
+              className={cn(
+                'w-9 h-9 ml-1 flex-shrink-0 flex items-center justify-center rounded-full transition-colors',
+                isUploading ? 'cursor-not-allowed' : 'hover:bg-gray-100'
+              )}
+              aria-label="Upload document"
+              tabIndex={0}
+              onClick={handlePlusClick}
+              disabled={isUploading}
+            >
+              {isUploading ? (
+                <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
+              ) : (
+                <Plus className="w-5 h-5 text-gray-400" />
+              )}
+            </button>
 
-        {/* Input */}
-        <div className="flex-1 relative">
+            {/* Upward popup menu */}
+            {showUploadMenu && (
+              <div
+                ref={menuRef}
+                className="absolute bottom-full left-0 mb-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 min-w-[200px] z-50"
+              >
+                <button
+                  type="button"
+                  onClick={handleAddFilesClick}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Paperclip className="w-5 h-5 text-gray-400" />
+                  <span className="text-sm font-medium">Add files</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.txt,.csv,.docx,.doc,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+            disabled={isUploading}
+          />
+
+          {/* Text input */}
           <input
             type="text"
             value={message}
@@ -259,8 +306,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             placeholder={placeholder}
             disabled={disabled}
             className={cn(
-              'w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-400',
-              'border-gray-300'
+              'flex-1 px-3 py-2.5 bg-transparent focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-400',
             )}
             style={{ minHeight: '44px' }}
           />
