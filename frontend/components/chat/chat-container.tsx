@@ -323,9 +323,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   // Load conversation data
   useEffect(() => {
-    // Skip loading if we're mid-stream — useChatSend manages messages during streaming
-    if (isStreaming || isLoading) return;
-
     const loadConversationData = async () => {
       if (currentConversationId) {
         setSourcePanelContext(null);
@@ -371,7 +368,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     };
     loadConversationData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentConversationId, conversationSelectionVersion, setUnifiedFilters, setSelectedTopic, isStreaming, isLoading]);
+  }, [currentConversationId, conversationSelectionVersion, setUnifiedFilters, setSelectedTopic]);
 
   // Persist RAG settings
   useEffect(() => {
