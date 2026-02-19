@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Sparkles, BookOpen } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Sparkles, BookOpen, LayoutGrid } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
 import { useConversationStore } from '@/lib/store/conversation-store';
@@ -53,7 +53,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const router = useRouter();
+  const pathname = usePathname();
   const { user, logout } = useAuthStore();
+  const isWorkspacePage = pathname === '/workspace';
 
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const debouncedCollectionSearchQuery = useDebounce(collectionSearchQuery, 300);
@@ -323,6 +325,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <BookOpen className="w-5 h-5" />
           </button>
+          <button
+            onClick={() => router.push('/workspace')}
+            className={cn(
+              'w-10 h-10 flex items-center justify-center rounded-lg transition-colors',
+              isWorkspacePage ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+            )}
+            title="Research Workspace"
+          >
+            <LayoutGrid className="w-5 h-5" />
+          </button>
           {user?.role === 'super_admin' && (
             <button
               onClick={() => router.push('/dashboard/settings/super-admin')}
@@ -433,6 +445,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <BookOpen className="w-[18px] h-[18px]" />
             My Sources
+          </button>
+          <button
+            onClick={() => router.push('/workspace')}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors',
+              isWorkspacePage
+                ? 'bg-gray-100 text-gray-900'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            )}
+          >
+            <LayoutGrid className="w-[18px] h-[18px]" />
+            Research Workspace
           </button>
           {user?.role === 'super_admin' && (
             <button
