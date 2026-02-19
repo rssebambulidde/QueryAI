@@ -9,6 +9,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { Plus, Edit2, Trash2, X, Save } from 'lucide-react';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { TopicTreeSelector } from '@/components/topics/topic-tree-selector';
 
 interface TopicManagerProps {
   onTopicSelect?: (topic: Topic | null) => void;
@@ -24,6 +25,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
+  const [selectedManagerTopicId, setSelectedManagerTopicId] = useState<string | null>(selectedTopicId ?? null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -31,7 +33,11 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
     description: '',
     suggestedStarters: '',
     strict: true,
+    parentTopicId: null as string | null,
   });
+
+  const effectiveSelectedTopicId = selectedTopicId ?? selectedManagerTopicId;
+  const effectiveSelectedTopic = topics.find((t) => t.id === effectiveSelectedTopicId) || null;
 
   // Load topics
   useEffect(() => {
@@ -67,11 +73,12 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
         scopeConfig: { suggested_starters, strict: formData.strict },
+        parentTopicId: formData.parentTopicId,
       });
 
       if (response.success && response.data) {
         toast.success('Topic created successfully');
-        setFormData({ name: '', description: '', suggestedStarters: '', strict: true });
+        setFormData({ name: '', description: '', suggestedStarters: '', strict: true, parentTopicId: null });
         setShowCreateForm(false);
         loadTopics();
       }
@@ -101,12 +108,13 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
         name: formData.name.trim(),
         description: formData.description.trim() || undefined,
         scopeConfig,
+        parentTopicId: formData.parentTopicId,
       });
 
       if (response.success && response.data) {
         toast.success('Topic updated successfully');
         setEditingTopic(null);
-        setFormData({ name: '', description: '', suggestedStarters: '', strict: true });
+        setFormData({ name: '', description: '', suggestedStarters: '', strict: true, parentTopicId: null });
         loadTopics();
       }
     } catch (error: any) {
@@ -125,6 +133,9 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
         toast.success('Topic deleted successfully');
         loadTopics();
         // If deleted topic was selected, clear selection
+        if (effectiveSelectedTopicId === topic.id) {
+          setSelectedManagerTopicId(null);
+        }
         if (selectedTopicId === topic.id && onTopicSelect) {
           onTopicSelect(null);
         }
@@ -143,11 +154,13 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
       description: topic.description || '',
       suggestedStarters: starters.join('\n'),
       strict: sc.strict !== false,
+      parentTopicId: topic.parent_topic_id || null,
     });
     setShowCreateForm(false);
   };
 
   const handleSelect = (topic: Topic) => {
+    setSelectedManagerTopicId(topic.id);
     if (onTopicSelect) {
       onTopicSelect(topic);
     }
@@ -155,12 +168,12 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
 
   const cancelEdit = () => {
     setEditingTopic(null);
-    setFormData({ name: '', description: '', suggestedStarters: '', strict: true });
+    setFormData({ name: '', description: '', suggestedStarters: '', strict: true, parentTopicId: null });
   };
 
   const cancelCreate = () => {
     setShowCreateForm(false);
-    setFormData({ name: '', description: '', suggestedStarters: '', strict: true });
+    setFormData({ name: '', description: '', suggestedStarters: '', strict: true, parentTopicId: null });
   };
 
   return (
@@ -172,7 +185,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
           onClick={() => {
             setShowCreateForm(true);
             setEditingTopic(null);
-            setFormData({ name: '', description: '', suggestedStarters: '', strict: true });
+            setFormData({ name: '', description: '', suggestedStarters: '', strict: true, parentTopicId: null });
           }}
           size="sm"
           className="flex items-center gap-2"
@@ -235,6 +248,31 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
               rows={2}
               className={cn(isMobile && "min-h-[44px] text-base")}
             />
+            <div>
+              <label className={cn(
+                "text-gray-600",
+                isMobile ? "text-base mb-2 block" : "text-sm"
+              )}>
+                Parent topic (optional)
+              </label>
+              <select
+                value={formData.parentTopicId || ''}
+                onChange={(e) => setFormData({ ...formData, parentTopicId: e.target.value || null })}
+                className={cn(
+                  "w-full mt-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm",
+                  isMobile ? "min-h-[44px] text-base" : ""
+                )}
+              >
+                <option value="">No parent (root topic)</option>
+                {topics
+                  .filter((topic) => !editingTopic || topic.id !== editingTopic.id)
+                  .map((topic) => (
+                    <option key={topic.id} value={topic.id}>
+                      {topic.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
             <label className={cn(
               "flex items-center gap-2 cursor-pointer touch-manipulation",
               isMobile ? "text-base min-h-[44px]" : "text-sm"
@@ -308,47 +346,58 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
           <p className="text-sm mt-2">Topics help scope your AI queries to specific domains.</p>
         </div>
       ) : (
-        <div className={cn(
-          "space-y-2 overflow-y-auto",
-          isMobile ? "max-h-[60vh]" : ""
-        )}>
-          {topics.map((topic) => (
-            <div
-              key={topic.id}
-              className={cn(
-                "flex items-center justify-between rounded-lg border transition-colors touch-manipulation",
-                isMobile ? "p-4 min-h-[60px]" : "p-3",
-                selectedTopicId === topic.id
-                  ? 'bg-orange-50 border-orange-300'
-                  : 'bg-white border-gray-200 hover:border-gray-300'
-              )}
-            >
-              <div
-                className="flex-1 cursor-pointer min-h-[44px] flex items-center"
-                onClick={() => handleSelect(topic)}
-              >
-                <div>
-                  <div className={cn(
-                    "font-medium text-gray-900",
-                    isMobile ? "text-base" : ""
-                  )}>
-                    {topic.name}
-                  </div>
-                  {topic.description && (
-                    <div className={cn(
-                      "text-gray-500 mt-1",
-                      isMobile ? "text-sm" : "text-sm"
-                    )}>
-                      {topic.description}
-                    </div>
-                  )}
-                </div>
+        <div className="space-y-3">
+          <div className={cn(
+            "border border-gray-200 rounded-lg overflow-y-auto",
+            isMobile ? "max-h-[60vh]" : "max-h-[420px]"
+          )}>
+            <TopicTreeSelector
+              topics={topics}
+              selectedTopicId={effectiveSelectedTopicId}
+              onSelect={(topic) => {
+                if (!topic) return;
+                handleSelect(topic);
+              }}
+              onCreateChild={(parentId) => {
+                setShowCreateForm(true);
+                setEditingTopic(null);
+                setFormData({
+                  name: '',
+                  description: '',
+                  suggestedStarters: '',
+                  strict: true,
+                  parentTopicId: parentId,
+                });
+              }}
+              className="p-2"
+              showCreateRoot
+              onCreateRoot={() => {
+                setShowCreateForm(true);
+                setEditingTopic(null);
+                setFormData({
+                  name: '',
+                  description: '',
+                  suggestedStarters: '',
+                  strict: true,
+                  parentTopicId: null,
+                });
+              }}
+            />
+          </div>
+
+          {effectiveSelectedTopic && (
+            <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
+              <div>
+                <div className="font-medium text-gray-900">{effectiveSelectedTopic.name}</div>
+                {effectiveSelectedTopic.description && (
+                  <div className="text-sm text-gray-500 mt-1">{effectiveSelectedTopic.description}</div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleEdit(topic)}
+                  onClick={() => handleEdit(effectiveSelectedTopic)}
                   className={cn(
                     "p-0 touch-manipulation",
                     isMobile ? "h-11 w-11" : "h-8 w-8"
@@ -359,7 +408,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleDelete(topic)}
+                  onClick={() => handleDelete(effectiveSelectedTopic)}
                   className={cn(
                     "p-0 text-red-600 hover:text-red-700 touch-manipulation",
                     isMobile ? "h-11 w-11" : "h-8 w-8"
@@ -369,7 +418,7 @@ export const TopicManager: React.FC<TopicManagerProps> = ({
                 </Button>
               </div>
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>
