@@ -42,7 +42,8 @@ export interface UseChatSendDeps {
   setPreviousCost: (c: { total: number } | null) => void;
 
   // Store actions
-  createConversation: (title?: string, topicId?: string) => Promise<{ id: string }>;
+  createConversation: (title?: string, topicId?: string, options?: { autoSelect?: boolean }) => Promise<{ id: string }>;
+  selectConversation: (id: string | null) => void;
   updateConversationFilters: (id: string, filters: Record<string, any>) => Promise<void>;
   updateConversation: (id: string, title: string) => Promise<void>;
   refreshConversations: () => void;
@@ -88,6 +89,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
     setPreviousTokenUsage,
     setPreviousCost,
     createConversation,
+    selectConversation,
     updateConversationFilters,
     updateConversation,
     refreshConversations,
@@ -172,7 +174,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
       if (!conversationId && !isResend) {
         try {
           const title = generateConversationTitle(content, activeFilters.topic?.name);
-          const newConversation = await createConversation(title, activeFilters.topicId || undefined);
+          const newConversation = await createConversation(title, activeFilters.topicId || undefined, { autoSelect: false });
           conversationId = newConversation.id;
           if (Object.keys(searchFilters).length > 0) {
             try {
@@ -371,7 +373,13 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           });
           responseTimeStartRef.current = null;
 
-          if (conversationId) await reloadPersistedMessages(conversationId);
+          if (conversationId) {
+            await reloadPersistedMessages(conversationId);
+            // Now safe to set the conversation as current (streaming is done, messages are persisted)
+            if (conversationId !== currentConversationId) {
+              selectConversation(conversationId);
+            }
+          }
           refreshConversations();
         } catch (streamError: any) {
           // Clean up rAF on any stream error / abort
@@ -424,7 +432,12 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
             const md = (fallbackResponse.data as any).metadata || {};
             extractResponseMetadata({ ...md, usage: fallbackResponse.data.usage });
 
-            if (conversationId) await reloadPersistedMessages(conversationId);
+            if (conversationId) {
+              await reloadPersistedMessages(conversationId);
+              if (conversationId !== currentConversationId) {
+                selectConversation(conversationId);
+              }
+            }
             refreshConversations();
           } else {
             throw streamError;
@@ -473,7 +486,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
       queryExpansionEnabled, queryExpansionSettings, rerankingEnabled, rerankingSettings,
       setMessages, setIsLoading, setIsStreaming, setStreamingState, setError,
       setUnifiedFilters, setLastResponseData, setPreviousTokenUsage, setPreviousCost,
-      createConversation, updateConversationFilters, updateConversation, refreshConversations, toast,
+      createConversation, selectConversation, updateConversationFilters, updateConversation, refreshConversations, toast,
     ],
   );
 
