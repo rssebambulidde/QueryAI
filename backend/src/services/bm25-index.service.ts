@@ -273,6 +273,7 @@ export class BM25Index {
     options: {
       userId?: string;
       topicId?: string;
+      ancestorTopicIds?: string[];
       documentIds?: string[];
       topK?: number;
       minScore?: number;
@@ -299,9 +300,14 @@ export class BM25Index {
         continue;
       }
       
-      // Filter by topicId: if provided, document must have matching topicId
+      // Filter by topicId: if provided, document must match topicId or an ancestor topic
       if (options.topicId !== undefined) {
-        if (doc.topicId !== options.topicId) {
+        if (options.ancestorTopicIds && options.ancestorTopicIds.length > 0) {
+          const allowedTopics = new Set([options.topicId, ...options.ancestorTopicIds]);
+          if (!doc.topicId || !allowedTopics.has(doc.topicId)) {
+            continue;
+          }
+        } else if (doc.topicId !== options.topicId) {
           continue;
         }
       }
@@ -368,6 +374,80 @@ export class BM25Index {
     
     logger.info('BM25 index cleared');
   }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // Serialization — used by Redis persistence layer
+  // ═════════════════════════════════════════════════════════════════════
+
+  /**
+   * Serialize the entire index to a JSON-safe plain object.
+   * Maps / Sets are converted to arrays so JSON.stringify works.
+   */
+  toJSON(): BM25SerializedIndex {
+    const documents: Array<[string, IndexedDocument]> = [];
+    for (const [k, v] of this.documents) documents.push([k, v]);
+
+    const termDocFreq: Array<[string, string[]]> = [];
+    for (const [term, docSet] of this.termDocumentFrequency) {
+      termDocFreq.push([term, Array.from(docSet)]);
+    }
+
+    const docTermFreq: Array<[string, Array<[string, number]>]> = [];
+    for (const [docId, freqMap] of this.documentTermFrequency) {
+      docTermFreq.push([docId, Array.from(freqMap.entries())]);
+    }
+
+    const docLengths: Array<[string, number]> = Array.from(this.documentLengths.entries());
+
+    return {
+      v: 1, // schema version
+      documents,
+      termDocumentFrequency: termDocFreq,
+      documentTermFrequency: docTermFreq,
+      documentLengths: docLengths,
+      averageDocumentLength: this.averageDocumentLength,
+      totalDocuments: this.totalDocuments,
+    };
+  }
+
+  /**
+   * Restore index state from a previously-serialized object.
+   * Replaces all current data.
+   */
+  fromJSON(data: BM25SerializedIndex): void {
+    if (!data || data.v !== 1) {
+      throw new Error('Incompatible BM25 index version');
+    }
+
+    this.documents = new Map(data.documents);
+
+    this.termDocumentFrequency = new Map();
+    for (const [term, docIds] of data.termDocumentFrequency) {
+      this.termDocumentFrequency.set(term, new Set(docIds));
+    }
+
+    this.documentTermFrequency = new Map();
+    for (const [docId, entries] of data.documentTermFrequency) {
+      this.documentTermFrequency.set(docId, new Map(entries));
+    }
+
+    this.documentLengths = new Map(data.documentLengths);
+    this.averageDocumentLength = data.averageDocumentLength;
+    this.totalDocuments = data.totalDocuments;
+  }
+}
+
+/**
+ * Schema for the serialized BM25 index (version 1).
+ */
+export interface BM25SerializedIndex {
+  v: number;
+  documents: Array<[string, IndexedDocument]>;
+  termDocumentFrequency: Array<[string, string[]]>;
+  documentTermFrequency: Array<[string, Array<[string, number]>]>;
+  documentLengths: Array<[string, number]>;
+  averageDocumentLength: number;
+  totalDocuments: number;
 }
 
 /**
@@ -384,6 +464,13 @@ export function getBM25Index(): BM25Index {
     globalBM25Index = new BM25Index();
   }
   return globalBM25Index;
+}
+
+/**
+ * Replace the global singleton (used after Redis restore).
+ */
+export function setGlobalBM25Index(index: BM25Index): void {
+  globalBM25Index = index;
 }
 
 /**

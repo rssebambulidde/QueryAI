@@ -138,126 +138,15 @@ export class ConflictResolutionService {
    */
   static formatConflictResolutionGuidelines(): string {
     try {
-      const guidelines = this.loadGuidelines();
-      const cr = guidelines.conflictResolution;
-      
-      let formatted = '\n\n=== CONFLICT RESOLUTION GUIDELINES ===\n\n';
-      
-      // Conflict Resolution Strategies
-      formatted += 'CONFLICT RESOLUTION STRATEGIES:\n';
-      formatted += 'When sources provide conflicting information, use these strategies:\n\n';
-      
-      for (const [key, strategy] of Object.entries(cr.strategies)) {
-        const strategyName = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        formatted += `${strategyName}:\n`;
-        formatted += `  ${strategy.description}\n`;
-        formatted += `  When to use: ${strategy.whenToUse}\n`;
-        formatted += `  Approach:\n`;
-        for (const approach of strategy.approach) {
-          formatted += `  - ${approach}\n`;
-        }
-        formatted += `  Example: ${strategy.example}\n\n`;
-      }
+      // Load guidelines to validate they exist (keeps cache warm for resolution methods)
+      this.loadGuidelines();
 
-      // Handling Conflicts
-      formatted += 'HANDLING CONFLICTS:\n';
-      formatted += 'When sources conflict, follow these guidelines:\n\n';
-      
-      for (const [key, handling] of Object.entries(cr.handlingConflicts)) {
-        const handlingName = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        formatted += `${handlingName}:\n`;
-        formatted += `  ${handling.description}\n`;
-        formatted += `  Requirements:\n`;
-        for (const requirement of handling.requirements) {
-          formatted += `  - ${requirement}\n`;
-        }
-        formatted += `  Example: ${handling.example}\n\n`;
-      }
-
-      // Acknowledging Uncertainty
-      formatted += 'ACKNOWLEDGING UNCERTAINTY:\n';
-      formatted += 'Acknowledge uncertainty in these situations:\n\n';
-      
-      formatted += 'When to Acknowledge:\n';
-      for (const [key, description] of Object.entries(cr.acknowledgingUncertainty.whenToAcknowledge)) {
-        const situationName = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        formatted += `- ${situationName}: ${description}\n`;
-      }
-      formatted += '\n';
-
-      formatted += 'How to Acknowledge:\n';
-      formatted += 'Use explicit statements:\n';
-      for (const statement of cr.acknowledgingUncertainty.howToAcknowledge.explicitStatements) {
-        formatted += `- ${statement}\n`;
-      }
-      formatted += '\n';
-
-      formatted += 'Examples:\n';
-      for (const example of cr.acknowledgingUncertainty.howToAcknowledge.examples) {
-        formatted += `- ${example}\n`;
-      }
-      formatted += '\n';
-
-      formatted += 'Uncertainty Phrases:\n';
-      for (const phrase of cr.acknowledgingUncertainty.uncertaintyPhrases) {
-        formatted += `- "${phrase}"\n`;
-      }
-      formatted += '\n';
-
-      // Examples
-      formatted += 'CONFLICT RESOLUTION EXAMPLES:\n';
-      formatted += 'Conflict Examples:\n';
-      for (const [key, example] of Object.entries(cr.examples)) {
-        if (key.startsWith('conflictExample')) {
-          const ex = example as ConflictExample;
-          formatted += `Scenario: ${ex.scenario}\n`;
-          formatted += `Conflict: ${ex.conflict}\n`;
-          formatted += `Resolution: ${ex.resolution}\n\n`;
-        }
-      }
-
-      formatted += 'Uncertainty Examples:\n';
-      for (const [key, example] of Object.entries(cr.examples)) {
-        if (key.startsWith('uncertaintyExample')) {
-          const ex = example as UncertaintyExample;
-          formatted += `Scenario: ${ex.scenario}\n`;
-          formatted += `Situation: ${ex.situation}\n`;
-          formatted += `Acknowledgment: ${ex.acknowledgment}\n\n`;
-        }
-      }
-
-      // Best Practices
-      formatted += 'BEST PRACTICES:\n';
-      for (const [key, practices] of Object.entries(cr.bestPractices)) {
-        const practiceName = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        formatted += `${practiceName}:\n`;
-        for (const practice of practices) {
-          formatted += `- ${practice}\n`;
-        }
-        formatted += '\n';
-      }
-
-      // Common Mistakes
-      formatted += 'COMMON MISTAKES TO AVOID:\n';
-      for (const [key, mistake] of Object.entries(cr.commonMistakes)) {
-        const mistakeName = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-        formatted += `${mistakeName}:\n`;
-        formatted += `  Mistake: ${mistake.mistake}\n`;
-        formatted += `  Correct: ${mistake.correct}\n`;
-        formatted += `  Wrong: ${mistake.example.wrong}\n`;
-        formatted += `  Correct: ${mistake.example.correct}\n\n`;
-      }
-
-      // Checklist
-      formatted += 'CONFLICT RESOLUTION CHECKLIST (BEFORE SUBMISSION):\n';
-      for (const check of cr.checklist.beforeSubmission) {
-        formatted += `- ${check}\n`;
-      }
-      formatted += '\n';
-
-      formatted += '=== END CONFLICT RESOLUTION GUIDELINES ===\n';
-
-      return formatted;
+      // Condensed conflict-resolution guidelines — 4 key bullets.
+      return `When sources conflict:
+- Acknowledge the conflict explicitly; cite each side.
+- Prefer authoritative/recent sources; explain why.
+- Present both perspectives if credibility is equal.
+- Use hedging language ("sources differ", "may vary") for genuine uncertainty.`;
     } catch (error: any) {
       logger.warn('Failed to format conflict resolution guidelines, using fallback', {
         error: error.message,

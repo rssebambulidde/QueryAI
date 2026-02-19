@@ -7,6 +7,7 @@ import { Conversation, Topic, DocumentItem } from '@/lib/api';
 import { RAGSettings, RAGSourceSelector } from './rag-source-selector';
 import { useToast } from '@/lib/hooks/use-toast';
 import { conversationApi, documentApi, topicApi } from '@/lib/api';
+import { TopicTreeSelector } from '@/components/topics/topic-tree-selector';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -249,27 +250,14 @@ export const ConversationSettingsPanel: React.FC<ConversationSettingsProps> = ({
                   <div className="text-xs text-gray-500">General conversation</div>
                 </div>
               </label>
-              {availableTopics.map((topic) => (
-                <label
-                  key={topic.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
-                >
-                  <input
-                    type="radio"
-                    name="topic"
-                    checked={selectedTopicId === topic.id}
-                    onChange={() => setSelectedTopicId(topic.id)}
-                    className="w-4 h-4 text-orange-600 border-gray-300 focus:ring-orange-500"
-                  />
-                  <Folder className="w-4 h-4 text-orange-400" />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium text-gray-900">{topic.name}</div>
-                    {topic.description && (
-                      <div className="text-xs text-gray-500">{topic.description}</div>
-                    )}
-                  </div>
-                </label>
-              ))}
+              <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                <TopicTreeSelector
+                  topics={availableTopics}
+                  selectedTopicId={selectedTopicId}
+                  onSelect={(topic) => setSelectedTopicId(topic?.id ?? null)}
+                  className="p-2"
+                />
+              </div>
             </div>
           </div>
         </div>

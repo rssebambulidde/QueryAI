@@ -37,6 +37,11 @@ export interface SourceMetadata {
   isbn?: string; // ISBN for books
   url?: string; // URL (for web sources)
   
+  // Provenance metadata
+  pageNumber?: number; // 1-based page number (PDFs)
+  sectionTitle?: string; // Section/heading title
+  sectionLevel?: number; // Heading level (1-6)
+
   // Quality indicators
   authorityScore?: number; // Domain authority score (0-1)
   qualityScore?: number; // Quality score (0-1)

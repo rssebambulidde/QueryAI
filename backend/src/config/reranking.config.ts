@@ -11,9 +11,10 @@ export interface RerankingConfig {
   topK: number; // Number of results to re-rank (re-rank top-K from initial retrieval)
   maxResults: number; // Maximum results to return after re-ranking
   minScore?: number; // Minimum score threshold after re-ranking
-  // Cross-encoder specific settings
-  crossEncoderModel?: string; // Model name (e.g., 'ms-marco-MiniLM-L-6-v2')
-  crossEncoderApiUrl?: string; // API URL for cross-encoder service (if using API)
+  // Cross-encoder specific settings (Cohere Rerank)
+  cohereModel?: string; // Cohere model name (default: 'rerank-v3.5')
+  crossEncoderModel?: string; // Legacy – unused, kept for back-compat
+  crossEncoderApiUrl?: string; // Legacy – unused
   batchSize?: number; // Batch size for re-ranking (for performance)
   // Score-based settings
   scoreWeights?: {
@@ -33,6 +34,7 @@ export const DEFAULT_RERANKING_CONFIG: RerankingConfig = {
   topK: 20, // Re-rank top 20 results from initial retrieval
   maxResults: 10, // Return top 10 after re-ranking
   minScore: 0.3, // Minimum score threshold
+  cohereModel: 'rerank-v3.5', // Cohere rerank model
   batchSize: 10, // Process 10 query-document pairs at a time
   scoreWeights: {
     semantic: 0.4,
@@ -85,9 +87,6 @@ export function validateRerankingConfig(config: RerankingConfig): boolean {
     return false; // Can't return more results than we re-rank
   }
   
-  if (config.strategy === 'cross-encoder' && !config.crossEncoderModel) {
-    return false; // Cross-encoder requires model specification
-  }
-  
+  // Cross-encoder (Cohere) just needs the API key at runtime; no model field required here
   return true;
 }

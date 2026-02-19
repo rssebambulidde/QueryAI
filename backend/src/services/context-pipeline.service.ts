@@ -21,8 +21,7 @@ import { RerankingStrategy } from '../config/reranking.config';
 import { DeduplicationService, DeduplicationOptions } from './deduplication.service';
 import { DiversityFilterService, DiversityOptions } from './diversity-filter.service';
 import { RelevanceOrderingService, OrderingOptions } from './relevance-ordering.service';
-import { ContextCompressorService, CompressionOptions } from './context-compressor.service';
-import { ContextSummarizerService, SummarizationOptions } from './context-summarizer.service';
+import { ContextSummarizerService, SummarizationOptions, ContextReductionStrategy } from './context-summarizer.service';
 import { SourcePrioritizerService, PrioritizationOptions } from './source-prioritizer.service';
 import { TokenBudgetService, TokenBudgetOptions, TokenBudget } from './token-budget.service';
 import { AdaptiveContextService } from './adaptive-context.service';
@@ -68,9 +67,7 @@ export interface ContextPipelineOptions {
 export interface FormatOptions {
   enableRelevanceOrdering?: boolean;
   orderingOptions?: OrderingOptions;
-  enableContextCompression?: boolean;
-  compressionOptions?: CompressionOptions;
-  enableContextSummarization?: boolean;
+  contextReductionStrategy?: ContextReductionStrategy;
   summarizationOptions?: SummarizationOptions;
   enableSourcePrioritization?: boolean;
   prioritizationOptions?: PrioritizationOptions;
@@ -366,8 +363,7 @@ export class ContextPipelineService {
     options: FormatOptions = {}
   ): Promise<string> {
     const enableRelevanceOrdering = options.enableRelevanceOrdering ?? true;
-    const enableContextCompression = options.enableContextCompression ?? true;
-    const enableContextSummarization = options.enableContextSummarization ?? true;
+    const contextReductionStrategy = options.contextReductionStrategy ?? 'summarize';
     const enableSourcePrioritization = options.enableSourcePrioritization ?? true;
     const enableTokenBudgeting = options.enableTokenBudgeting ?? true;
 
@@ -393,10 +389,10 @@ export class ContextPipelineService {
       }
     }
 
-    // ── Context summarization ─────────────────────────────────────
-    let summarizedContext = orderedContext;
+    // ── Context reduction (summarize | compress | none) ──────────────
+    let reducedContext = orderedContext;
 
-    if (enableContextSummarization) {
+    if (contextReductionStrategy === 'summarize') {
       try {
         const summarizationResult = await LatencyTrackerService.trackOperation(
           OperationType.CONTEXT_SUMMARIZATION,
@@ -415,7 +411,7 @@ export class ContextPipelineService {
         );
 
         if (summarizationResult.wasSummarized) {
-          summarizedContext = summarizationResult.context;
+          reducedContext = summarizationResult.context;
           const stats = summarizationResult.context.summarizationStats;
 
           logger.info('Context summarized', {
@@ -436,61 +432,40 @@ export class ContextPipelineService {
       } catch (error: any) {
         logger.warn('Context summarization failed, using original context', { error: error.message });
       }
-    }
-
-    // ── Context compression ───────────────────────────────────────
-    let compressedContext = summarizedContext;
-
-    if (enableContextCompression) {
+    } else if (contextReductionStrategy === 'compress') {
       try {
-        const compressionResult = await LatencyTrackerService.trackOperation(
-          OperationType.CONTEXT_COMPRESSION,
-          async () => ContextCompressorService.compressContext(summarizedContext, {
-            ...options.compressionOptions,
-            query: options.query,
-            model: options.model,
-          }),
-          {
-            userId: options.userId,
-            metadata: {
-              documentChunks: summarizedContext.documentContexts.length,
-              webResults: summarizedContext.webSearchResults.length,
-            },
-          }
-        );
+        const compressionResult = ContextSummarizerService.compressContext(orderedContext, {
+          model: options.model,
+        });
 
         if (compressionResult.wasCompressed) {
-          compressedContext = compressionResult.context;
-          const stats = compressionResult.context.compressionStats;
-
-          logger.info('Context compressed', {
-            originalTokens: stats?.originalTokens,
-            compressedTokens: stats?.compressedTokens,
-            compressionRatio: stats?.compressionRatio,
-            strategy: stats?.strategy,
-            processingTimeMs: stats?.processingTimeMs,
-          });
-
-          if (stats && stats.processingTimeMs > RetrievalConfig.processingTargets.compressionTimeoutMs) {
-            logger.warn('Compression exceeded target time', {
-              processingTimeMs: stats.processingTimeMs,
-              targetTime: RetrievalConfig.processingTargets.compressionTimeoutMs,
-            });
-          }
+          reducedContext = compressionResult.context;
+          logger.info('Context compressed via truncation');
         }
       } catch (error: any) {
         logger.warn('Context compression failed, using original context', { error: error.message });
       }
     }
+    // 'none' → skip context reduction entirely
 
     // ── Source prioritization ─────────────────────────────────────
-    let prioritizedContext = compressedContext;
+    let prioritizedContext = reducedContext;
 
     if (enableSourcePrioritization) {
       try {
-        const prioritizationResult = SourcePrioritizerService.prioritizeContext(compressedContext, {
+        // Load citation click-through boost scores (cached, non-blocking)
+        let clickBoostMap: Map<string, number> | undefined;
+        try {
+          const { CitationClickService } = await import('./citation-click.service');
+          clickBoostMap = await CitationClickService.getDomainBoostMap();
+        } catch {
+          // Service unavailable or table not yet migrated — skip boost
+        }
+
+        const prioritizationResult = SourcePrioritizerService.prioritizeContext(reducedContext, {
           ...options.prioritizationOptions,
           query: options.query,
+          clickBoostMap,
         });
 
         prioritizedContext = prioritizationResult.context;
@@ -583,6 +558,18 @@ export class ContextPipelineService {
           formattedContext += `[Document ${index + 1}] ⭐ ${doc.documentName} (HIGH PRIORITY)\n`;
         } else {
           formattedContext += `[Document ${index + 1}] ${doc.documentName}\n`;
+        }
+
+        // Provenance: page number and section title
+        const provParts: string[] = [];
+        if ((doc as any).pageNumber != null) {
+          provParts.push(`page ${(doc as any).pageNumber}`);
+        }
+        if ((doc as any).sectionTitle) {
+          provParts.push(`§${(doc as any).sectionTitle}`);
+        }
+        if (provParts.length > 0) {
+          formattedContext += `Location: ${provParts.join(', ')}\n`;
         }
 
         formattedContext += `Relevance Score: ${((doc as any).orderingScore || doc.score || 0).toFixed(2)}\n`;

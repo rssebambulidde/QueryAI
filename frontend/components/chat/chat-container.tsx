@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import type { Message } from './chat-message';
+import { Download } from 'lucide-react';
+import type { Message, MessageVersionSummary } from './chat-message';
 import type { RAGSettings } from './rag-source-selector';
 import { aiApi, conversationApi, topicApi, documentApi, searchApi, queueApi, QuestionRequest, Source } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
@@ -21,7 +22,10 @@ import { mapApiMessagesToUi, type ApiMessage, type LastResponseData } from './ch
 import { ChatMessageList } from './chat-message-list';
 import { ChatInputArea } from './chat-input-area';
 import { SourcesSidebar } from './sources-sidebar';
-// Conversation export and chat shortcut UI removed from this component
+import { MessageVersionCompare } from './message-version-compare';
+import { ChatErrorBoundary } from './chat-error-boundary';
+import { ConversationExportDialog } from './conversation-export-dialog';
+// Chat shortcut UI removed from this component
 import { useChatSend } from '@/lib/hooks/useChatSend';
 import { useDocumentUpload } from '@/lib/hooks/use-document-upload';
 import type { UploadStatus } from './chat-types';
@@ -95,6 +99,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   });
 
   const [showResearchSummaryModal, setShowResearchSummaryModal] = useState(false);
+  const [compareVersions, setCompareVersions] = useState<MessageVersionSummary[] | null>(null);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   
   const [dynamicStarters, setDynamicStarters] = useState<string[] | null>(null);
   const [documentInfo, setDocumentInfo] = useState<{ totalCount: number; processedCount: number; processingCount: number }>({ totalCount: 0, processedCount: 0, processingCount: 0 });
@@ -206,6 +212,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     resumeStream: handleResumeStreaming,
     retryStream: handleRetryStreaming,
     editMessage: handleEditMessage,
+    regenerateMessage: handleRegenerateMessage,
     previousResponseTimeRef,
   } = useChatSend({
     messages,
@@ -619,6 +626,21 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     }
   };
 
+  // ── Version history ───────────────────────────────────────────────────
+
+  const handleVersionSelect = (messageId: string, version: MessageVersionSummary) => {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        return { ...m, content: version.content, sources: version.sources, version: version.version };
+      }),
+    );
+  };
+
+  const handleCompareVersions = (_messageId: string, versions: MessageVersionSummary[]) => {
+    setCompareVersions(versions);
+  };
+
   // ── Action response (summary / essay / report) ──────────────────────────
 
   const handleActionResponse = async (content: string, actionType: string, messageSources?: Source[]) => {
@@ -636,6 +658,64 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         await conversationApi.saveMessage(currentConversationId, {
           role: 'assistant',
           content,
+          sources: messageSources,
+          metadata: { isActionResponse: true, actionType },
+        });
+      } catch {
+        toast.error('Could not save to conversation');
+      }
+    }
+  };
+
+  /**
+   * Streaming action response handler.
+   * Creates a placeholder message immediately, then feeds chunks into it
+   * so the user sees text appear incrementally ("Writing..." indicator).
+   */
+  const handleStreamActionResponse = async (
+    actionType: string,
+    messageSources: Source[] | undefined,
+    stream: AsyncGenerator<string, void, unknown>
+  ) => {
+    const messageId = (Date.now() + 1).toString();
+
+    // Insert streaming placeholder
+    const placeholder: Message = {
+      id: messageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      sources: messageSources,
+      isActionResponse: true,
+      isStreaming: true,
+    };
+    setMessages((prev) => [...prev, placeholder]);
+
+    let fullContent = '';
+    try {
+      for await (const chunk of stream) {
+        fullContent += chunk;
+        // Update the streaming message with accumulated content
+        const snapshot = fullContent;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, content: snapshot } : m))
+        );
+      }
+    } catch (error: any) {
+      toast.error(error?.message || `Failed to generate ${actionType}`);
+    }
+
+    // Mark streaming complete
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, isStreaming: false, content: fullContent } : m))
+    );
+
+    // Save to conversation
+    if (currentConversationId && actionType && fullContent) {
+      try {
+        await conversationApi.saveMessage(currentConversationId, {
+          role: 'assistant',
+          content: fullContent,
           sources: messageSources,
           metadata: { isActionResponse: true, actionType },
         });
@@ -690,39 +770,55 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       {/* Conversation mode */}
       {!isEmpty && (
         <>
-          {/* Chat toolbar removed (export and shortcuts hidden) */}
-          <div className="flex items-center justify-end gap-1 px-4 py-1.5 border-b border-gray-100 bg-gray-50/50" />
+          {/* Chat toolbar */}
+          <div className="flex items-center justify-end gap-1 px-4 py-1.5 border-b border-gray-100 bg-gray-50/50">
+            <button
+              onClick={() => setIsExportOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+              title="Export conversation"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export</span>
+            </button>
+          </div>
 
           <div className="flex flex-1 min-h-0">
-            <ChatMessageList
-              messages={messages}
-              isStreaming={isStreaming}
-              streamingState={streamingState}
-              error={error}
-              selectedTopic={selectedTopic}
-              isMobile={isMobile}
-              lastResponseData={lastResponseData}
-              queryExpansionEnabled={queryExpansionEnabled}
-              onQueryExpansionEnabledChange={setQueryExpansionEnabled}
-              queryExpansionSettings={queryExpansionSettings}
-              onQueryExpansionSettingsChange={setQueryExpansionSettings}
-              rerankingEnabled={rerankingEnabled}
-              onRerankingEnabledChange={setRerankingEnabled}
-              rerankingSettings={rerankingSettings}
-              onRerankingSettingsChange={setRerankingSettings}
-              previousTokenUsage={previousTokenUsage}
-              previousCost={previousCost}
-              onEditMessage={handleEditMessage}
-              onDeleteMessage={handleDeleteMessage}
-              onFollowUpClick={(q) => handleSend(q)}
-              onExitResearchMode={handleExitResearchMode}
-              onOpenSources={(sources, query) => setSourcePanelContext({ sources, query })}
-              onActionResponse={handleActionResponse}
-              onPauseStreaming={handlePauseStreaming}
-              onResumeStreaming={handleResumeStreaming}
-              onCancelStreaming={handleCancelStreaming}
-              onRetryStreaming={handleRetryStreaming}
-            />
+            <ChatErrorBoundary scope="chat">
+              <ChatMessageList
+                messages={messages}
+                isStreaming={isStreaming}
+                streamingState={streamingState}
+                error={error}
+                selectedTopic={selectedTopic}
+                isMobile={isMobile}
+                conversationId={currentConversationId ?? undefined}
+                lastResponseData={lastResponseData}
+                queryExpansionEnabled={queryExpansionEnabled}
+                onQueryExpansionEnabledChange={setQueryExpansionEnabled}
+                queryExpansionSettings={queryExpansionSettings}
+                onQueryExpansionSettingsChange={setQueryExpansionSettings}
+                rerankingEnabled={rerankingEnabled}
+                onRerankingEnabledChange={setRerankingEnabled}
+                rerankingSettings={rerankingSettings}
+                onRerankingSettingsChange={setRerankingSettings}
+                previousTokenUsage={previousTokenUsage}
+                previousCost={previousCost}
+                onEditMessage={handleEditMessage}
+                onDeleteMessage={handleDeleteMessage}
+                onRegenerateMessage={handleRegenerateMessage}
+                onVersionSelect={handleVersionSelect}
+                onCompareVersions={handleCompareVersions}
+                onFollowUpClick={(q) => handleSend(q)}
+                onExitResearchMode={handleExitResearchMode}
+                onOpenSources={(sources, query) => setSourcePanelContext({ sources, query })}
+                onActionResponse={handleActionResponse}
+                onStreamActionResponse={handleStreamActionResponse}
+                onPauseStreaming={handlePauseStreaming}
+                onResumeStreaming={handleResumeStreaming}
+                onCancelStreaming={handleCancelStreaming}
+                onRetryStreaming={handleRetryStreaming}
+              />
+            </ChatErrorBoundary>
 
             <SourcesSidebar
               sourcePanelContext={sourcePanelContext}
@@ -768,7 +864,20 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         topicName={selectedTopic?.name || ''}
       />
       <CitationSettings isOpen={isCitationSettingsOpen} onClose={() => setIsCitationSettingsOpen(false)} />
-      {/* Conversation export dialog removed from chat UI */}
+      {compareVersions && (
+        <MessageVersionCompare versions={compareVersions} onClose={() => setCompareVersions(null)} />
+      )}
+      {isExportOpen && currentConversationId && (() => {
+        const conv = conversations.find(c => c.id === currentConversationId);
+        return conv ? (
+          <ConversationExportDialog
+            conversation={conv}
+            messageCount={messages.length}
+            isOpen={isExportOpen}
+            onClose={() => setIsExportOpen(false)}
+          />
+        ) : null;
+      })()}
     </div>
   );
 };

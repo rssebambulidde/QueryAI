@@ -125,6 +125,40 @@ export class ConversationService {
       const limit = options?.limit ?? 50;
       const offset = options?.offset ?? 0;
 
+      // Fast path: single RPC returns conversations + metadata in one round trip
+      if (options?.includeMetadata) {
+        const { data: rpcData, error: rpcError } = await supabaseAdmin
+          .schema('private' as any)
+          .rpc('get_conversations_with_metadata', {
+            p_user_id: userId,
+            p_limit: limit,
+            p_offset: offset,
+          });
+
+        if (rpcError) {
+          // Fallback: if the RPC doesn't exist yet (pre-migration), use the old path
+          logger.warn('get_conversations_with_metadata RPC failed, falling back to N+1', {
+            error: rpcError.message,
+          });
+        } else if (rpcData && Array.isArray(rpcData)) {
+          return (rpcData as any[]).map((row) => ({
+            id: row.id,
+            user_id: row.user_id,
+            topic_id: row.topic_id ?? undefined,
+            title: row.title ?? undefined,
+            metadata: row.metadata ?? undefined,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            messageCount: Number(row.message_count) || 0,
+            lastMessage: row.last_message
+              ? row.last_message + (row.last_message.length >= 100 ? '...' : '')
+              : undefined,
+            lastMessageAt: row.last_message_at ?? undefined,
+          }));
+        }
+      }
+
+      // Standard path (no metadata) or RPC fallback
       let query = supabaseAdmin
         .from('conversations')
         .select('*')
@@ -147,7 +181,7 @@ export class ConversationService {
         return [];
       }
 
-      // If metadata is requested, fetch message counts and last messages
+      // Fallback N+1 path — only reached if RPC failed above
       if (options?.includeMetadata) {
         const conversationsWithMetadata = await Promise.all(
           data.map(async (conv) => {

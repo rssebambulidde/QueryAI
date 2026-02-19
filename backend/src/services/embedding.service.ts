@@ -1001,6 +1001,10 @@ export class EmbeddingService {
         id: `${documentId}_chunk_${index}`,
         chunkIndex: chunk.chunkIndex,
         content: chunk.content,
+        // Provenance metadata for citations
+        pageNumber: chunk.pageNumber,
+        sectionTitle: chunk.section?.title,
+        sectionLevel: chunk.section?.level,
       }));
 
       // Get current model dimensions for Pinecone

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { ConversationService } from '../services/conversation.service';
 import { MessageService } from '../services/message.service';
+import { ExportService, ExportFormat } from '../services/export.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
 import { AppError } from '../types/error';
@@ -229,6 +230,49 @@ router.delete(
       success: true,
       message: 'Message deleted successfully',
     });
+  })
+);
+
+/**
+ * GET /api/conversations/:id/export
+ * Export conversation with bibliography in PDF, Markdown, or DOCX.
+ * Query params: format=pdf|markdown|docx, includeSources=true, includeBibliography=true
+ */
+router.get(
+  '/:id/export',
+  validateUUIDParams('id'),
+  asyncHandler(async (req, res) => {
+    const userId = req.user!.id;
+    const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const format = (req.query.format as string) || 'markdown';
+
+    const validFormats = ['pdf', 'markdown', 'docx'];
+    if (!validFormats.includes(format)) {
+      throw new AppError(`Invalid format. Must be one of: ${validFormats.join(', ')}`, 400, 'VALIDATION_ERROR');
+    }
+
+    const conversation = await ConversationService.getConversation(conversationId, userId);
+    if (!conversation) {
+      throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
+    }
+
+    const messages = await MessageService.getMessages(conversationId, userId, {
+      limit: 500,
+    });
+
+    const includeSources = req.query.includeSources !== 'false';
+    const includeBibliography = req.query.includeBibliography !== 'false';
+
+    const result = await ExportService.exportConversation(conversation, messages, {
+      format: format as ExportFormat,
+      includeSources,
+      includeBibliography,
+    });
+
+    res.setHeader('Content-Type', result.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('Content-Length', result.buffer.length);
+    res.send(result.buffer);
   })
 );
 

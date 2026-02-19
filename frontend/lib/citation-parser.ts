@@ -2,79 +2,86 @@ import { Source } from './api';
 import { CitationMatch } from '@/components/chat/inline-citation';
 
 /**
- * Parses citations from markdown/text content
- * Supports patterns like:
- * - [Web Source 1]
- * - [Document 2]
- * - [Web Source 1](url)
- * - [Document 3](url)
+ * Single-pass citation parser.
+ *
+ * Patterns recognised:
+ *   [Web Source 1], [Web Source 2](url)   → matched to the Nth web-type source
+ *   [Document 1],   [Document 3](url)     → matched to the Nth document-type source
+ *
+ * Type-specific indexing: the LLM writes "[Web Source 2]" meaning "the 2nd
+ * source whose type is 'web'", NOT the 2nd element of the flat sources array.
+ *
+ * Trailing "Sources: …" summary lines are stripped so they don't duplicate
+ * the inline citations already rendered by the UI.
  */
 export function parseCitations(content: string, sources: Source[]): {
   processedContent: string;
   citations: CitationMatch[];
 } {
   const citations: CitationMatch[] = [];
-  const citationPattern = /\[(Web Source|Document)\s+(\d+)\](?:\(([^)]+)\))?/gi;
-  
-  // Find all citations and their positions
-  const matches: Array<{
-    match: RegExpMatchArray;
-    index: number;
-  }> = [];
-  
-  let match;
-  while ((match = citationPattern.exec(content)) !== null) {
-    matches.push({
-      match,
-      index: match.index,
-    });
+
+  if (!sources || sources.length === 0) {
+    return { processedContent: content, citations };
   }
 
-  // Sort matches by position (reverse order for safe replacement)
+  // Strip trailing "Sources:" summary lines to prevent duplicate rendering.
+  // Require a leading newline so we don't accidentally match "web sources:" mid-sentence.
+  const cleaned = content.replace(
+    /\n+Sources:\s*(?:\[(?:Web Source|Document)\s+\d+\](?:\([^)]+\))?[\s,]*)+\s*$/gi,
+    ''
+  );
+
+  // Pre-filter sources by type for correct N→source mapping
+  const webSources = sources.filter(s => s.type === 'web');
+  const docSources = sources.filter(s => s.type === 'document');
+
+  const citationPattern = /\[(Web Source|Document)\s+(\d+)\](?:\(([^)]+)\))?/gi;
+
+  // Collect all matches
+  const matches: Array<{ match: RegExpExecArray; index: number }> = [];
+  let match;
+  while ((match = citationPattern.exec(cleaned)) !== null) {
+    matches.push({ match, index: match.index });
+  }
+
+  // Sort reverse for safe in-place string replacement
   matches.sort((a, b) => b.index - a.index);
 
-  // Replace citations with placeholders
-  let processedContent = content;
-  const placeholders: Map<string, CitationMatch> = new Map();
+  let processedContent = cleaned;
 
-  matches.forEach(({ match, index }) => {
-    const fullMatch = match[0];
-    const type = match[1].toLowerCase().includes('web') ? 'web' : 'document';
-    const number = parseInt(match[2], 10);
-    const sourceIndex = number - 1;
+  matches.forEach(({ match: m, index }) => {
+    const fullMatch = m[0];
+    const type: 'web' | 'document' = m[1].toLowerCase().includes('web') ? 'web' : 'document';
+    const number = parseInt(m[2], 10);
+    const typeFiltered = type === 'web' ? webSources : docSources;
+    const typeIndex = number - 1; // 1-based → 0-based within type
 
-    // Validate source exists
-    if (sourceIndex >= 0 && sourceIndex < sources.length) {
-      const source = sources[sourceIndex];
-      if (source && source.type === type) {
-        const citation: CitationMatch = {
-          type,
-          number,
-          index,
-          sourceIndex,
-          fullMatch,
-        };
+    if (typeIndex >= 0 && typeIndex < typeFiltered.length) {
+      const source = typeFiltered[typeIndex];
+      const globalIndex = sources.indexOf(source);
 
-        const placeholder = `__CITATION_${citations.length}__`;
-        placeholders.set(placeholder, citation);
-        citations.push(citation);
+      const citation: CitationMatch = {
+        type,
+        number,
+        index,
+        sourceIndex: globalIndex,
+        fullMatch,
+      };
 
-        // Replace in reverse order to maintain indices
-        processedContent =
-          processedContent.substring(0, index) +
-          placeholder +
-          processedContent.substring(index + fullMatch.length);
-      }
+      const placeholder = `__CITATION_${citations.length}__`;
+      citations.push(citation);
+
+      processedContent =
+        processedContent.substring(0, index) +
+        placeholder +
+        processedContent.substring(index + fullMatch.length);
     }
   });
 
-  // Sort citations by original position
+  // Restore original order by position
   citations.sort((a, b) => a.index - b.index);
 
-  return {
-    processedContent,
-    citations,
-  };
+  return { processedContent, citations };
 }
 
 /**

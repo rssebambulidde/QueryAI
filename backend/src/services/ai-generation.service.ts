@@ -305,4 +305,133 @@ Report:`;
       throw new AppError('Failed to generate detailed report', 500, 'REPORT_ERROR');
     }
   }
+
+  // ── Streaming variants ─────────────────────────────────────────────
+
+  /**
+   * Streaming summary generator — yields text chunks as they arrive from OpenAI.
+   */
+  static async *summarizeResponseStream(
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[]
+  ): AsyncGenerator<string, void, unknown> {
+    const prompt = `You are a helpful assistant. Create a concise summary of the following AI response about "${keyword}".
+
+Original Response:
+${originalResponse}
+
+${sources && sources.length > 0 ? `Sources used: ${sources.map(s => s.title).join(', ')}` : ''}
+
+Instructions:
+- Create a short paragraph (3-5 sentences) or bullet points summarizing the key points
+- Use the keyword "${keyword}" naturally in the summary
+- Do not add new information beyond what's in the original response
+- Keep it concise and focused on the main ideas
+- Format as plain text (no markdown formatting needed)
+
+Summary:`;
+
+    yield* this._streamCompletion(prompt, 300, 'SUMMARY_STREAM_ERROR');
+  }
+
+  /**
+   * Streaming essay generator — yields text chunks as they arrive from OpenAI.
+   */
+  static async *writeEssayStream(
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[]
+  ): AsyncGenerator<string, void, unknown> {
+    const prompt = `You are a professional writer. Create a formal essay based on the following AI response about "${keyword}".
+
+Original Response:
+${originalResponse}
+
+${sources && sources.length > 0 ? `Sources used: ${sources.map(s => s.title).join(', ')}` : ''}
+
+Instructions:
+- Create a professional essay with proper structure
+- Use formal tone throughout
+- Use the keyword "${keyword}" naturally throughout the essay
+- Structure MUST include:
+  1. A clear title (use ## Title format)
+  2. An introduction paragraph (start naturally, do NOT label it "Introduction:")
+  3. Body paragraphs (2-3 paragraphs developing the main ideas - do NOT label them "Body:" or "Main Section:")
+  4. A conclusion paragraph (end naturally, do NOT label it "Conclusion:")
+- DO NOT use explicit section labels like "Introduction:", "Body:", "Main Section:", "Conclusion:"
+- Write as a continuous, flowing essay where sections flow naturally into each other
+- Use markdown formatting: ## for title, regular paragraphs for content
+- Expand on the ideas from the original response in a structured, academic style
+- Make it read naturally while maintaining clear structure
+
+Essay:`;
+
+    yield* this._streamCompletion(prompt, 1500, 'ESSAY_STREAM_ERROR');
+  }
+
+  /**
+   * Streaming report generator — yields text chunks as they arrive from OpenAI.
+   */
+  static async *generateDetailedReportStream(
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[]
+  ): AsyncGenerator<string, void, unknown> {
+    const prompt = `You are a research analyst. Create a comprehensive, structured report based on the following AI response about "${keyword}".
+
+Original Response:
+${originalResponse}
+
+${sources && sources.length > 0 ? `Sources used: ${sources.map(s => s.title).join(', ')}` : ''}
+
+Instructions:
+- Create an in-depth, comprehensive report with proper structure
+- Use formal, professional language
+- Use the keyword "${keyword}" naturally throughout
+- Structure MUST include:
+  1. A clear title (use ## Title format)
+  2. An introduction section (start naturally, do NOT label it "Introduction:")
+  3. Multiple main sections (3-4 sections with clear topics - do NOT label them "Body:" or "Main Section:")
+  4. A conclusion section (end naturally, do NOT label it "Conclusion:")
+- DO NOT use explicit section labels like "Introduction:", "Body:", "Main Section:", "Conclusion:", "Executive Summary:"
+- Use markdown formatting: ## for title, ### for main section headings, regular paragraphs for content
+- Each main section should have a descriptive heading (e.g., "## Key Features" not "## Main Section")
+- Write as a continuous, flowing report where sections flow naturally into each other
+- Expand significantly on the original response with detailed explanations, implications, and analysis
+- Make it comprehensive and research-grade while reading naturally
+
+Report:`;
+
+    yield* this._streamCompletion(prompt, 2500, 'REPORT_STREAM_ERROR');
+  }
+
+  /**
+   * Internal helper: creates an OpenAI streaming completion and yields text chunks.
+   */
+  private static async *_streamCompletion(
+    prompt: string,
+    maxTokens: number,
+    errorCode: string
+  ): AsyncGenerator<string, void, unknown> {
+    try {
+      const stream = await openai.chat.completions.create({
+        model: DEFAULT_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: DEFAULT_TEMPERATURE,
+        max_tokens: maxTokens,
+        stream: true,
+      });
+
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) {
+          yield content;
+        }
+      }
+    } catch (error: any) {
+      logger.error(`Streaming generation error [${errorCode}]:`, error);
+      throw new AppError(`Streaming generation failed`, 500, errorCode);
+    }
+  }
 }

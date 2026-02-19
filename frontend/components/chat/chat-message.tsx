@@ -5,14 +5,17 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
-import { Copy, Edit2, Check, X, Trash2, BookOpen } from 'lucide-react';
+import { Copy, Edit2, Check, X, Trash2, BookOpen, RefreshCw, ChevronDown, History, GitCompare, ThumbsUp, ThumbsDown, MessageSquare, Flag } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
 import { EnhancedContentProcessor } from './enhanced-content-processor';
+import { ChatErrorBoundary } from './chat-error-boundary';
 import { AIActionButtons } from './ai-action-buttons';
 import { SourceBreakdown } from './source-breakdown';
 import { Source, aiApi } from '@/lib/api';
+import { analyticsApi, feedbackApi } from '@/lib/api';
+import type { FlaggedCitation } from '@/lib/api';
 import { exportToPdf } from '@/lib/export-pdf';
 import { ResponseTimeIndicator } from '@/components/health/response-time-indicator';
 import { ConfidenceBadge } from './confidence-badge';
@@ -42,6 +45,20 @@ export interface ChatMessageType {
   responseTime?: number; // Response time in milliseconds
   qualityScore?: number; // Answer quality score (0-1)
   searchResults?: SearchResult[]; // Results from /search command
+  // Version history
+  version?: number;
+  parentMessageId?: string | null;
+  versions?: MessageVersionSummary[]; // All versions for version indicator
+}
+
+/** Minimal version shape for the UI version indicator / compare. */
+export interface MessageVersionSummary {
+  id: string;
+  version: number;
+  content: string;
+  sources?: Source[];
+  metadata?: Record<string, any>;
+  created_at: string;
 }
 
 // Keep Message as an alias for backward compatibility
@@ -49,22 +66,42 @@ export type Message = ChatMessageType;
 
 const REFUSAL_PATTERN = /outside|limited to|disable research mode|research (mode|topic)/i;
 
+export interface RegenerateOptions {
+  model?: string;
+  maxDocumentChunks?: number;
+  maxSearchResults?: number;
+  enableWebSearch?: boolean;
+  enableDocumentSearch?: boolean;
+  temperature?: number;
+  maxTokens?: number;
+}
+
 interface ChatMessageProps {
   message: Message;
   previousResponseTime?: number; // Previous assistant message's response time for trend
   onEdit?: (messageId: string, newContent: string) => void;
   onFollowUpClick?: (question: string) => void;
   userQuestion?: string; // The user's original question for context
-  onActionResponse?: (content: string, actionType?: 'summary' | 'essay' | 'report') => void; // Callback for action responses
+  onActionResponse?: (content: string, actionType?: 'summary' | 'essay' | 'report') => void; // Callback for action responses (non-streaming fallback)
+  onStreamActionResponse?: (actionType: 'summary' | 'essay' | 'report', stream: AsyncGenerator<string, void, unknown>) => Promise<void>; // Streaming action callback
   /** Open Perplexity-style sources sidebar with this message's sources and optional query for header */
   onOpenSources?: (sources: Source[], query?: string) => void;
   isStreaming?: boolean; // Whether the message is currently streaming
   selectedTopicName?: string | null; // For refusal hint (11.2)
   onExitResearchMode?: () => void; // For refusal hint "exit research mode" action
   onDelete?: (messageId: string) => void;
+  onRegenerate?: (messageId: string, options?: RegenerateOptions) => void;
+  onVersionSelect?: (messageId: string, version: MessageVersionSummary) => void;
+  onCompareVersions?: (messageId: string, versions: MessageVersionSummary[]) => void;
+  /** Conversation ID for citation click-through tracking. */
+  conversationId?: string;
+  /** Topic ID for feedback context. */
+  topicId?: string;
+  /** Called when user flags a citation from within the message. */
+  onFlagCitation?: (messageId: string, sourceUrl: string, sourceTitle: string) => void;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onActionResponse, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode, onDelete }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onActionResponse, onStreamActionResponse, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, topicId, onFlagCitation }) => {
   const { isMobile } = useMobile();
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
@@ -74,7 +111,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
+  const [showRegenerateMenu, setShowRegenerateMenu] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [, setTimeTick] = useState(0);
+  const [feedbackRating, setFeedbackRating] = useState<-1 | 1 | null>(null);
+  const [showFeedbackComment, setShowFeedbackComment] = useState(false);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [flaggedCitations, setFlaggedCitations] = useState<FlaggedCitation[]>([]);
   const { toast } = useToast();
 
   // Re-render every 60s to keep relative timestamps fresh
@@ -82,6 +126,93 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
     const interval = setInterval(() => setTimeTick((t) => t + 1), 60_000);
     return () => clearInterval(interval);
   }, []);
+
+  // Reset regenerating state when message content changes (regeneration complete)
+  useEffect(() => {
+    setIsRegenerating(false);
+  }, [message.content]);
+
+  // Close regenerate menu on outside click
+  useEffect(() => {
+    if (!showRegenerateMenu) return;
+    const handler = () => setShowRegenerateMenu(false);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [showRegenerateMenu]);
+
+  // ─── Feedback handler ─────────────────────────────────────────
+  const handleFeedback = async (rating: -1 | 1) => {
+    // Toggle off if same rating clicked again
+    if (feedbackRating === rating) {
+      setFeedbackRating(null);
+      setShowFeedbackComment(false);
+      try {
+        await feedbackApi.deleteFeedback(message.id);
+      } catch { /* silent */ }
+      return;
+    }
+
+    setFeedbackRating(rating);
+    // Show comment form when thumbs down
+    if (rating === -1) {
+      setShowFeedbackComment(true);
+    } else {
+      setShowFeedbackComment(false);
+      // Submit thumbs-up immediately
+      setFeedbackSubmitting(true);
+      try {
+        await feedbackApi.submitFeedback({
+          messageId: message.id,
+          conversationId,
+          topicId,
+          rating,
+          flaggedCitations: flaggedCitations.length > 0 ? flaggedCitations : undefined,
+          question: userQuestion,
+          answer: message.content,
+          sources: message.sources?.map(s => ({ type: s.type, title: s.title, url: s.url, snippet: s.snippet })),
+        });
+        toast.success('Thanks for the feedback!');
+      } catch {
+        toast.error('Failed to submit feedback');
+        setFeedbackRating(null);
+      } finally {
+        setFeedbackSubmitting(false);
+      }
+    }
+  };
+
+  const submitNegativeFeedback = async () => {
+    setFeedbackSubmitting(true);
+    try {
+      await feedbackApi.submitFeedback({
+        messageId: message.id,
+        conversationId,
+        topicId,
+        rating: -1,
+        comment: feedbackComment.trim() || undefined,
+        flaggedCitations: flaggedCitations.length > 0 ? flaggedCitations : undefined,
+        question: userQuestion,
+        answer: message.content,
+        sources: message.sources?.map(s => ({ type: s.type, title: s.title, url: s.url, snippet: s.snippet })),
+      });
+      toast.success('Feedback submitted — we\'ll review this answer');
+      setShowFeedbackComment(false);
+    } catch {
+      toast.error('Failed to submit feedback');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
+  /** Called from InlineCitation when user flags a source */
+  const handleFlagCitation = (sourceUrl: string, sourceTitle: string) => {
+    setFlaggedCitations(prev => {
+      const exists = prev.some(c => c.sourceUrl === sourceUrl);
+      if (exists) return prev.filter(c => c.sourceUrl !== sourceUrl);
+      return [...prev, { sourceUrl, sourceTitle }];
+    });
+    onFlagCitation?.(message.id, sourceUrl, sourceTitle);
+  };
 
   const handleCopy = async () => {
     try {
@@ -119,96 +250,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
     return new Set(matches).size;
   }, [message.content, isUser]);
 
-
-  // Replace [Source N] and [Web Source N] patterns with hyperlinks using source titles
-  // Also handles "Sources:" lines with multiple citations
-  const processContentWithSources = (content: string, sources?: Source[]): string => {
-    if (!sources || sources.length === 0) return content;
-    
-    let processedContent = content;
-    
-    // First, process "Sources:" lines that contain multiple citations
-    // Pattern: "Sources: [Web Source 1](URL), [Document 1], [Web Source 2](URL)"
-    const sourcesLinePattern = /Sources:\s*((?:\[(?:Web Source|Document)\s+\d+\](?:\([^)]+\))?(?:\s*,\s*)?)+)/gi;
-    processedContent = processedContent.replace(sourcesLinePattern, (match, citations) => {
-      // Process each citation in the line
-      const citationPattern = /\[(Web Source|Document)\s+(\d+)\](?:\(([^)]+)\))?/gi;
-      const citationsList: string[] = [];
-      
-      let citationMatch;
-      let lastIndex = 0;
-      while ((citationMatch = citationPattern.exec(citations)) !== null) {
-        const [, type, number] = citationMatch;
-        const sourceIndex = parseInt(number) - 1;
-        
-        if (type === 'Web Source') {
-          const webSource = sources[sourceIndex] && sources[sourceIndex].type === 'web' 
-            ? sources[sourceIndex] 
-            : sources.find(s => s.type === 'web' && s.url);
-          if (webSource && webSource.url) {
-            const linkText = webSource.title || `Web Source ${number}`;
-            citationsList.push(`[${linkText}](${webSource.url} "${webSource.title || linkText}")`);
-          }
-        } else if (type === 'Document') {
-          const docSource = sources[sourceIndex] && sources[sourceIndex].type === 'document'
-            ? sources[sourceIndex]
-            : sources.find(s => s.type === 'document');
-          if (docSource) {
-            const linkText = docSource.title || `Document ${number}`;
-            if (docSource.url) {
-              citationsList.push(`[${linkText}](${docSource.url} "${docSource.title || linkText}")`);
-            } else {
-              citationsList.push(`**${linkText}**`);
-            }
-          }
-        }
-      }
-      
-      return 'Sources: ' + citationsList.join(', ');
-    });
-    
-    // Then process standalone citations (not in Sources: lines)
-    // Process web sources
-    const webSources = sources.filter(s => s.type === 'web' && s.url);
-    webSources.forEach((source, index) => {
-      const sourceNumber = index + 1;
-      
-      // Only replace if not already in a "Sources:" line
-      const pattern = new RegExp(`(?!Sources:.*)\\[Web Source ${sourceNumber}\\](?:\\([^)]+\\))?`, 'gi');
-      const linkText = source.title || `Web Source ${sourceNumber}`;
-      const replacement = `[${linkText}](${source.url} "${source.title || linkText}")`;
-      
-      processedContent = processedContent.replace(pattern, replacement);
-    });
-    
-    // Process document sources
-    const documentSources = sources.filter(s => s.type === 'document');
-    documentSources.forEach((source, index) => {
-      const sourceNumber = index + 1;
-      // Only replace if not already in a "Sources:" line
-      const pattern = new RegExp(`(?!Sources:.*)\\[Document ${sourceNumber}\\]`, 'gi');
-      
-      const linkText = source.title || `Document ${sourceNumber}`;
-      
-      if (source.url) {
-        processedContent = processedContent.replace(
-          pattern,
-          `[${linkText}](${source.url} "${source.title || linkText}")`
-        );
-      } else {
-        processedContent = processedContent.replace(
-          pattern,
-          `**${linkText}**`
-        );
-      }
-    });
-    
-    return processedContent;
-  };
-
-  const processedContent = isUser || !hasSources 
-    ? message.content 
-    : processContentWithSources(message.content, message.sources);
+  // Memoize flagged citation URLs as a Set for O(1) lookup
+  const flaggedCitationUrls = useMemo(
+    () => new Set(flaggedCitations.map(c => c.sourceUrl)),
+    [flaggedCitations]
+  );
 
   return (
     <div
@@ -320,13 +366,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                 </div>
               </div>
             ) : (
-              <>
+              <ChatErrorBoundary
+                scope="message"
+                rawContent={message.content}
+              >
                 <EnhancedContentProcessor
                   content={(message.content || '').replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim()}
                   sources={message.sources}
                   isUser={false}
+                  messageId={message.id}
+                  onCitationClick={(sourceIndex, sourceUrl, sourceType) => {
+                    analyticsApi.trackCitationClick({
+                      messageId: message.id,
+                      conversationId,
+                      sourceIndex,
+                      sourceUrl,
+                      sourceType,
+                    }).catch(() => { /* fire-and-forget */ });
+                  }}
+                  onFlagCitation={handleFlagCitation}
+                  flaggedCitationUrls={flaggedCitationUrls}
                 />
-              </>
+              </ChatErrorBoundary>
             )}
           </div>
 
@@ -436,67 +497,162 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   </button>
                 </div>
               )}
+              {/* Regenerate button for assistant messages */}
+              {!isUser && onRegenerate && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
+                <div className="relative">
+                  <div className="flex items-center">
+                    <button
+                      onClick={() => {
+                        setIsRegenerating(true);
+                        onRegenerate(message.id);
+                      }}
+                      disabled={isRegenerating}
+                      className={cn(
+                        'rounded-l hover:bg-opacity-20 transition-colors touch-manipulation',
+                        'min-w-[36px] min-h-[44px] flex items-center justify-center',
+                        'text-gray-400 hover:bg-gray-100 hover:text-gray-600 p-1.5',
+                        isRegenerating && 'animate-spin'
+                      )}
+                      title="Regenerate response"
+                      aria-label="Regenerate response"
+                    >
+                      <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setShowRegenerateMenu(!showRegenerateMenu)}
+                      className={cn(
+                        'rounded-r hover:bg-opacity-20 transition-colors touch-manipulation',
+                        'min-w-[20px] min-h-[44px] flex items-center justify-center',
+                        'text-gray-400 hover:bg-gray-100 hover:text-gray-600 p-0.5'
+                      )}
+                      title="Regenerate options"
+                      aria-label="Regenerate options"
+                    >
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  </div>
+                  {showRegenerateMenu && (
+                    <div className="absolute bottom-full right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[180px]">
+                      <button
+                        onClick={() => { setShowRegenerateMenu(false); setIsRegenerating(true); onRegenerate(message.id); }}
+                        className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Same settings
+                      </button>
+                      <button
+                        onClick={() => { setShowRegenerateMenu(false); setIsRegenerating(true); onRegenerate(message.id, { maxDocumentChunks: 10, maxSearchResults: 8 }); }}
+                        className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        More sources
+                      </button>
+                      <button
+                        onClick={() => { setShowRegenerateMenu(false); setIsRegenerating(true); onRegenerate(message.id, { temperature: 0.3, maxTokens: 512 }); }}
+                        className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <span className="text-xs font-mono w-3.5 h-3.5 flex items-center justify-center">T↓</span>
+                        Shorter &amp; precise
+                      </button>
+                      <button
+                        onClick={() => { setShowRegenerateMenu(false); setIsRegenerating(true); onRegenerate(message.id, { temperature: 0.9, maxTokens: 4096 }); }}
+                        className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <span className="text-xs font-mono w-3.5 h-3.5 flex items-center justify-center">T↑</span>
+                        Longer &amp; creative
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Ellipsis menu for assistant messages with actions */}
-              {!isUser && onActionResponse && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
+              {!isUser && (onActionResponse || onStreamActionResponse) && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
                 <AIActionButtons
                   onSummarize={async () => {
                     if (!userQuestion) return;
-                    setIsActionLoading(true);
-                    try {
-                      const response = await aiApi.summarize(
-                        message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
-                        userQuestion,
-                        message.sources
-                      );
-                      if (response.success && response.data) {
-                        onActionResponse(response.data.summary, 'summary');
-                      } else {
-                        toast.error(response.message || 'Failed to generate summary');
+                    const cleanContent = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
+                    if (onStreamActionResponse) {
+                      setIsActionLoading(true);
+                      try {
+                        const stream = aiApi.summarizeStream(cleanContent, userQuestion, message.sources);
+                        await onStreamActionResponse('summary', stream);
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to generate summary');
+                      } finally {
+                        setIsActionLoading(false);
                       }
-                    } catch (error: any) {
-                      toast.error(error.message || 'Failed to generate summary');
-                    } finally {
-                      setIsActionLoading(false);
+                    } else if (onActionResponse) {
+                      setIsActionLoading(true);
+                      try {
+                        const response = await aiApi.summarize(cleanContent, userQuestion, message.sources);
+                        if (response.success && response.data) {
+                          onActionResponse(response.data.summary, 'summary');
+                        } else {
+                          toast.error(response.message || 'Failed to generate summary');
+                        }
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to generate summary');
+                      } finally {
+                        setIsActionLoading(false);
+                      }
                     }
                   }}
                   onWriteEssay={async () => {
                     if (!userQuestion) return;
-                    setIsActionLoading(true);
-                    try {
-                      const response = await aiApi.writeEssay(
-                        message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
-                        userQuestion,
-                        message.sources
-                      );
-                      if (response.success && response.data) {
-                        onActionResponse(response.data.essay, 'essay');
-                      } else {
-                        toast.error(response.message || 'Failed to generate essay');
+                    const cleanContent = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
+                    if (onStreamActionResponse) {
+                      setIsActionLoading(true);
+                      try {
+                        const stream = aiApi.writeEssayStream(cleanContent, userQuestion, message.sources);
+                        await onStreamActionResponse('essay', stream);
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to generate essay');
+                      } finally {
+                        setIsActionLoading(false);
                       }
-                    } catch (error: any) {
-                      toast.error(error.message || 'Failed to generate essay');
-                    } finally {
-                      setIsActionLoading(false);
+                    } else if (onActionResponse) {
+                      setIsActionLoading(true);
+                      try {
+                        const response = await aiApi.writeEssay(cleanContent, userQuestion, message.sources);
+                        if (response.success && response.data) {
+                          onActionResponse(response.data.essay, 'essay');
+                        } else {
+                          toast.error(response.message || 'Failed to generate essay');
+                        }
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to generate essay');
+                      } finally {
+                        setIsActionLoading(false);
+                      }
                     }
                   }}
                   onDetailedReport={async () => {
                     if (!userQuestion) return;
-                    setIsActionLoading(true);
-                    try {
-                      const response = await aiApi.generateReport(
-                        message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim(),
-                        userQuestion,
-                        message.sources
-                      );
-                      if (response.success && response.data) {
-                        onActionResponse(response.data.report, 'report');
-                      } else {
-                        toast.error(response.message || 'Failed to generate report');
+                    const cleanContent = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
+                    if (onStreamActionResponse) {
+                      setIsActionLoading(true);
+                      try {
+                        const stream = aiApi.generateReportStream(cleanContent, userQuestion, message.sources);
+                        await onStreamActionResponse('report', stream);
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to generate report');
+                      } finally {
+                        setIsActionLoading(false);
                       }
-                    } catch (error: any) {
-                      toast.error(error.message || 'Failed to generate report');
-                    } finally {
-                      setIsActionLoading(false);
+                    } else if (onActionResponse) {
+                      setIsActionLoading(true);
+                      try {
+                        const response = await aiApi.generateReport(cleanContent, userQuestion, message.sources);
+                        if (response.success && response.data) {
+                          onActionResponse(response.data.report, 'report');
+                        } else {
+                          toast.error(response.message || 'Failed to generate report');
+                        }
+                      } catch (error: any) {
+                        toast.error(error.message || 'Failed to generate report');
+                      } finally {
+                        setIsActionLoading(false);
+                      }
                     }
                   }}
                   onExport={() => {
@@ -518,6 +674,113 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
           </div>
         </div>
 
+        {/* Version history indicator — only for assistant messages with 2+ versions */}
+        {!isUser && message.versions && message.versions.length > 1 && !isStreaming && !message.isStreaming && (
+          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+            <History className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <div className="flex items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-1 py-0.5">
+              {message.versions.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => onVersionSelect?.(message.id, v)}
+                  className={cn(
+                    'px-2 py-0.5 text-xs font-medium rounded transition-colors',
+                    v.version === (message.version ?? 1)
+                      ? 'bg-orange-600 text-white shadow-sm'
+                      : 'text-gray-500 hover:bg-gray-200 hover:text-gray-700'
+                  )}
+                  title={`Version ${v.version} — ${new Date(v.created_at).toLocaleString()}`}
+                >
+                  v{v.version}
+                </button>
+              ))}
+            </div>
+            {message.versions.length >= 2 && onCompareVersions && (
+              <button
+                onClick={() => onCompareVersions(message.id, message.versions!)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                title="Compare versions side by side"
+              >
+                <GitCompare className="w-3 h-3" />
+                Compare
+              </button>
+            )}
+          </div>
+        )}
+
+
+        {/* Feedback — thumbs up / thumbs down for assistant messages */}
+        {!isUser && !isStreaming && !message.isStreaming && message.content.trim() && !message.isTopicChangeMessage && (
+          <div className="mt-2">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => handleFeedback(1)}
+                disabled={feedbackSubmitting}
+                className={cn(
+                  'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors',
+                  feedbackRating === 1
+                    ? 'bg-green-100 text-green-700 border border-green-300'
+                    : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 border border-transparent'
+                )}
+                title="Helpful answer"
+              >
+                <ThumbsUp className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => handleFeedback(-1)}
+                disabled={feedbackSubmitting}
+                className={cn(
+                  'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors',
+                  feedbackRating === -1
+                    ? 'bg-red-100 text-red-700 border border-red-300'
+                    : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 border border-transparent'
+                )}
+                title="Not helpful"
+              >
+                <ThumbsDown className="w-3.5 h-3.5" />
+              </button>
+              {flaggedCitations.length > 0 && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-medium">
+                  <Flag className="w-3 h-3" />
+                  {flaggedCitations.length} flagged
+                </span>
+              )}
+            </div>
+
+            {/* Comment form for negative feedback */}
+            {showFeedbackComment && feedbackRating === -1 && (
+              <div className="mt-2 space-y-2 p-3 rounded-lg border border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  What went wrong? (optional)
+                </div>
+                <textarea
+                  value={feedbackComment}
+                  onChange={(e) => setFeedbackComment(e.target.value)}
+                  placeholder="The answer was inaccurate, missing information, etc."
+                  className="w-full p-2 text-sm border border-gray-200 rounded-lg bg-white resize-none focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400"
+                  rows={2}
+                  maxLength={2000}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={submitNegativeFeedback}
+                    disabled={feedbackSubmitting}
+                    className="px-3 py-1.5 text-xs font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                  >
+                    {feedbackSubmitting ? 'Submitting…' : 'Submit feedback'}
+                  </button>
+                  <button
+                    onClick={() => { setShowFeedbackComment(false); setFeedbackRating(null); }}
+                    className="px-3 py-1.5 text-xs font-medium text-gray-500 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Follow-up Questions for Assistant Messages - Show AI-generated questions */}
         {!isUser && onFollowUpClick && message.followUpQuestions && message.followUpQuestions.length > 0 && !message.isActionResponse && (

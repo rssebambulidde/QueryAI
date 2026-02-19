@@ -4,7 +4,9 @@
  * Integrates with document storage and indexing
  */
 
-import { BM25Index, IndexedDocument, getBM25Index } from './bm25-index.service';
+import { BM25Index, IndexedDocument, getBM25Index, setGlobalBM25Index } from './bm25-index.service';
+import type { BM25SerializedIndex } from './bm25-index.service';
+import { RedisCacheService } from './redis-cache.service';
 import { ChunkService } from './chunk.service';
 import { DocumentService } from './document.service';
 import logger from '../config/logger';
@@ -24,6 +26,7 @@ export interface KeywordSearchResult {
 export interface KeywordSearchOptions {
   userId: string;
   topicId?: string;
+  ancestorTopicIds?: string[];
   documentIds?: string[];
   topK?: number;
   minScore?: number;
@@ -34,11 +37,101 @@ export interface KeywordSearchOptions {
  * Handles keyword-based document retrieval using BM25
  */
 export class KeywordSearchService {
+
+  // ── Redis persistence constants ────────────────────────────────────────
+  private static readonly BM25_CACHE_KEY = 'bm25:index:global';
+  private static readonly BM25_CACHE_PREFIX = 'bm25';
+  private static readonly BM25_TTL = 86_400; // 24 hours
+  /** Guard so we only attempt one Redis restore per process lifetime. */
+  private static redisRestoreAttempted = false;
+
   /**
    * Get BM25 index (delegates to global singleton so resetBM25Index() works in tests)
    */
   private static getIndex(): BM25Index {
     return getBM25Index();
+  }
+
+  // ── Redis persistence helpers ──────────────────────────────────────────
+
+  /**
+   * Persist current in-memory BM25 index to Redis.
+   * Fire-and-forget — never throws.
+   */
+  static async persistToRedis(): Promise<void> {
+    try {
+      const index = this.getIndex();
+      const stats = index.getStats();
+      if (stats.totalDocuments === 0) return; // nothing worth caching
+
+      const serialized = index.toJSON();
+      const json = JSON.stringify(serialized);
+
+      const stored = await RedisCacheService.set(
+        this.BM25_CACHE_KEY,
+        serialized,
+        { prefix: this.BM25_CACHE_PREFIX, ttl: this.BM25_TTL },
+      );
+
+      if (stored) {
+        logger.info('BM25 index persisted to Redis', {
+          totalDocuments: stats.totalDocuments,
+          totalTerms: stats.totalTerms,
+          sizeBytes: json.length,
+        });
+      }
+    } catch (err: any) {
+      logger.warn('Failed to persist BM25 index to Redis', { error: err.message });
+    }
+  }
+
+  /**
+   * Attempt to restore the BM25 index from Redis.
+   * Returns `true` if a cached index was loaded, `false` otherwise.
+   * Only runs once per process (idempotent guard).
+   */
+  static async restoreFromRedis(): Promise<boolean> {
+    if (this.redisRestoreAttempted) return false;
+    this.redisRestoreAttempted = true;
+
+    try {
+      const data = await RedisCacheService.get<BM25SerializedIndex>(
+        this.BM25_CACHE_KEY,
+        { prefix: this.BM25_CACHE_PREFIX },
+      );
+
+      if (!data || typeof data !== 'object' || data.v !== 1) {
+        logger.debug('No cached BM25 index found in Redis');
+        return false;
+      }
+
+      const index = new BM25Index();
+      index.fromJSON(data);
+      setGlobalBM25Index(index);
+
+      const stats = index.getStats();
+      logger.info('BM25 index restored from Redis', {
+        totalDocuments: stats.totalDocuments,
+        totalTerms: stats.totalTerms,
+      });
+      return true;
+    } catch (err: any) {
+      logger.warn('Failed to restore BM25 index from Redis', { error: err.message });
+      return false;
+    }
+  }
+
+  /**
+   * Invalidate the cached BM25 index in Redis.
+   * Called when documents are added/removed so stale data isn't served.
+   */
+  static async invalidateRedisCache(): Promise<void> {
+    try {
+      await RedisCacheService.delete(this.BM25_CACHE_KEY, { prefix: this.BM25_CACHE_PREFIX });
+      logger.debug('BM25 Redis cache invalidated');
+    } catch (err: any) {
+      logger.warn('Failed to invalidate BM25 Redis cache', { error: err.message });
+    }
   }
 
   /**
@@ -87,6 +180,9 @@ export class KeywordSearchService {
         documentId,
         chunkCount: indexedDocs.length,
       });
+
+      // Persist updated index to Redis (fire-and-forget)
+      this.persistToRedis().catch(() => {});
     } catch (error: any) {
       logger.error('Failed to index document for keyword search', {
         documentId,
@@ -136,6 +232,9 @@ export class KeywordSearchService {
     index.removeDocumentChunks(documentId);
     
     logger.info('Document removed from keyword index', { documentId });
+
+    // Persist updated index to Redis (fire-and-forget)
+    this.persistToRedis().catch(() => {});
   }
 
   /**
@@ -146,12 +245,18 @@ export class KeywordSearchService {
     options: KeywordSearchOptions
   ): Promise<KeywordSearchResult[]> {
     try {
+      // On first search, attempt to restore index from Redis
+      if (this.getIndex().getStats().totalDocuments === 0) {
+        await this.restoreFromRedis();
+      }
+
       const index = this.getIndex();
       
       // Perform BM25 search
       const results = index.search(query, {
         userId: options.userId,
         topicId: options.topicId,
+        ancestorTopicIds: options.ancestorTopicIds,
         documentIds: options.documentIds,
         topK: options.topK || RetrievalConfig.defaults.topK,
         minScore: options.minScore ?? 0,

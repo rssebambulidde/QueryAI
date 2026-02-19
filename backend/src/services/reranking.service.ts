@@ -1,6 +1,6 @@
 /**
  * Re-ranking Service
- * Re-ranks search results using cross-encoder models or score-based approaches
+ * Re-ranks search results using Cohere Rerank v3 or score-based approaches
  * Improves precision by re-scoring top-K results from initial retrieval
  */
 
@@ -15,6 +15,9 @@ import {
 } from '../config/reranking.config';
 import logger from '../config/logger';
 import { RerankingInternalConfig } from '../config/thresholds.config';
+import { LatencyTrackerService, OperationType } from './latency-tracker.service';
+import { CohereClient } from 'cohere-ai';
+import config from '../config/env';
 
 export interface RerankedResult extends DocumentContext {
   originalScore: number; // Original score before re-ranking
@@ -35,6 +38,19 @@ export interface RerankingOptions {
  * Re-ranking Service
  */
 export class RerankingService {
+  /** Lazily-initialised Cohere client (null when COHERE_API_KEY is missing) */
+  private static cohereClient: CohereClient | null = null;
+
+  /**
+   * Get (or create) the Cohere client. Returns null if no API key configured.
+   */
+  private static getCohereClient(): CohereClient | null {
+    if (this.cohereClient) return this.cohereClient;
+    const apiKey = config.COHERE_API_KEY;
+    if (!apiKey) return null;
+    this.cohereClient = new CohereClient({ token: apiKey });
+    return this.cohereClient;
+  }
   /**
    * Calculate document length score (shorter documents often more relevant)
    * Returns score between 0 and 1 (shorter = higher score)
@@ -117,28 +133,76 @@ export class RerankingService {
   }
 
   /**
-   * Re-rank using cross-encoder model
-   * This is a placeholder for actual cross-encoder integration
-   * In production, this would call a cross-encoder API or local model
+   * Re-rank using Cohere Rerank v3 cross-encoder model.
+   * Falls back to score-based reranking when the API key is missing or the call fails.
    */
   private static async rerankWithCrossEncoder(
     query: string,
     results: DocumentContext[],
     config: RerankingConfig
   ): Promise<RerankedResult[]> {
-    // TODO: Integrate actual cross-encoder model
-    // Options:
-    // 1. Use API service (Cohere, Jina, etc.)
-    // 2. Use Python microservice with sentence-transformers
-    // 3. Use @xenova/transformers for Node.js (if available)
-    
-    logger.warn('Cross-encoder re-ranking not yet implemented, falling back to score-based', {
-      query: query.substring(0, 100),
-      resultsCount: results.length,
-    });
+    const client = this.getCohereClient();
+    if (!client) {
+      logger.warn('COHERE_API_KEY not configured – falling back to score-based reranking');
+      return this.rerankWithScoreBased(query, results, config);
+    }
 
-    // Fallback to score-based for now
-    return this.rerankWithScoreBased(query, results, config);
+    try {
+      const documents = results.map(r => r.content);
+      const model = config.cohereModel || DEFAULT_RERANKING_CONFIG.cohereModel || 'rerank-v3.5';
+
+      const response = await LatencyTrackerService.trackOperation(
+        OperationType.RERANKING,
+        async () =>
+          client.v2.rerank({
+            model,
+            query,
+            documents,
+            topN: results.length, // score all, we filter later
+          }),
+        { metadata: { provider: 'cohere', model, documentCount: documents.length } },
+      );
+
+      // Build a map of index → Cohere relevance score
+      const scoreMap = new Map<number, number>();
+      for (const item of response.results) {
+        scoreMap.set(item.index, item.relevanceScore);
+      }
+
+      // Produce RerankedResult[] sorted by Cohere score desc
+      const reranked: RerankedResult[] = results.map((result, index) => ({
+        ...result,
+        originalScore: result.score,
+        rerankedScore: scoreMap.get(index) ?? 0,
+        rankChange: 0,
+      }));
+
+      reranked.sort((a, b) => b.rerankedScore - a.rerankedScore);
+
+      // Calculate rank changes
+      const originalRanks = new Map<string, number>();
+      results.forEach((result, idx) => {
+        originalRanks.set(`${result.documentId}_${result.chunkIndex}`, idx);
+      });
+      reranked.forEach((result, newIndex) => {
+        const key = `${result.documentId}_${result.chunkIndex}`;
+        const originalIndex = originalRanks.get(key) ?? newIndex;
+        result.rankChange = originalIndex - newIndex;
+      });
+
+      logger.info('Cohere reranking completed', {
+        model,
+        inputCount: results.length,
+        outputCount: reranked.length,
+      });
+
+      return reranked;
+    } catch (err: any) {
+      logger.error('Cohere reranking failed – falling back to score-based', {
+        error: err?.message || String(err),
+      });
+      return this.rerankWithScoreBased(query, results, config);
+    }
   }
 
   /**

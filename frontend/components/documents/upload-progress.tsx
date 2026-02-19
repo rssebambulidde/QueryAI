@@ -14,6 +14,12 @@ export interface UploadProgressItem {
   speed?: number; // bytes per second
   eta?: number; // seconds remaining
   error?: string;
+  /** Real-time stage label from the backend processing pipeline. */
+  stageLabel?: string;
+  /** Real-time progress percent from the backend (0-100). */
+  processingProgress?: number;
+  /** The document ID returned after upload, used for status polling. */
+  documentId?: string;
 }
 
 interface UploadProgressProps {
@@ -91,7 +97,7 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({
                   )}
                   {upload.status === 'processing' && (
                     <span className={cn("text-orange-600", isMobile ? "text-sm" : "text-xs")}>
-                      Processing...
+                      {upload.stageLabel || 'Processing...'}
                     </span>
                   )}
                   {upload.status === 'completed' && (
@@ -150,9 +156,15 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({
                 isMobile ? "text-sm font-medium" : "text-xs"
               )}>
                 <span>
-                  {upload.status === 'uploading' ? 'Uploading' : 'Processing'}...
+                  {upload.status === 'uploading'
+                    ? 'Uploading...'
+                    : upload.stageLabel || 'Processing...'}
                 </span>
-                <span className="font-semibold">{upload.progress}%</span>
+                <span className="font-semibold">
+                  {upload.status === 'processing' && upload.processingProgress != null
+                    ? `${upload.processingProgress}%`
+                    : `${upload.progress}%`}
+                </span>
               </div>
               <div className={cn(
                 "w-full bg-gray-200 rounded-full",
@@ -165,7 +177,11 @@ export const UploadProgress: React.FC<UploadProgressProps> = ({
                     upload.status === 'uploading' && 'bg-orange-600',
                     upload.status === 'processing' && 'bg-purple-600'
                   )}
-                  style={{ width: `${upload.progress}%` }}
+                  style={{
+                    width: `${upload.status === 'processing' && upload.processingProgress != null
+                      ? upload.processingProgress
+                      : upload.progress}%`,
+                  }}
                 />
               </div>
             </div>

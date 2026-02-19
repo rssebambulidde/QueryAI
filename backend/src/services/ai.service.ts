@@ -8,6 +8,10 @@
  * This file owns the canonical type definitions (QuestionRequest,
  * QuestionResponse, Source) so that all downstream services can import
  * them from a single location without circular dependencies.
+ *
+ * QuestionRequest is derived from the Zod schema defined in
+ *   schemas/ai-request.schema.ts
+ * so that runtime validation and static types stay in sync.
  */
 
 import { DegradationLevel } from './degradation.service';
@@ -15,96 +19,21 @@ import { LatencyTrackerService, OperationType } from './latency-tracker.service'
 import { ResponseProcessorService } from './response-processor.service';
 import { AIAnswerPipelineService } from './ai-answer-pipeline.service';
 import { AIGenerationService } from './ai-generation.service';
+import type { QuestionRequestParsed } from '../schemas/ai-request.schema';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Canonical type definitions — imported by downstream services
 // ═══════════════════════════════════════════════════════════════════════
 
-export interface QuestionRequest {
-  question: string;
-  context?: string;
-  conversationHistory?: Array<{
-    role: 'user' | 'assistant';
-    content: string;
-  }>;
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  enableSearch?: boolean;
-  topic?: string;
-  maxSearchResults?: number;
-  optimizeSearchQuery?: boolean;
-  searchOptimizationContext?: string;
-  useTopicAwareQuery?: boolean;
-  topicQueryOptions?: import('./topic-query-builder.service').TopicQueryOptions;
-  timeRange?: 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
-  startDate?: string;
-  endDate?: string;
-  country?: string;
-  enableDocumentSearch?: boolean;
-  enableWebSearch?: boolean;
-  topicId?: string;
-  documentIds?: string[];
-  maxDocumentChunks?: number;
-  minScore?: number;
-  enableQueryExpansion?: boolean;
-  expansionStrategy?: 'llm' | 'embedding' | 'hybrid' | 'none';
-  maxExpansions?: number;
-  enableQueryRewriting?: boolean;
-  queryRewritingOptions?: import('./query-rewriter.service').QueryRewritingOptions;
-  enableWebResultReranking?: boolean;
-  webResultRerankingConfig?: import('./web-result-reranker.service').RerankingConfig;
-  enableQualityScoring?: boolean;
-  qualityScoringConfig?: import('./result-quality-scorer.service').QualityScoringConfig;
-  minQualityScore?: number;
-  filterByQuality?: boolean;
-  enableReranking?: boolean;
-  rerankingStrategy?: 'cross-encoder' | 'score-based' | 'hybrid' | 'none';
-  rerankingTopK?: number;
-  rerankingMaxResults?: number;
-  useAdaptiveThreshold?: boolean;
-  minResults?: number;
-  maxResults?: number;
-  enableDiversityFilter?: boolean;
-  diversityLambda?: number;
-  diversityMaxResults?: number;
-  enableResultDeduplication?: boolean;
-  deduplicationThreshold?: number;
-  deduplicationNearDuplicateThreshold?: number;
-  useAdaptiveContextSelection?: boolean;
-  enableAdaptiveContextSelection?: boolean;
-  adaptiveContextOptions?: Partial<import('./adaptive-context.service').AdaptiveContextOptions>;
-  minChunks?: number;
-  maxChunks?: number;
-  enableDynamicLimits?: boolean;
-  dynamicLimitOptions?: import('../config/rag.config').DynamicLimitOptions;
-  enableRelevanceOrdering?: boolean;
-  orderingOptions?: import('./relevance-ordering.service').OrderingOptions;
-  enableContextCompression?: boolean;
-  compressionOptions?: import('./context-compressor.service').CompressionOptions;
-  maxContextTokens?: number;
-  enableContextSummarization?: boolean;
-  summarizationOptions?: import('./context-summarizer.service').SummarizationOptions;
-  enableSourcePrioritization?: boolean;
-  prioritizationOptions?: import('./source-prioritizer.service').PrioritizationOptions;
-  enableTokenBudgeting?: boolean;
-  tokenBudgetOptions?: import('./token-budget.service').TokenBudgetOptions;
-  enableFewShotExamples?: boolean;
-  fewShotOptions?: import('./few-shot-selector.service').FewShotSelectionOptions;
-  enableConversationSummarization?: boolean;
-  conversationSummarizationOptions?: import('./conversation-summarizer.service').ConversationSummarizationOptions;
-  enableHistoryFiltering?: boolean;
-  historyFilterOptions?: import('./history-filter.service').HistoryFilterOptions;
-  enableSlidingWindow?: boolean;
-  slidingWindowOptions?: import('./sliding-window.service').SlidingWindowOptions;
-  enableStateTracking?: boolean;
-  stateTrackingOptions?: import('./conversation-state.service').StateTrackingOptions;
-  enableCitationParsing?: boolean;
-  citationParseOptions?: import('./citation-parser.service').CitationParseOptions;
-  conversationId?: string;
-  /** Pre-retrieved RAG context (used by streaming route to avoid double retrieval) */
+/**
+ * QuestionRequest: the validated request shape produced by Zod,
+ * extended with internal pipeline-only fields that are never
+ * sent by clients.
+ */
+export type QuestionRequest = QuestionRequestParsed & {
+  /** Injected by streaming route when RAG context is pre-retrieved */
   _preRetrievedRagContext?: string;
-}
+};
 
 export interface Source {
   type: 'document' | 'web';
@@ -113,6 +42,8 @@ export interface Source {
   documentId?: string;
   snippet?: string;
   score?: number;
+  pageNumber?: number;
+  sectionTitle?: string;
   metadata?: import('../types/source').SourceMetadata;
 }
 
@@ -197,11 +128,12 @@ export class AIService {
 
   static async answerQuestion(
     request: QuestionRequest,
-    userId?: string
+    userId?: string,
+    options?: { signal?: AbortSignal }
   ): Promise<QuestionResponse> {
     return await LatencyTrackerService.trackOperation(
       OperationType.AI_QUESTION_ANSWERING,
-      async () => AIAnswerPipelineService.answerQuestionInternal(request, userId),
+      async () => AIAnswerPipelineService.answerQuestionInternal(request, userId, options),
       {
         userId,
         metadata: {
@@ -218,14 +150,15 @@ export class AIService {
 
   static async *answerQuestionStream(
     request: QuestionRequest,
-    userId?: string
+    userId?: string,
+    options?: { signal?: AbortSignal }
   ): AsyncGenerator<string, void, unknown> {
     const startTime = Date.now();
     let success = false;
     let error: string | undefined;
 
     try {
-      const generator = AIAnswerPipelineService.answerQuestionStreamInternal(request, userId);
+      const generator = AIAnswerPipelineService.answerQuestionStreamInternal(request, userId, options);
 
       const trackedGenerator = async function*() {
         try {
@@ -297,6 +230,32 @@ export class AIService {
     sources?: Source[]
   ): Promise<string> {
     return AIGenerationService.generateDetailedReport(originalResponse, keyword, sources);
+  }
+
+  // ── Streaming content generation (delegates to AIGenerationService) ──
+
+  static summarizeResponseStream(
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[]
+  ): AsyncGenerator<string, void, unknown> {
+    return AIGenerationService.summarizeResponseStream(originalResponse, keyword, sources);
+  }
+
+  static writeEssayStream(
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[]
+  ): AsyncGenerator<string, void, unknown> {
+    return AIGenerationService.writeEssayStream(originalResponse, keyword, sources);
+  }
+
+  static generateDetailedReportStream(
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[]
+  ): AsyncGenerator<string, void, unknown> {
+    return AIGenerationService.generateDetailedReportStream(originalResponse, keyword, sources);
   }
 
   // ── LLM cache stats (delegates to AIAnswerPipelineService) ──────────

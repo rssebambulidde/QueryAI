@@ -19,6 +19,8 @@ export namespace Database {
     name: string;
     description?: string;
     scope_config?: Record<string, any>;
+    parent_topic_id?: string | null;
+    topic_path?: string;
     created_at: string;
     updated_at: string;
   }
@@ -40,6 +42,8 @@ export namespace Database {
     content: string;
     sources?: Record<string, any>[];
     metadata?: Record<string, any>;
+    version: number;
+    parent_message_id?: string | null;
     created_at: string;
   }
 

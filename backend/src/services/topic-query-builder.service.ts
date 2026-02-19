@@ -12,6 +12,8 @@ export interface TopicQueryOptions {
   extractTopicKeywords?: boolean; // Extract keywords from topic (default: true)
   useTopicTemplates?: boolean; // Use topic-specific templates (default: true)
   topicWeight?: 'high' | 'medium' | 'low'; // How strongly to emphasize topic (default: 'medium')
+  /** Ancestor chain (root → parent) to provide hierarchical context */
+  ancestorNames?: string[];
 }
 
 export interface TopicQueryResult {
@@ -210,6 +212,7 @@ export class TopicQueryBuilderService {
       extractTopicKeywords = true,
       useTopicTemplates = true,
       topicWeight = 'medium',
+      ancestorNames = [],
     } = options;
 
     if (!topic || topic.trim().length === 0) {
@@ -227,10 +230,27 @@ export class TopicQueryBuilderService {
     let enhancedQuery = originalQuery;
     const topicTrimmed = topic.trim();
 
-    // Extract topic keywords
-    const topicKeywords = extractTopicKeywords
+    // Build hierarchical topic string if ancestors exist
+    const hierarchicalTopic = ancestorNames.length > 0
+      ? [...ancestorNames, topicTrimmed].join(' > ')
+      : topicTrimmed;
+
+    // Extract topic keywords (include ancestor keywords for broader context)
+    let topicKeywords = extractTopicKeywords
       ? this.extractTopicKeywords(topicTrimmed)
       : [];
+
+    if (extractTopicKeywords && ancestorNames.length > 0) {
+      const ancestorKeywords = ancestorNames.flatMap(name => this.extractTopicKeywords(name));
+      // Deduplicate, keeping topic keywords first
+      const existingSet = new Set(topicKeywords.map(k => k.toLowerCase()));
+      for (const kw of ancestorKeywords) {
+        if (!existingSet.has(kw.toLowerCase())) {
+          topicKeywords.push(kw);
+          existingSet.add(kw.toLowerCase());
+        }
+      }
+    }
 
     // Classify question type
     const questionType = QueryOptimizerService.classifyQuestionType(originalQuery);
@@ -242,12 +262,12 @@ export class TopicQueryBuilderService {
       ? 'context'
       : 'prefix';
 
-    // Build query based on integration method
+    // Build query based on integration method (use hierarchical topic for richer context)
     switch (integrationMethod) {
       case 'template':
         enhancedQuery = this.buildTemplateQuery(
           originalQuery,
-          topicTrimmed,
+          hierarchicalTopic,
           questionType,
           topicKeywords
         );
@@ -256,7 +276,7 @@ export class TopicQueryBuilderService {
       case 'context':
         enhancedQuery = this.buildContextQuery(
           originalQuery,
-          topicTrimmed,
+          hierarchicalTopic,
           topicKeywords,
           topicWeight
         );
@@ -268,7 +288,7 @@ export class TopicQueryBuilderService {
 
       case 'prefix':
       default:
-        enhancedQuery = this.buildPrefixQuery(originalQuery, topicTrimmed);
+        enhancedQuery = this.buildPrefixQuery(originalQuery, hierarchicalTopic);
         break;
     }
 
@@ -279,6 +299,7 @@ export class TopicQueryBuilderService {
       originalQuery: originalQuery.substring(0, 100),
       enhancedQuery: enhancedQuery.substring(0, 100),
       topic: topicTrimmed,
+      hierarchicalTopic: ancestorNames.length > 0 ? hierarchicalTopic : undefined,
       questionType,
       integrationMethod,
       topicKeywordsCount: topicKeywords.length,

@@ -56,16 +56,60 @@ export const aiApi = {
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
+
+            let currentEvent = '';
+
             for (const line of lines) {
+              if (line.startsWith('event: ')) {
+                currentEvent = line.slice(7).trim();
+                continue;
+              }
+
               if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                  if (data.chunk) yield data.chunk;
-                  if (data.followUpQuestions) yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal };
-                  if (data.qualityScore !== undefined) yield { qualityScore: data.qualityScore };
-                  if (data.done) return;
-                  if (data.error) throw new Error(data.error.message || 'Stream error');
-                } catch (e) {}
+                const payload = line.slice(6);
+
+                switch (currentEvent) {
+                  case 'chunk':
+                    yield payload;
+                    break;
+                  case 'sources':
+                    // This copy doesn't yield sources (used by non-RAG callers); skip
+                    break;
+                  case 'followUpQuestions':
+                    try {
+                      const fup = JSON.parse(payload);
+                      yield { followUpQuestions: fup.questions, refusal: fup.refusal };
+                    } catch { /* skip */ }
+                    break;
+                  case 'qualityScore':
+                    try {
+                      const qs = JSON.parse(payload);
+                      yield { qualityScore: qs.score };
+                    } catch { /* skip */ }
+                    break;
+                  case 'done':
+                    return;
+                  case 'error':
+                    try {
+                      const err = JSON.parse(payload);
+                      throw new Error(err.message || 'Stream error');
+                    } catch (e) {
+                      if (e instanceof Error && e.message !== 'Stream error') throw e;
+                    }
+                    break;
+                  default:
+                    // Legacy fallback for unnamed data-only lines
+                    try {
+                      const data = JSON.parse(payload);
+                      if (data.chunk) yield data.chunk;
+                      if (data.followUpQuestions) yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal };
+                      if (data.qualityScore !== undefined) yield { qualityScore: data.qualityScore };
+                      if (data.done) return;
+                      if (data.error) throw new Error(data.error.message || 'Stream error');
+                    } catch { /* skip */ }
+                    break;
+                }
+                currentEvent = '';
               }
             }
           }

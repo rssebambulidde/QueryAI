@@ -39,6 +39,7 @@ export interface RetrievalMetrics {
     web?: boolean;
   };
   topicId?: string;
+  ancestorTopicIds?: string[];
   documentIds?: string[];
 }
 
@@ -169,6 +170,7 @@ export class MetricsService {
     options?: {
       queryId?: string;
       topicId?: string;
+      ancestorTopicIds?: string[];
       documentIds?: string[];
       searchTypes?: {
         semantic?: boolean;
@@ -272,6 +274,7 @@ export class MetricsService {
       averageScore,
       searchTypes: options?.searchTypes,
       topicId: options?.topicId,
+      ancestorTopicIds: options?.ancestorTopicIds,
       documentIds: options?.documentIds,
     };
 
@@ -320,6 +323,7 @@ export class MetricsService {
           average_score: metrics.averageScore,
           search_types: metrics.searchTypes,
           topic_id: metrics.topicId,
+          ancestor_topic_ids: metrics.ancestorTopicIds || null,
           document_ids: metrics.documentIds,
         });
 

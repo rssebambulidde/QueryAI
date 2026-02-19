@@ -60,15 +60,10 @@ jest.mock('../relevance-ordering.service', () => ({
   },
 }));
 
-jest.mock('../context-compressor.service', () => ({
-  ContextCompressorService: {
-    compressContext: jest.fn(),
-  },
-}));
-
 jest.mock('../context-summarizer.service', () => ({
   ContextSummarizerService: {
     summarizeContext: jest.fn(),
+    compressContext: jest.fn(),
   },
 }));
 

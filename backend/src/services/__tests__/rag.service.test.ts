@@ -17,7 +17,6 @@ jest.mock('../diversity-filter.service');
 jest.mock('../deduplication.service');
 jest.mock('../context-selector.service');
 jest.mock('../relevance-ordering.service');
-jest.mock('../context-compressor.service');
 jest.mock('../context-summarizer.service');
 jest.mock('../source-prioritizer.service');
 jest.mock('../token-budget.service');
@@ -46,7 +45,6 @@ import { DiversityFilterService } from '../diversity-filter.service';
 import { DeduplicationService } from '../deduplication.service';
 import { ContextSelectorService } from '../context-selector.service';
 import { RelevanceOrderingService } from '../relevance-ordering.service';
-import { ContextCompressorService } from '../context-compressor.service';
 import { ContextSummarizerService } from '../context-summarizer.service';
 import { SourcePrioritizerService } from '../source-prioritizer.service';
 import { TokenBudgetService } from '../token-budget.service';
@@ -219,7 +217,7 @@ describe('RAGService', () => {
       },
     });
 
-    (ContextCompressorService.compressContext as any).mockReturnValue({
+    (ContextSummarizerService.compressContext as any).mockReturnValue({
       wasCompressed: false,
       context: {
         documentContexts: [],
@@ -979,24 +977,17 @@ describe('RAGService', () => {
     });
 
     it('should apply context compression when enabled', async () => {
-      (ContextCompressorService.compressContext as any).mockReturnValueOnce({
+      (ContextSummarizerService.compressContext as any).mockReturnValueOnce({
         wasCompressed: true,
         context: mockContext,
-        compressionStats: {
-          originalTokens: 1000,
-          compressedTokens: 800,
-          compressionRatio: 0.8,
-          strategy: 'truncation',
-          processingTimeMs: 50,
-        },
       });
 
       await RAGService.formatContextForPrompt(mockContext, {
-        enableContextCompression: true,
+        contextReductionStrategy: 'compress',
         query: mockQuery,
       });
 
-      expect(ContextCompressorService.compressContext).toHaveBeenCalled();
+      expect(ContextSummarizerService.compressContext).toHaveBeenCalled();
     });
 
     it('should apply context summarization when enabled', async () => {
@@ -1015,7 +1006,7 @@ describe('RAGService', () => {
       });
 
       await RAGService.formatContextForPrompt(mockContext, {
-        enableContextSummarization: true,
+        contextReductionStrategy: 'summarize',
         query: mockQuery,
       });
 
@@ -1494,7 +1485,7 @@ describe('RAGService', () => {
     });
 
     it('should handle compression failure gracefully', async () => {
-      (ContextCompressorService.compressContext as any).mockImplementation(() => {
+      (ContextSummarizerService.compressContext as any).mockImplementation(() => {
         throw new Error('Compression failed');
       });
 
@@ -1504,7 +1495,7 @@ describe('RAGService', () => {
           webSearchResults: [mockWebSearchResult],
         },
         {
-          enableContextCompression: true,
+          contextReductionStrategy: 'compress',
         }
       );
 
@@ -1522,7 +1513,7 @@ describe('RAGService', () => {
           webSearchResults: [mockWebSearchResult],
         },
         {
-          enableContextSummarization: true,
+          contextReductionStrategy: 'summarize',
         }
       );
 

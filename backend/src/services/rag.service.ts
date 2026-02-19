@@ -21,8 +21,7 @@ import { RetrievalConfig } from '../config/thresholds.config';
 import type { ExpansionStrategy } from './query-expansion.service';
 import type { RerankingStrategy } from '../config/reranking.config';
 import type { OrderingOptions } from './relevance-ordering.service';
-import type { CompressionOptions } from './context-compressor.service';
-import type { SummarizationOptions } from './context-summarizer.service';
+import type { ContextReductionStrategy, SummarizationOptions } from './context-summarizer.service';
 import type { PrioritizationOptions } from './source-prioritizer.service';
 import type { TokenBudgetOptions } from './token-budget.service';
 import type { DynamicLimitOptions } from '../config/rag.config';
@@ -46,6 +45,10 @@ export interface DocumentContext {
   publishedDate?: string;
   createdAt?: string;
   updatedAt?: string;
+  // Provenance metadata from chunk/Pinecone
+  pageNumber?: number;
+  sectionTitle?: string;
+  sectionLevel?: number;
 }
 
 export interface RAGContext {
@@ -63,6 +66,14 @@ export interface RAGContext {
   affectedServices?: import('./degradation.service').ServiceType[];
   degradationMessage?: string;
   partial?: boolean;
+  // Multi-hop retrieval metadata (set when complex query was decomposed)
+  multiHop?: {
+    decomposed: true;
+    subQuestions: string[];
+    retrievalCountsPerHop: number[];
+    totalBeforeDedup: number;
+    totalAfterDedup: number;
+  };
   // Added by summarization / compression pipelines
   summarizationStats?: any;
   compressionStats?: any;
@@ -71,6 +82,7 @@ export interface RAGContext {
 export interface RAGOptions {
   userId: string;
   topicId?: string;
+  ancestorTopicIds?: string[];
   documentIds?: string[];
   enableDocumentSearch?: boolean;
   enableWebSearch?: boolean;
@@ -125,8 +137,7 @@ export interface RAGOptions {
   diversitySimilarityThreshold?: number;
   enableRelevanceOrdering?: boolean;
   orderingOptions?: OrderingOptions;
-  enableContextCompression?: boolean;
-  compressionOptions?: CompressionOptions;
+  contextReductionStrategy?: ContextReductionStrategy;
   maxContextTokens?: number;
   enableSourcePrioritization?: boolean;
   prioritizationOptions?: PrioritizationOptions;
@@ -134,7 +145,6 @@ export interface RAGOptions {
   tokenBudgetOptions?: TokenBudgetOptions;
   enableAdaptiveContextSelection?: boolean;
   adaptiveContextOptions?: Partial<import('./adaptive-context.service').AdaptiveContextOptions>;
-  enableContextSummarization?: boolean;
   summarizationOptions?: SummarizationOptions;
   enableDynamicLimits?: boolean;
   dynamicLimitOptions?: Partial<DynamicLimitOptions>;
@@ -231,6 +241,11 @@ export class RAGService {
       degraded: retrieval.degraded,
       degradationLevel: retrieval.degradationLevel,
       partial: retrieval.partial,
+      multiHop: retrieval.multiHop ? {
+        subQuestions: retrieval.multiHop.subQuestions.length,
+        totalBeforeDedup: retrieval.multiHop.totalBeforeDedup,
+        totalAfterDedup: retrieval.multiHop.totalAfterDedup,
+      } : undefined,
     });
 
     const ragContext: RAGContext = {
@@ -241,6 +256,7 @@ export class RAGService {
       affectedServices: retrieval.affectedServices,
       degradationMessage: retrieval.degradationMessage,
       partial: retrieval.partial,
+      multiHop: retrieval.multiHop,
     };
 
     // ── 4. Cache store ──────────────────────────────────────────
@@ -257,7 +273,25 @@ export class RAGService {
     context: RAGContext,
     options: FormatOptions = {}
   ): Promise<string> {
-    return ContextPipelineService.formatContextForPrompt(context, options);
+    const formatted = await ContextPipelineService.formatContextForPrompt(context, options);
+
+    // When multi-hop retrieval was used, prepend an instruction so the LLM
+    // knows the context was gathered from multiple angles of the question.
+    if (context.multiHop) {
+      const subQList = context.multiHop.subQuestions
+        .map((q, i) => `  ${i + 1}. ${q}`)
+        .join('\n');
+      const multiHopHeader = [
+        'MULTI-PART QUESTION CONTEXT: The user\'s question was decomposed into these sub-questions for deeper retrieval:',
+        subQList,
+        'The context below includes relevant excerpts for each sub-question, merged and deduplicated.',
+        'Address ALL parts of the original question comprehensively. Structure your answer so each aspect is covered clearly.',
+        '',
+      ].join('\n');
+      return multiHopHeader + formatted;
+    }
+
+    return formatted;
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -346,6 +380,8 @@ export class RAGService {
       documentId?: string;
       snippet?: string;
       score?: number;
+      pageNumber?: number;
+      sectionTitle?: string;
       metadata?: import('../types/source').SourceMetadata;
     }> = [];
 
@@ -358,6 +394,8 @@ export class RAGService {
           documentId: doc.documentId,
           snippet: doc.content.substring(0, 200) + (doc.content.length > 200 ? '...' : ''),
           score: doc.score,
+          pageNumber: doc.pageNumber,
+          sectionTitle: doc.sectionTitle,
           metadata: {
             documentType: doc.documentType,
             fileSize: doc.fileSize,
@@ -369,6 +407,9 @@ export class RAGService {
             createdAt: doc.createdAt,
             updatedAt: doc.updatedAt,
             timestamp: doc.timestamp,
+            pageNumber: doc.pageNumber,
+            sectionTitle: doc.sectionTitle,
+            sectionLevel: doc.sectionLevel,
           },
         });
       });

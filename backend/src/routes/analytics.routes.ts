@@ -3,6 +3,8 @@ import { AnalyticsService } from '../services/analytics.service';
 import { CostAnalyticsService, type CostInterval } from '../services/cost-analytics.service';
 import * as AlertService from '../services/alert.service';
 import { MonitoringService, type UsageBucket } from '../services/monitoring.service';
+import { CitationClickService } from '../services/citation-click.service';
+import { CitedSourceService } from '../services/cited-source.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireSuperAdmin } from '../middleware/authorization.middleware';
@@ -10,6 +12,7 @@ import { apiLimiter } from '../middleware/rateLimiter';
 import { ValidationError } from '../types/error';
 import { validateUUIDParams } from '../validation/uuid';
 import { DatabaseService } from '../services/database.service';
+import { supabaseAdmin } from '../config/database';
 import logger from '../config/logger';
 
 const router = Router();
@@ -355,6 +358,201 @@ router.get(
       success: true,
       data: { usage: usageByDate },
     });
+  })
+);
+
+/**
+ * GET /api/analytics/regeneration-quality
+ * Tracks how regenerations affect answer quality compared to originals.
+ * Super Admin only.  Query: ?days=30
+ */
+router.get(
+  '/regeneration-quality',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const days = Math.min(parseInt(req.query.days as string, 10) || 30, 365);
+
+    const { data, error } = await supabaseAdmin
+      .schema('private' as any)
+      .rpc('get_regeneration_quality_stats', { p_days: days });
+
+    if (error) {
+      logger.error('Failed to fetch regeneration quality stats', { error: error.message });
+      throw new ValidationError(`Failed to fetch stats: ${error.message}`);
+    }
+
+    // The RPC returns a single row
+    const stats = Array.isArray(data) ? data[0] : data;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        period: `${days} days`,
+        totalRegenerations: Number(stats?.total_regenerations ?? 0),
+        avgVersionCount: Number(stats?.avg_version_count ?? 0),
+        qualityImproved: Number(stats?.quality_improved ?? 0),
+        qualityUnchanged: Number(stats?.quality_unchanged ?? 0),
+        qualityDeclined: Number(stats?.quality_declined ?? 0),
+        avgQualityDelta: Number(stats?.avg_quality_delta ?? 0),
+      },
+    });
+  })
+);
+
+// ═══════════════════════════════════════════════════════════════════════
+// Citation click-through analytics
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/analytics/citation-click
+ * Record a citation click event. Authenticated users only.
+ */
+router.post(
+  '/citation-click',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { messageId, sourceIndex, sourceUrl, sourceType, conversationId } = req.body;
+
+    if (sourceIndex === undefined || sourceIndex === null || typeof sourceIndex !== 'number') {
+      throw new ValidationError('sourceIndex is required and must be a number');
+    }
+    if (!sourceType || !['document', 'web'].includes(sourceType)) {
+      throw new ValidationError('sourceType must be "document" or "web"');
+    }
+
+    const clickId = await CitationClickService.recordClick({
+      userId: req.user!.id,
+      conversationId: conversationId || undefined,
+      messageId: messageId || undefined,
+      sourceIndex,
+      sourceUrl: sourceUrl || undefined,
+      sourceType,
+    });
+
+    res.status(201).json({ success: true, data: { id: clickId } });
+  })
+);
+
+/**
+ * GET /api/analytics/citation-clicks
+ * Admin: citation click stats overview.  Query: ?days=30
+ */
+router.get(
+  '/citation-clicks',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const days = Math.min(parseInt(req.query.days as string, 10) || 30, 365);
+    const stats = await CitationClickService.getClickStats(days);
+
+    res.status(200).json({ success: true, data: { period: `${days} days`, ...stats } });
+  })
+);
+
+/**
+ * GET /api/analytics/citation-clicks/domains
+ * Admin: click-through rates per source domain.  Query: ?days=30
+ */
+router.get(
+  '/citation-clicks/domains',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const days = Math.min(parseInt(req.query.days as string, 10) || 30, 365);
+    const rates = await CitationClickService.getDomainClickRates(days);
+
+    res.status(200).json({ success: true, data: { period: `${days} days`, domains: rates } });
+  })
+);
+
+// ═══════════════════════════════════════════════════════════════════════
+// Cross-conversation cited sources (user-facing, not admin-only)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/analytics/cited-sources
+ * Returns the authenticated user's most-cited sources.
+ * Query: ?topicId, ?startDate, ?endDate, ?limit, ?offset
+ */
+router.get(
+  '/cited-sources',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ValidationError('User not authenticated');
+
+    const topicId = req.query.topicId as string | undefined;
+    const startDate = req.query.startDate as string | undefined;
+    const endDate = req.query.endDate as string | undefined;
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 50, 100);
+    const offset = parseInt(req.query.offset as string, 10) || 0;
+
+    const sources = await CitedSourceService.getUserCitedSources(userId, {
+      topicId,
+      startDate,
+      endDate,
+      limit,
+      offset,
+    });
+
+    res.json({ success: true, data: { sources } });
+  })
+);
+
+/**
+ * GET /api/analytics/cited-sources/:id/conversations
+ * Source explorer: returns all conversations where a cited source was used.
+ * Query: ?limit, ?offset
+ */
+router.get(
+  '/cited-sources/:id/conversations',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ValidationError('User not authenticated');
+
+    const citedSourceId = req.params.id as string;
+    if (!citedSourceId) throw new ValidationError('Cited source ID is required');
+
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 50, 100);
+    const offset = parseInt(req.query.offset as string, 10) || 0;
+
+    const conversations = await CitedSourceService.getSourceConversations(userId, citedSourceId, {
+      limit,
+      offset,
+    });
+
+    res.json({ success: true, data: { conversations } });
+  })
+);
+
+/**
+ * GET /api/analytics/cited-sources/topic/:topicId
+ * Sources most relied on within a specific topic.
+ * Query: ?limit
+ */
+router.get(
+  '/cited-sources/topic/:topicId',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ValidationError('User not authenticated');
+
+    const topicId = req.params.topicId as string;
+    if (!topicId) throw new ValidationError('Topic ID is required');
+
+    const limit = Math.min(parseInt(req.query.limit as string, 10) || 20, 50);
+    const sources = await CitedSourceService.getTopicCitedSources(userId, topicId, limit);
+
+    res.json({ success: true, data: { sources } });
   })
 );
 

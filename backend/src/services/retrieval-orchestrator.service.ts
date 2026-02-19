@@ -30,6 +30,7 @@ import { MetricsService } from './metrics.service';
 import { LatencyTrackerService, OperationType } from './latency-tracker.service';
 import logger from '../config/logger';
 import { RetrievalConfig, CacheTtlConfig } from '../config/thresholds.config';
+import { QueryDecomposerService, DecompositionResult } from './query-decomposer.service';
 
 import type { DocumentContext, RAGContext, RAGOptions } from './rag.service';
 
@@ -45,6 +46,17 @@ export interface RetrievalResult {
   affectedServices?: ServiceType[];
   degradationMessage?: string;
   partial?: boolean;
+  /** Multi-hop metadata — present when query was decomposed. */
+  multiHop?: {
+    decomposed: true;
+    subQuestions: string[];
+    /** Number of unique document chunks retrieved per sub-question. */
+    retrievalCountsPerHop: number[];
+    /** Total chunks before deduplication. */
+    totalBeforeDedup: number;
+    /** Total chunks after deduplication. */
+    totalAfterDedup: number;
+  };
 }
 
 export class RetrievalOrchestratorService {
@@ -277,6 +289,7 @@ export class RetrievalOrchestratorService {
       const keywordResults = await KeywordSearchService.search(expandedQuery, {
         userId: options.userId,
         topicId: options.topicId,
+        ancestorTopicIds: options.ancestorTopicIds,
         documentIds: options.documentIds,
         topK: options.maxDocumentChunks || RetrievalConfig.defaults.topK,
         minScore: (options.minScore || RetrievalConfig.keywordBaseMinScore) * RetrievalConfig.keywordMinScoreMultiplier,
@@ -407,6 +420,7 @@ export class RetrievalOrchestratorService {
             userId: options.userId,
             topK: Math.min(50, (options.maxDocumentChunks || RetrievalConfig.defaults.topK) * 3),
             topicId: options.topicId,
+            ancestorTopicIds: options.ancestorTopicIds,
             documentIds: options.documentIds,
             minScore: RetrievalConfig.broadAnalysisMinScore,
             // NOTE: Do NOT filter by embeddingModel — vectors stored before this
@@ -461,6 +475,7 @@ export class RetrievalOrchestratorService {
               userId: options.userId,
               topK: options.maxDocumentChunks || RetrievalConfig.defaults.topK,
               topicId: options.topicId,
+              ancestorTopicIds: options.ancestorTopicIds,
               documentIds: options.documentIds,
               minScore,
               // NOTE: Do NOT filter by embeddingModel — vectors stored before this
@@ -499,6 +514,7 @@ export class RetrievalOrchestratorService {
               userId: options.userId,
               topK: options.maxDocumentChunks || RetrievalConfig.defaults.topK,
               topicId: options.topicId,
+              ancestorTopicIds: options.ancestorTopicIds,
               documentIds: options.documentIds,
               minScore,
               // NOTE: Do NOT filter by embeddingModel
@@ -559,6 +575,7 @@ export class RetrievalOrchestratorService {
               userId: options.userId,
               topK: options.maxDocumentChunks || RetrievalConfig.defaults.topK,
               topicId: options.topicId,
+              ancestorTopicIds: options.ancestorTopicIds,
               documentIds: options.documentIds,
               minScore: fallbackThreshold,
               embeddingModel,
@@ -651,6 +668,10 @@ export class RetrievalOrchestratorService {
             fileSizeFormatted,
             publishedDate,
             authors,
+            // Provenance from Pinecone metadata
+            pageNumber: (result.metadata as any)?.page_number ?? undefined,
+            sectionTitle: (result.metadata as any)?.section_title ?? undefined,
+            sectionLevel: (result.metadata as any)?.section_level ?? undefined,
           });
         } catch (error: any) {
           logger.warn('Failed to process document metadata', {
@@ -991,9 +1012,221 @@ export class RetrievalOrchestratorService {
 
   /**
    * Execute parallel retrieval (semantic + keyword + web) and merge results.
+   * Automatically detects complex multi-part questions and performs
+   * multi-hop retrieval when beneficial.
+   *
    * Returns raw RetrievalResult before pipeline processing.
    */
   static async orchestrateRetrieval(
+    query: string,
+    options: RAGOptions
+  ): Promise<RetrievalResult> {
+    // ── Multi-hop gate ─────────────────────────────────────────────
+    // Only attempt decomposition when document search is enabled
+    // (multi-hop is about retrieving diverse document context).
+    const enableMultiHop = options.enableDocumentSearch !== false;
+
+    if (enableMultiHop && QueryDecomposerService.shouldDecompose(query)) {
+      try {
+        const decomposition = await QueryDecomposerService.decompose(query);
+        if (decomposition.decomposed) {
+          return this.orchestrateMultiHopRetrieval(query, decomposition, options);
+        }
+        logger.debug('Decomposition gate passed but LLM declined', {
+          reason: decomposition.reason,
+          query: query.substring(0, 100),
+        });
+      } catch (error: any) {
+        logger.warn('Multi-hop decomposition failed, falling back to single-hop', {
+          error: error.message,
+          userId: options.userId,
+        });
+      }
+    }
+
+    // ── Single-hop (default) ───────────────────────────────────────
+    return this.orchestrateSingleHopRetrieval(query, options);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Multi-hop retrieval
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Retrieve context for each sub-question independently, then merge,
+   * deduplicate, and re-rank the unified set.
+   *
+   * Web search is run once with the original query (not per sub-question)
+   * to avoid excessive API calls.
+   */
+  private static async orchestrateMultiHopRetrieval(
+    originalQuery: string,
+    decomposition: DecompositionResult,
+    options: RAGOptions
+  ): Promise<RetrievalResult> {
+    const { subQuestions } = decomposition;
+
+    // Calculate limits based on original query (for global budget)
+    const { maxDocumentChunks, maxWebResults } = this.calculateLimits(originalQuery, options);
+
+    // Per-sub-question chunk budget: divide equally with a small boost
+    const perHopChunks = Math.max(3, Math.ceil(maxDocumentChunks / subQuestions.length * 1.25));
+
+    logger.info('Starting multi-hop retrieval', {
+      userId: options.userId,
+      originalQuery: originalQuery.substring(0, 100),
+      subQuestionCount: subQuestions.length,
+      subQuestions: subQuestions.map(q => q.substring(0, 80)),
+      perHopChunks,
+      maxDocumentChunks,
+    });
+
+    const hopOptions: RAGOptions = {
+      ...options,
+      maxDocumentChunks: perHopChunks,
+      maxWebResults,
+      // Disable dynamic limits recalculation per hop — we already computed them
+      enableDynamicLimits: false,
+    };
+
+    // ── Parallel per-hop retrieval ──────────────────────────────────
+    // Each sub-question gets independent semantic + keyword search.
+    // Web search runs once with the original query.
+    const hopPromises = subQuestions.map(async (subQ) => {
+      const [semanticResult, keywordResult] = await Promise.allSettled([
+        options.enableDocumentSearch !== false
+          ? this.retrieveDocumentContext(subQ, hopOptions)
+          : Promise.resolve([] as DocumentContext[]),
+        options.enableKeywordSearch
+          ? this.retrieveDocumentContextKeyword(subQ, hopOptions)
+          : Promise.resolve([] as KeywordSearchResult[]),
+      ]);
+
+      const semantic = semanticResult.status === 'fulfilled' ? semanticResult.value : [];
+      const keyword = keywordResult.status === 'fulfilled' ? keywordResult.value : [];
+
+      // Merge hybrid per hop
+      let merged: DocumentContext[];
+      if (options.enableDocumentSearch !== false && options.enableKeywordSearch && semantic.length > 0 && keyword.length > 0) {
+        merged = await this.combineSearchResults(semantic, keyword, hopOptions);
+      } else if (semantic.length > 0) {
+        merged = semantic;
+      } else {
+        merged = keyword.map(r => ({
+          documentId: r.documentId,
+          documentName: r.documentName || 'Unknown Document',
+          chunkIndex: r.chunkIndex,
+          content: r.content,
+          score: r.score,
+        }));
+      }
+
+      return merged;
+    });
+
+    // Web search (once, with original query)
+    const webPromise = this.retrieveWebSearch(originalQuery, { ...options, maxWebResults });
+
+    const [hopResults, webSearchResult] = await Promise.all([
+      Promise.all(hopPromises),
+      webPromise.catch(() => [] as RAGContext['webSearchResults']),
+    ]);
+
+    const retrievalCountsPerHop = hopResults.map(r => r.length);
+    const allChunks = hopResults.flat();
+    const totalBeforeDedup = allChunks.length;
+
+    // ── Deduplication ───────────────────────────────────────────────
+    // Remove duplicate chunks (same documentId + chunkIndex), keeping
+    // the copy with the highest score.
+    const chunkMap = new Map<string, DocumentContext>();
+    for (const chunk of allChunks) {
+      const key = `${chunk.documentId}::${chunk.chunkIndex}`;
+      const existing = chunkMap.get(key);
+      if (!existing || chunk.score > existing.score) {
+        chunkMap.set(key, chunk);
+      }
+    }
+
+    // Re-rank by score descending, enforce global budget
+    let documentContexts = Array.from(chunkMap.values())
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxDocumentChunks);
+
+    const totalAfterDedup = documentContexts.length;
+
+    // ── Fallback: if multi-hop produced nothing useful, try single-hop
+    if (documentContexts.length === 0 && options.enableDocumentSearch !== false) {
+      logger.warn('Multi-hop retrieval produced no results, falling back to single-hop', {
+        userId: options.userId,
+        subQuestionCount: subQuestions.length,
+      });
+      return this.orchestrateSingleHopRetrieval(originalQuery, options);
+    }
+
+    logger.info('Multi-hop retrieval complete', {
+      userId: options.userId,
+      subQuestionCount: subQuestions.length,
+      retrievalCountsPerHop,
+      totalBeforeDedup,
+      totalAfterDedup,
+      webResults: webSearchResult.length,
+    });
+
+    // Degradation status
+    const degradationStatus = DegradationService.getOverallStatus();
+    const isDegraded = degradationStatus.level !== DegradationLevel.NONE;
+
+    // Collect metrics (async, non-blocking)
+    if (options.userId && documentContexts.length > 0) {
+      MetricsService.collectMetrics(
+        originalQuery,
+        options.userId,
+        documentContexts,
+        undefined,
+        {
+          topicId: options.topicId,
+          ancestorTopicIds: options.ancestorTopicIds,
+          documentIds: options.documentIds,
+          searchTypes: {
+            semantic: options.enableDocumentSearch,
+            keyword: options.enableKeywordSearch,
+            hybrid: options.enableDocumentSearch && options.enableKeywordSearch,
+            web: options.enableWebSearch,
+          },
+          webResultsCount: webSearchResult.length,
+        }
+      ).catch((err: any) => {
+        logger.warn('Failed to collect multi-hop retrieval metrics', { error: err.message });
+      });
+    }
+
+    return {
+      documentContexts,
+      webSearchResults: webSearchResult,
+      degraded: isDegraded,
+      degradationLevel: degradationStatus.level,
+      affectedServices: degradationStatus.affectedServices,
+      degradationMessage: isDegraded ? degradationStatus.message : undefined,
+      multiHop: {
+        decomposed: true,
+        subQuestions,
+        retrievalCountsPerHop,
+        totalBeforeDedup,
+        totalAfterDedup,
+      },
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Single-hop retrieval (original logic)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Standard single-hop retrieval: parallel semantic + keyword + web
+   * search for a single query, then merge.
+   */
+  private static async orchestrateSingleHopRetrieval(
     query: string,
     options: RAGOptions
   ): Promise<RetrievalResult> {
@@ -1082,6 +1315,7 @@ export class RetrievalOrchestratorService {
         undefined,
         {
           topicId: options.topicId,
+          ancestorTopicIds: options.ancestorTopicIds,
           documentIds: options.documentIds,
           searchTypes: {
             semantic: options.enableDocumentSearch,

@@ -78,6 +78,8 @@ export interface PrioritizationRules {
 export interface PrioritizationOptions {
   rules?: Partial<PrioritizationRules>;
   query?: string; // Query for relevance context
+  /** Domain → boost score (0-1) from citation click-through analytics. */
+  clickBoostMap?: Map<string, number>;
 }
 
 export interface PrioritizationStats {
@@ -183,9 +185,13 @@ export class SourcePrioritizerService {
   /**
    * Calculate priority score for a web result
    */
+  /** Max multiplier applied when a domain has the highest click boost (1.0). */
+  private static readonly CLICK_BOOST_MAX = 1.15;
+
   private static calculateWebPriority(
     result: { title: string; url: string; content: string; score?: number; publishedDate?: string; authorityScore?: number },
-    rules: PrioritizationRules
+    rules: PrioritizationRules,
+    clickBoostMap?: Map<string, number>
   ): number {
     // Get authority score (use provided or calculate)
     let authorityScore = result.authorityScore;
@@ -215,6 +221,20 @@ export class SourcePrioritizerService {
     if (rules.preferAuthoritative && authorityScore >= rules.highAuthorityThreshold) {
       // High authority boost
       priority *= rules.highAuthorityBoost;
+    }
+
+    // Apply citation click-through boost
+    if (clickBoostMap && clickBoostMap.size > 0 && result.url) {
+      try {
+        const domain = new URL(result.url).hostname.replace(/^www\./, '');
+        const boostScore = clickBoostMap.get(domain);
+        if (boostScore !== undefined && boostScore > 0) {
+          // Linear interpolation: 1.0 → CLICK_BOOST_MAX based on normalized score
+          priority *= 1.0 + boostScore * (this.CLICK_BOOST_MAX - 1.0);
+        }
+      } catch {
+        // Invalid URL — skip boost
+      }
     }
     
     // Apply web weight
@@ -276,7 +296,8 @@ export class SourcePrioritizerService {
           content: result.content,
           publishedDate: undefined, // Web results in RAGContext don't have publishedDate
         },
-        rules
+        rules,
+        options.clickBoostMap
       );
       
       const authorityScore = DomainAuthorityService.getDomainAuthorityScore(result.url).score;

@@ -58,7 +58,11 @@ const DEFAULT_PARSE_OPTIONS: Required<CitationParseOptions> = {
  */
 export class CitationParserService {
   /**
-   * Parse citations from text
+   * Parse citations from text using regex patterns.
+   *
+   * @deprecated Primary citation extraction is now handled by structured JSON
+   * output (AIResponseSchema.citedSources). This method is retained as a fallback
+   * when the model returns unstructured text.
    */
   static parseCitations(
     text: string,

@@ -16,6 +16,10 @@ export interface VectorMetadata {
   createdAt: string;
   embeddingModel?: string; // Store which model was used
   embeddingDimensions?: number; // Store dimensions for validation
+  // Provenance metadata for citations
+  page_number?: number; // 1-based page number (PDFs)
+  section_title?: string; // Heading text of the enclosing section
+  section_level?: number; // Heading level (1-6)
 }
 
 export interface SearchResult {
@@ -142,6 +146,17 @@ export class PineconeService {
 
         if (embeddingModel) {
           metadata.embeddingModel = embeddingModel;
+        }
+
+        // Provenance metadata (when provided by chunking pipeline)
+        if ((chunk as any).pageNumber != null) {
+          metadata.page_number = (chunk as any).pageNumber;
+        }
+        if ((chunk as any).sectionTitle) {
+          metadata.section_title = (chunk as any).sectionTitle;
+        }
+        if ((chunk as any).sectionLevel != null) {
+          metadata.section_level = (chunk as any).sectionLevel;
         }
 
         return {
@@ -404,6 +419,7 @@ export class PineconeService {
       userId: string;
       topK?: number;
       topicId?: string;
+      ancestorTopicIds?: string[];
       documentIds?: string[];
       minScore?: number;
       embeddingModel?: string; // Optional: filter by embedding model
@@ -443,7 +459,12 @@ export class PineconeService {
       };
 
       if (options.topicId) {
-        filter.topicId = { $eq: options.topicId };
+        if (options.ancestorTopicIds && options.ancestorTopicIds.length > 0) {
+          // Include sub-topic + all ancestor topics for hierarchical retrieval
+          filter.topicId = { $in: [options.topicId, ...options.ancestorTopicIds] };
+        } else {
+          filter.topicId = { $eq: options.topicId };
+        }
       }
 
       if (options.documentIds && options.documentIds.length > 0) {

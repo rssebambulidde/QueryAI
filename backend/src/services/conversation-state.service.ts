@@ -492,4 +492,29 @@ export class ConversationStateService {
 
     return parts.join('\n');
   }
+
+  /**
+   * Format state for context inclusion — compact version (~200 token budget).
+   * Limits: 5 topics, 10 entities (name+type only), 10 concepts.
+   */
+  static formatStateForContextCompact(state: ConversationState): string {
+    const parts: string[] = [];
+
+    if (state.topics.length > 0) {
+      const topics = state.topics.slice(0, 5);
+      parts.push(`Topics: ${topics.join(', ')}`);
+    }
+
+    if (state.entities.length > 0) {
+      const entities = state.entities.slice(0, 10);
+      parts.push(`Entities: ${entities.map(e => `${e.name} [${e.type}]`).join(', ')}`);
+    }
+
+    if (state.keyConcepts.length > 0) {
+      const concepts = state.keyConcepts.slice(0, 10);
+      parts.push(`Concepts: ${concepts.join(', ')}`);
+    }
+
+    return parts.join('\n');
+  }
 }

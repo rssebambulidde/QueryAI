@@ -33,6 +33,7 @@ export interface TextChunk {
   tokenCount: number;
   chunkIndex: number;
   // Enhanced metadata for boundary awareness
+  pageNumber?: number; // 1-based page number (PDFs via page breaks)
   section?: SectionInfo; // Section this chunk belongs to
   paragraphIndices?: number[]; // Indices of paragraphs included in this chunk
   startsAtParagraphBoundary?: boolean; // Whether chunk starts at paragraph boundary

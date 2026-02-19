@@ -254,95 +254,16 @@ export class CitationValidatorService {
    */
   static formatCitationGuidelines(): string {
     try {
-      const guidelines = this.loadGuidelines();
-      
-      let formatted = '\n\n=== ENHANCED CITATION INSTRUCTIONS ===\n\n';
-      
-      // When to cite
-      formatted += 'WHEN TO CITE (MANDATORY):\n';
-      formatted += 'You MUST cite sources for:\n';
-      for (const [type, description] of Object.entries(guidelines.whenToCite)) {
-        formatted += `- ${type.charAt(0).toUpperCase() + type.slice(1)}: ${description}\n`;
-      }
-      formatted += '\n';
+      // Load guidelines to validate they exist (keeps cache warm for other methods)
+      this.loadGuidelines();
 
-      // Citation formats
-      formatted += 'CITATION FORMATS:\n';
-      formatted += '1. Document Citations:\n';
-      formatted += `   Format: ${guidelines.citationFormats.documentCitations.format}\n`;
-      formatted += `   ${guidelines.citationFormats.documentCitations.description}\n`;
-      formatted += `   Examples: ${guidelines.citationFormats.documentCitations.examples.join(', ')}\n`;
-      formatted += `   Rules:\n`;
-      for (const rule of guidelines.citationFormats.documentCitations.rules) {
-        formatted += `   - ${rule}\n`;
-      }
-      formatted += '\n';
-
-      formatted += '2. Document Citations with URL:\n';
-      formatted += `   Format: ${guidelines.citationFormats.documentCitationsWithUrl.format}\n`;
-      formatted += `   ${guidelines.citationFormats.documentCitationsWithUrl.description}\n`;
-      formatted += `   Examples: ${guidelines.citationFormats.documentCitationsWithUrl.examples.join(', ')}\n`;
-      formatted += '\n';
-
-      formatted += '3. Web Citations:\n';
-      formatted += `   Format: ${guidelines.citationFormats.webCitations.format}\n`;
-      formatted += `   ${guidelines.citationFormats.webCitations.description}\n`;
-      formatted += `   Examples: ${guidelines.citationFormats.webCitations.examples.join(', ')}\n`;
-      formatted += `   Rules:\n`;
-      for (const rule of guidelines.citationFormats.webCitations.rules) {
-        formatted += `   - ${rule}\n`;
-      }
-      formatted += '\n';
-
-      // Citation placement
-      formatted += 'CITATION PLACEMENT:\n';
-      formatted += '1. Inline Citations (PREFERRED):\n';
-      formatted += `   ${guidelines.citationPlacement.inline.description}\n`;
-      formatted += `   Examples:\n`;
-      for (const example of guidelines.citationPlacement.inline.examples) {
-        formatted += `   - ${example}\n`;
-      }
-      formatted += '\n';
-
-      // Citation examples
-      formatted += 'CITATION EXAMPLES BY TYPE:\n';
-      for (const [key, example] of Object.entries(guidelines.citationExamples)) {
-        formatted += `${example.type.charAt(0).toUpperCase() + example.type.slice(1)}:\n`;
-        formatted += `   Example: ${example.example}\n`;
-        formatted += `   Explanation: ${example.explanation}\n\n`;
-      }
-
-      // Common mistakes
-      formatted += 'COMMON MISTAKES TO AVOID:\n';
-      for (const [key, mistake] of Object.entries(guidelines.commonMistakes)) {
-        formatted += `${mistake.mistake}:\n`;
-        formatted += `   Wrong: ${mistake.example.wrong}\n`;
-        formatted += `   Correct: ${mistake.example.correct}\n`;
-        formatted += `   Rule: ${mistake.correct}\n\n`;
-      }
-
-      // Mandatory rules
-      formatted += 'MANDATORY CITATION RULES:\n';
-      for (const rule of guidelines.citationRules.mandatory) {
-        formatted += `- ${rule}\n`;
-      }
-      formatted += '\n';
-
-      formatted += 'FORMATTING RULES:\n';
-      for (const rule of guidelines.citationRules.formatting) {
-        formatted += `- ${rule}\n`;
-      }
-      formatted += '\n';
-
-      formatted += 'VALIDATION RULES:\n';
-      for (const rule of guidelines.citationRules.validation) {
-        formatted += `- ${rule}\n`;
-      }
-      formatted += '\n';
-
-      formatted += '=== END ENHANCED CITATION INSTRUCTIONS ===\n';
-
-      return formatted;
+      // Condensed citation instructions — replaces the verbose per-field expansion.
+      // All duplicate rules were collapsed into the system prompt's CITATION RULE block;
+      // this section adds only the additional detail not already stated there.
+      return `Cite facts, statistics, quotes, dates, names, and processes.
+- Place citation inline immediately after the claim, not at paragraph end.
+- URLs must exactly match those provided in the context.
+- Do not cite sources that are not in the context.`;
     } catch (error: any) {
       logger.warn('Failed to format citation guidelines, using fallback', {
         error: error.message,

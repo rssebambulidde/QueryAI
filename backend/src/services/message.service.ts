@@ -5,6 +5,7 @@ import { AppError, ValidationError } from '../types/error';
 import { ConversationService } from './conversation.service';
 import { ConversationSummarizerService, ConversationSummarizationOptions } from './conversation-summarizer.service';
 import { SlidingWindowService, SlidingWindowOptions } from './sliding-window.service';
+import { CitedSourceService } from './cited-source.service';
 
 export interface CreateMessageInput {
   conversationId: string;
@@ -80,6 +81,11 @@ export class MessageService {
         role: input.role,
       });
 
+      // Fire-and-forget: track cited sources for assistant messages
+      if (input.role === 'assistant' && input.sources?.length) {
+        this._trackCitationsAsync(input.conversationId, data.id, input.sources as Record<string, any>[]).catch(() => {});
+      }
+
       return data;
     } catch (error) {
       if (error instanceof ValidationError || error instanceof AppError) {
@@ -91,7 +97,11 @@ export class MessageService {
   }
 
   /**
-   * Save a message pair (user message + assistant response) atomically
+   * Save a message pair (user message + assistant response) atomically.
+   *
+   * Uses the `save_message_pair` Supabase RPC function so both rows are
+   * inserted inside a single database transaction.  If anything fails
+   * the whole transaction is rolled back — no dangling user messages.
    */
   static async saveMessagePair(
     conversationId: string,
@@ -101,35 +111,86 @@ export class MessageService {
     assistantMetadata?: Record<string, any>
   ): Promise<MessagePair> {
     try {
-      // Save user message
-      const userMessage = await this.saveMessage({
-        conversationId,
-        role: 'user',
-        content: userContent,
+      if (!conversationId) {
+        throw new ValidationError('Conversation ID is required');
+      }
+      if (!userContent || userContent.trim().length === 0) {
+        throw new ValidationError('User message content is required');
+      }
+      if (!assistantContent || assistantContent.trim().length === 0) {
+        throw new ValidationError('Assistant message content is required');
+      }
+
+      const { data, error } = await supabaseAdmin.schema('private').rpc('save_message_pair', {
+        p_conversation_id: conversationId,
+        p_user_content: userContent.trim(),
+        p_assistant_content: assistantContent.trim(),
+        p_sources: (assistantSources as any) ?? null,
+        p_metadata: (assistantMetadata as any) ?? null,
       });
 
-      // Save assistant message
-      const assistantMessage = await this.saveMessage({
-        conversationId,
-        role: 'assistant',
-        content: assistantContent,
-        sources: assistantSources,
-        metadata: assistantMetadata,
-      });
+      if (error) {
+        logger.error('Error saving message pair via RPC:', error);
+        throw new AppError(
+          `Failed to save message pair: ${error.message}`,
+          500,
+          'MESSAGE_PAIR_SAVE_ERROR'
+        );
+      }
 
-      logger.info('Message pair saved', {
+      // The RPC returns a JSONB object with userMessage / assistantMessage
+      const userMessage: Database.Message = data.userMessage;
+      const assistantMessage: Database.Message = data.assistantMessage;
+
+      logger.info('Message pair saved atomically', {
         conversationId,
         userMessageId: userMessage.id,
         assistantMessageId: assistantMessage.id,
       });
 
-      return {
-        userMessage,
-        assistantMessage,
-      };
+      // Fire-and-forget: track cited sources on the assistant message
+      if (assistantSources?.length) {
+        this._trackCitationsAsync(conversationId, assistantMessage.id, assistantSources as Record<string, any>[]).catch(() => {});
+      }
+
+      return { userMessage, assistantMessage };
     } catch (error) {
-      logger.error('Error saving message pair:', error);
-      throw error;
+      if (error instanceof ValidationError || error instanceof AppError) {
+        throw error;
+      }
+      logger.error('Unexpected error saving message pair:', error);
+      throw new AppError('Failed to save message pair', 500, 'MESSAGE_PAIR_SAVE_ERROR');
+    }
+  }
+
+  /**
+   * Fire-and-forget helper: look up conversation owner + topic, then
+   * track all cited sources via CitedSourceService.
+   */
+  private static async _trackCitationsAsync(
+    conversationId: string,
+    messageId: string,
+    sources: Record<string, any>[]
+  ): Promise<void> {
+    try {
+      // Look up conversation to get user_id and topic_id
+      const { data: conv } = await supabaseAdmin
+        .from('conversations')
+        .select('user_id, topic_id')
+        .eq('id', conversationId)
+        .single();
+
+      if (!conv) return;
+
+      await CitedSourceService.trackMessageSources(
+        conv.user_id,
+        conversationId,
+        messageId,
+        conv.topic_id || null,
+        sources
+      );
+    } catch (err) {
+      logger.warn('Citation tracking failed (non-blocking)', { error: (err as Error).message });
     }
   }
 
@@ -180,12 +241,23 @@ export class MessageService {
     }
   }
 
+  /** Default number of most-recent messages to fetch. */
+  private static readonly DEFAULT_MESSAGE_LIMIT = 200;
+
   /**
-   * Get all messages for a conversation (no pagination)
+   * Get messages for a conversation.
+   *
+   * By default fetches at most the **last 200 messages** (most recent) to
+   * avoid loading potentially huge histories.  The rows are returned in
+   * chronological (ascending) order.
+   *
+   * Pass `{ unlimited: true }` for admin / export use-cases that need every
+   * message, or a custom `{ limit: N }` to override the default cap.
    */
   static async getAllMessages(
     conversationId: string,
-    userId: string
+    userId: string,
+    options?: { limit?: number; unlimited?: boolean }
   ): Promise<Database.Message[]> {
     try {
       // Verify conversation belongs to user
@@ -194,11 +266,23 @@ export class MessageService {
         throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
       }
 
-      const { data, error } = await supabaseAdmin
+      const unlimited = options?.unlimited === true;
+      const limit = unlimited ? undefined : (options?.limit ?? this.DEFAULT_MESSAGE_LIMIT);
+
+      let query = supabaseAdmin
         .from('messages')
         .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
+        .eq('conversation_id', conversationId);
+
+      if (limit) {
+        // Fetch the last N rows efficiently: order DESC, limit, then
+        // reverse in-memory so callers always receive chronological order.
+        query = query.order('created_at', { ascending: false }).limit(limit);
+      } else {
+        query = query.order('created_at', { ascending: true });
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         logger.error('Error fetching all messages:', error);
@@ -209,7 +293,14 @@ export class MessageService {
         );
       }
 
-      return data || [];
+      const messages = data || [];
+
+      // Reverse when we fetched DESC so output is always chronological.
+      if (limit) {
+        messages.reverse();
+      }
+
+      return messages;
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -228,7 +319,7 @@ export class MessageService {
     options: ConversationSummarizationOptions = {}
   ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
     try {
-      // Get all messages
+      // Get recent messages (default-limited to avoid loading huge histories)
       const messages = await this.getAllMessages(conversationId, userId);
 
       // Convert to format expected by summarizer
@@ -257,7 +348,7 @@ export class MessageService {
     options: SlidingWindowOptions = {}
   ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
     try {
-      // Get all messages
+      // Get recent messages (default-limited to avoid loading huge histories)
       const messages = await this.getAllMessages(conversationId, userId);
 
       // Convert to format expected by sliding window service
@@ -266,11 +357,7 @@ export class MessageService {
         content: msg.content || '',
       }));
 
-      // Apply sliding window
-      const windowResult = await SlidingWindowService.applySlidingWindow(history, options);
-
-      // Format for history
-      return SlidingWindowService.formatWindowForHistory(windowResult);
+      return this.applyHistoryStrategy(history, options);
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -278,6 +365,33 @@ export class MessageService {
       logger.error('Unexpected error getting sliding window history:', error);
       throw new AppError('Failed to get sliding window history', 500, 'HISTORY_SLIDING_WINDOW_ERROR');
     }
+  }
+
+  /**
+   * Apply the unified conversation-history strategy to a raw message array.
+   *
+   * **Strategy: sliding window with summarization fallback.**
+   *
+   * 1. Keep the most recent N messages (default: 10, from SlidingWindowConfig.windowSize).
+   * 2. When older messages exist beyond the window, summarize them into a compact
+   *    representation (capped at SlidingWindowConfig.maxSummaryTokens = 1 000 tokens).
+   * 3. Total token budget for window + summary: SlidingWindowConfig.maxTotalTokens (2 000).
+   *
+   * Both /ask (non-streaming) and /ask/stream (streaming) pipelines funnel through
+   * this method so the LLM always receives identical conversation context.
+   *
+   * @param history  Raw array of {role, content} pairs (DB-loaded or client-provided).
+   * @param options  Override window size, token budget, model, etc.
+   * @returns        Windowed (and possibly summarized) history ready for prompt building.
+   */
+  static async applyHistoryStrategy(
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    options: SlidingWindowOptions = {}
+  ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+    if (!history || history.length === 0) return [];
+
+    const windowResult = await SlidingWindowService.applySlidingWindow(history, options);
+    return SlidingWindowService.formatWindowForHistory(windowResult);
   }
 
   /**
@@ -425,6 +539,133 @@ export class MessageService {
       }
       logger.error('Unexpected error deleting conversation messages:', error);
       throw new AppError('Failed to delete messages', 500, 'MESSAGES_DELETE_ERROR');
+    }
+  }
+
+  // ─── Version history helpers ────────────────────────────────────────────
+
+  /**
+   * Create a new version of an existing message.
+   *
+   * The new row is inserted with `parent_message_id` pointing at the root
+   * message (the original v1, or the parent of the current message) and
+   * `version` = max existing version + 1.
+   *
+   * Returns the newly-created message row.
+   */
+  static async createMessageVersion(
+    originalMessageId: string,
+    updates: {
+      content: string;
+      sources?: CreateMessageInput['sources'];
+      metadata?: Record<string, any>;
+    },
+  ): Promise<Database.Message> {
+    try {
+      // Fetch the original message to resolve the root parent
+      const { data: original, error: fetchErr } = await supabaseAdmin
+        .from('messages')
+        .select('*')
+        .eq('id', originalMessageId)
+        .single();
+
+      if (fetchErr || !original) {
+        throw new AppError('Original message not found', 404, 'MESSAGE_NOT_FOUND');
+      }
+
+      // The root is either the original itself (if it has no parent) or its parent
+      const rootId: string = original.parent_message_id ?? original.id;
+
+      // Find the current max version among siblings + root
+      const { data: siblings, error: sibErr } = await supabaseAdmin
+        .from('messages')
+        .select('version')
+        .or(`id.eq.${rootId},parent_message_id.eq.${rootId}`)
+        .order('version', { ascending: false })
+        .limit(1);
+
+      if (sibErr) {
+        throw new AppError(`Failed to query versions: ${sibErr.message}`, 500, 'VERSION_QUERY_ERROR');
+      }
+
+      const maxVersion = siblings?.[0]?.version ?? 1;
+      const newVersion = maxVersion + 1;
+
+      const { data: newMsg, error: insertErr } = await supabaseAdmin
+        .from('messages')
+        .insert({
+          conversation_id: original.conversation_id,
+          role: original.role,
+          content: updates.content.trim(),
+          sources: (updates.sources as any) ?? original.sources ?? null,
+          metadata: {
+            ...updates.metadata,
+            regenerated_from: originalMessageId,
+            regenerated_at: new Date().toISOString(),
+          },
+          version: newVersion,
+          parent_message_id: rootId,
+        })
+        .select()
+        .single();
+
+      if (insertErr || !newMsg) {
+        throw new AppError(`Failed to create message version: ${insertErr?.message}`, 500, 'VERSION_CREATE_ERROR');
+      }
+
+      logger.info('Message version created', {
+        rootId,
+        newMessageId: newMsg.id,
+        version: newVersion,
+        conversationId: original.conversation_id,
+      });
+
+      return newMsg;
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      logger.error('Unexpected error creating message version:', error);
+      throw new AppError('Failed to create message version', 500, 'VERSION_CREATE_ERROR');
+    }
+  }
+
+  /**
+   * Get all versions of a message (root + children), ordered by version ASC.
+   * Accepts any version's ID — resolves to root automatically via RPC.
+   */
+  static async getMessageVersions(
+    messageId: string,
+    userId: string,
+  ): Promise<Database.Message[]> {
+    try {
+      // First verify the message belongs to a conversation the user owns
+      const { data: msg, error: fetchErr } = await supabaseAdmin
+        .from('messages')
+        .select('conversation_id')
+        .eq('id', messageId)
+        .single();
+
+      if (fetchErr || !msg) {
+        throw new AppError('Message not found', 404, 'MESSAGE_NOT_FOUND');
+      }
+
+      const conversation = await ConversationService.getConversation(msg.conversation_id, userId);
+      if (!conversation) {
+        throw new AppError('Message not found', 404, 'MESSAGE_NOT_FOUND');
+      }
+
+      const { data, error } = await supabaseAdmin
+        .schema('private' as any)
+        .rpc('get_message_versions', { p_message_id: messageId });
+
+      if (error) {
+        throw new AppError(`Failed to fetch versions: ${error.message}`, 500, 'VERSIONS_FETCH_ERROR');
+      }
+
+      return (data as Database.Message[]) || [];
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      logger.error('Unexpected error fetching message versions:', error);
+      throw new AppError('Failed to fetch message versions', 500, 'VERSIONS_FETCH_ERROR');
     }
   }
 }

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Source } from '@/lib/api';
-import { ExternalLink, FileText, Download, ChevronDown, ChevronUp, X, Globe, File } from 'lucide-react';
+import { ExternalLink, FileText, Download, ChevronDown, ChevronUp, X, Globe, File, Flag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { downloadDocument } from '@/lib/utils/download-document';
 
@@ -21,6 +21,14 @@ interface InlineCitationProps {
   className?: string;
   onExpand?: (source: Source) => void;
   isExpanded?: boolean;
+  /** Fired when the user actually opens a source (download / external link). */
+  onCitationClick?: (sourceIndex: number, sourceUrl: string | undefined, sourceType: 'document' | 'web') => void;
+  /** 0-based index of this source in the message's sources array. */
+  sourceIndex?: number;
+  /** Called when user flags this citation as not supporting the claim. */
+  onFlagCitation?: (sourceUrl: string, sourceTitle: string) => void;
+  /** Whether this citation has already been flagged. */
+  isFlagged?: boolean;
 }
 
 export const InlineCitation: React.FC<InlineCitationProps> = ({
@@ -30,6 +38,10 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
   className,
   onExpand,
   isExpanded = false,
+  onCitationClick,
+  sourceIndex,
+  onFlagCitation,
+  isFlagged = false,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isTooltipHovered, setIsTooltipHovered] = useState(false);
@@ -72,6 +84,9 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
   const handleDocumentClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (onCitationClick && sourceIndex !== undefined) {
+      onCitationClick(sourceIndex, source.url, 'document');
+    }
     if (source.documentId) {
       await downloadDocument(source.documentId, source.title || 'document', source.url);
     } else if (source.url) {
@@ -82,6 +97,9 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
   const handleWebClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (onCitationClick && sourceIndex !== undefined) {
+      onCitationClick(sourceIndex, source.url, 'web');
+    }
     if (source.url) {
       window.open(source.url, '_blank');
     }
@@ -185,6 +203,13 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
             {source.title || `Source ${citationNumber}`}
           </h4>
 
+          {/* Page / Section provenance */}
+          {(source.pageNumber || source.sectionTitle) && (
+            <p className="text-xs text-gray-500 mb-1.5">
+              {[source.pageNumber && `Page ${source.pageNumber}`, source.sectionTitle && `— ${source.sectionTitle}`].filter(Boolean).join(' ')}
+            </p>
+          )}
+
           {/* Source Preview/Snippet */}
           <p className="text-xs text-gray-600 mb-2 line-clamp-3">
             {getSourcePreview()}
@@ -200,15 +225,35 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
 
           {/* Action Hints */}
           <div className="flex items-center justify-between pt-2 border-t border-gray-200">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClick(e);
-              }}
-              className="text-xs text-orange-600 hover:text-orange-700 font-medium underline"
-            >
-              View details
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClick(e);
+                }}
+                className="text-xs text-orange-600 hover:text-orange-700 font-medium underline"
+              >
+                View details
+              </button>
+              {onFlagCitation && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onFlagCitation(source.url || '', source.title || `Source ${citationNumber}`);
+                  }}
+                  className={cn(
+                    'inline-flex items-center gap-0.5 text-xs font-medium transition-colors',
+                    isFlagged
+                      ? 'text-amber-600'
+                      : 'text-gray-400 hover:text-amber-600'
+                  )}
+                  title={isFlagged ? 'Unflag citation' : 'Flag as not supporting the claim'}
+                >
+                  <Flag className="w-3 h-3" />
+                  {isFlagged ? 'Flagged' : 'Flag'}
+                </button>
+              )}
+            </div>
             {isDocument && source.documentId && (
               <button
                 onClick={(e) => {
@@ -288,6 +333,11 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
                   {getSourceDomain()}
                 </p>
               )}
+              {isDocument && (source.pageNumber || source.sectionTitle) && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {[source.pageNumber && `Page ${source.pageNumber}`, source.sectionTitle].filter(Boolean).join(' — ')}
+                </p>
+              )}
             </div>
           </div>
 
@@ -346,6 +396,24 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
                 Open Source
               </button>
             ) : null}
+            {onFlagCitation && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFlagCitation(source.url || '', source.title || `Source ${citationNumber}`);
+                }}
+                className={cn(
+                  'inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                  isFlagged
+                    ? 'bg-amber-50 border-amber-300 text-amber-700'
+                    : 'bg-white border-gray-200 text-gray-600 hover:border-amber-300 hover:text-amber-700'
+                )}
+                title={isFlagged ? 'Unflag citation' : 'Flag as not supporting the claim'}
+              >
+                <Flag className="w-4 h-4" />
+                {isFlagged ? 'Flagged' : 'Flag'}
+              </button>
+            )}
           </div>
         </div>
       )}

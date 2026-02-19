@@ -90,18 +90,18 @@ describe('Reranking Configuration', () => {
       expect(validateRerankingConfig(config)).toBe(false);
     });
 
-    it('should reject cross-encoder without model', () => {
+    it('should accept cross-encoder without legacy model field (uses Cohere)', () => {
       const config: RerankingConfig = {
         enabled: true,
         strategy: 'cross-encoder',
         topK: 20,
         maxResults: 10,
-        // Missing crossEncoderModel
+        // No crossEncoderModel needed – Cohere is the default provider
       };
-      expect(validateRerankingConfig(config)).toBe(false);
+      expect(validateRerankingConfig(config)).toBe(true);
     });
 
-    it('should accept cross-encoder with model', () => {
+    it('should accept cross-encoder with legacy model field', () => {
       const config: RerankingConfig = {
         enabled: true,
         strategy: 'cross-encoder',

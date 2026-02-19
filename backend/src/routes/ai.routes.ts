@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { AIService, QuestionRequest } from '../services/ai.service';
+import { AIService } from '../services/ai.service';
+import type { QuestionRequest } from '../services/ai.service';
 import { RequestQueueService, QueuePriority } from '../services/request-queue.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
@@ -7,8 +8,12 @@ import { apiLimiter } from '../middleware/rateLimiter';
 import { enforceQueryLimit } from '../middleware/subscription.middleware';
 import { logQueryUsage } from '../middleware/usageCounter.middleware';
 import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
-import { ValidationError } from '../types/error';
-import { assertUUID, validateUUIDArray, isValidUUID } from '../validation/uuid';
+import { validateRequest } from '../middleware/validate';
+import { QuestionRequestSchema, RegenerateRequestSchema } from '../schemas/ai-request.schema';
+import { ValidationError, NotFoundError } from '../types/error';
+import { isValidUUID, assertUUID, validateUUIDArray } from '../validation/uuid';
+import { AIAnswerPipelineService } from '../services/ai-answer-pipeline.service';
+import { StreamingService } from '../services/streaming.service';
 import logger from '../config/logger';
 
 const router = Router();
@@ -20,76 +25,36 @@ const router = Router();
  */
 router.post(
   '/ask',
+  validateRequest(QuestionRequestSchema),
   authenticate,
   tierRateLimiter,
   enforceQueryLimit,
   apiLimiter,
   logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
-    const { 
-      question, 
-      context, 
-      conversationHistory, 
-      model, 
-      temperature, 
-      maxTokens,
-      enableSearch,
-      topic,
-      maxSearchResults,
-      timeRange,
-      startDate,
-      endDate,
-      country,
-      // RAG options
-      enableDocumentSearch,
-      enableWebSearch,
-      topicId,
-      documentIds,
-      maxDocumentChunks,
-      minScore,
-      conversationId,
-      // Queue options
-      useQueue,
-      priority,
-    } = req.body;
-
-    if (!question) {
-      throw new ValidationError('Question is required');
-    }
-
-    // Validate UUID params from body
-    if (topicId) assertUUID(topicId, 'topicId');
-    if (documentIds) validateUUIDArray(documentIds, 'documentIds');
-    if (conversationId) assertUUID(conversationId, 'conversationId');
+    // req.body has been validated & stripped by Zod middleware
+    const body = req.body;
 
     const userId = req.user?.id;
     if (!userId) {
       throw new ValidationError('User not authenticated');
     }
 
+    const { useQueue, priority, ...rest } = body;
+
     const request: QuestionRequest = {
-      question: question.trim(),
-      context: context?.trim(),
-      conversationHistory: conversationHistory || [],
-      model,
-      temperature,
-      maxTokens,
-      enableSearch: enableSearch !== false, // Default to true
-      topic: topic?.trim(),
-      maxSearchResults: maxSearchResults ?? 5,
-      timeRange,
-      startDate,
-      endDate,
-      country,
-      // RAG options
-      enableDocumentSearch: enableDocumentSearch !== false, // Default to true
-      enableWebSearch: enableWebSearch !== false, // Default to true
-      topicId: topicId,
-      documentIds: documentIds,
-      maxDocumentChunks: maxDocumentChunks ?? 5,
-      minScore: minScore, // Keep as undefined when not provided — lets adaptive threshold run
-      // Conversation management
-      conversationId: conversationId,
+      ...rest,
+      question: rest.question.trim(),
+      context: rest.context?.trim(),
+      // Let undefined/empty flow through so prepareRequestContext() loads
+      // history from DB via the unified sliding-window strategy.
+      conversationHistory: rest.conversationHistory?.length ? rest.conversationHistory : undefined,
+      enableSearch: rest.enableSearch !== false,
+      topic: rest.topic?.trim(),
+      maxSearchResults: rest.maxSearchResults ?? 5,
+      enableDocumentSearch: rest.enableDocumentSearch !== false,
+      enableWebSearch: rest.enableWebSearch !== false,
+      maxDocumentChunks: rest.maxDocumentChunks ?? 5,
     };
 
     logger.info('AI question request with RAG', {
@@ -100,6 +65,12 @@ router.post(
       enableWebSearch: request.enableWebSearch,
       topicId: request.topicId,
       useQueue: !!useQueue,
+    });
+
+    // AbortController for client disconnect on non-streaming requests
+    const abortController = new AbortController();
+    req.on('close', () => {
+      if (!res.writableEnded) abortController.abort();
     });
 
     // Use queue if requested and available (Redis must be configured)
@@ -120,9 +91,9 @@ router.post(
         const job = await RequestQueueService.addRAGRequest(userId, request, {
           priority: queuePriority,
           metadata: {
-            conversationId,
-            topicId,
-            documentIds,
+            conversationId: request.conversationId,
+            topicId: request.topicId,
+            documentIds: request.documentIds,
           },
         });
 
@@ -146,7 +117,7 @@ router.post(
     }
 
     // Direct processing (default or fallback)
-    const result = await AIService.answerQuestion(request, userId);
+    const result = await AIService.answerQuestion(request, userId, { signal: abortController.signal });
 
     // Log usage for analytics
     try {
@@ -176,74 +147,36 @@ router.post(
  */
 router.post(
   '/ask/stream',
+  validateRequest(QuestionRequestSchema),
   authenticate,
   tierRateLimiter,
   enforceQueryLimit,
   apiLimiter,
   logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
-    const { 
-      question, 
-      context, 
-      conversationHistory, 
-      model, 
-      temperature, 
-      maxTokens,
-      enableSearch,
-      topic,
-      maxSearchResults,
-      timeRange,
-      startDate,
-      endDate,
-      country,
-      // RAG options
-      enableDocumentSearch,
-      enableWebSearch,
-      topicId,
-      documentIds,
-      maxDocumentChunks,
-      minScore,
-      conversationId,
-      resendUserMessageId,
-    } = req.body;
-
-    if (!question) {
-      throw new ValidationError('Question is required');
-    }
-
-    // Validate UUID params from body
-    if (topicId) assertUUID(topicId, 'topicId');
-    if (documentIds) validateUUIDArray(documentIds, 'documentIds');
-    if (conversationId) assertUUID(conversationId, 'conversationId');
+    // req.body has been validated & stripped by Zod middleware
+    const body = req.body;
 
     const userId = req.user?.id;
     if (!userId) {
       throw new ValidationError('User not authenticated');
     }
 
+    const { useQueue, priority, resendUserMessageId, ...rest } = body;
+
     const request: QuestionRequest = {
-      question: question.trim(),
-      context: context?.trim(),
-      conversationHistory: conversationHistory || [],
-      model,
-      temperature,
-      maxTokens,
-      enableSearch: enableSearch !== false, // Default to true
-      topic: topic?.trim(),
-      maxSearchResults: maxSearchResults ?? 5,
-      timeRange,
-      startDate,
-      endDate,
-      country,
-      // RAG options
-      enableDocumentSearch: enableDocumentSearch !== false, // Default to true
-      enableWebSearch: enableWebSearch !== false, // Default to true
-      topicId: topicId,
-      documentIds: documentIds,
-      maxDocumentChunks: maxDocumentChunks ?? 5,
-      minScore: minScore, // Keep as undefined when not provided — lets adaptive threshold run
-      // Conversation management
-      conversationId: conversationId,
+      ...rest,
+      question: rest.question.trim(),
+      context: rest.context?.trim(),
+      // Let undefined/empty flow through so prepareRequestContext() loads
+      // history from DB via the unified sliding-window strategy.
+      conversationHistory: rest.conversationHistory?.length ? rest.conversationHistory : undefined,
+      enableSearch: rest.enableSearch !== false,
+      topic: rest.topic?.trim(),
+      maxSearchResults: rest.maxSearchResults ?? 5,
+      enableDocumentSearch: rest.enableDocumentSearch !== false,
+      enableWebSearch: rest.enableWebSearch !== false,
+      maxDocumentChunks: rest.maxDocumentChunks ?? 5,
     };
 
     logger.info('AI streaming question request with RAG', {
@@ -267,21 +200,25 @@ router.post(
     // Flush headers immediately
     res.flushHeaders();
 
+    // AbortController — signals the OpenAI API to stop generating when the client disconnects
+    const abortController = new AbortController();
+
     // Handle client disconnect
     req.on('close', () => {
+      abortController.abort();
       logger.info('Client disconnected from streaming endpoint', {
         userId: req.user?.id,
       });
-      res.end();
+      if (!res.writableEnded) res.end();
     });
 
     try {
-      const isResend = !!resendUserMessageId && !!request.conversationId && userId;
+      const isResend = !!resendUserMessageId && !!request.conversationId && !!userId;
 
       if (isResend) {
         const { MessageService } = await import('../services/message.service');
         await MessageService.updateMessage(resendUserMessageId, userId, { content: request.question });
-        const all = await MessageService.getAllMessages(request.conversationId!, userId);
+        const all = await MessageService.getAllMessages(request.conversationId!, userId, { unlimited: true });
         const idx = all.findIndex((m) => m.id === resendUserMessageId);
         if (idx >= 0 && idx + 1 < all.length && all[idx + 1].role === 'assistant') {
           await MessageService.deleteMessage(all[idx + 1].id, userId);
@@ -322,8 +259,8 @@ router.post(
         if (!onTopic) {
           const refusal = AIService.getRefusalMessage(topicName!);
           const followUp = AIService.getRefusalFollowUp(topicName!);
-          res.write(`data: ${JSON.stringify({ chunk: refusal })}\n\n`);
-          res.write(`data: ${JSON.stringify({ followUpQuestions: [followUp], refusal: true })}\n\n`);
+          res.write(StreamingService.formatSSEMessage('chunk', refusal));
+          res.write(StreamingService.formatSSEMessage('followUpQuestions', { questions: [followUp], refusal: true }));
           if (request.conversationId && userId) {
             try {
               const { ConversationService } = await import('../services/conversation.service');
@@ -346,7 +283,7 @@ router.post(
               logger.warn('Failed to save refusal to conversation (streaming)', { error: e?.message });
             }
           }
-          res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+          res.write(StreamingService.formatSSEMessage('done', {}));
           res.end();
           return;
         }
@@ -390,8 +327,7 @@ router.post(
           // Pre-format context to pass to stream generator (avoids double RAG retrieval)
           formattedRagContext = await RAGService.formatContextForPrompt(ragContext, {
             enableRelevanceOrdering: true,
-            enableContextSummarization: true,
-            enableContextCompression: true,
+            contextReductionStrategy: 'summarize' as const,
             enableSourcePrioritization: true,
             enableTokenBudgeting: true,
             tokenBudgetOptions: { model: request.model || 'gpt-3.5-turbo' },
@@ -406,159 +342,77 @@ router.post(
         }
       }
       
-      // Pass pre-retrieved RAG context to avoid double retrieval in stream generator
-      if (formattedRagContext) {
-        request._preRetrievedRagContext = formattedRagContext;
-      }
-      
       // Send sources early via SSE so frontend can display them while streaming
       if (sources && sources.length > 0) {
-        res.write(`data: ${JSON.stringify({ sources })}
-
-`);
+        res.write(StreamingService.formatSSEMessage('sources', sources));
       }
       
       // Stream the response and collect full answer
-      const stream = AIService.answerQuestionStream(request, userId);
+      const stream = AIService.answerQuestionStream(request, userId, { signal: abortController.signal });
       let fullAnswer = '';
+      let structuredMeta: { followUpQuestions?: string[]; citedSources?: any[] } | null = null;
       
       for await (const chunk of stream) {
-        fullAnswer += chunk;
-        // Send chunk as SSE format
-        res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
-      }
-      
-      // Parse follow-up questions from the complete answer using ResponseProcessorService
-      let followUpQuestions: string[] | undefined;
-      try {
-        const { ResponseProcessorService } = await import('../services/response-processor.service');
-        const followUpResult = await ResponseProcessorService.processFollowUpQuestions(
-          fullAnswer,
-          request.question,
-          topicName
-        );
-        followUpQuestions = followUpResult.questions.length > 0 ? followUpResult.questions : undefined;
-        fullAnswer = followUpResult.answer;
-      } catch (followUpErr: any) {
-        logger.warn('Follow-up questions processing failed in streaming', { error: followUpErr?.message });
-        // Continue without follow-ups on error
-      }
-      
-      // Calculate answer quality score
-      let qualityScore: number | undefined;
-      try {
-        const { ResponseProcessorService } = await import('../services/response-processor.service');
-        qualityScore = ResponseProcessorService.calculateAnswerQualityScore(
-          fullAnswer,
-          sources || [],
-          followUpQuestions || []
-        );
-      } catch (qualityErr: any) {
-        logger.warn('Quality score calculation failed', { error: qualityErr?.message });
-      }
-
-      // Send follow-up questions (required on every response)
-      if (followUpQuestions && followUpQuestions.length > 0) {
-        res.write(`data: ${JSON.stringify({ followUpQuestions })}\n\n`);
-      }
-
-      // Send quality score
-      if (qualityScore !== undefined) {
-        res.write(`data: ${JSON.stringify({ qualityScore })}\n\n`);
-      }
-
-      // Save messages to conversation if conversationId provided and userId available
-      if (request.conversationId && userId && fullAnswer) {
-        try {
-          const { ConversationService } = await import('../services/conversation.service');
-          const { MessageService } = await import('../services/message.service');
-          
-          let conversationId = request.conversationId;
-          let conversation = await ConversationService.getConversation(conversationId, userId);
-          
-          if (!conversation) {
-            const title = ConversationService.generateTitleFromMessage(request.question);
-            conversation = await ConversationService.createConversation({
-              userId,
-              title,
-              topicId: request.topicId,
-            });
-            conversationId = conversation.id;
-            logger.info('Created new conversation for streaming message', { conversationId, userId });
+        // The pipeline may yield a JSON metadata sentinel at the end
+        if (typeof chunk === 'string' && chunk.startsWith('{"__structured":true')) {
+          try {
+            structuredMeta = JSON.parse(chunk);
+          } catch {
+            // Not valid metadata — treat as text
+            fullAnswer += chunk;
+            res.write(StreamingService.formatSSEMessage('chunk', chunk));
           }
-
-          if (isResend) {
-            await MessageService.saveMessage({
-              conversationId,
-              role: 'assistant',
-              content: fullAnswer,
-              sources: sources ?? undefined,
-              metadata: {
-                model: request.model || 'gpt-4o-mini',
-                streaming: true,
-                ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
-                ...(qualityScore !== undefined && { qualityScore }),
-              },
-            });
-          } else {
-            await MessageService.saveMessagePair(
-              conversationId,
-              request.question,
-              fullAnswer,
-              sources,
-              {
-                model: request.model || 'gpt-4o-mini',
-                streaming: true,
-                ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
-                ...(qualityScore !== undefined && { qualityScore }),
-              }
-            );
-          }
-
-          logger.info('Messages saved to conversation (streaming)', {
-            conversationId,
-            userId,
-            isResend,
-          });
-        } catch (saveError: any) {
-          logger.warn('Failed to save messages to conversation (streaming)', {
-            error: saveError.message,
-            conversationId: request.conversationId,
-            userId,
-          });
+        } else {
+          fullAnswer += chunk;
+          // Send chunk as SSE format
+          res.write(StreamingService.formatSSEMessage('chunk', chunk));
         }
       }
+      
+      // Post-stream processing: follow-ups, quality, save, usage log
+      const postResult = await AIAnswerPipelineService.postProcessStream({
+        fullAnswer,
+        question: request.question,
+        userId,
+        sources,
+        topicName,
+        topicId: request.topicId,
+        conversationId: request.conversationId,
+        model: request.model,
+        isResend,
+        structuredFollowUps: structuredMeta?.followUpQuestions,
+      });
 
-      // Log usage for analytics
-      if (userId && fullAnswer) {
-        try {
-          const { DatabaseService } = await import('../services/database.service');
-          await DatabaseService.logUsage(userId, 'query', {
-            question: request.question.substring(0, 200), // Truncate for storage
-            topicId: request.topicId,
-            model: request.model || 'gpt-3.5-turbo',
-            hasSources: sources && sources.length > 0,
-            streaming: true,
-          });
-        } catch (usageError: any) {
-          logger.warn('Failed to log query usage (streaming)', { error: usageError?.message });
-        }
+      if (postResult.followUpQuestions && postResult.followUpQuestions.length > 0) {
+        res.write(StreamingService.formatSSEMessage('followUpQuestions', { questions: postResult.followUpQuestions }));
+      }
+      if (postResult.qualityScore !== undefined) {
+        res.write(StreamingService.formatSSEMessage('qualityScore', { score: postResult.qualityScore }));
       }
 
       // Send completion message
-      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-      res.end();
+      if (!abortController.signal.aborted && !res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('done', {}));
+        res.end();
+      }
     } catch (error: any) {
+      // Client disconnected — not an error
+      if (error.name === 'AbortError' || error.code === 'ABORT_ERR' || error.code === 'REQUEST_CANCELLED' || abortController.signal.aborted) {
+        logger.info('Stream cancelled by client', { userId: req.user?.id });
+        if (!res.writableEnded) res.end();
+        return;
+      }
+
       logger.error('Error in streaming endpoint:', error);
       
-      // Send error as SSE
-      res.write(`data: ${JSON.stringify({ 
-        error: {
+      // Send error as SSE (only if the client is still connected)
+      if (!res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('error', {
           message: error.message || 'Failed to generate response',
           code: error.code || 'STREAM_ERROR',
-        }
-      })}\n\n`);
-      res.end();
+        }));
+        res.end();
+      }
     }
   })
 );
@@ -632,6 +486,146 @@ router.post(
       success: true,
       data: { report },
     });
+  })
+);
+
+// ── Streaming generation endpoints (SSE) ──────────────────────────────
+
+/**
+ * POST /api/ai/summarize/stream
+ * Stream a summary of a previous AI response via SSE
+ */
+router.post(
+  '/summarize/stream',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { originalResponse, keyword, sources } = req.body;
+
+    if (!originalResponse || !keyword) {
+      throw new ValidationError('originalResponse and keyword are required');
+    }
+
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.flushHeaders();
+
+    try {
+      const stream = AIService.summarizeResponseStream(originalResponse, keyword, sources);
+
+      for await (const chunk of stream) {
+        if (res.writableEnded) break;
+        res.write(StreamingService.formatSSEMessage('chunk', chunk));
+      }
+
+      if (!res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('done', {}));
+        res.end();
+      }
+    } catch (error: any) {
+      logger.error('Error in summarize stream:', error);
+      if (!res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('error', { message: error.message || 'Streaming summary failed' }));
+        res.end();
+      }
+    }
+  })
+);
+
+/**
+ * POST /api/ai/essay/stream
+ * Stream a formal essay based on a previous AI response via SSE
+ */
+router.post(
+  '/essay/stream',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { originalResponse, keyword, sources } = req.body;
+
+    if (!originalResponse || !keyword) {
+      throw new ValidationError('originalResponse and keyword are required');
+    }
+
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.flushHeaders();
+
+    try {
+      const stream = AIService.writeEssayStream(originalResponse, keyword, sources);
+
+      for await (const chunk of stream) {
+        if (res.writableEnded) break;
+        res.write(StreamingService.formatSSEMessage('chunk', chunk));
+      }
+
+      if (!res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('done', {}));
+        res.end();
+      }
+    } catch (error: any) {
+      logger.error('Error in essay stream:', error);
+      if (!res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('error', { message: error.message || 'Streaming essay failed' }));
+        res.end();
+      }
+    }
+  })
+);
+
+/**
+ * POST /api/ai/report/stream
+ * Stream a detailed report based on a previous AI response via SSE
+ */
+router.post(
+  '/report/stream',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { originalResponse, keyword, sources } = req.body;
+
+    if (!originalResponse || !keyword) {
+      throw new ValidationError('originalResponse and keyword are required');
+    }
+
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.flushHeaders();
+
+    try {
+      const stream = AIService.generateDetailedReportStream(originalResponse, keyword, sources);
+
+      for await (const chunk of stream) {
+        if (res.writableEnded) break;
+        res.write(StreamingService.formatSSEMessage('chunk', chunk));
+      }
+
+      if (!res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('done', {}));
+        res.end();
+      }
+    } catch (error: any) {
+      logger.error('Error in report stream:', error);
+      if (!res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('error', { message: error.message || 'Streaming report failed' }));
+        res.end();
+      }
+    }
   })
 );
 
@@ -751,7 +745,8 @@ router.post(
     const request: QuestionRequest = {
       question: question.trim(),
       context: context?.trim(),
-      conversationHistory: conversationHistory || [],
+      // Let undefined/empty flow through — unified sliding-window strategy in pipeline
+      conversationHistory: conversationHistory?.length ? conversationHistory : undefined,
       model,
       temperature,
       maxTokens,
@@ -985,6 +980,146 @@ router.get(
         })),
         count: userJobs.length,
       },
+    });
+  })
+);
+
+/**
+ * POST /api/ai/regenerate
+ * Re-run the AI pipeline for an existing assistant message with optional parameter overrides.
+ * Creates a NEW version row linked via parent_message_id (version history).
+ */
+router.post(
+  '/regenerate',
+  validateRequest(RegenerateRequestSchema),
+  authenticate,
+  tierRateLimiter,
+  enforceQueryLimit,
+  apiLimiter,
+  logQueryUsage,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { messageId, conversationId, options } = req.body;
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { ConversationService } = await import('../services/conversation.service');
+    const { MessageService } = await import('../services/message.service');
+
+    // 1. Verify conversation ownership
+    const conversation = await ConversationService.getConversation(conversationId, userId);
+    if (!conversation) {
+      throw new NotFoundError('Conversation not found');
+    }
+
+    // 2. Fetch the target assistant message and the preceding user message
+    const allMessages = await MessageService.getAllMessages(conversationId, userId, { unlimited: true });
+    const assistantIdx = allMessages.findIndex((m) => m.id === messageId);
+    if (assistantIdx === -1 || allMessages[assistantIdx].role !== 'assistant') {
+      throw new NotFoundError('Assistant message not found');
+    }
+
+    const originalAssistant = allMessages[assistantIdx];
+
+    // Walk backwards to find the originating user question
+    let userMessage: typeof allMessages[number] | undefined;
+    for (let i = assistantIdx - 1; i >= 0; i--) {
+      if (allMessages[i].role === 'user') {
+        userMessage = allMessages[i];
+        break;
+      }
+    }
+    if (!userMessage) {
+      throw new NotFoundError('Originating user message not found');
+    }
+
+    // 3. Build a QuestionRequest from the original user message + overrides
+    const mergedRequest: QuestionRequest = {
+      question: userMessage.content,
+      conversationId,
+      topicId: conversation.topic_id || undefined,
+      ...options,
+    };
+
+    logger.info('Regenerating response (new version)', {
+      userId,
+      conversationId,
+      messageId,
+      userQuestion: userMessage.content.substring(0, 100),
+      overrides: options,
+    });
+
+    // 4. Re-run pipeline (non-streaming), skip internal save
+    const result = await AIAnswerPipelineService.answerQuestionInternal(mergedRequest, userId, { skipSave: true });
+
+    // 5. Create a new message version linked to the original
+    const newVersionMsg = await MessageService.createMessageVersion(messageId, {
+      content: result.answer,
+      sources: result.sources as any,
+      metadata: {
+        model: result.model,
+        ...(result.followUpQuestions?.length && { followUpQuestions: result.followUpQuestions }),
+        ...(result.usage && { usage: result.usage }),
+        ...(options && { regenerateOptions: options }),
+      },
+    });
+
+    await ConversationService.updateConversationTimestamp(conversationId);
+
+    // 6. Fetch all versions to return to the client
+    const allVersions = await MessageService.getMessageVersions(messageId, userId);
+
+    logger.info('Response regenerated (new version)', {
+      userId,
+      conversationId,
+      originalMessageId: messageId,
+      newMessageId: newVersionMsg.id,
+      newVersion: newVersionMsg.version,
+      model: result.model,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        newMessage: newVersionMsg,
+        versions: allVersions,
+        answer: result.answer,
+        model: result.model,
+        sources: result.sources,
+        followUpQuestions: result.followUpQuestions,
+        usage: result.usage,
+        responseVersion: newVersionMsg.version,
+      },
+    });
+  })
+);
+
+/**
+ * GET /api/ai/messages/:messageId/versions
+ * Fetch all versions of a message (root + children) for version history UI.
+ */
+router.get(
+  '/messages/:messageId/versions',
+  authenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { messageId } = req.params;
+    if (!messageId || !isValidUUID(messageId)) {
+      throw new ValidationError('Valid message ID is required');
+    }
+
+    const { MessageService } = await import('../services/message.service');
+    const versions = await MessageService.getMessageVersions(messageId, userId);
+
+    return res.status(200).json({
+      success: true,
+      data: { versions },
     });
   })
 );

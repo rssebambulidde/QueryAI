@@ -3,24 +3,29 @@ import { MessageService, CreateMessageInput } from '../services/message.service'
 import { AppError, ValidationError } from '../types/error';
 
 // Mock Supabase
-jest.mock('../config/database', () => ({
-  supabaseAdmin: {
-    from: jest.fn(() => ({
-      insert: jest.fn(() => ({
-        select: jest.fn(() => ({
-          single: jest.fn(),
+jest.mock('../config/database', () => {
+  const rpcMock = jest.fn();
+  return {
+    supabaseAdmin: {
+      from: jest.fn(() => ({
+        insert: jest.fn(() => ({
+          select: jest.fn(() => ({
+            single: jest.fn(),
+          })),
         })),
-      })),
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          order: jest.fn(() => ({
-            asc: jest.fn(),
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            order: jest.fn(() => ({
+              asc: jest.fn(),
+            })),
           })),
         })),
       })),
-    })),
-  },
-}));
+      rpc: rpcMock,
+      schema: jest.fn(() => ({ rpc: rpcMock })),
+    },
+  };
+});
 
 // Mock ConversationService
 jest.mock('../services/conversation.service', () => ({
@@ -177,22 +182,12 @@ describe('MessageService', () => {
   });
 
   describe('saveMessagePair', () => {
-    it('should save user and assistant messages atomically', async () => {
-      (supabaseAdmin.from as any)
-        .mockReturnValueOnce({
-          insert: jest.fn(() => ({
-            select: jest.fn(() => ({
-              single: (jest.fn() as any).mockResolvedValue({ data: { ...mockMessage, role: 'user' }, error: null }),
-            })),
-          })),
-        })
-        .mockReturnValueOnce({
-          insert: jest.fn(() => ({
-            select: jest.fn(() => ({
-              single: (jest.fn() as any).mockResolvedValue({ data: { ...mockMessage, role: 'assistant', id: 'msg-789' }, error: null }),
-            })),
-          })),
-        });
+    it('should save user and assistant messages atomically via RPC', async () => {
+      const rpcResult = {
+        userMessage: { ...mockMessage, role: 'user', content: 'User question' },
+        assistantMessage: { ...mockMessage, role: 'assistant', id: 'msg-789', content: 'Assistant answer' },
+      };
+      (supabaseAdmin.rpc as any).mockResolvedValue({ data: rpcResult, error: null });
 
       const pair = await MessageService.saveMessagePair(
         mockConversationId,
@@ -200,12 +195,20 @@ describe('MessageService', () => {
         'Assistant answer'
       );
 
+      expect(supabaseAdmin.schema).toHaveBeenCalledWith('private');
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('save_message_pair', {
+        p_conversation_id: mockConversationId,
+        p_user_content: 'User question',
+        p_assistant_content: 'Assistant answer',
+        p_sources: null,
+        p_metadata: null,
+      });
       expect(pair).toBeDefined();
       expect(pair.userMessage.role).toBe('user');
       expect(pair.assistantMessage.role).toBe('assistant');
     });
 
-    it('should save message pair with sources', async () => {
+    it('should save message pair with sources via RPC', async () => {
       const sources = [
         {
           type: 'web' as const,
@@ -214,21 +217,11 @@ describe('MessageService', () => {
         },
       ];
 
-      (supabaseAdmin.from as any)
-        .mockReturnValueOnce({
-          insert: jest.fn(() => ({
-            select: jest.fn(() => ({
-              single: (jest.fn() as any).mockResolvedValue({ data: { ...mockMessage, role: 'user' }, error: null }),
-            })),
-          })),
-        })
-        .mockReturnValueOnce({
-          insert: jest.fn(() => ({
-            select: jest.fn(() => ({
-               single: (jest.fn() as any).mockResolvedValue({ data: { ...mockMessage, role: 'assistant', sources, id: 'msg-789' }, error: null }),
-            })),
-          })),
-        });
+      const rpcResult = {
+        userMessage: { ...mockMessage, role: 'user', content: 'Question' },
+        assistantMessage: { ...mockMessage, role: 'assistant', sources, id: 'msg-789', content: 'Answer' },
+      };
+      (supabaseAdmin.rpc as any).mockResolvedValue({ data: rpcResult, error: null });
 
       const pair = await MessageService.saveMessagePair(
         mockConversationId,
@@ -237,7 +230,37 @@ describe('MessageService', () => {
         sources
       );
 
+      expect(supabaseAdmin.schema).toHaveBeenCalledWith('private');
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('save_message_pair', {
+        p_conversation_id: mockConversationId,
+        p_user_content: 'Question',
+        p_assistant_content: 'Answer',
+        p_sources: sources,
+        p_metadata: null,
+      });
       expect(pair.assistantMessage.sources).toEqual(sources);
+    });
+
+    it('should throw on RPC error', async () => {
+      (supabaseAdmin.rpc as any).mockResolvedValue({ data: null, error: { message: 'DB error' } });
+
+      await expect(
+        MessageService.saveMessagePair(mockConversationId, 'Q', 'A')
+      ).rejects.toThrow(AppError);
+    });
+
+    it('should validate required fields', async () => {
+      await expect(
+        MessageService.saveMessagePair('', 'Q', 'A')
+      ).rejects.toThrow(ValidationError);
+
+      await expect(
+        MessageService.saveMessagePair(mockConversationId, '', 'A')
+      ).rejects.toThrow(ValidationError);
+
+      await expect(
+        MessageService.saveMessagePair(mockConversationId, 'Q', '')
+      ).rejects.toThrow(ValidationError);
     });
   });
 
@@ -260,11 +283,12 @@ describe('MessageService', () => {
     });
 
     it('should use sliding window when getSlidingWindowHistory is called', async () => {
+      const mockData = Array.from({ length: 20 }, (_, i) => ({ ...mockMessage, id: `msg-${i}` }));
       (supabaseAdmin.from as any).mockReturnValueOnce({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
             order: jest.fn(() => ({
-              asc: (jest.fn() as any).mockResolvedValue({ data: Array.from({ length: 20 }, (_, i) => ({ ...mockMessage, id: `msg-${i}` })), error: null }),
+              limit: (jest.fn() as any).mockResolvedValue({ data: mockData, error: null }),
             })),
           })),
         })),
@@ -281,10 +305,15 @@ describe('MessageService', () => {
 
   describe('getSlidingWindowHistory', () => {
     it('should get conversation history formatted for OpenAI', async () => {
+      // Mock returns data in DESC order (newest first) since getAllMessages
+      // now queries ORDER BY created_at DESC + LIMIT, then reverses in-memory.
+      const mockData = [{ ...mockMessage, role: 'assistant', id: 'msg-789' }, { ...mockMessage, role: 'user' }];
       (supabaseAdmin.from as any).mockReturnValueOnce({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
-            order: (jest.fn() as any).mockResolvedValue({ data: [{ ...mockMessage, role: 'user' }, { ...mockMessage, role: 'assistant', id: 'msg-789' }], error: null }),
+            order: jest.fn(() => ({
+              limit: (jest.fn() as any).mockResolvedValue({ data: mockData, error: null }),
+            })),
           })),
         })),
       });
@@ -299,10 +328,13 @@ describe('MessageService', () => {
     });
 
     it('should limit history to last N messages', async () => {
+      const mockData = Array.from({ length: 15 }, (_, i) => ({ ...mockMessage, id: `msg-${i}`, role: i % 2 === 0 ? 'user' : 'assistant' }));
       (supabaseAdmin.from as any).mockReturnValueOnce({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
-            order: (jest.fn() as any).mockResolvedValue({ data: Array.from({ length: 15 }, (_, i) => ({ ...mockMessage, id: `msg-${i}`, role: i % 2 === 0 ? 'user' : 'assistant' })), error: null }),
+            order: jest.fn(() => ({
+              limit: (jest.fn() as any).mockResolvedValue({ data: mockData, error: null }),
+            })),
           })),
         })),
       });

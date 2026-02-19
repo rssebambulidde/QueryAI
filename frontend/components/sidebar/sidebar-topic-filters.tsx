@@ -8,6 +8,7 @@ import { useFilterStore } from '@/lib/store/filter-store';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { TIME_RANGE_OPTIONS, COUNTRY_OPTIONS } from '@/lib/filter-constants';
 import { cn } from '@/lib/utils';
+import { TopicTreeSelector, getAncestorPath } from '@/components/topics/topic-tree-selector';
 import type { TimeRange } from '@/lib/api';
 
 export const SidebarTopicFilters: React.FC = () => {
@@ -27,6 +28,7 @@ export const SidebarTopicFilters: React.FC = () => {
   const [showCreateTopic, setShowCreateTopic] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
   const [newTopicDescription, setNewTopicDescription] = useState('');
+  const [createParentId, setCreateParentId] = useState<string | null>(null);
   const topicDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,12 +68,14 @@ export const SidebarTopicFilters: React.FC = () => {
       const res = await topicApi.create({
         name: newTopicName.trim(),
         description: newTopicDescription.trim() || undefined,
+        parentTopicId: createParentId,
       });
       if (res.success && res.data) {
         toast.success('Topic created');
         setNewTopicName('');
         setNewTopicDescription('');
         setShowCreateTopic(false);
+        setCreateParentId(null);
         handleTopicSelect(res.data);
         await loadTopics();
       }
@@ -117,7 +121,19 @@ export const SidebarTopicFilters: React.FC = () => {
                 <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 bg-orange-100 rounded">
                   Research
                 </span>
-                <span className="text-xs font-medium text-orange-900 truncate">{selectedTopic.name}</span>
+                {/* Breadcrumb trail for nested topics */}
+                {(() => {
+                  const ancestors = getAncestorPath(selectedTopic.id, topics);
+                  if (ancestors.length > 0) {
+                    return (
+                      <span className="text-xs text-orange-600 truncate">
+                        {ancestors.map(a => a.name).join(' › ')} ›{' '}
+                        <span className="font-medium text-orange-900">{selectedTopic.name}</span>
+                      </span>
+                    );
+                  }
+                  return <span className="text-xs font-medium text-orange-900 truncate">{selectedTopic.name}</span>;
+                })()}
               </span>
               <button
                 type="button"
@@ -146,38 +162,30 @@ export const SidebarTopicFilters: React.FC = () => {
           )}
 
           {showTopicDropdown && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-              <div className="p-1.5 border-b border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowTopicDropdown(false);
-                    setShowCreateTopic(true);
-                  }}
-                  className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-orange-600 hover:bg-orange-50 rounded"
-                >
-                  <Plus className="w-3 h-3" />
-                  New topic
-                </button>
-              </div>
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-56 overflow-y-auto">
               {isLoadingTopics ? (
                 <div className="px-3 py-2 text-xs text-gray-500">Loading...</div>
-              ) : topics.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-gray-500">No topics yet</div>
               ) : (
-                topics.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => handleTopicSelect(t)}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-orange-50 border-b border-gray-100 last:border-b-0"
-                  >
-                    <div className="font-medium text-gray-900">{t.name}</div>
-                    {t.description && (
-                      <div className="text-gray-500 mt-0.5 truncate">{t.description}</div>
-                    )}
-                  </button>
-                ))
+                <TopicTreeSelector
+                  topics={topics}
+                  selectedTopicId={selectedTopic?.id}
+                  onSelect={(topic) => {
+                    handleTopicSelect(topic);
+                    setShowTopicDropdown(false);
+                  }}
+                  showCreateRoot
+                  onCreateRoot={() => {
+                    setShowTopicDropdown(false);
+                    setCreateParentId(null);
+                    setShowCreateTopic(true);
+                  }}
+                  onCreateChild={(parentId) => {
+                    setShowTopicDropdown(false);
+                    setCreateParentId(parentId);
+                    setShowCreateTopic(true);
+                  }}
+                  className="p-1"
+                />
               )}
             </div>
           )}
@@ -186,13 +194,18 @@ export const SidebarTopicFilters: React.FC = () => {
         {showCreateTopic && (
           <div className="p-2 bg-white border border-gray-200 rounded-lg space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium">New topic</span>
+              <span className="text-xs font-medium">
+                {createParentId
+                  ? `Sub-topic of "${topics.find(t => t.id === createParentId)?.name || 'parent'}"`
+                  : 'New topic'}
+              </span>
               <button
                 type="button"
                 onClick={() => {
                   setShowCreateTopic(false);
                   setNewTopicName('');
                   setNewTopicDescription('');
+                  setCreateParentId(null);
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -228,6 +241,7 @@ export const SidebarTopicFilters: React.FC = () => {
                   setShowCreateTopic(false);
                   setNewTopicName('');
                   setNewTopicDescription('');
+                  setCreateParentId(null);
                 }}
                 className="px-2 py-1.5 text-xs border border-gray-300 rounded hover:bg-gray-100"
               >

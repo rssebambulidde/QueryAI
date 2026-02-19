@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useCallback } from 'react';
-import type { Message } from '@/components/chat/chat-message';
+import type { Message, RegenerateOptions } from '@/components/chat/chat-message';
 import { aiApi, QuestionRequest, conversationApi, Source } from '@/lib/api';
 import {
   mapApiMessagesToUi,
@@ -60,6 +60,7 @@ export interface UseChatSendReturn {
   resumeStream: () => void;
   retryStream: () => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
+  regenerateMessage: (messageId: string, options?: RegenerateOptions) => Promise<void>;
   /** Refs exposed so streaming-controls can read isPaused state */
   isPausedRef: React.MutableRefObject<boolean>;
   previousResponseTimeRef: React.MutableRefObject<number | null>;
@@ -98,6 +99,14 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
   const pausedChunksRef = useRef<string[]>([]);
   const responseTimeStartRef = useRef<number | null>(null);
   const previousResponseTimeRef = useRef<number | null>(null);
+
+  // ── rAF-batched chunk accumulator ────────────────────────────────────────
+  // Instead of calling setMessages on every token, we accumulate chunks and
+  // flush at most once per animation frame (~60 fps).
+  const pendingChunksRef = useRef<string[]>([]);
+  const rafRef = useRef<number | null>(null);
+  /** Reference to the in-flight assistant message, kept in sync across frames. */
+  const assistantMsgRef = useRef<Message | null>(null);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -215,6 +224,32 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           timestamp: new Date(),
           isStreaming: true,
         };
+        assistantMsgRef.current = assistantMessage;
+        pendingChunksRef.current = [];
+
+        /** Flush accumulated chunks to React state (called by rAF or imperatively). */
+        const flushPendingChunks = () => {
+          if (rafRef.current !== null) {
+            cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+          }
+          const pending = pendingChunksRef.current.splice(0);
+          if (pending.length === 0) return;
+          const joined = pending.join('');
+          assistantMessage = { ...assistantMessage, content: assistantMessage.content + joined };
+          assistantMsgRef.current = assistantMessage;
+          setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+        };
+
+        /** Schedule a rAF flush (no-ops if one is already queued). */
+        const scheduleFlush = () => {
+          if (rafRef.current === null) {
+            rafRef.current = requestAnimationFrame(() => {
+              rafRef.current = null;
+              flushPendingChunks();
+            });
+          }
+        };
 
         responseTimeStartRef.current = Date.now();
         setMessages((prev) => [...prev, assistantMessage]);
@@ -269,16 +304,18 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
             }
 
             if (pausedChunksRef.current.length > 0) {
-              const paused = pausedChunksRef.current.splice(0);
-              for (const p of paused) assistantMessage = { ...assistantMessage, content: assistantMessage.content + p };
-              setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+              // Resume: flush any pause-buffered chunks + pending rAF chunks together
+              pendingChunksRef.current.push(...pausedChunksRef.current.splice(0));
+              flushPendingChunks();
             }
 
             if (typeof chunk === 'object' && 'sources' in chunk) {
               streamSources = (chunk as { sources?: Source[] }).sources;
-              // Update assistant message with sources immediately
+              // Flush pending text first so sources layer on top of latest content
               if (streamSources) {
+                flushPendingChunks();
                 assistantMessage = { ...assistantMessage, sources: streamSources };
+                assistantMsgRef.current = assistantMessage;
                 setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
               }
               continue;
@@ -294,17 +331,16 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
             }
 
             if (typeof chunk === 'string') {
-              assistantMessage = { ...assistantMessage, content: assistantMessage.content + chunk };
-              setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+              pendingChunksRef.current.push(chunk);
+              scheduleFlush();
             }
           }
 
-          // Flush remaining paused chunks
+          // Flush remaining paused + pending chunks
           if (pausedChunksRef.current.length > 0) {
-            const paused = pausedChunksRef.current.splice(0);
-            for (const p of paused) assistantMessage = { ...assistantMessage, content: assistantMessage.content + p };
-            setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+            pendingChunksRef.current.push(...pausedChunksRef.current.splice(0));
           }
+          flushPendingChunks();
 
           // Extract follow-ups from text if not received via structured chunk
           if (!followUpQuestions) {
@@ -338,6 +374,14 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           if (conversationId) await reloadPersistedMessages(conversationId);
           refreshConversations();
         } catch (streamError: any) {
+          // Clean up rAF on any stream error / abort
+          if (rafRef.current !== null) {
+            cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+          }
+          pendingChunksRef.current = [];
+          assistantMsgRef.current = null;
+
           if (streamError.name === 'AbortError' || abortControllerRef.current?.signal.aborted) {
             setStreamingState('cancelled');
             setIsStreaming(false);
@@ -438,6 +482,13 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
   const cancelStream = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+      // Cancel any pending rAF flush
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      pendingChunksRef.current = [];
+      assistantMsgRef.current = null;
       setStreamingState('cancelled');
       setIsStreaming(false);
       setIsLoading(false);
@@ -485,6 +536,63 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
     [messages, setMessages, sendMessage],
   );
 
+  // ── Regenerate assistant message with optional overrides ─────────────────
+
+  const regenerateMessage = useCallback(
+    async (messageId: string, options?: RegenerateOptions) => {
+      if (!currentConversationId) {
+        toast.error('No active conversation');
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await aiApi.regenerate(messageId, currentConversationId, options);
+
+        if (response.success && response.data) {
+          const { answer, sources, followUpQuestions, responseVersion, versions } = response.data;
+
+          // Build version summaries from the versions array
+          const versionSummaries = (versions || []).map((v) => ({
+            id: v.id,
+            version: v.version,
+            content: v.content,
+            sources: v.sources as Source[] | undefined,
+            metadata: v.metadata ?? undefined,
+            created_at: v.created_at,
+          }));
+
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== messageId) return m;
+              return {
+                ...m,
+                content: answer,
+                sources: sources ?? m.sources,
+                followUpQuestions: followUpQuestions ?? m.followUpQuestions,
+                version: responseVersion,
+                versions: versionSummaries,
+              };
+            })
+          );
+
+          toast.success(`Response regenerated (v${responseVersion})`);
+        } else {
+          toast.error(response.message || 'Failed to regenerate response');
+        }
+      } catch (err: any) {
+        const msg = err?.response?.data?.error?.message || err.message || 'Failed to regenerate';
+        toast.error(msg);
+        setError(msg);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [currentConversationId, setMessages, setIsLoading, setError, toast],
+  );
+
   return {
     sendMessage,
     cancelStream,
@@ -492,6 +600,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
     resumeStream,
     retryStream,
     editMessage,
+    regenerateMessage,
     isPausedRef,
     previousResponseTimeRef,
   };

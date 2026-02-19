@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { TopicService, CreateTopicInput, UpdateTopicInput } from '../services/topic.service';
+import { TopicService, CreateTopicInput, UpdateTopicInput, TopicTreeNode } from '../services/topic.service';
 import { CacheInvalidationService } from '../services/cache-invalidation.service';
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -12,7 +12,7 @@ const router = Router();
 
 /**
  * GET /api/topics
- * Get all topics for the authenticated user
+ * Get all topics for the authenticated user (flat list)
  */
 router.get(
   '/',
@@ -26,6 +26,20 @@ router.get(
       success: true,
       data: topics,
     });
+  })
+);
+
+/**
+ * GET /api/topics/tree
+ * Get user's topics as a nested tree structure
+ */
+router.get(
+  '/tree',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const tree = await TopicService.getUserTopicTree(userId);
+    res.json({ success: true, data: tree });
   })
 );
 
@@ -75,6 +89,7 @@ router.post(
       name,
       description,
       scopeConfig,
+      parentTopicId: req.body.parentTopicId || null,
     };
 
     const topic = await TopicService.createTopic(input);
@@ -99,14 +114,15 @@ router.put(
     const topicId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { name, description, scopeConfig } = req.body;
 
-    if (!name && description === undefined && scopeConfig === undefined) {
-      throw new ValidationError('At least one field (name, description, or scopeConfig) is required');
+    if (!name && description === undefined && scopeConfig === undefined && req.body.parentTopicId === undefined) {
+      throw new ValidationError('At least one field (name, description, scopeConfig, or parentTopicId) is required');
     }
 
     const updates: UpdateTopicInput = {};
     if (name !== undefined) updates.name = name;
     if (description !== undefined) updates.description = description;
     if (scopeConfig !== undefined) updates.scopeConfig = scopeConfig;
+    if (req.body.parentTopicId !== undefined) updates.parentTopicId = req.body.parentTopicId;
 
     const topic = await TopicService.updateTopic(topicId, userId, updates);
 
@@ -163,6 +179,38 @@ router.delete(
       success: true,
       message: 'Topic deleted successfully',
     });
+  })
+);
+
+/**
+ * GET /api/topics/:id/ancestors
+ * Get the ancestor chain for a topic (root → current)
+ */
+router.get(
+  '/:id/ancestors',
+  authenticate,
+  validateUUIDParams('id'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const topicId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const ancestors = await TopicService.getAncestors(topicId, userId);
+    res.json({ success: true, data: ancestors });
+  })
+);
+
+/**
+ * GET /api/topics/:id/descendants
+ * Get all descendant topic IDs (including self)
+ */
+router.get(
+  '/:id/descendants',
+  authenticate,
+  validateUUIDParams('id'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const topicId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const ids = await TopicService.getDescendantIds(topicId, userId);
+    res.json({ success: true, data: ids });
   })
 );
 

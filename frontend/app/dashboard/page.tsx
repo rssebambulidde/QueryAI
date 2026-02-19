@@ -16,7 +16,7 @@ import { useMobile } from '@/lib/hooks/use-mobile';
 import { useToast } from '@/lib/hooks/use-toast';
 // import { RoleDebug } from '@/components/debug/role-debug'; // Uncomment to debug role issues
 
-type TabType = 'chat' | 'collections';
+type TabType = 'chat' | 'collections' | 'sources';
 
 function DashboardContent() {
   const router = useRouter();
@@ -51,7 +51,7 @@ function DashboardContent() {
   // Read tab from URL query parameter on mount and when it changes
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['chat', 'collections'].includes(tabParam)) {
+    if (tabParam && ['chat', 'collections', 'sources'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     } else if (tabParam === 'documents') {
       // Redirect to settings/documents

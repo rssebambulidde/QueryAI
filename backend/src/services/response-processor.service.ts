@@ -82,8 +82,12 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
   }
 
   /**
-   * Extract follow-up questions from response using multiple patterns
-   * Returns array of 0-4 questions
+   * Extract follow-up questions from response using multiple regex patterns.
+   * Returns array of 0-4 questions.
+   *
+   * @deprecated Primary extraction is now handled by structured JSON output
+   * (AIResponseSchema). This method is retained as a fallback for models
+   * that don't support json_schema response_format.
    */
   static extractFollowUpQuestions(responseText: string, topicName?: string): string[] {
     let followUpQuestions: string[] = [];
@@ -127,8 +131,11 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
   }
 
   /**
-   * Process follow-up questions from response: extract and generate if needed
-   * Returns object with questions array and answer text (with follow-ups removed)
+   * Process follow-up questions from response: extract and generate if needed.
+   * Returns object with questions array and answer text (with follow-ups removed).
+   *
+   * @deprecated Primary extraction is now handled by structured JSON output.
+   * This method is retained as a fallback when the model returns unstructured text.
    */
   static async processFollowUpQuestions(
     responseText: string,

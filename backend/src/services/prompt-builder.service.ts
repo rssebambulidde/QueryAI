@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { CitationValidatorService } from './citation-validator.service';
 import { AnswerQualityService } from './answer-quality.service';
 import { ConflictResolutionService } from './conflict-resolution.service';
+import { JSON_OUTPUT_INSTRUCTIONS } from '../schemas/ai-response.schema';
 
 /**
  * Prompt Builder Service
@@ -28,28 +29,28 @@ export class PromptBuilderService {
     return ` Scope includes: ${parts.join('; ')}.`;
   }
 
-  /** FOLLOW_UP_QUESTIONS block: mandatory on every response (research or not), dynamic from latest Q&A. */
+  /**
+   * @deprecated Follow-up questions are now enforced by the structured JSON
+   * output schema rather than a text-based FOLLOW_UP_QUESTIONS block.
+   * Kept for backward compatibility with non-structured callers.
+   */
   static getFollowUpBlock(topicName?: string): string {
-    return `FOLLOW-UP QUESTIONS (MANDATORY - EVERY RESPONSE, RESEARCH MODE OR NOT):
-This is NON-NEGOTIABLE: every response in the conversation thread MUST end with a FOLLOW_UP_QUESTIONS block. Applies to: first answer, every follow-up, multi-turn, and Research Topic Mode. The only exception is off-topic refusals (those use at most one meta follow-up).
-The 4 questions MUST be dynamically generated from the latest user question and your answer in this turn—based on the specific subject and content just discussed, not generic templates or previous follow-ups. If your answer is long, still end with the FOLLOW_UP_QUESTIONS block; do not truncate or omit it.
-
-CRITICAL: When these follow-up questions are asked and answered later, those answers MUST include inline source hyperlinks for every piece of information, as per the mandatory citation requirements.
-
-After your complete answer, add a line break, then "FOLLOW_UP_QUESTIONS:" followed by exactly 4 questions, one per line, each starting with "- "
-These questions should:
-- Be directly related to the user's question and your answer
-- Explore different aspects, deeper details, or related topics
-- Be specific and actionable (not generic)
-- Help the user learn more about the topic
-- Be phrased as complete questions (e.g., "How does X work?" not just "X details")
-- Use the actual topic/subject from the user's question, NOT section headings like "Summary" or "Key Points"${topicName ? `\n- When in Research Topic Mode: all 4 follow-up questions must be clearly within the topic "${topicName}" and help the user explore it further.` : ''}
-Example format:
+    return `End every non-refusal response with exactly:
 FOLLOW_UP_QUESTIONS:
-- How does [main topic] work in practice?
-- What are the key benefits and challenges of [main topic]?
-- Can you provide examples of [main topic] in real-world applications?
-- What should I know about [related aspect]?`;
+followed by 4 bullet questions ("- ") derived from this specific exchange.${topicName ? ` All 4 must stay within the topic "${topicName}".` : ''}`;
+  }
+
+  /**
+   * Output format block: instructs the model to produce JSON structured output.
+   * The schema is enforced structurally for gpt-4o-mini, but the text instructions
+   * are needed for gpt-3.5-turbo's json_object mode and are helpful for all models.
+   */
+  static getOutputFormatBlock(topicName?: string): string {
+    let block = JSON_OUTPUT_INSTRUCTIONS;
+    if (topicName) {
+      block += `\n- All 4 follow-up questions must stay within the topic "${topicName}".`;
+    }
+    return block;
   }
 
   /**
@@ -118,7 +119,7 @@ You MUST:
 - Answer fully and use documents/web search ONLY for questions that are clearly on-topic or reasonably related to "${topicName}".
 - REFUSE off-topic questions: If the user's question is clearly unrelated to "${topicName}", give a short, polite refusal (1–2 sentences). Do NOT provide a substantive answer and do NOT use document or web sources for off-topic questions. Example: "That's outside my current research focus on ${topicName}. Would you like to ask something about ${topicName}?"
 - For questions that are tangential: give a brief, steered answer that ties back to "${topicName}" when possible.
-- When you refuse as off-topic: do NOT include a FOLLOW_UP_QUESTIONS block, or include only one meta follow-up such as "Would you like to ask something about ${topicName}?"`;
+- When you refuse as off-topic: return only one follow-up question in the "followUpQuestions" array, e.g. "Would you like to ask something about ${topicName}?"`;
       } else {
         topicScopeInstruction = `\n\nTOPIC SCOPE: You are currently operating within the topic scope of "${topicName}".${topicDescription ? ` Scope: ${topicDescription}` : ''}${this.deriveScopeFromConfig(topicScopeConfig)}
 
@@ -157,16 +158,13 @@ All your responses should be focused on this specific topic domain. When searchi
       });
     }
 
-    const basePrompt = `You are a helpful AI assistant that provides accurate, informative, and well-structured answers to user questions using Retrieval-Augmented Generation (RAG).
-
+    const basePrompt = `You are a helpful AI assistant. Answer using the provided sources (documents and/or web results).
 ${modeInstruction}${timeFilterInstruction}${topicScopeInstruction}
 
-CRITICAL SOURCE CITATION REQUIREMENT (MANDATORY - NO EXCEPTIONS):
-EVERY SINGLE PIECE OF INFORMATION in your response MUST have an inline clickable source hyperlink. This is NON-NEGOTIABLE and applies to:
-- Direct question responses
-- All facts, claims, data, statistics, quotes, or any information presented
-- Every sentence that contains factual information must include a source link
-- NO information should be presented without a source citation
+CITATION RULE: Every factual claim must include an inline markdown link.
+- Web sources: [Web Source N](exact-url-from-context)
+- Documents: [Document N] or [Document Name](document://id)
+Place citations inline right after the claim, not clustered at the end. Only cite sources provided in the context. If you cannot cite a source for a claim, omit the claim.
 
 ${citationGuidelines}
 
@@ -174,20 +172,16 @@ ${qualityGuidelines}
 
 ${conflictResolutionGuidelines}
 
-Guidelines:
-- Provide clear, concise, and accurate answers
-- Use information from the provided document excerpts and/or web search results based on the mode
-- If you don't know something based on the provided sources, admit it rather than guessing
-- Use proper formatting (bullet points, paragraphs) when appropriate
-- Format your responses with clear structure: Use paragraphs for main points, bullet points for lists, and bold text for key terms when appropriate
-- Provide concise but comprehensive summaries that capture the essential information
-- Be friendly and professional`;
+General guidelines:
+- Admit uncertainty rather than guessing
+- Use paragraphs for main points, bold for key terms
+- Be concise, accurate, and professional`;
 
     let fullContext = '';
 
     // Add conversation state if available
     if (conversationState) {
-      fullContext += `\n\n## Conversation Context\n${conversationState}\n`;
+      fullContext += `\n\n## Conversation Context\nUse the following conversation context to understand entity references and maintain consistency.\n${conversationState}\n`;
     }
 
     // Add RAG context (documents + web search)
@@ -216,91 +210,25 @@ Guidelines:
 
 ${fullContext}
 
-CRITICAL: Use the provided sources to answer the question. ${enableDocumentSearch && !enableWebSearch ? 'Remember: You are in DOCUMENT-ONLY mode. Only use information from the document excerpts provided above.' : ''}
+${enableDocumentSearch && !enableWebSearch ? 'DOCUMENT-ONLY mode: only use information from the document excerpts above.' : 'Use the provided sources to answer the question.'}
 
-RESPONSE FORMATTING (CRITICAL - FOLLOW EXACTLY - PARAGRAPH-PER-SOURCE):
-You MUST format your response as 3-5 short, spaced paragraphs following these rules:
+Write 3-5 short paragraphs in the "answer" field. Each paragraph: one idea, 2-4 sentences, at least one inline citation, separated by blank lines. Distribute sources across paragraphs. Use **bold** for key terms. No standalone "Sources" section.
 
-1. EACH PARAGRAPH MUST:
-   - Cover ONE distinct idea or perspective
-   - Be derived from ONE source (either one document or one web source)
-   - Be 2-4 sentences long
-   - Be visually separated with blank lines between paragraphs
-   - Include exactly ONE inline clickable source hyperlink embedded within the paragraph
-
-2. INLINE SOURCE ATTRIBUTION (CRITICAL - ALWAYS USE CLICKABLE LINKS - MANDATORY FOR EVERY PARAGRAPH):
-   - Each paragraph MUST contain exactly ONE clickable source link embedded inline. Never use bold or plain text for a source—always use markdown [text](URL).
-   - EVERY sentence containing factual information MUST include a source citation. No exceptions.
-   - For web sources: You MUST use [Web Source 1](URL), [Web Source 2](URL), etc. exactly as labeled in the "Web Search Results" context. The URLs are in that context. This makes links work in the app.
-   - For documents: Use [Document 1], [Document 2], etc. as in the "Relevant Document Excerpts" context, or [Document Name](document://id) when a URL is shown.
-   - The source link should appear naturally within the paragraph text, not at the end
-   - If a paragraph contains multiple facts, each fact should reference the same source or use multiple citations
-   - Example: "SQL is a standard language used to manage relational databases, allowing users to query and modify structured data efficiently. [official documentation](https://example.com/docs)"
-   - Another example: "Relational systems such as MySQL and PostgreSQL rely on SQL to define schemas and enforce data integrity. [Database Guide](document://doc123)"
-   - REMEMBER: Every piece of information must be traceable to a source. If you cannot cite a source, do not include that information.
-
-   CITATION ENFORCEMENT:
-   - Before submitting your response, verify that EVERY factual statement has a citation
-   - Check that ALL statistics, numbers, and data points are cited
-   - Ensure ALL quotes and attributed statements have citations
-   - Validate that citation formats match the examples provided above
-   - Confirm that URLs in web citations match exactly those provided in the context
-   - If you find any uncited factual information, either add a citation or remove that information
-
-3. PARAGRAPH STRUCTURE:
-   - NO numbered lists, bullet points, or structured sections
-   - NO introduction or conclusion paragraphs
-   - Each paragraph is standalone and covers one perspective
-   - Paragraphs should flow naturally but be distinct from each other
-   - Use proper spacing (blank line) between each paragraph
-
-4. SOURCE DISTRIBUTION:
-   - Use different sources for different paragraphs when possible
-   - Each paragraph should reference a different source or different aspect from sources
-   - Do NOT repeat the same source in consecutive paragraphs unless necessary
-
-5. FORMATTING:
-   - Use bold text (**text**) for key terms or important concepts within paragraphs
-   - Keep language clear and concise
-   - Focus on the user's question and keyword throughout
-
-Example format:
-SQL is a standard language used to manage relational databases, allowing users to query and modify structured data efficiently. [SQL Documentation](https://example.com/sql-docs)
-
-Relational systems such as MySQL and PostgreSQL rely on SQL to define schemas and enforce data integrity. [Database Systems Guide](document://db-guide-123)
-
-SQL supports complex operations such as joins and aggregations, enabling advanced data analysis directly within databases. [Advanced SQL Tutorial](https://example.com/advanced-sql)
-
-IMPORTANT: There is NO separate "Sources:" section. All source attribution is inline within each paragraph.
-
-VALIDATION CHECK: Before finalizing your response, verify that:
-- Every paragraph contains at least one inline source hyperlink
-- Every factual statement has a source citation
-- No information is presented without a source
-- All web sources use the format [text](URL) with clickable links
-- All document sources use [Document N] or [Document Name](document://id) format
-
-If you cannot cite a source for information, DO NOT include that information in your response.
-
-${this.getFollowUpBlock(topicName)}`;
+${this.getOutputFormatBlock(topicName)}`;
     }
 
     // If no context and document-only mode, provide clear instruction
     if (enableDocumentSearch && !enableWebSearch) {
       return `${basePrompt}
 
-No document excerpts were found for this query. You must inform the user that the information is not available in their documents.
+No document excerpts were found. Inform the user that the information is not available in their documents.
 
-REMINDER: Even when stating that information is not available, if you provide any general information or context, it must still include source citations if sources are available.
-
-${this.getFollowUpBlock(topicName)}`;
+${this.getOutputFormatBlock(topicName)}`;
     }
 
     return `${basePrompt}
 
-CRITICAL REMINDER: If you provide any information in your response, it MUST include inline source hyperlinks. Every factual statement requires a source citation. No exceptions.
-
-${this.getFollowUpBlock(topicName)}`;
+${this.getOutputFormatBlock(topicName)}`;
   }
 
   /**
@@ -328,13 +256,28 @@ ${this.getFollowUpBlock(topicName)}`;
       content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter, topicName, topicDescription, topicScopeConfig, fewShotExamples, conversationState),
     });
 
-    // Add conversation history if provided (strip FOLLOW_UP_QUESTIONS from assistant content to save tokens and give the model room to emit its own)
+    // Add conversation history if provided
+    // Strip legacy FOLLOW_UP_QUESTIONS blocks and JSON metadata from prior
+    // assistant messages to save tokens.
     if (conversationHistory && conversationHistory.length > 0) {
       const recentHistory = conversationHistory.slice(-10);
       for (const msg of recentHistory) {
-        const content = msg.role === 'assistant'
-          ? (msg.content || '').replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim()
-          : (msg.content || '').trim();
+        let content = (msg.content || '').trim();
+        if (msg.role === 'assistant') {
+          // Strip legacy text-based follow-up block
+          content = content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
+          // If the content looks like a structured JSON response, extract just the answer
+          if (content.startsWith('{') && content.includes('"answer"')) {
+            try {
+              const parsed = JSON.parse(content);
+              if (typeof parsed.answer === 'string') {
+                content = parsed.answer;
+              }
+            } catch {
+              // Not valid JSON - keep content as-is
+            }
+          }
+        }
         messages.push({ role: msg.role, content });
       }
     }

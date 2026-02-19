@@ -73,6 +73,12 @@ interface EnvConfig {
   BREVO_SENDER_EMAIL?: string;
   BREVO_SENDER_NAME?: string;
 
+  // Cohere (Reranking)
+  COHERE_API_KEY?: string; // Cohere API key for rerank-v3 cross-encoder reranking
+
+  // Answer Evaluation (LLM-as-judge)
+  ANSWER_EVAL_SAMPLE_RATE?: string; // Fraction of queries evaluated (0.0-1.0, default 0.05)
+
   // Redis Cache
   REDIS_URL?: string; // Redis connection URL (redis://[username]:[password]@[host]:[port]/[database])
   REDIS_HOST?: string; // Redis host (if not using REDIS_URL)
@@ -102,9 +108,11 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
     'PAYPAL_PLAN_ID_STARTER',
     'PAYPAL_PLAN_ID_PREMIUM',
     'PAYPAL_PLAN_ID_PRO',
+    'PAYPAL_PLAN_ID_ENTERPRISE',
     'PAYPAL_PLAN_ID_STARTER_ANNUAL',
     'PAYPAL_PLAN_ID_PREMIUM_ANNUAL',
     'PAYPAL_PLAN_ID_PRO_ANNUAL',
+    'PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL',
     'FRONTEND_URL',
     'FRONTEND_FALLBACK_URL',
     'BACKEND_FALLBACK_URL',
@@ -112,6 +120,8 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
     'BREVO_SENDER_EMAIL',
     'BREVO_SENDER_NAME',
     'EMBEDDING_MODEL',
+    'COHERE_API_KEY',
+    'ANSWER_EVAL_SAMPLE_RATE',
     'REDIS_URL',
     'REDIS_HOST',
     'REDIS_PORT',
@@ -205,6 +215,12 @@ const config: EnvConfig = {
   BREVO_API_KEY: getEnvVar('BREVO_API_KEY') || undefined,
   BREVO_SENDER_EMAIL: getEnvVar('BREVO_SENDER_EMAIL', 'noreply@queryai.com'),
   BREVO_SENDER_NAME: getEnvVar('BREVO_SENDER_NAME', 'QueryAI'),
+
+  // Cohere (Reranking) - Optional
+  COHERE_API_KEY: getEnvVar('COHERE_API_KEY') || undefined,
+
+  // Answer Evaluation (LLM-as-judge) - Optional
+  ANSWER_EVAL_SAMPLE_RATE: getEnvVar('ANSWER_EVAL_SAMPLE_RATE', '0.05'),
 
   // Redis Cache - Optional (for distributed caching)
   REDIS_URL: getEnvVar('REDIS_URL') || undefined,

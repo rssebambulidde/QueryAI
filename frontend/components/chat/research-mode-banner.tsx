@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
-import { Tag, X } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Tag, X, ChevronRight } from 'lucide-react';
 import { useFilterStore } from '@/lib/store/filter-store';
+import { getAncestorPath } from '@/components/topics/topic-tree-selector';
 import { cn } from '@/lib/utils';
 
 interface ResearchModeBannerProps {
@@ -11,7 +12,12 @@ interface ResearchModeBannerProps {
 }
 
 export const ResearchModeBanner: React.FC<ResearchModeBannerProps> = ({ className, onExit }) => {
-  const { selectedTopic, setSelectedTopic } = useFilterStore();
+  const { selectedTopic, topics, setSelectedTopic } = useFilterStore();
+
+  const ancestors = useMemo(() => {
+    if (!selectedTopic) return [];
+    return getAncestorPath(selectedTopic.id, topics);
+  }, [selectedTopic, topics]);
 
   if (!selectedTopic) return null;
 
@@ -20,6 +26,14 @@ export const ResearchModeBanner: React.FC<ResearchModeBannerProps> = ({ classNam
     else setSelectedTopic(null);
   };
 
+  const handleBreadcrumbClick = (topic: import('@/lib/api').Topic) => {
+    setSelectedTopic(topic);
+  };
+
+  const breadcrumbLabel = ancestors.length > 0
+    ? `${ancestors.map(a => a.name).join(' > ')} > ${selectedTopic.name}`
+    : selectedTopic.name;
+
   return (
     <div
       className={cn(
@@ -27,15 +41,35 @@ export const ResearchModeBanner: React.FC<ResearchModeBannerProps> = ({ classNam
         className
       )}
       role="banner"
-      aria-label={`Research mode: ${selectedTopic.name}. Exit research mode to ask about any topic.`}
+      aria-label={`Research mode: ${breadcrumbLabel}. Exit research mode to ask about any topic.`}
     >
       <div
         className="flex items-center gap-2 min-w-0"
         title={selectedTopic.description ?? undefined}
       >
         <Tag className="w-4 h-4 text-orange-600 shrink-0" aria-hidden />
-        <span className="text-sm font-medium text-orange-900 truncate">
-          Research mode: <span className="font-semibold">{selectedTopic.name}</span>
+        <span className="text-sm font-medium text-orange-900 truncate flex items-center gap-1">
+          Research mode:
+          {ancestors.length > 0 ? (
+            <span className="flex items-center gap-0.5">
+              {ancestors.map((ancestor, i) => (
+                <span key={ancestor.id} className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleBreadcrumbClick(ancestor)}
+                    className="text-orange-600 hover:text-orange-800 hover:underline cursor-pointer"
+                    title={`Switch to ${ancestor.name}`}
+                  >
+                    {ancestor.name}
+                  </button>
+                  <ChevronRight className="w-3 h-3 text-orange-400" />
+                </span>
+              ))}
+              <span className="font-semibold">{selectedTopic.name}</span>
+            </span>
+          ) : (
+            <span className="font-semibold">{selectedTopic.name}</span>
+          )}
         </span>
       </div>
       <button

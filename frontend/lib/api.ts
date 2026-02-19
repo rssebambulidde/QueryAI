@@ -280,6 +280,8 @@ export interface Source {
   documentId?: string;
   snippet?: string;
   score?: number;
+  pageNumber?: number;
+  sectionTitle?: string;
 }
 
 export interface DocumentItem {
@@ -304,8 +306,22 @@ export interface Topic {
   name: string;
   description?: string;
   scope_config?: Record<string, any>;
+  parent_topic_id?: string | null;
+  topic_path?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TopicTreeNode extends Topic {
+  children: TopicTreeNode[];
+}
+
+export interface TopicAncestor {
+  id: string;
+  name: string;
+  description?: string | null;
+  parent_topic_id?: string | null;
+  depth: number;
 }
 
 export interface Conversation {
@@ -334,6 +350,18 @@ export interface Message {
   id: string;
   conversation_id: string;
   role: 'user' | 'assistant';
+  content: string;
+  sources?: Source[];
+  metadata?: Record<string, any>;
+  version: number;
+  parent_message_id?: string | null;
+  created_at: string;
+}
+
+/** Lightweight version summary for UI version indicators. */
+export interface MessageVersion {
+  id: string;
+  version: number;
   content: string;
   sources?: Source[];
   metadata?: Record<string, any>;
@@ -435,6 +463,78 @@ export const authApi = {
   },
 };
 
+/**
+ * Internal SSE streaming helper for generation endpoints (summarize, essay, report).
+ * Yields plain text chunks. Throws on HTTP or stream errors.
+ */
+async function* _streamGeneration(
+  path: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal
+): AsyncGenerator<string, void, unknown> {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: typeof window !== 'undefined' ? `Bearer ${localStorage.getItem('accessToken') || ''}` : '',
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No reader available');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      if (signal?.aborted) { reader.cancel(); return; }
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      let currentEvent = '';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) { currentEvent = line.slice(7).trim(); continue; }
+        if (line.startsWith('data: ')) {
+          const payload = line.slice(6);
+          switch (currentEvent) {
+            case 'chunk':
+              yield payload;
+              break;
+            case 'done':
+              return;
+            case 'error':
+              try { const err = JSON.parse(payload); throw new Error(err.message || 'Stream error'); } catch (e) { if (e instanceof Error && e.message !== 'Stream error') throw e; }
+              break;
+            default:
+              // Legacy fallback
+              try {
+                const data = JSON.parse(payload);
+                if (data.chunk) yield data.chunk;
+                if (data.done) return;
+                if (data.error) throw new Error(data.error.message || 'Stream error');
+              } catch { /* skip */ }
+              break;
+          }
+          currentEvent = '';
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 // AI API
 export const aiApi = {
   ask: async (request: QuestionRequest): Promise<ApiResponse<QuestionResponse>> => {
@@ -505,31 +605,63 @@ export const aiApi = {
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
 
+            let currentEvent = '';
+
             for (const line of lines) {
+              if (line.startsWith('event: ')) {
+                currentEvent = line.slice(7).trim();
+                continue;
+              }
+
               if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                  if (data.sources) {
-                    yield { sources: data.sources };
-                  }
-                  if (data.chunk) {
-                    yield data.chunk;
-                  }
-                  if (data.followUpQuestions) {
-                    yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal };
-                  }
-                  if (data.qualityScore !== undefined) {
-                    yield { qualityScore: data.qualityScore };
-                  }
-                  if (data.done) {
+                const payload = line.slice(6);
+
+                switch (currentEvent) {
+                  case 'chunk':
+                    // Plain text — no JSON parsing needed
+                    yield payload;
+                    break;
+                  case 'sources':
+                    try {
+                      yield { sources: JSON.parse(payload) as Source[] };
+                    } catch { /* skip malformed */ }
+                    break;
+                  case 'followUpQuestions':
+                    try {
+                      const fup = JSON.parse(payload);
+                      yield { followUpQuestions: fup.questions, refusal: fup.refusal };
+                    } catch { /* skip malformed */ }
+                    break;
+                  case 'qualityScore':
+                    try {
+                      const qs = JSON.parse(payload);
+                      yield { qualityScore: qs.score };
+                    } catch { /* skip malformed */ }
+                    break;
+                  case 'done':
                     return;
-                  }
-                  if (data.error) {
-                    throw new Error(data.error.message || 'Stream error');
-                  }
-                } catch (e) {
-                  // Skip invalid JSON
+                  case 'error':
+                    try {
+                      const err = JSON.parse(payload);
+                      throw new Error(err.message || 'Stream error');
+                    } catch (e) {
+                      if (e instanceof Error && e.message !== 'Stream error') throw e;
+                    }
+                    break;
+                  default:
+                    // Legacy fallback: unnamed data-only lines (backwards compat)
+                    try {
+                      const data = JSON.parse(payload);
+                      if (data.sources) { yield { sources: data.sources }; }
+                      if (data.chunk) { yield data.chunk; }
+                      if (data.followUpQuestions) { yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal }; }
+                      if (data.qualityScore !== undefined) { yield { qualityScore: data.qualityScore }; }
+                      if (data.done) { return; }
+                      if (data.error) { throw new Error(data.error.message || 'Stream error'); }
+                    } catch { /* skip */ }
+                    break;
                 }
+                currentEvent = '';
               }
             }
           }
@@ -576,6 +708,35 @@ export const aiApi = {
     return response.data;
   },
 
+  // ── Streaming generation variants ────────────────────────────────────
+
+  summarizeStream: async function* (
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[],
+    signal?: AbortSignal
+  ): AsyncGenerator<string, void, unknown> {
+    yield* _streamGeneration('/api/ai/summarize/stream', { originalResponse, keyword, sources }, signal);
+  },
+
+  writeEssayStream: async function* (
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[],
+    signal?: AbortSignal
+  ): AsyncGenerator<string, void, unknown> {
+    yield* _streamGeneration('/api/ai/essay/stream', { originalResponse, keyword, sources }, signal);
+  },
+
+  generateReportStream: async function* (
+    originalResponse: string,
+    keyword: string,
+    sources?: Source[],
+    signal?: AbortSignal
+  ): AsyncGenerator<string, void, unknown> {
+    yield* _streamGeneration('/api/ai/report/stream', { originalResponse, keyword, sources }, signal);
+  },
+
   researchSessionSummary: async (conversationId: string, topicName: string): Promise<ApiResponse<{ summary: string }>> => {
     const response = await apiClient.post('/api/ai/research-session-summary', { conversationId, topicName });
     return response.data;
@@ -583,6 +744,43 @@ export const aiApi = {
 
   suggestedStarters: async (topicId: string): Promise<ApiResponse<{ starters: string[] }>> => {
     const response = await apiClient.get('/api/ai/suggested-starters', { params: { topicId } });
+    return response.data;
+  },
+
+  regenerate: async (
+    messageId: string,
+    conversationId: string,
+    options?: {
+      model?: string;
+      maxDocumentChunks?: number;
+      maxSearchResults?: number;
+      enableWebSearch?: boolean;
+      enableDocumentSearch?: boolean;
+      temperature?: number;
+      maxTokens?: number;
+    }
+  ): Promise<ApiResponse<{
+    newMessage: Message;
+    versions: Message[];
+    answer: string;
+    model: string;
+    sources?: Source[];
+    followUpQuestions?: string[];
+    usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+    responseVersion: number;
+  }>> => {
+    const response = await apiClient.post('/api/ai/regenerate', {
+      messageId,
+      conversationId,
+      options,
+    });
+    return response.data;
+  },
+
+  getMessageVersions: async (
+    messageId: string,
+  ): Promise<ApiResponse<{ versions: Message[] }>> => {
+    const response = await apiClient.get(`/api/ai/messages/${messageId}/versions`);
     return response.data;
   },
 };
@@ -643,6 +841,40 @@ export const queueApi = {
     return response.data;
   },
 };
+
+// Document processing progress types
+export type ProcessingStage =
+  | 'queued'
+  | 'downloading'
+  | 'extracting'
+  | 'chunking'
+  | 'embedding'
+  | 'indexing'
+  | 'completed'
+  | 'failed';
+
+export interface ProcessingStageRecord {
+  name: ProcessingStage;
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface DocumentProcessingStatus {
+  documentId: string;
+  status: string;
+  processing: {
+    stage: ProcessingStage;
+    progressPercent: number;
+    stageLabel: string;
+    startedAt: string;
+    error?: string;
+    failedStage?: ProcessingStage;
+    stages: ProcessingStageRecord[];
+  } | null;
+  extractionError: string | null;
+  embeddingError: string | null;
+}
 
 // Document API
 export const documentApi = {
@@ -706,6 +938,11 @@ export const documentApi = {
     const response = await apiClient.get(`/api/documents/${documentId}/text`);
     return response.data;
   },
+
+  getProcessingStatus: async (documentId: string): Promise<ApiResponse<DocumentProcessingStatus>> => {
+    const response = await apiClient.get(`/api/documents/${documentId}/status`);
+    return response.data;
+  },
 };
 
 // Conversation API
@@ -753,6 +990,18 @@ export const conversationApi = {
     const response = await apiClient.delete(`/api/conversations/${conversationId}/messages/${messageId}`);
     return response.data;
   },
+
+  exportConversation: async (
+    id: string,
+    format: 'pdf' | 'markdown' | 'docx',
+    options?: { includeSources?: boolean; includeBibliography?: boolean }
+  ): Promise<Blob> => {
+    const response = await apiClient.get(`/api/conversations/${id}/export`, {
+      params: { format, ...options },
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 };
 
 // Topic API
@@ -762,17 +1011,32 @@ export const topicApi = {
     return response.data;
   },
 
+  tree: async (): Promise<ApiResponse<TopicTreeNode[]>> => {
+    const response = await apiClient.get('/api/topics/tree');
+    return response.data;
+  },
+
   get: async (id: string): Promise<ApiResponse<Topic>> => {
     const response = await apiClient.get(`/api/topics/${id}`);
     return response.data;
   },
 
-  create: async (data: { name: string; description?: string; scopeConfig?: Record<string, any> }): Promise<ApiResponse<Topic>> => {
+  getAncestors: async (id: string): Promise<ApiResponse<TopicAncestor[]>> => {
+    const response = await apiClient.get(`/api/topics/${id}/ancestors`);
+    return response.data;
+  },
+
+  getDescendants: async (id: string): Promise<ApiResponse<string[]>> => {
+    const response = await apiClient.get(`/api/topics/${id}/descendants`);
+    return response.data;
+  },
+
+  create: async (data: { name: string; description?: string; scopeConfig?: Record<string, any>; parentTopicId?: string | null }): Promise<ApiResponse<Topic>> => {
     const response = await apiClient.post('/api/topics', data);
     return response.data;
   },
 
-  update: async (id: string, data: { name?: string; description?: string; scopeConfig?: Record<string, any> }): Promise<ApiResponse<Topic>> => {
+  update: async (id: string, data: { name?: string; description?: string; scopeConfig?: Record<string, any>; parentTopicId?: string | null }): Promise<ApiResponse<Topic>> => {
     const response = await apiClient.put(`/api/topics/${id}`, data);
     return response.data;
   },
@@ -955,7 +1219,116 @@ export const analyticsApi = {
     });
     return response.data;
   },
+
+  trackCitationClick: async (params: {
+    messageId?: string;
+    conversationId?: string;
+    sourceIndex: number;
+    sourceUrl?: string;
+    sourceType: 'document' | 'web';
+  }): Promise<ApiResponse<{ id: string | null }>> => {
+    const response = await apiClient.post('/api/analytics/citation-click', params);
+    return response.data;
+  },
+
+  getCitationClickStats: async (
+    days: number = 30
+  ): Promise<ApiResponse<{
+    period: string;
+    totalClicks: number;
+    uniqueUsers: number;
+    clicksByType: Record<string, number>;
+    topDomains: { domain: string; clicks: number; unique_users: number }[];
+    avgClicksPerMessage: number;
+  }>> => {
+    const response = await apiClient.get('/api/analytics/citation-clicks', {
+      params: { days },
+    });
+    return response.data;
+  },
+
+  getCitationDomainRates: async (
+    days: number = 30
+  ): Promise<ApiResponse<{
+    period: string;
+    domains: { domain: string; totalClicked: number; uniqueClickers: number }[];
+  }>> => {
+    const response = await apiClient.get('/api/analytics/citation-clicks/domains', {
+      params: { days },
+    });
+    return response.data;
+  },
+
+  // ── Cross-conversation cited sources ──────────────────────────────
+
+  getCitedSources: async (options?: {
+    topicId?: string;
+    startDate?: string;
+    endDate?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiResponse<{ sources: CitedSource[] }>> => {
+    const response = await apiClient.get('/api/analytics/cited-sources', {
+      params: options,
+    });
+    return response.data;
+  },
+
+  getSourceConversations: async (
+    citedSourceId: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<ApiResponse<{ conversations: SourceConversation[] }>> => {
+    const response = await apiClient.get(`/api/analytics/cited-sources/${citedSourceId}/conversations`, {
+      params: options,
+    });
+    return response.data;
+  },
+
+  getTopicCitedSources: async (
+    topicId: string,
+    limit: number = 20
+  ): Promise<ApiResponse<{ sources: TopicCitedSource[] }>> => {
+    const response = await apiClient.get(`/api/analytics/cited-sources/topic/${topicId}`, {
+      params: { limit },
+    });
+    return response.data;
+  },
 };
+
+// Cited Sources Types
+export interface CitedSource {
+  id: string;
+  source_url: string | null;
+  source_type: 'document' | 'web';
+  document_id: string | null;
+  source_title: string;
+  source_domain: string | null;
+  first_cited_at: string;
+  last_cited_at: string;
+  citation_count: number;
+  conversation_count: number;
+}
+
+export interface SourceConversation {
+  conversation_id: string;
+  conversation_title: string | null;
+  message_id: string;
+  snippet: string | null;
+  topic_id: string | null;
+  topic_name: string | null;
+  cited_at: string;
+}
+
+export interface TopicCitedSource {
+  id: string;
+  source_url: string | null;
+  source_type: 'document' | 'web';
+  document_id: string | null;
+  source_title: string;
+  source_domain: string | null;
+  topic_citation_count: number;
+  total_citation_count: number;
+}
 
 // Subscription API Types
 export interface Subscription {
@@ -1654,6 +2027,122 @@ export const metricsApi = {
     const response = await apiClient.get('/api/metrics/quality/trends', {
       params: options,
     });
+    return response.data;
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// Feedback API — thumbs up/down, comments, citation flagging
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface FlaggedCitation {
+  sourceUrl: string;
+  sourceTitle: string;
+  reason?: string;
+}
+
+export interface FeedbackSubmission {
+  messageId: string;
+  conversationId?: string;
+  topicId?: string;
+  rating: -1 | 1;
+  comment?: string;
+  flaggedCitations?: FlaggedCitation[];
+  model?: string;
+  /** Context for evaluator routing on negative feedback */
+  question?: string;
+  answer?: string;
+  sources?: Array<{ type?: string; title?: string; url?: string; snippet?: string }>;
+}
+
+export interface MessageFeedback {
+  id: string;
+  user_id: string;
+  message_id: string;
+  conversation_id: string | null;
+  topic_id: string | null;
+  rating: -1 | 1;
+  comment: string | null;
+  flagged_citations: FlaggedCitation[];
+  model: string | null;
+  created_at: string;
+}
+
+export const feedbackApi = {
+  /** Submit or update feedback for a message. */
+  submitFeedback: async (
+    feedback: FeedbackSubmission,
+  ): Promise<ApiResponse<{ feedbackId: string }>> => {
+    const response = await apiClient.post('/api/feedback', feedback);
+    return response.data;
+  },
+
+  /** Get current user's feedback for a specific message. */
+  getFeedback: async (
+    messageId: string,
+  ): Promise<ApiResponse<{ feedback: MessageFeedback | null }>> => {
+    const response = await apiClient.get(`/api/feedback/message/${messageId}`);
+    return response.data;
+  },
+
+  /** Remove feedback for a message. */
+  deleteFeedback: async (
+    messageId: string,
+  ): Promise<ApiResponse<{ deleted: boolean }>> => {
+    const response = await apiClient.delete(`/api/feedback/message/${messageId}`);
+    return response.data;
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// Workspace API
+// ═══════════════════════════════════════════════════════════════════
+
+export interface WorkspaceTopicNode {
+  id: string;
+  name: string;
+  description: string | null;
+  conversationCount: number;
+  documentCount: number;
+  createdAt: string;
+}
+
+export interface WorkspaceDocumentNode {
+  id: string;
+  filename: string;
+  fileType: string;
+  fileSize: number;
+  topicId: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface WorkspaceConversationEdge {
+  topicId: string;
+  count: number;
+}
+
+export interface WorkspaceTopicCitation {
+  topicId: string;
+  citations: Array<{
+    sourceTitle: string;
+    sourceType: 'document' | 'web';
+    documentId: string | null;
+    citationCount: number;
+  }>;
+}
+
+export interface WorkspaceGraphData {
+  topics: WorkspaceTopicNode[];
+  documents: WorkspaceDocumentNode[];
+  conversationCounts: WorkspaceConversationEdge[];
+  topicCitations: WorkspaceTopicCitation[];
+}
+
+export const workspaceApi = {
+  /** Get the full research workspace graph data. */
+  getGraph: async (): Promise<ApiResponse<WorkspaceGraphData>> => {
+    const response = await apiClient.get('/api/workspace');
     return response.data;
   },
 };

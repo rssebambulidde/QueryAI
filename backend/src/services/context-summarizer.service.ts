@@ -8,7 +8,15 @@ import { openai } from '../config/openai';
 import { TokenCountService } from './token-count.service';
 import logger from '../config/logger';
 import { RAGContext, DocumentContext } from './rag.service';
-import { SummarizationConfig as SummarizationThresholds } from '../config/thresholds.config';
+import { SummarizationConfig as SummarizationThresholds, CompressionConfig as CompressionThresholds } from '../config/thresholds.config';
+
+/**
+ * Unified context reduction strategy.
+ * - 'summarize': LLM-based summarization (preserves citations & key info)
+ * - 'compress':  Fast token-based truncation without LLM calls
+ * - 'none':      Skip context reduction entirely
+ */
+export type ContextReductionStrategy = 'compress' | 'summarize' | 'none';
 
 /**
  * Summarization configuration
@@ -425,5 +433,102 @@ export class ContextSummarizerService {
       ...options,
       config: quickConfig,
     });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Truncation-based compression (no LLM calls)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Smart-truncate text, preserving sentence boundaries when possible.
+   */
+  private static truncateText(
+    text: string,
+    maxTokens: number,
+    model: string = 'gpt-3.5-turbo'
+  ): string {
+    const currentTokens = TokenCountService.countTokensForModel(text, model);
+    if (currentTokens <= maxTokens) return text;
+
+    const targetChars = Math.floor(
+      (maxTokens / currentTokens) * text.length * CompressionThresholds.truncationSafetyMargin
+    );
+
+    // Try sentence-boundary truncation first
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    let result = '';
+    let tokens = 0;
+    for (const sentence of sentences) {
+      const sentenceTokens = TokenCountService.countTokensForModel(sentence, model);
+      if (tokens + sentenceTokens > maxTokens) break;
+      result += sentence;
+      tokens += sentenceTokens;
+    }
+
+    if (!result) {
+      // Fall back to character-level truncation
+      result = text.slice(0, targetChars) + '...';
+    } else if (result.length < text.length) {
+      result += '...';
+    }
+
+    return result;
+  }
+
+  /**
+   * Compress context using fast truncation (no LLM calls).
+   * Distributes a token budget evenly across all context items.
+   */
+  static compressContext(
+    context: RAGContext,
+    options: { maxTokens?: number; model?: string } = {}
+  ): { context: SummarizedContext; wasCompressed: boolean } {
+    const maxTokens = options.maxTokens || CompressionThresholds.maxTokens;
+    const model = options.model || 'gpt-3.5-turbo';
+
+    const totalItems = context.documentContexts.length + context.webSearchResults.length;
+    if (totalItems === 0) {
+      return {
+        context: { documentContexts: [], webSearchResults: [] },
+        wasCompressed: false,
+      };
+    }
+
+    const originalTokens = this.countContextTokens(context, model);
+    if (originalTokens <= maxTokens) {
+      return {
+        context: {
+          documentContexts: context.documentContexts,
+          webSearchResults: context.webSearchResults,
+        },
+        wasCompressed: false,
+      };
+    }
+
+    const targetPerItem = Math.floor(maxTokens / totalItems);
+
+    const compressedDocs = context.documentContexts.map(doc => ({
+      ...doc,
+      content: this.truncateText(doc.content, targetPerItem, model),
+    }));
+
+    const compressedWebs = context.webSearchResults.map(result => ({
+      ...result,
+      content: this.truncateText(result.content, targetPerItem, model),
+    }));
+
+    logger.info('Context compressed via truncation', {
+      originalTokens,
+      targetPerItem,
+      items: totalItems,
+    });
+
+    return {
+      context: {
+        documentContexts: compressedDocs,
+        webSearchResults: compressedWebs,
+      },
+      wasCompressed: true,
+    };
   }
 }

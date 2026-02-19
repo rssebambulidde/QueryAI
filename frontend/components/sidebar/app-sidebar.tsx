@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Sparkles } from 'lucide-react';
+import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Sparkles, BookOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -18,8 +18,11 @@ import { useDebounce } from '@/lib/hooks/use-debounce';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { ConversationSkeleton, CollectionSkeleton } from './skeleton-loader';
 import { AccountDropdown } from './account-dropdown';
+import { CitedSourcesPanel } from '@/components/research/cited-sources-panel';
+import { SourceExplorerModal } from '@/components/research/source-explorer-modal';
+import type { CitedSource } from '@/lib/api';
 
-type TabType = 'chat' | 'collections';
+type TabType = 'chat' | 'collections' | 'sources';
 
 interface AppSidebarProps {
   activeTab: TabType;
@@ -45,6 +48,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
   const [isCollectionSearchOpen, setIsCollectionSearchOpen] = useState(false);
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
+  const [explorerSource, setExplorerSource] = useState<CitedSource | null>(null);
   const accountButtonRef = React.useRef<HTMLButtonElement>(null);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -309,6 +313,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Folder className="w-5 h-5" />
           </button>
+          <button
+            onClick={() => { onTabChange('sources'); setIsCollapsed(false); }}
+            className={cn(
+              'w-10 h-10 flex items-center justify-center rounded-lg transition-colors',
+              activeTab === 'sources' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+            )}
+            title="My Sources"
+          >
+            <BookOpen className="w-5 h-5" />
+          </button>
           {user?.role === 'super_admin' && (
             <button
               onClick={() => router.push('/dashboard/settings/super-admin')}
@@ -407,6 +421,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <Folder className="w-[18px] h-[18px]" />
             Library
+          </button>
+          <button
+            onClick={() => onTabChange('sources')}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors',
+              activeTab === 'sources'
+                ? 'bg-gray-100 text-gray-900'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            )}
+          >
+            <BookOpen className="w-[18px] h-[18px]" />
+            My Sources
           </button>
           {user?.role === 'super_admin' && (
             <button
@@ -658,6 +684,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             </div>
           </div>
         )}
+
+        {activeTab === 'sources' && (
+          <div className="py-2 h-full">
+            <CitedSourcesPanel
+              onSourceExplore={setExplorerSource}
+              className="h-full"
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Bottom section: Upgrade, Account ── */}
@@ -729,6 +764,15 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             setSelectedConversationForCollection(null);
           }}
           onSaved={() => {}}
+        />
+      )}
+
+      {/* Source Explorer Modal */}
+      {explorerSource && (
+        <SourceExplorerModal
+          source={explorerSource}
+          isOpen={!!explorerSource}
+          onClose={() => setExplorerSource(null)}
         />
       )}
     </div>

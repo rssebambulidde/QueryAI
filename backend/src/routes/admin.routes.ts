@@ -211,4 +211,156 @@ router.put(
   })
 );
 
+// ═════════════════════════════════════════════════════════════════════
+// LLM-as-Judge Evaluation Aggregates
+// ═════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/admin/quality/evaluations
+ * Returns aggregate faithfulness / relevance / citation-accuracy scores
+ * grouped by day (default), week, or month.
+ *
+ * Query params:
+ *   days    – lookback window (default 30)
+ *   groupBy – "day" | "week" | "month"
+ *   detail  – if "true", also returns the most recent individual evaluations
+ */
+router.get(
+  '/quality/evaluations',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { AnswerEvaluatorService } = await import('../services/answer-evaluator.service');
+
+    const days = Math.min(Math.max(parseInt(req.query.days as string, 10) || 30, 1), 365);
+    const groupBy = (['day', 'week', 'month'].includes(req.query.groupBy as string)
+      ? req.query.groupBy as 'day' | 'week' | 'month'
+      : 'day');
+    const includeDetail = req.query.detail === 'true';
+
+    const aggregates = await AnswerEvaluatorService.getAggregates(days, groupBy);
+
+    const responseData: Record<string, any> = { aggregates };
+
+    if (includeDetail) {
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 50, 1), 200);
+      const offset = Math.max(parseInt(req.query.offset as string, 10) || 0, 0);
+      responseData.recent = await AnswerEvaluatorService.getRecentEvaluations(limit, offset);
+    }
+
+    res.json({ success: true, data: responseData });
+  })
+);
+
+// ═══════════════════════════════════════════════════════════════════════
+// Feedback analytics (admin)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/admin/feedback/analytics
+ * Aggregate user feedback grouped by day/week/month.
+ */
+router.get(
+  '/feedback/analytics',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { FeedbackService } = await import('../services/feedback.service');
+
+    const days = Math.min(Math.max(parseInt(req.query.days as string, 10) || 30, 1), 365);
+    const groupBy = (['day', 'week', 'month'].includes(req.query.groupBy as string)
+      ? req.query.groupBy as 'day' | 'week' | 'month'
+      : 'day');
+
+    const analytics = await FeedbackService.getAnalytics(days, groupBy);
+
+    res.json({ success: true, data: { analytics } });
+  })
+);
+
+/**
+ * GET /api/admin/feedback/by-model
+ * Feedback breakdown per AI model.
+ */
+router.get(
+  '/feedback/by-model',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { FeedbackService } = await import('../services/feedback.service');
+
+    const days = Math.min(Math.max(parseInt(req.query.days as string, 10) || 30, 1), 365);
+
+    const byModel = await FeedbackService.getByModel(days);
+
+    res.json({ success: true, data: { byModel } });
+  })
+);
+
+/**
+ * GET /api/admin/feedback/by-topic
+ * Feedback breakdown per topic.
+ */
+router.get(
+  '/feedback/by-topic',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { FeedbackService } = await import('../services/feedback.service');
+
+    const days = Math.min(Math.max(parseInt(req.query.days as string, 10) || 30, 1), 365);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 20, 1), 100);
+
+    const byTopic = await FeedbackService.getByTopic(days, limit);
+
+    res.json({ success: true, data: { byTopic } });
+  })
+);
+
+/**
+ * GET /api/admin/feedback/flagged
+ * Recent feedback with flagged citations.
+ */
+router.get(
+  '/feedback/flagged',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { FeedbackService } = await import('../services/feedback.service');
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 50, 1), 200);
+    const offset = Math.max(parseInt(req.query.offset as string, 10) || 0, 0);
+
+    const flagged = await FeedbackService.getRecentFlagged(limit, offset);
+
+    res.json({ success: true, data: { flagged } });
+  })
+);
+
+/**
+ * GET /api/admin/feedback/recent
+ * Recent feedback entries (all).
+ */
+router.get(
+  '/feedback/recent',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { FeedbackService } = await import('../services/feedback.service');
+
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 50, 1), 200);
+    const offset = Math.max(parseInt(req.query.offset as string, 10) || 0, 0);
+
+    const recent = await FeedbackService.getRecent(limit, offset);
+
+    res.json({ success: true, data: { recent } });
+  })
+);
+
 export default router;

@@ -285,6 +285,9 @@ export class ChunkingService {
   ): TextChunk[] {
     const chunks: TextChunk[] = [];
 
+    // Build page-break map from form-feed characters (\f) inserted by pdf-parse
+    const pageBreaks = this.detectPageBreaks(text);
+
     // If text is small enough, return as single chunk
     const totalTokens = this.countTokensInternal(text, opts.encodingType, opts.model);
     if (totalTokens <= opts.maxChunkSize) {
@@ -301,6 +304,7 @@ export class ChunkingService {
         endChar: text.length,
         tokenCount: totalTokens,
         chunkIndex: 0,
+        pageNumber: this.getPageForOffset(pageBreaks, 0),
         section: section,
         paragraphIndices: paragraphs.map(p => p.index),
         startsAtParagraphBoundary: true,
@@ -402,6 +406,7 @@ export class ChunkingService {
           endChar: chunkEndChar,
           tokenCount: currentTokens,
           chunkIndex: chunkIndex++,
+          pageNumber: this.getPageForOffset(pageBreaks, currentStartChar),
           section: chunkSection,
           paragraphIndices: chunkParagraphIndices.length > 0 ? chunkParagraphIndices : undefined,
           startsAtParagraphBoundary: startsAtParaBoundary,
@@ -467,6 +472,7 @@ export class ChunkingService {
           endChar: chunkEndChar,
           tokenCount: finalTokens,
           chunkIndex: chunkIndex,
+          pageNumber: this.getPageForOffset(pageBreaks, currentStartChar),
           section: chunkSection,
           paragraphIndices: chunkParagraphIndices.length > 0 ? chunkParagraphIndices : undefined,
           startsAtParagraphBoundary: startsAtParaBoundary,
@@ -499,6 +505,46 @@ export class ChunkingService {
     });
 
     return chunks;
+  }
+
+  // ─── Page-break helpers ─────────────────────────────────────────────
+
+  /**
+   * Build an array of character offsets where page breaks (\f) occur.
+   * Returns sorted offsets; empty when text has no form-feeds (non-PDF docs).
+   */
+  private static detectPageBreaks(text: string): number[] {
+    const breaks: number[] = [];
+    let idx = text.indexOf('\f');
+    while (idx !== -1) {
+      breaks.push(idx);
+      idx = text.indexOf('\f', idx + 1);
+    }
+    return breaks;
+  }
+
+  /**
+   * Given a sorted array of page-break offsets and a character offset,
+   * return the 1-based page number.  Returns undefined when the text
+   * has no page breaks (non-PDF documents).
+   */
+  private static getPageForOffset(
+    pageBreaks: number[],
+    offset: number
+  ): number | undefined {
+    if (pageBreaks.length === 0) return undefined;
+    // Binary search for the page
+    let lo = 0;
+    let hi = pageBreaks.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (pageBreaks[mid] <= offset) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo + 1; // 1-based
   }
 
   /**
@@ -535,12 +581,16 @@ export class ChunkingService {
       );
 
       // Convert semantic chunks to TextChunk format (with boundary metadata)
+      // Also detect page breaks for page numbers
+      const pageBreaks = this.detectPageBreaks(text);
+
       return semanticChunks.map((chunk) => ({
         content: chunk.content,
         startChar: chunk.startChar,
         endChar: chunk.endChar,
         tokenCount: chunk.tokenCount,
         chunkIndex: chunk.chunkIndex,
+        pageNumber: this.getPageForOffset(pageBreaks, chunk.startChar),
         section: chunk.section,
         paragraphIndices: chunk.paragraphIndices,
         startsAtParagraphBoundary: chunk.startsAtParagraphBoundary,

@@ -127,118 +127,15 @@ export class AnswerQualityService {
    */
   static formatQualityGuidelines(): string {
     try {
-      const guidelines = this.loadGuidelines();
-      
-      let formatted = '\n\n=== ANSWER QUALITY GUIDELINES ===\n\n';
-      
-      // Quality Criteria
-      formatted += 'QUALITY CRITERIA:\n';
-      formatted += 'Your answers must meet these quality standards:\n\n';
-      
-      for (const [key, criterion] of Object.entries(guidelines.qualityCriteria)) {
-        formatted += `${key.charAt(0).toUpperCase() + key.slice(1)}:\n`;
-        formatted += `  ${criterion.description}\n`;
-        formatted += `  Requirements:\n`;
-        for (const requirement of criterion.requirements) {
-          formatted += `  - ${requirement}\n`;
-        }
-        formatted += `  Indicators:\n`;
-        for (const indicator of criterion.indicators) {
-          formatted += `  - ${indicator}\n`;
-        }
-        formatted += '\n';
-      }
+      // Load guidelines to validate they exist (keeps cache warm for scoring methods)
+      this.loadGuidelines();
 
-      // Answer Structure
-      formatted += 'ANSWER STRUCTURE TEMPLATES:\n';
-      formatted += 'Choose the appropriate structure based on the question type:\n\n';
-      
-      for (const [key, template] of Object.entries(guidelines.answerStructure)) {
-        formatted += `${key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1')}:\n`;
-        formatted += `  ${template.description}\n`;
-        formatted += `  Template:\n`;
-        const templateLines = template.template.split('\n');
-        for (const line of templateLines) {
-          formatted += `  ${line}\n`;
-        }
-        formatted += `  Example:\n`;
-        const exampleLines = template.example.split('\n');
-        for (const line of exampleLines) {
-          formatted += `  ${line}\n`;
-        }
-        formatted += '\n';
-      }
-
-      // Format Requirements
-      formatted += 'FORMAT REQUIREMENTS:\n';
-      for (const [key, requirement] of Object.entries(guidelines.formatRequirements)) {
-        formatted += `${key.charAt(0).toUpperCase() + key.slice(1)}:\n`;
-        formatted += `  ${requirement.description}\n`;
-        formatted += `  Rules:\n`;
-        for (const rule of requirement.rules) {
-          formatted += `  - ${rule}\n`;
-        }
-        formatted += '\n';
-      }
-
-      // Quality Examples
-      formatted += 'QUALITY EXAMPLES:\n';
-      formatted += 'Good Answer Example:\n';
-      formatted += `  Question: ${guidelines.qualityExamples.goodAnswer.question}\n`;
-      formatted += `  Answer: ${guidelines.qualityExamples.goodAnswer.answer}\n`;
-      formatted += `  Quality:\n`;
-      for (const [key, value] of Object.entries(guidelines.qualityExamples.goodAnswer.quality)) {
-        formatted += `  - ${key}: ${value}\n`;
-      }
-      formatted += '\n';
-
-      formatted += 'Bad Answer Example:\n';
-      formatted += `  Question: ${guidelines.qualityExamples.badAnswer.question}\n`;
-      formatted += `  Answer: ${guidelines.qualityExamples.badAnswer.answer}\n`;
-      formatted += `  Quality Issues:\n`;
-      for (const [key, value] of Object.entries(guidelines.qualityExamples.badAnswer.quality)) {
-        formatted += `  - ${key}: ${value}\n`;
-      }
-      formatted += '\n';
-
-      // Common Mistakes
-      formatted += 'COMMON MISTAKES TO AVOID:\n';
-      for (const [key, mistake] of Object.entries(guidelines.commonMistakes)) {
-        formatted += `${mistake.mistake}:\n`;
-        formatted += `  Wrong: ${mistake.example.wrong}\n`;
-        formatted += `  Correct: ${mistake.example.correct}\n`;
-        formatted += `  Rule: ${mistake.correct}\n\n`;
-      }
-
-      // Quality Checklist
-      formatted += 'QUALITY CHECKLIST (BEFORE SUBMISSION):\n';
-      formatted += 'Verify your answer meets these standards:\n';
-      for (const check of guidelines.qualityChecklist.beforeSubmission) {
-        formatted += `- ${check}\n`;
-      }
-      formatted += '\n';
-
-      formatted += 'Accuracy Checks:\n';
-      for (const check of guidelines.qualityChecklist.accuracyChecks) {
-        formatted += `- ${check}\n`;
-      }
-      formatted += '\n';
-
-      formatted += 'Completeness Checks:\n';
-      for (const check of guidelines.qualityChecklist.completenessChecks) {
-        formatted += `- ${check}\n`;
-      }
-      formatted += '\n';
-
-      formatted += 'Clarity Checks:\n';
-      for (const check of guidelines.qualityChecklist.clarityChecks) {
-        formatted += `- ${check}\n`;
-      }
-      formatted += '\n';
-
-      formatted += '=== END ANSWER QUALITY GUIDELINES ===\n';
-
-      return formatted;
+      // Condensed quality guidelines — 4 key bullets instead of verbose expansion.
+      return `Quality standards:
+- Accuracy: all claims sourced; distinguish fact from opinion; admit uncertainty.
+- Completeness: address every part of the question; include relevant context.
+- Clarity: plain language; define technical terms; logical structure.
+- Relevance: stay focused on the question; omit tangential information.`;
     } catch (error: any) {
       logger.warn('Failed to format answer quality guidelines, using fallback', {
         error: error.message,

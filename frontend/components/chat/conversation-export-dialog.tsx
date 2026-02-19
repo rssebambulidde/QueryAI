@@ -1,17 +1,18 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Download, FileText, FileJson, Check } from 'lucide-react';
+import { X, Download, FileText, FileJson, FileType } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Conversation, Message } from '@/lib/api';
-import { exportConversation, ExportOptions } from '@/lib/utils/export-conversation';
+import { Conversation, conversationApi } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { useMobile } from '@/lib/hooks/use-mobile';
 
+type ExportFormat = 'pdf' | 'markdown' | 'docx';
+
 interface ConversationExportDialogProps {
   conversation: Conversation;
-  messages: Message[];
+  messageCount: number;
   isOpen: boolean;
   onClose: () => void;
   className?: string;
@@ -19,31 +20,52 @@ interface ConversationExportDialogProps {
 
 export const ConversationExportDialog: React.FC<ConversationExportDialogProps> = ({
   conversation,
-  messages,
+  messageCount,
   isOpen,
   onClose,
   className,
 }) => {
   const { isMobile } = useMobile();
-  const [exportOptions, setExportOptions] = useState<ExportOptions>({
-    format: 'pdf',
-    includeSources: true,
-    includeCitations: true,
-  });
+  const [format, setFormat] = useState<ExportFormat>('pdf');
+  const [includeSources, setIncludeSources] = useState(true);
+  const [includeBibliography, setIncludeBibliography] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
 
   if (!isOpen) return null;
 
   const handleExport = async () => {
-    if (messages.length === 0) {
+    if (messageCount === 0) {
       toast.error('No messages to export');
       return;
     }
 
     setIsExporting(true);
     try {
-      await exportConversation(conversation, messages, exportOptions);
+      const blob = await conversationApi.exportConversation(conversation.id, format, {
+        includeSources,
+        includeBibliography,
+      });
+
+      // Determine filename
+      const baseName = (conversation.title || 'conversation')
+        .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
+        .replace(/\s+/g, '-')
+        .slice(0, 60);
+
+      const ext = format === 'markdown' ? 'md' : format;
+      const filename = `${baseName}.${ext}`;
+
+      // Trigger download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
       toast.success('Conversation exported successfully');
       onClose();
     } catch (error: any) {
@@ -55,8 +77,8 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
 
   const formats = [
     { value: 'pdf' as const, label: 'PDF', icon: FileText, description: 'Best for printing and sharing' },
+    { value: 'docx' as const, label: 'Word (DOCX)', icon: FileType, description: 'Best for reports and papers' },
     { value: 'markdown' as const, label: 'Markdown', icon: FileText, description: 'Best for documentation' },
-    { value: 'json' as const, label: 'JSON', icon: FileJson, description: 'Best for data processing' },
   ];
 
   return (
@@ -127,7 +149,7 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
               "text-gray-500",
               isMobile ? "text-sm" : "text-xs"
             )}>
-              {messages.length} message{messages.length !== 1 ? 's' : ''} • Created{' '}
+              {messageCount} message{messageCount !== 1 ? 's' : ''} • Created{' '}
               {new Date(conversation.created_at).toLocaleDateString()}
             </div>
           </div>
@@ -144,15 +166,15 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
               "space-y-2",
               isMobile && "flex flex-col"
             )}>
-              {formats.map((format) => {
-                const Icon = format.icon;
+              {formats.map((fmt) => {
+                const Icon = fmt.icon;
                 return (
                   <label
-                    key={format.value}
+                    key={fmt.value}
                     className={cn(
                       'flex items-start gap-3 rounded-lg border-2 cursor-pointer transition-all touch-manipulation min-h-[60px]',
                       isMobile ? "p-4" : "p-3",
-                      exportOptions.format === format.value
+                      format === fmt.value
                         ? 'border-orange-500 bg-orange-50'
                         : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     )}
@@ -160,9 +182,9 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
                     <input
                       type="radio"
                       name="export-format"
-                      value={format.value}
-                      checked={exportOptions.format === format.value}
-                      onChange={() => setExportOptions({ ...exportOptions, format: format.value })}
+                      value={fmt.value}
+                      checked={format === fmt.value}
+                      onChange={() => setFormat(fmt.value)}
                       className={cn(
                         "mt-1 text-orange-600 border-gray-300 focus:ring-orange-500",
                         isMobile ? "w-5 h-5" : "w-4 h-4"
@@ -177,13 +199,13 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
                         "font-medium text-gray-900",
                         isMobile ? "text-base" : "text-sm"
                       )}>
-                        {format.label}
+                        {fmt.label}
                       </div>
                       <div className={cn(
                         "text-gray-500 mt-0.5",
                         isMobile ? "text-sm" : "text-xs"
                       )}>
-                        {format.description}
+                        {fmt.description}
                       </div>
                     </div>
                   </label>
@@ -216,15 +238,13 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
                   "text-gray-500 mt-0.5",
                   isMobile ? "text-sm" : "text-xs"
                 )}>
-                  Include source references and metadata
+                  Include source references with each answer
                 </div>
               </div>
               <input
                 type="checkbox"
-                checked={exportOptions.includeSources ?? true}
-                onChange={(e) =>
-                  setExportOptions({ ...exportOptions, includeSources: e.target.checked })
-                }
+                checked={includeSources}
+                onChange={(e) => setIncludeSources(e.target.checked)}
                 className={cn(
                   "text-orange-600 border-gray-300 rounded focus:ring-orange-500",
                   isMobile ? "w-5 h-5" : "w-4 h-4"
@@ -241,21 +261,19 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
                   "font-medium text-gray-900",
                   isMobile ? "text-base" : "text-sm"
                 )}>
-                  Include Citations
+                  Include Bibliography
                 </div>
                 <div className={cn(
                   "text-gray-500 mt-0.5",
                   isMobile ? "text-sm" : "text-xs"
                 )}>
-                  Include inline citation links and references
+                  Append a full deduplicated bibliography at the end
                 </div>
               </div>
               <input
                 type="checkbox"
-                checked={exportOptions.includeCitations ?? true}
-                onChange={(e) =>
-                  setExportOptions({ ...exportOptions, includeCitations: e.target.checked })
-                }
+                checked={includeBibliography}
+                onChange={(e) => setIncludeBibliography(e.target.checked)}
                 className={cn(
                   "text-orange-600 border-gray-300 rounded focus:ring-orange-500",
                   isMobile ? "w-5 h-5" : "w-4 h-4"
@@ -282,7 +300,7 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
           </Button>
           <Button
             onClick={handleExport}
-            disabled={isExporting || messages.length === 0}
+            disabled={isExporting || messageCount === 0}
             className={cn(
               "bg-orange-600 hover:bg-orange-700 text-white",
               isMobile && "w-full"

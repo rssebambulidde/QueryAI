@@ -7,7 +7,7 @@
  */
 
 import type { Source, QuestionResponse, Topic, DocumentItem } from '@/lib/api';
-import type { Message } from './chat-message';
+import type { Message, RegenerateOptions, MessageVersionSummary } from './chat-message';
 import type { StreamingState } from './streaming-controls';
 import type { QueryExpansionSettings } from '@/components/advanced/query-expansion-display';
 import type { RerankingSettings } from '@/components/advanced/reranking-controls';
@@ -76,6 +76,8 @@ export type ApiMessage = {
     completionTokens: number;
     totalTokens: number;
   };
+  version?: number;
+  parent_message_id?: string | null;
   created_at: string;
 };
 
@@ -106,6 +108,8 @@ export function mapApiMessagesToUi(apiMessages: ApiMessage[]): Message[] {
       isRefusal: msg.metadata?.isRefusal,
       responseTime: msg.metadata?.responseTime,
       qualityScore: msg.metadata?.qualityScore,
+      version: msg.version,
+      parentMessageId: msg.parent_message_id,
     };
   });
 }
@@ -136,6 +140,8 @@ export interface ChatMessageListProps {
   error: string | null;
   selectedTopic: Topic | null;
   isMobile: boolean;
+  /** Current conversation ID for citation click-through tracking. */
+  conversationId?: string;
   // Advanced features
   lastResponseData: LastResponseData | null;
   queryExpansionEnabled: boolean;
@@ -151,10 +157,14 @@ export interface ChatMessageListProps {
   // Message handlers
   onEditMessage: (messageId: string, newContent: string) => void;
   onDeleteMessage: (messageId: string) => void;
+  onRegenerateMessage: (messageId: string, options?: RegenerateOptions) => void;
+  onVersionSelect: (messageId: string, version: MessageVersionSummary) => void;
+  onCompareVersions: (messageId: string, versions: MessageVersionSummary[]) => void;
   onFollowUpClick: (question: string) => void;
   onExitResearchMode: () => void;
   onOpenSources: (sources: Source[], query: string) => void;
   onActionResponse: (content: string, actionType: string, messageSources?: Source[]) => Promise<void>;
+  onStreamActionResponse: (actionType: string, messageSources: Source[] | undefined, stream: AsyncGenerator<string, void, unknown>) => Promise<void>;
   // Streaming handlers
   onPauseStreaming: () => void;
   onResumeStreaming: () => void;

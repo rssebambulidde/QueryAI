@@ -5,6 +5,7 @@
  * non-streaming paths:
  *   - answerQuestionInternal   (non-streaming: RAG → LLM → citations → quality → save)
  *   - answerQuestionStreamInternal (streaming: RAG → LLM stream → yield chunks)
+ *   - postProcessStream        (post-stream: follow-ups, quality, save, usage log)
  *
  * Also houses the helper methods these pipelines depend on:
  *   - Model selection (tier-based)
@@ -33,9 +34,37 @@ import { CostTrackingService } from './cost-tracking.service';
 import { SubscriptionService } from './subscription.service';
 import { PromptBuilderService } from './prompt-builder.service';
 import { ResponseProcessorService } from './response-processor.service';
+import { getResponseFormat, AIResponseSchema, type AIStructuredResponse } from '../schemas/ai-response.schema';
+import { JsonAnswerStreamParser } from '../utils/json-stream-parser';
 import crypto from 'crypto';
 
 import type { QuestionRequest, QuestionResponse, Source } from './ai.service';
+
+// ═══════════════════════════════════════════════════════════════════════
+// Off-Topic Pre-Check Cache
+// ═══════════════════════════════════════════════════════════════════════
+
+const OFF_TOPIC_CACHE_TTL = 300; // 5 minutes
+const OFF_TOPIC_CACHE_PREFIX = 'off-topic-check';
+
+interface OffTopicCacheStats {
+  hits: number;
+  misses: number;
+}
+
+let offTopicCacheStats: OffTopicCacheStats = {
+  hits: 0,
+  misses: 0,
+};
+
+function generateOffTopicCacheKey(
+  question: string,
+  topicId: string
+): string {
+  return crypto.createHash('sha256')
+    .update(question.toLowerCase().trim() + '|' + topicId)
+    .digest('hex');
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // LLM Response Cache
@@ -51,6 +80,46 @@ export interface LLMCacheStats {
   errors: number;
 }
 
+export interface PreparedContext {
+  ragContext: string | undefined;
+  sources: Source[] | undefined;
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> | undefined;
+  selectedModel: string;
+  modelSelectionReason: string;
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  topicName: string | undefined;
+  topicDescription: string | undefined;
+  topicScopeConfig: Record<string, any> | null | undefined;
+  timeFilter: { timeRange?: string; startDate?: string; endDate?: string; topic?: string; country?: string } | undefined;
+  temperature: number;
+  maxTokens: number;
+  contextDegraded: boolean;
+  contextDegradationLevel: DegradationLevel | undefined;
+  contextDegradationMessage: string | undefined;
+  contextPartial: boolean;
+}
+
+export interface PostProcessStreamParams {
+  fullAnswer: string;
+  question: string;
+  userId: string;
+  sources?: Source[];
+  topicName?: string;
+  topicId?: string;
+  conversationId?: string;
+  model?: string;
+  isResend?: boolean;
+  structuredFollowUps?: string[];
+}
+
+export interface PostProcessStreamResult {
+  followUpQuestions?: string[];
+  qualityScore?: number;
+  /** Final answer text (may be trimmed of follow-up markdown by ResponseProcessor) */
+  cleanedAnswer: string;
+  conversationId?: string;
+}
+
 let llmCacheStats: LLMCacheStats = {
   hits: 0,
   misses: 0,
@@ -63,7 +132,8 @@ function generateLLMCacheKey(
   model: string,
   temperature: number,
   ragContext?: string,
-  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
+  topicId?: string
 ): string {
   const questionHash = crypto.createHash('sha256')
     .update(question.trim().toLowerCase())
@@ -84,21 +154,97 @@ function generateLLMCacheKey(
         .substring(0, 8)
     : 'no-history';
 
-  return `${questionHash}|${model}|${temperature}|${contextHash}|${historyHash}`;
+  const topic = topicId ?? 'no-topic';
+
+  return `${questionHash}|${model}|${temperature}|${contextHash}|${historyHash}|${topic}`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // AIAnswerPipelineService
 // ═══════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════
+// Complexity-Based Model Selection — Thresholds & Types
+//
+// Strategy: deterministic, three-tier complexity scoring.
+//   LOW       → gpt-3.5-turbo          (fast, cheap — simple Q&A)
+//   MEDIUM    → gpt-4o-mini             (balanced — multi-part or moderate-context queries)
+//   HIGH      → gpt-4o-mini             (same model, higher token budget — synthesis / long sessions)
+//
+// Scoring signals (each contributes points; thresholds below):
+//   • Regex pattern indicators (comparison, analysis, multi-step, math/logic)
+//   • Question word count (multi-part heuristic)
+//   • Question character length
+//   • RAG context length (dense info requiring synthesis)
+//   • Conversation history length (session coherence)
+//
+// The exact thresholds are defined as named constants so they can be
+// tuned in one place without touching scoring or selection logic.
+// ═══════════════════════════════════════════════════════════════════════
+
+/** Complexity tier returned by `assessComplexity()`. */
+export type ComplexityTier = 'low' | 'medium' | 'high';
+
+export interface ComplexityAssessment {
+  tier: ComplexityTier;
+  score: number;
+  signals: string[];  // human-readable list of signals that fired
+}
+
+// ── Scoring weights ────────────────────────────────────────────────────
+
+/** Points awarded when ≥ 1 regex complexity-indicator matches the question. */
+const COMPLEXITY_WEIGHT_PATTERN_MATCH = 2;
+
+/** Points awarded when the question contains math / formal-logic language. */
+const COMPLEXITY_WEIGHT_MATH_LOGIC = 2;
+
+/** Points awarded when question word count exceeds QUESTION_WORD_COUNT_THRESHOLD. */
+const COMPLEXITY_WEIGHT_LONG_QUESTION_WORDS = 1;
+
+/** Points awarded when question character length exceeds QUESTION_CHAR_LENGTH_THRESHOLD. */
+const COMPLEXITY_WEIGHT_LONG_QUESTION_CHARS = 1;
+
+/** Points awarded when RAG context length exceeds RAG_CONTEXT_LENGTH_THRESHOLD. */
+const COMPLEXITY_WEIGHT_DENSE_CONTEXT = 1;
+
+/** Points awarded when conversation history length exceeds HISTORY_LENGTH_THRESHOLD. */
+const COMPLEXITY_WEIGHT_LONG_HISTORY = 1;
+
+/** Points awarded when the question contains comparison / conditional language. */
+const COMPLEXITY_WEIGHT_COMPARISON = 1;
+
+// ── Signal thresholds ──────────────────────────────────────────────────
+
+/** Word count above which a question is considered "multi-part". */
+const QUESTION_WORD_COUNT_THRESHOLD = 30;
+
+/** Character length above which a question earns the "long question" signal. */
+const QUESTION_CHAR_LENGTH_THRESHOLD = 200;
+
+/** RAG context character length above which the query is "dense context". */
+const RAG_CONTEXT_LENGTH_THRESHOLD = 4000;
+
+/** Conversation-history turn count above which the session is "long". */
+const HISTORY_LENGTH_THRESHOLD = 10;
+
+// ── Tier boundaries (inclusive lower bound) ────────────────────────────
+
+/** Minimum score for MEDIUM complexity (below → LOW). */
+const MEDIUM_COMPLEXITY_THRESHOLD = 2;
+
+/** Minimum score for HIGH complexity (below → MEDIUM). */
+const HIGH_COMPLEXITY_THRESHOLD = 5;
+
 export class AIAnswerPipelineService {
-  // Model configuration (mirrored from AIService)
+  // Model configuration
   private static readonly DEFAULT_MODEL = 'gpt-3.5-turbo';
   private static readonly DEFAULT_TEMPERATURE = 0.7;
   private static readonly DEFAULT_MAX_TOKENS = 1800;
+  /** Best-quality model for complex / medium queries (pro tier). */
   private static readonly GPT4_MODEL = 'gpt-4o-mini';
+  /** Default cost-effective model. */
   private static readonly GPT35_MODEL = 'gpt-3.5-turbo';
-  private static readonly PRO_TIER_GPT4_THRESHOLD = 0.2;
 
   // ═════════════════════════════════════════════════════════════════════
   // LLM Cache Stats
@@ -126,6 +272,29 @@ export class AIAnswerPipelineService {
   }
 
   // ═════════════════════════════════════════════════════════════════════
+  // Off-Topic Cache Stats
+  // ═════════════════════════════════════════════════════════════════════
+
+  static getOffTopicCacheStats(): OffTopicCacheStats & { hitRate: number } {
+    const total = offTopicCacheStats.hits + offTopicCacheStats.misses;
+    const hitRate = total > 0
+      ? (offTopicCacheStats.hits / total) * 100
+      : 0;
+
+    return {
+      ...offTopicCacheStats,
+      hitRate: Math.round(hitRate * 100) / 100,
+    };
+  }
+
+  static resetOffTopicCacheStats(): void {
+    offTopicCacheStats = {
+      hits: 0,
+      misses: 0,
+    };
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
   // Helper methods
   // ═════════════════════════════════════════════════════════════════════
 
@@ -133,8 +302,33 @@ export class AIAnswerPipelineService {
     question: string,
     topicName: string,
     topicDescription?: string,
-    topicScopeConfig?: Record<string, any> | null
+    topicScopeConfig?: Record<string, any> | null,
+    topicId?: string
   ): Promise<boolean> {
+    // ── Cache lookup ──────────────────────────────────────────────────
+    const cacheKey = topicId
+      ? generateOffTopicCacheKey(question, topicId)
+      : null;
+
+    if (cacheKey) {
+      const cached = await RedisCacheService.get<boolean>(cacheKey, {
+        prefix: OFF_TOPIC_CACHE_PREFIX,
+        ttl: OFF_TOPIC_CACHE_TTL,
+      });
+
+      if (cached !== null) {
+        offTopicCacheStats.hits++;
+        logger.debug('Off-topic pre-check cache hit', {
+          question: question.substring(0, 80),
+          topicId,
+          result: cached,
+        });
+        return cached;
+      }
+      offTopicCacheStats.misses++;
+    }
+
+    // ── LLM call (cache miss) ────────────────────────────────────────
     const scopeLine = PromptBuilderService.deriveScopeFromConfig(topicScopeConfig);
     const desc = topicDescription || 'general';
     const prompt = `Topic: ${topicName}. Description: ${desc}.${scopeLine}
@@ -162,24 +356,53 @@ Is this question clearly within the topic? Answer only YES or NO.`;
 
       const completion = retryResult.result;
       const text = (completion.choices[0]?.message?.content || '').trim().toUpperCase();
-      if (/^NO\b/.test(text)) return false;
-      return true;
+      const onTopic = !/^NO\b/.test(text);
+
+      // Store result in cache
+      if (cacheKey) {
+        await RedisCacheService.set(cacheKey, onTopic, {
+          prefix: OFF_TOPIC_CACHE_PREFIX,
+          ttl: OFF_TOPIC_CACHE_TTL,
+        });
+      }
+
+      return onTopic;
     } catch (err: any) {
       logger.warn('Off-topic pre-check failed, proceeding with full flow', { error: err?.message });
       return true;
     }
   }
 
-  static isComplexQuery(
+  /**
+   * Assess query complexity and return a deterministic tier.
+   *
+   * Scoring signals (cumulative):
+   *   +2  regex pattern indicators (analysis, comparison, multi-step, etc.)
+   *   +2  math / formal-logic language
+   *   +1  question word count > QUESTION_WORD_COUNT_THRESHOLD (30)
+   *   +1  question char length > QUESTION_CHAR_LENGTH_THRESHOLD (200)
+   *   +1  RAG context length > RAG_CONTEXT_LENGTH_THRESHOLD (4 000 chars)
+   *   +1  conversation history > HISTORY_LENGTH_THRESHOLD (10 turns)
+   *   +1  comparison / conditional language
+   *
+   * Tier boundaries:
+   *   score < MEDIUM_COMPLEXITY_THRESHOLD (2) → LOW
+   *   score < HIGH_COMPLEXITY_THRESHOLD   (5) → MEDIUM
+   *   score ≥ HIGH_COMPLEXITY_THRESHOLD   (5) → HIGH
+   */
+  static assessComplexity(
     question: string,
     ragContext?: string,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
-  ): boolean {
+  ): ComplexityAssessment {
+    let score = 0;
+    const signals: string[] = [];
+
+    // ── 1. Regex complexity-indicator patterns ─────────────────────────
     const complexIndicators = [
       /\?.*\?/,
       /(?:and|or|also|additionally|furthermore|moreover).*\?/i,
-      /(?:compare|contrast|analyze|analysis|evaluate|examine|assess|critique)/i,
-      /(?:difference|similarity|relationship|correlation|impact|effect)/i,
+      /(?:analyze|analysis|evaluate|examine|assess|critique)/i,
       /(?:pros?|cons?|advantages?|disadvantages?|benefits?|drawbacks?)/i,
       /(?:algorithm|implementation|architecture|design|methodology|framework)/i,
       /(?:optimize|optimization|performance|efficiency|scalability)/i,
@@ -190,20 +413,71 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       /(?:summarize|summary|overview|review|synthesis|synthesize)/i,
       /(?:all|every|entire|complete|full|comprehensive)/i,
     ];
+    if (complexIndicators.some(p => p.test(question))) {
+      score += COMPLEXITY_WEIGHT_PATTERN_MATCH;
+      signals.push('pattern-match');
+    }
 
-    const hasComplexIndicators = complexIndicators.some(pattern => pattern.test(question));
-    const isLongQuestion = question.length > 200;
-    const hasExtensiveContext = (ragContext && ragContext.length > 3000) ||
-      (conversationHistory && conversationHistory.length > 5);
-    const hasMathLogic = /(?:calculate|solve|equation|formula|theorem|proof|logic|reasoning)/i.test(question);
+    // ── 2. Math / formal-logic language ────────────────────────────────
+    if (/(?:calculate|solve|equation|formula|theorem|proof|logic|reasoning)/i.test(question)) {
+      score += COMPLEXITY_WEIGHT_MATH_LOGIC;
+      signals.push('math-logic');
+    }
 
-    const complexityScore =
-      (hasComplexIndicators ? 2 : 0) +
-      (isLongQuestion ? 1 : 0) +
-      (hasExtensiveContext ? 1 : 0) +
-      (hasMathLogic ? 2 : 0);
+    // ── 3. Comparison / conditional language ───────────────────────────
+    if (/(?:compare|contrast|difference|similarity|versus|vs\.?|if.*then|when.*would|relationship|correlation|impact|effect)/i.test(question)) {
+      score += COMPLEXITY_WEIGHT_COMPARISON;
+      signals.push('comparison-conditional');
+    }
 
-    return complexityScore >= 3;
+    // ── 4. Question word count > 30 (likely multi-part) ────────────────
+    const wordCount = question.trim().split(/\s+/).length;
+    if (wordCount > QUESTION_WORD_COUNT_THRESHOLD) {
+      score += COMPLEXITY_WEIGHT_LONG_QUESTION_WORDS;
+      signals.push(`word-count(${wordCount})`);
+    }
+
+    // ── 5. Question character length > 200 ─────────────────────────────
+    if (question.length > QUESTION_CHAR_LENGTH_THRESHOLD) {
+      score += COMPLEXITY_WEIGHT_LONG_QUESTION_CHARS;
+      signals.push(`char-length(${question.length})`);
+    }
+
+    // ── 6. RAG context > 4 000 chars (dense information) ───────────────
+    if (ragContext && ragContext.length > RAG_CONTEXT_LENGTH_THRESHOLD) {
+      score += COMPLEXITY_WEIGHT_DENSE_CONTEXT;
+      signals.push(`dense-context(${ragContext.length})`);
+    }
+
+    // ── 7. Conversation history > 10 turns ─────────────────────────────
+    if (conversationHistory && conversationHistory.length > HISTORY_LENGTH_THRESHOLD) {
+      score += COMPLEXITY_WEIGHT_LONG_HISTORY;
+      signals.push(`long-history(${conversationHistory.length})`);
+    }
+
+    // ── Determine tier ─────────────────────────────────────────────────
+    let tier: ComplexityTier;
+    if (score >= HIGH_COMPLEXITY_THRESHOLD) {
+      tier = 'high';
+    } else if (score >= MEDIUM_COMPLEXITY_THRESHOLD) {
+      tier = 'medium';
+    } else {
+      tier = 'low';
+    }
+
+    return { tier, score, signals };
+  }
+
+  /**
+   * Legacy convenience wrapper — returns true when complexity is HIGH.
+   * Kept for backward-compat with callers that only need a boolean.
+   */
+  static isComplexQuery(
+    question: string,
+    ragContext?: string,
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+  ): boolean {
+    return this.assessComplexity(question, ragContext, conversationHistory).tier === 'high';
   }
 
   static async selectModel(
@@ -235,19 +509,25 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       }
 
       if (tier === 'pro') {
-        const isComplex = this.isComplexQuery(question, ragContext, conversationHistory);
+        // Deterministic, complexity-based model selection (Item 22).
+        // No randomness — the same question always picks the same model,
+        // which makes LLM response caching reliable.
+        const { tier: complexity, score, signals } = this.assessComplexity(
+          question, ragContext, conversationHistory
+        );
 
-        if (isComplex) {
-          return { model: this.GPT4_MODEL, reason: 'pro-tier-complex-query' };
+        logger.debug('Complexity assessment for model selection', {
+          complexity, score, signals, userId,
+        });
+
+        if (complexity === 'high') {
+          return { model: this.GPT4_MODEL, reason: `pro-tier-high-complexity(${score})` };
         }
-
-        const useGPT4 = Math.random() < this.PRO_TIER_GPT4_THRESHOLD;
-
-        if (useGPT4) {
-          return { model: this.GPT4_MODEL, reason: 'pro-tier-random-gpt4' };
+        if (complexity === 'medium') {
+          return { model: this.GPT4_MODEL, reason: `pro-tier-medium-complexity(${score})` };
         }
-
-        return { model: this.GPT35_MODEL, reason: 'pro-tier-standard-gpt35' };
+        // LOW complexity → cost-effective model
+        return { model: this.GPT35_MODEL, reason: `pro-tier-low-complexity(${score})` };
       }
 
       return { model: this.GPT35_MODEL, reason: 'default-fallback' };
@@ -291,12 +571,524 @@ Is this question clearly within the topic? Answer only YES or NO.`;
   }
 
   // ═════════════════════════════════════════════════════════════════════
+  // Shared: fetch topic details
+  // ═════════════════════════════════════════════════════════════════════
+
+  static async fetchTopicDetails(
+    topicId: string,
+    userId: string
+  ): Promise<{ topicName: string; topicDescription?: string; topicScopeConfig?: Record<string, any> | null } | null> {
+    try {
+      const { TopicService } = await import('./topic.service');
+      const topic = await TopicService.getTopic(topicId, userId);
+      if (topic) {
+        return {
+          topicName: topic.name,
+          topicDescription: topic.description ?? undefined,
+          topicScopeConfig: topic.scope_config ?? null,
+        };
+      }
+    } catch (topicError: any) {
+      logger.warn('Failed to fetch topic details', {
+        topicId,
+        error: topicError.message,
+      });
+    }
+    return null;
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
+  // Shared: prepare request context (RAG, history, model, messages)
+  // ═════════════════════════════════════════════════════════════════════
+
+  static async prepareRequestContext(
+    request: QuestionRequest,
+    userId?: string,
+    preloadedTopic?: {
+      topicName?: string;
+      topicDescription?: string;
+      topicScopeConfig?: Record<string, any> | null;
+    }
+  ): Promise<PreparedContext> {
+    const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
+    const maxTokens = request.maxTokens ?? this.DEFAULT_MAX_TOKENS;
+
+    // ── Topic details ──────────────────────────────────────────────────
+    let topicName = preloadedTopic?.topicName;
+    let topicDescription = preloadedTopic?.topicDescription;
+    let topicScopeConfig = preloadedTopic?.topicScopeConfig;
+
+    if (!topicName && request.topicId && userId) {
+      const topicResult = await this.fetchTopicDetails(request.topicId, userId);
+      if (topicResult) {
+        topicName = topicResult.topicName;
+        topicDescription = topicResult.topicDescription;
+        topicScopeConfig = topicResult.topicScopeConfig;
+        logger.info('Topic context loaded', { topicId: request.topicId, topicName });
+      }
+    }
+
+    // ── Topic hierarchy (ancestors) ────────────────────────────────────
+    let ancestorTopicIds: string[] | undefined;
+    let ancestorNames: string[] | undefined;
+
+    if (request.topicId && userId) {
+      try {
+        const { TopicService } = await import('./topic.service');
+        const ancestors = await TopicService.getAncestors(request.topicId, userId);
+        if (ancestors.length > 0) {
+          ancestorTopicIds = ancestors.map(a => a.id);
+          ancestorNames = ancestors.map(a => a.name);
+          logger.info('Topic hierarchy resolved', {
+            topicId: request.topicId,
+            ancestorCount: ancestors.length,
+            ancestorNames,
+          });
+        }
+      } catch (ancestorError: any) {
+        logger.warn('Failed to resolve topic ancestors', {
+          topicId: request.topicId,
+          error: ancestorError.message,
+        });
+      }
+    }
+
+    // ── RAG retrieval ──────────────────────────────────────────────────
+    let ragContext: string | undefined;
+    let sources: Source[] | undefined;
+    let contextDegraded = false;
+    let contextDegradationLevel: DegradationLevel | undefined;
+    let contextDegradationMessage: string | undefined;
+    let contextPartial = false;
+
+    if (userId) {
+      try {
+        const ragOptions: RAGOptions = {
+          userId,
+          topicId: (request.documentIds && request.documentIds.length > 0) ? undefined : request.topicId,
+          ancestorTopicIds: (request.documentIds && request.documentIds.length > 0) ? undefined : ancestorTopicIds,
+          documentIds: request.documentIds,
+          enableDocumentSearch: request.enableDocumentSearch !== false,
+          enableWebSearch: request.enableWebSearch !== false,
+          maxDocumentChunks: request.maxDocumentChunks ?? 5,
+          maxWebResults: request.maxSearchResults ?? 5,
+          minScore: request.minScore,
+          topic: request.topic,
+          timeRange: request.timeRange,
+          startDate: request.startDate,
+          endDate: request.endDate,
+          country: request.country,
+          topicQueryOptions: ancestorNames && ancestorNames.length > 0
+            ? { ancestorNames }
+            : undefined,
+          enableQueryExpansion: request.enableQueryExpansion ?? false,
+          expansionStrategy: request.expansionStrategy,
+          maxExpansions: request.maxExpansions,
+          enableQueryRewriting: request.enableQueryRewriting ?? false,
+          queryRewritingOptions: request.queryRewritingOptions,
+          enableWebResultReranking: request.enableWebResultReranking ?? false,
+          webResultRerankingConfig: request.webResultRerankingConfig,
+          enableQualityScoring: request.enableQualityScoring ?? false,
+          qualityScoringConfig: request.qualityScoringConfig,
+          minQualityScore: request.minQualityScore,
+          filterByQuality: request.filterByQuality ?? false,
+          enableReranking: request.enableReranking ?? false,
+          rerankingStrategy: request.rerankingStrategy,
+          rerankingTopK: request.rerankingTopK,
+          rerankingMaxResults: request.rerankingMaxResults,
+          useAdaptiveThreshold: request.useAdaptiveThreshold ?? true,
+          minResults: request.minResults,
+          maxResults: request.maxResults,
+          enableDiversityFilter: request.enableDiversityFilter ?? false,
+          diversityLambda: request.diversityLambda,
+          diversityMaxResults: request.diversityMaxResults,
+          diversitySimilarityThreshold: undefined,
+          enableResultDeduplication: request.enableResultDeduplication ?? false,
+          deduplicationThreshold: request.deduplicationThreshold,
+          deduplicationNearDuplicateThreshold: request.deduplicationNearDuplicateThreshold,
+          useAdaptiveContextSelection: request.useAdaptiveContextSelection ?? true,
+          enableAdaptiveContextSelection: request.enableAdaptiveContextSelection ?? true,
+          adaptiveContextOptions: request.adaptiveContextOptions,
+          minChunks: request.minChunks,
+          maxChunks: request.maxChunks,
+          enableDynamicLimits: request.enableDynamicLimits ?? true,
+          dynamicLimitOptions: request.dynamicLimitOptions,
+          enableRelevanceOrdering: request.enableRelevanceOrdering ?? true,
+          orderingOptions: request.orderingOptions,
+          contextReductionStrategy: request.contextReductionStrategy ?? 'summarize',
+          maxContextTokens: request.maxContextTokens,
+          summarizationOptions: request.summarizationOptions,
+          enableSourcePrioritization: request.enableSourcePrioritization ?? true,
+          prioritizationOptions: request.prioritizationOptions,
+          enableTokenBudgeting: request.enableTokenBudgeting ?? true,
+          tokenBudgetOptions: request.tokenBudgetOptions ? {
+            ...request.tokenBudgetOptions,
+            model: request.tokenBudgetOptions.model ?? request.model ?? 'gpt-3.5-turbo',
+          } : undefined,
+        };
+
+        if (request.enableSearch === false) {
+          ragOptions.enableWebSearch = false;
+        }
+
+        const context = await RAGService.retrieveContext(request.question, ragOptions);
+
+        const [formattedContext, extractedSources] = await Promise.all([
+          RAGService.formatContextForPrompt(context, {
+            enableRelevanceOrdering: ragOptions.enableRelevanceOrdering ?? true,
+            orderingOptions: ragOptions.orderingOptions,
+            contextReductionStrategy: ragOptions.contextReductionStrategy ?? 'summarize',
+            summarizationOptions: ragOptions.summarizationOptions,
+            enableSourcePrioritization: ragOptions.enableSourcePrioritization ?? true,
+            prioritizationOptions: ragOptions.prioritizationOptions,
+            enableTokenBudgeting: ragOptions.enableTokenBudgeting ?? true,
+            tokenBudgetOptions: {
+              ...ragOptions.tokenBudgetOptions,
+              model: request.model || 'gpt-3.5-turbo',
+            },
+            query: request.question,
+            model: request.model || 'gpt-3.5-turbo',
+            userId: userId,
+          }),
+          Promise.resolve(RAGService.extractSources(context)),
+        ]);
+
+        ragContext = formattedContext;
+        sources = extractedSources;
+        contextDegraded = context.degraded || false;
+        contextDegradationLevel = context.degradationLevel;
+        contextDegradationMessage = context.degradationMessage;
+        contextPartial = context.partial || false;
+
+        logger.info('RAG context retrieved', {
+          userId,
+          documentChunks: context.documentContexts.length,
+          webResults: context.webSearchResults.length,
+          totalSources: sources.length,
+          degraded: contextDegraded,
+          degradationLevel: contextDegradationLevel,
+          partial: contextPartial,
+        });
+      } catch (ragError: any) {
+        logger.warn('RAG retrieval failed, continuing without RAG context', {
+          error: ragError.message,
+          question: request.question,
+          userId,
+        });
+      }
+    } else {
+      // Fallback web search when no userId
+      if (request.enableSearch !== false) {
+        try {
+          const searchRequest: SearchRequest = {
+            query: request.question,
+            topic: request.topic,
+            maxResults: request.maxSearchResults ?? 5,
+            timeRange: request.timeRange,
+            startDate: request.startDate,
+            endDate: request.endDate,
+            country: request.country,
+          };
+
+          const searchResponse = await SearchService.search(searchRequest);
+
+          if (searchResponse.results && searchResponse.results.length > 0) {
+            const webResults = searchResponse.results.map(r => ({
+              title: r.title,
+              url: r.url,
+              content: r.content,
+            }));
+
+            ragContext = await RAGService.formatContextForPrompt({
+              documentContexts: [],
+              webSearchResults: webResults,
+            }, {
+              enableRelevanceOrdering: true,
+              contextReductionStrategy: request.contextReductionStrategy ?? 'summarize',
+              summarizationOptions: request.summarizationOptions,
+              enableSourcePrioritization: request.enableSourcePrioritization ?? true,
+              prioritizationOptions: request.prioritizationOptions,
+              enableTokenBudgeting: request.enableTokenBudgeting ?? true,
+              tokenBudgetOptions: {
+                ...request.tokenBudgetOptions,
+                model: request.model || 'gpt-3.5-turbo',
+              },
+              query: request.question,
+              model: request.model || 'gpt-3.5-turbo',
+              userId: userId,
+            });
+
+            const accessDate = new Date().toISOString();
+
+            sources = searchResponse.results.map((r) => ({
+              type: 'web' as const,
+              title: r.title,
+              url: r.url,
+              snippet: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
+              metadata: {
+                publishedDate: r.publishedDate,
+                publicationDate: r.publishedDate,
+                accessDate,
+                author: r.author,
+                url: r.url,
+              },
+            }));
+
+            logger.info('Search results retrieved (fallback)', {
+              query: request.question,
+              resultsCount: webResults.length,
+            });
+          }
+        } catch (searchError: any) {
+          logger.warn('Search failed, continuing without search results', {
+            error: searchError.message,
+            question: request.question,
+          });
+        }
+      }
+    }
+
+    // ── Time filter ────────────────────────────────────────────────────
+    const timeFilter = request.timeRange || request.startDate || request.endDate || request.topic || request.country
+      ? {
+          timeRange: request.timeRange,
+          startDate: request.startDate,
+          endDate: request.endDate,
+          topic: request.topic,
+          country: request.country,
+        }
+      : undefined;
+
+    // ── Conversation history (unified: sliding window + summarization) ─
+    //
+    // Strategy decision (Item 21):
+    //   **Sliding window with summarization fallback.**
+    //
+    //   • Deterministic: the most recent N messages (default 10) are kept
+    //     verbatim — same window for /ask and /ask/stream.
+    //   • When older messages exist, they are summarized into ≤ 1 000 tokens
+    //     to stay within the 2 000-token total history budget.
+    //   • After windowing, optional relevance filtering (below) may further
+    //     prune low-relevance turns.
+    //
+    //   Configuration (see SlidingWindowConfig in thresholds.config.ts):
+    //     - Max messages in window:  10   (windowSize)
+    //     - Token budget (win+sum):  2 000 (maxTotalTokens)
+    //     - Summary token cap:       1 000 (maxSummaryTokens)
+    //     - Summarization trigger:   messages.length > windowSize
+    //
+    //   Both pipelines call prepareRequestContext() so the LLM always
+    //   receives identical conversation context regardless of endpoint.
+    // ──────────────────────────────────────────────────────────────────
+    let conversationHistory = request.conversationHistory;
+
+    // Load from DB when no client-provided history (or empty array)
+    if (request.conversationId && userId && (!conversationHistory || conversationHistory.length === 0)) {
+      try {
+        const { MessageService } = await import('./message.service');
+
+        conversationHistory = await MessageService.getSlidingWindowHistory(
+          request.conversationId,
+          userId,
+          {
+            model: request.model || 'gpt-3.5-turbo',
+            ...request.slidingWindowOptions,
+          }
+        );
+
+        logger.info('Conversation history loaded (unified sliding-window strategy)', {
+          conversationId: request.conversationId,
+          historyLength: conversationHistory.length,
+        });
+      } catch (error: any) {
+        logger.warn('Failed to fetch conversation history, continuing without history', {
+          error: error.message,
+          conversationId: request.conversationId,
+        });
+      }
+    } else if (conversationHistory && conversationHistory.length > 0) {
+      // Client-provided history — still apply sliding window for consistency
+      try {
+        const { MessageService } = await import('./message.service');
+
+        conversationHistory = await MessageService.applyHistoryStrategy(
+          conversationHistory,
+          {
+            model: request.model || 'gpt-3.5-turbo',
+            ...request.slidingWindowOptions,
+          }
+        );
+
+        logger.info('Client-provided history windowed (unified strategy)', {
+          historyLength: conversationHistory.length,
+        });
+      } catch (error: any) {
+        logger.warn('Failed to apply history strategy to client-provided history, using as-is', {
+          error: error.message,
+        });
+      }
+    }
+
+    // ── History relevance filtering ────────────────────────────────────
+    if (conversationHistory && conversationHistory.length > 0 && request.enableHistoryFiltering !== false) {
+      try {
+        const { HistoryFilterService } = await import('./history-filter.service');
+
+        const filterResult = await HistoryFilterService.filterHistory(
+          request.question,
+          conversationHistory,
+          { ...request.historyFilterOptions }
+        );
+
+        conversationHistory = filterResult.filteredHistory;
+
+        logger.info('Conversation history filtered by relevance', {
+          originalCount: filterResult.stats.originalCount,
+          filteredCount: filterResult.stats.filteredCount,
+          removedCount: filterResult.stats.removedCount,
+          processingTimeMs: filterResult.stats.processingTimeMs,
+          avgRelevanceScore: filterResult.scores.reduce((sum: number, msg: any) => sum + msg.relevanceScore, 0) / filterResult.scores.length,
+        });
+      } catch (error: any) {
+        logger.warn('Failed to filter conversation history, using original history', {
+          error: error.message,
+        });
+      }
+    }
+
+    // ── Model selection ────────────────────────────────────────────────
+    let selectedModel: string;
+    let modelSelectionReason: string;
+
+    if (request.model) {
+      selectedModel = request.model;
+      modelSelectionReason = 'user-requested';
+    } else {
+      const modelSelection = await this.selectModel(
+        userId,
+        request.question,
+        ragContext,
+        conversationHistory,
+        request.model
+      );
+      selectedModel = modelSelection.model;
+      modelSelectionReason = modelSelection.reason;
+    }
+
+    if (userId) {
+      try {
+        const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
+        logger.info('Model selected based on tier', {
+          userId,
+          tier: subscriptionData?.subscription.tier || 'unknown',
+          selectedModel,
+          reason: modelSelectionReason,
+          question: request.question.substring(0, 100),
+        });
+      } catch (error) {
+        // Ignore errors in logging
+      }
+    }
+
+    // ── Conversation state (entity / topic tracking) ───────────────────
+    let conversationStateText = '';
+
+    if (request.conversationId && userId && request.enableStateTracking !== false) {
+      try {
+        const { ConversationStateService } = await import('./conversation-state.service');
+        const state = await ConversationStateService.getState(request.conversationId, userId);
+
+        if (state && (state.topics.length > 0 || state.entities.length > 0 || state.keyConcepts.length > 0)) {
+          conversationStateText = ConversationStateService.formatStateForContextCompact(state);
+          logger.info('Conversation state injected into prompt', {
+            conversationId: request.conversationId,
+            topics: state.topics.length,
+            entities: state.entities.length,
+            concepts: state.keyConcepts.length,
+          });
+        }
+      } catch (stateErr: any) {
+        logger.warn('Failed to retrieve conversation state, continuing without it', {
+          error: stateErr.message,
+          conversationId: request.conversationId,
+        });
+      }
+    }
+
+    // ── Few-shot examples ──────────────────────────────────────────────
+    let fewShotExamplesText = '';
+
+    if (request.enableFewShotExamples !== false) {
+      try {
+        const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
+        const hasWebResults = ragContext?.includes('Web Search Results:') || false;
+
+        const fewShotOptions: FewShotSelectionOptions = {
+          query: request.question,
+          hasDocuments,
+          hasWebResults,
+          maxExamples: request.fewShotOptions?.maxExamples ?? 2,
+          maxTokens: request.fewShotOptions?.maxTokens ?? 500,
+          model: request.model || 'gpt-3.5-turbo',
+          preferCitationStyle: request.fewShotOptions?.preferCitationStyle,
+          ...request.fewShotOptions,
+        };
+
+        const fewShotSelection = FewShotSelectorService.selectExamples(fewShotOptions);
+        if (fewShotSelection.examples.length > 0) {
+          fewShotExamplesText = FewShotSelectorService.formatExamplesForPrompt(fewShotSelection.examples);
+        }
+      } catch (err: unknown) {
+        logger.warn('Few-shot example selection failed, continuing without examples', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // ── Build messages ─────────────────────────────────────────────────
+    const messages = this.buildMessages(
+      request.question,
+      ragContext,
+      request.context,
+      conversationHistory,
+      request.enableDocumentSearch,
+      request.enableWebSearch,
+      timeFilter,
+      topicName,
+      topicDescription,
+      topicScopeConfig,
+      fewShotExamplesText,
+      conversationStateText
+    );
+
+    return {
+      ragContext,
+      sources,
+      conversationHistory,
+      selectedModel,
+      modelSelectionReason,
+      messages,
+      topicName,
+      topicDescription,
+      topicScopeConfig,
+      timeFilter,
+      temperature,
+      maxTokens,
+      contextDegraded,
+      contextDegradationLevel,
+      contextDegradationMessage,
+      contextPartial,
+    };
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
   // Non-streaming answer pipeline
   // ═════════════════════════════════════════════════════════════════════
 
   static async answerQuestionInternal(
     request: QuestionRequest,
-    userId?: string
+    userId?: string,
+    options?: { signal?: AbortSignal; skipSave?: boolean }
   ): Promise<QuestionResponse> {
     try {
       // Validate input
@@ -308,454 +1100,108 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         throw new ValidationError('Question is too long (max 2000 characters)');
       }
 
-      const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
-      const maxTokens = request.maxTokens ?? this.DEFAULT_MAX_TOKENS;
+      // ── Fetch topic details early (needed for pre-check decision) ────
+      let preloadedTopic: { topicName: string; topicDescription?: string; topicScopeConfig?: Record<string, any> | null } | undefined;
 
-      // Fetch topic details if topicId is provided (for Research Topic Mode)
-      let topicName: string | undefined;
-      let topicDescription: string | undefined;
-      let topicScopeConfig: Record<string, any> | null | undefined;
-      
-      const topicFetchPromise = request.topicId && userId
-        ? (async () => {
-            try {
-              const { TopicService } = await import('./topic.service');
-              const topic = await TopicService.getTopic(request.topicId!, userId);
-              if (topic) {
-                return {
-                  topicName: topic.name,
-                  topicDescription: topic.description ?? undefined,
-                  topicScopeConfig: topic.scope_config ?? null,
-                };
-              }
-            } catch (topicError: any) {
-              logger.warn('Failed to fetch topic details', {
-                topicId: request.topicId,
-                error: topicError.message,
-              });
-            }
-            return null;
-          })()
-        : Promise.resolve(null);
-
-      // Wait for topic fetch to complete before off-topic check
-      const topicResult = await topicFetchPromise;
-      if (topicResult) {
-        topicName = topicResult.topicName;
-        topicDescription = topicResult.topicDescription;
-        topicScopeConfig = topicResult.topicScopeConfig;
-        logger.info('Topic context loaded', { topicId: request.topicId, topicName });
+      if (request.topicId && userId) {
+        const topicResult = await this.fetchTopicDetails(request.topicId, userId);
+        if (topicResult) {
+          preloadedTopic = topicResult;
+        }
       }
 
-      // Off-topic pre-check
+      // ── Decide whether to run off-topic pre-check ────────────────────
       const preCheckEnabled =
-        !!topicName &&
+        !!preloadedTopic?.topicName &&
         process.env.ENABLE_OFF_TOPIC_PRE_CHECK !== 'false' &&
-        topicScopeConfig?.enable_off_topic_pre_check !== false;
-      if (preCheckEnabled && topicName) {
-        const onTopic = await LatencyTrackerService.trackOperation(
-          OperationType.AI_OFF_TOPIC_CHECK,
-          async () => this.runOffTopicPreCheckInternal(request.question, topicName!, topicDescription, topicScopeConfig)
-        );
-        if (!onTopic) {
-          const refusal = ResponseProcessorService.getRefusalMessage(topicName);
-          const followUp = ResponseProcessorService.getRefusalFollowUp(topicName);
-          let conversationIdForResponse = request.conversationId;
-          if (request.conversationId && userId) {
-            try {
-              const { ConversationService } = await import('./conversation.service');
-              const { MessageService } = await import('./message.service');
-              let conversation = await ConversationService.getConversation(request.conversationId, userId);
-              let cid = request.conversationId;
-              if (!conversation) {
-                conversation = await ConversationService.createConversation({
-                  userId,
-                  title: ConversationService.generateTitleFromMessage(request.question),
-                  topicId: request.topicId,
-                });
-                cid = conversation.id;
-                conversationIdForResponse = cid;
-              }
-              await MessageService.saveMessagePair(cid, request.question, refusal, [], {
-                followUpQuestions: [followUp],
-                isRefusal: true,
-              });
-            } catch (e: any) {
-              logger.warn('Failed to save refusal to conversation', { error: e?.message });
-            }
-          }
-          const defaultModel = this.GPT35_MODEL;
-          const response: QuestionResponse = {
-            answer: refusal,
-            model: defaultModel,
-            sources: [],
-            followUpQuestions: [followUp],
-            refusal: true,
-            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-          };
-          (response as any).conversationId = conversationIdForResponse;
-          return response;
-        }
-      }
+        preloadedTopic?.topicScopeConfig?.enable_off_topic_pre_check !== false;
 
-      // Retrieve RAG context (documents + web search)
-      let ragContext: string | undefined;
-      let sources: Source[] | undefined;
-      let contextDegraded = false;
-      let contextDegradationLevel: DegradationLevel | undefined;
-      let contextDegradationMessage: string | undefined;
-      let contextPartial = false;
-
-      if (userId) {
-        try {
-          const ragOptions: RAGOptions = {
-            userId,
-            // When specific documentIds are provided, omit topicId to avoid filtering out
-            // vectors that don't have topicId metadata (documents not assigned to a topic).
-            topicId: (request.documentIds && request.documentIds.length > 0) ? undefined : request.topicId,
-            documentIds: request.documentIds,
-            enableDocumentSearch: request.enableDocumentSearch !== false,
-            enableWebSearch: request.enableWebSearch !== false,
-            maxDocumentChunks: request.maxDocumentChunks ?? 5,
-            maxWebResults: request.maxSearchResults ?? 5,
-            // Leave minScore as undefined when not provided — lets adaptive threshold run.
-            minScore: request.minScore,
-            topic: request.topic,
-            timeRange: request.timeRange,
-            startDate: request.startDate,
-            endDate: request.endDate,
-            country: request.country,
-            enableQueryExpansion: request.enableQueryExpansion ?? false,
-            expansionStrategy: request.expansionStrategy,
-            maxExpansions: request.maxExpansions,
-            enableQueryRewriting: request.enableQueryRewriting ?? false,
-            queryRewritingOptions: request.queryRewritingOptions,
-            enableWebResultReranking: request.enableWebResultReranking ?? false,
-            webResultRerankingConfig: request.webResultRerankingConfig,
-            enableQualityScoring: request.enableQualityScoring ?? false,
-            qualityScoringConfig: request.qualityScoringConfig,
-            minQualityScore: request.minQualityScore,
-            filterByQuality: request.filterByQuality ?? false,
-            enableReranking: request.enableReranking ?? false,
-            rerankingStrategy: request.rerankingStrategy,
-            rerankingTopK: request.rerankingTopK,
-            rerankingMaxResults: request.rerankingMaxResults,
-            useAdaptiveThreshold: request.useAdaptiveThreshold ?? true,
-            minResults: request.minResults,
-            maxResults: request.maxResults,
-            enableDiversityFilter: request.enableDiversityFilter ?? false,
-            diversityLambda: request.diversityLambda,
-            diversityMaxResults: request.diversityMaxResults,
-            diversitySimilarityThreshold: undefined,
-            enableResultDeduplication: request.enableResultDeduplication ?? false,
-            deduplicationThreshold: request.deduplicationThreshold,
-            deduplicationNearDuplicateThreshold: request.deduplicationNearDuplicateThreshold,
-            useAdaptiveContextSelection: request.useAdaptiveContextSelection ?? true,
-            enableAdaptiveContextSelection: request.enableAdaptiveContextSelection ?? true,
-            adaptiveContextOptions: request.adaptiveContextOptions,
-            minChunks: request.minChunks,
-            maxChunks: request.maxChunks,
-            enableDynamicLimits: request.enableDynamicLimits ?? true,
-            dynamicLimitOptions: request.dynamicLimitOptions,
-          };
-
-          if (request.enableSearch === false) {
-            ragOptions.enableWebSearch = false;
-          }
-
-          const context = await RAGService.retrieveContext(request.question, ragOptions);
-          
-          const [formattedContext, extractedSources] = await Promise.all([
-            RAGService.formatContextForPrompt(context, {
-              enableRelevanceOrdering: ragOptions.enableRelevanceOrdering ?? true,
-              orderingOptions: ragOptions.orderingOptions,
-              enableContextSummarization: ragOptions.enableContextSummarization ?? true,
-              summarizationOptions: ragOptions.summarizationOptions,
-              enableContextCompression: ragOptions.enableContextCompression ?? true,
-              compressionOptions: ragOptions.compressionOptions,
-              enableSourcePrioritization: ragOptions.enableSourcePrioritization ?? true,
-              prioritizationOptions: ragOptions.prioritizationOptions,
-              enableTokenBudgeting: ragOptions.enableTokenBudgeting ?? true,
-              tokenBudgetOptions: {
-                ...ragOptions.tokenBudgetOptions,
-                model: request.model || 'gpt-3.5-turbo',
-              },
-              query: request.question,
-              model: request.model || 'gpt-3.5-turbo',
-              userId: userId,
-            }),
-            Promise.resolve(RAGService.extractSources(context)),
-          ]);
-          
-          ragContext = formattedContext;
-          sources = extractedSources;
-
-          contextDegraded = context.degraded || false;
-          contextDegradationLevel = context.degradationLevel;
-          contextDegradationMessage = context.degradationMessage;
-          contextPartial = context.partial || false;
-
-          logger.info('RAG context retrieved', {
-            userId,
-            documentChunks: context.documentContexts.length,
-            webResults: context.webSearchResults.length,
-            totalSources: sources.length,
-            degraded: contextDegraded,
-            degradationLevel: contextDegradationLevel,
-            partial: contextPartial,
-          });
-        } catch (ragError: any) {
-          logger.warn('RAG retrieval failed, continuing without RAG context', {
-            error: ragError.message,
-            question: request.question,
-            userId,
-          });
-        }
-      } else {
-        if (request.enableSearch !== false) {
-          try {
-            const searchRequest: SearchRequest = {
-              query: request.question,
-              topic: request.topic,
-              maxResults: request.maxSearchResults ?? 5,
-            };
-
-            const searchResponse = await SearchService.search(searchRequest);
-            
-            if (searchResponse.results && searchResponse.results.length > 0) {
-              const webResults = searchResponse.results.map(r => ({
-                title: r.title,
-                url: r.url,
-                content: r.content,
-              }));
-
-              ragContext = await RAGService.formatContextForPrompt({
-                documentContexts: [],
-                webSearchResults: webResults,
-              }, {
-                enableRelevanceOrdering: true,
-                enableContextSummarization: request.enableContextSummarization ?? true,
-                summarizationOptions: request.summarizationOptions,
-                enableContextCompression: request.enableContextCompression ?? true,
-                compressionOptions: request.compressionOptions,
-                enableSourcePrioritization: request.enableSourcePrioritization ?? true,
-                prioritizationOptions: request.prioritizationOptions,
-                enableTokenBudgeting: request.enableTokenBudgeting ?? true,
-                tokenBudgetOptions: {
-                  ...request.tokenBudgetOptions,
-                  model: request.model || 'gpt-3.5-turbo',
-                },
-                query: request.question,
-                model: request.model || 'gpt-3.5-turbo',
-                userId: userId,
-              });
-
-              const accessDate = new Date().toISOString();
-              
-              sources = searchResponse.results.map((r) => ({
-                type: 'web' as const,
-                title: r.title,
-                url: r.url,
-                snippet: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
-                metadata: {
-                  publishedDate: r.publishedDate,
-                  publicationDate: r.publishedDate,
-                  accessDate,
-                  author: r.author,
-                  url: r.url,
-                },
-              }));
-
-              logger.info('Search results retrieved (fallback)', {
-                query: request.question,
-                resultsCount: webResults.length,
-              });
-            }
-          } catch (searchError: any) {
-            logger.warn('Search failed, continuing without search results', {
-              error: searchError.message,
-              question: request.question,
-            });
-          }
-        }
-      }
-
-      // Build time filter for prompt
-      const timeFilter = request.timeRange || request.startDate || request.endDate || request.topic || request.country
-        ? {
-            timeRange: request.timeRange,
-            startDate: request.startDate,
-            endDate: request.endDate,
-            topic: request.topic,
-            country: request.country,
-          }
-        : undefined;
-
-      // Fetch and process conversation history
-      const conversationHistoryPromise = (async () => {
-        let conversationHistory = request.conversationHistory;
-        
-        if (request.conversationId && userId && !conversationHistory && request.enableConversationSummarization !== false) {
-          try {
-            const { MessageService } = await import('./message.service');
-            
-            const summarizationOptions = {
-              model: request.model || 'gpt-3.5-turbo',
-              ...request.conversationSummarizationOptions,
-            };
-            
-            conversationHistory = await MessageService.getSummarizedHistory(
-              request.conversationId,
-              userId,
-              summarizationOptions
-            );
-            
-            logger.info('Conversation history summarized', {
-              conversationId: request.conversationId,
-              historyLength: conversationHistory.length,
-            });
-          } catch (error: any) {
-            logger.warn('Failed to fetch/summarize conversation history, continuing without history', {
-              error: error.message,
-              conversationId: request.conversationId,
-            });
-          }
-        }
-
-        if (conversationHistory && conversationHistory.length > 0 && request.enableHistoryFiltering !== false) {
-          try {
-            const { HistoryFilterService } = await import('./history-filter.service');
-            
-            const filterOptions = {
-              ...request.historyFilterOptions,
-            };
-            
-            const filterResult = await HistoryFilterService.filterHistory(
+      // ── Parallelize off-topic pre-check with full context preparation ─
+      // Both only need the preloaded topic to start. On-topic queries save
+      // 300–800 ms; off-topic queries discard the context (small wasted cost).
+      const offTopicPromise = preCheckEnabled && preloadedTopic
+        ? LatencyTrackerService.trackOperation(
+            OperationType.AI_OFF_TOPIC_CHECK,
+            async () => this.runOffTopicPreCheckInternal(
               request.question,
-              conversationHistory,
-              filterOptions
-            );
-            
-            conversationHistory = filterResult.filteredHistory;
-            
-            logger.info('Conversation history filtered by relevance', {
-              originalCount: filterResult.stats.originalCount,
-              filteredCount: filterResult.stats.filteredCount,
-              removedCount: filterResult.stats.removedCount,
-              processingTimeMs: filterResult.stats.processingTimeMs,
-              avgRelevanceScore: filterResult.scores.reduce((sum: number, msg: any) => sum + msg.relevanceScore, 0) / filterResult.scores.length,
+              preloadedTopic!.topicName,
+              preloadedTopic!.topicDescription,
+              preloadedTopic!.topicScopeConfig,
+              request.topicId
+            )
+          )
+        : Promise.resolve(true as boolean);
+
+      const contextPromise = this.prepareRequestContext(request, userId, preloadedTopic);
+
+      const [onTopic, context] = await Promise.all([offTopicPromise, contextPromise]);
+
+      // ── Handle off-topic refusal (discard context) ───────────────────
+      if (preCheckEnabled && !onTopic && preloadedTopic) {
+        const refusal = ResponseProcessorService.getRefusalMessage(preloadedTopic.topicName);
+        const followUp = ResponseProcessorService.getRefusalFollowUp(preloadedTopic.topicName);
+        
+        let conversationIdForResponse = request.conversationId;
+        if (request.conversationId && userId) {
+          try {
+            const { ConversationService } = await import('./conversation.service');
+            const { MessageService } = await import('./message.service');
+            let conversation = await ConversationService.getConversation(request.conversationId, userId);
+            let cid = request.conversationId;
+            if (!conversation) {
+              conversation = await ConversationService.createConversation({
+                userId,
+                title: ConversationService.generateTitleFromMessage(request.question),
+                topicId: request.topicId,
+              });
+              cid = conversation.id;
+              conversationIdForResponse = cid;
+            }
+            await MessageService.saveMessagePair(cid, request.question, refusal, [], {
+              followUpQuestions: [followUp],
+              isRefusal: true,
             });
-          } catch (error: any) {
-            logger.warn('Failed to filter conversation history, using original history', {
-              error: error.message,
-            });
+          } catch (e: any) {
+            logger.warn('Failed to save refusal to conversation', { error: e?.message });
           }
         }
 
-        return conversationHistory;
-      })();
-
-      const conversationHistory = await conversationHistoryPromise;
-
-      // Select model based on tier and query complexity
-      let selectedModel: string;
-      let modelSelectionReason: string;
-      
-      if (request.model) {
-        selectedModel = request.model;
-        modelSelectionReason = 'user-requested';
-      } else {
-        const modelSelection = await this.selectModel(
-          userId,
-          request.question,
-          ragContext,
-          conversationHistory,
-          request.model
-        );
-        selectedModel = modelSelection.model;
-        modelSelectionReason = modelSelection.reason;
+        const defaultModel = this.GPT35_MODEL;
+        const response: QuestionResponse = {
+          answer: refusal,
+          model: defaultModel,
+          sources: [],
+          followUpQuestions: [followUp],
+          refusal: true,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        };
+        (response as any).conversationId = conversationIdForResponse;
+        return response;
       }
-      
-      if (userId) {
-        try {
-          const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
-          logger.info('Model selected based on tier', {
-            userId,
-            tier: subscriptionData?.subscription.tier || 'unknown',
-            selectedModel,
-            reason: modelSelectionReason,
-            question: request.question.substring(0, 100),
-          });
-        } catch (error) {
-          // Ignore errors in logging
-        }
-      }
-
-      // Few-shot examples
-      let fewShotExamplesText = '';
-      let conversationStateText = '';
-      if (request.enableFewShotExamples !== false) {
-        try {
-          const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
-          const hasWebResults = ragContext?.includes('Web Search Results:') || false;
-          const fewShotOptions: FewShotSelectionOptions = {
-            query: request.question,
-            hasDocuments,
-            hasWebResults,
-            maxExamples: request.fewShotOptions?.maxExamples ?? 2,
-            maxTokens: request.fewShotOptions?.maxTokens ?? 500,
-            model: request.model || 'gpt-3.5-turbo',
-            preferCitationStyle: request.fewShotOptions?.preferCitationStyle,
-            ...request.fewShotOptions,
-          };
-          const fewShotSelection = FewShotSelectorService.selectExamples(fewShotOptions);
-          if (fewShotSelection.examples.length > 0) {
-            fewShotExamplesText = FewShotSelectorService.formatExamplesForPrompt(fewShotSelection.examples);
-          }
-        } catch (err: unknown) {
-          logger.warn('Few-shot example selection failed, continuing without examples', {
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-
-      const messages = this.buildMessages(
-        request.question,
-        ragContext,
-        request.context,
-        conversationHistory,
-        request.enableDocumentSearch,
-        request.enableWebSearch,
-        timeFilter,
-        topicName,
-        topicDescription,
-        topicScopeConfig,
-        fewShotExamplesText,
-        conversationStateText
-      );
 
       logger.info('Sending question to OpenAI with RAG', {
-        model: selectedModel,
+        model: context.selectedModel,
         questionLength: request.question.length,
         hasContext: !!request.context,
-        hasRAGContext: !!ragContext,
-        sourcesCount: sources?.length || 0,
-        historyLength: conversationHistory?.length || 0,
-        modelSelectionReason,
+        hasRAGContext: !!context.ragContext,
+        sourcesCount: context.sources?.length || 0,
+        historyLength: context.conversationHistory?.length || 0,
+        modelSelectionReason: context.modelSelectionReason,
       });
 
       // Check LLM response cache
-      const shouldCache = !request.conversationHistory || request.conversationHistory.length <= 10;
+      const shouldCache = !context.conversationHistory || context.conversationHistory.length <= 10;
       let completion: OpenAI.Chat.Completions.ChatCompletion | undefined;
       let cachedResponse: QuestionResponse | null = null;
       
       if (shouldCache) {
         const llmCacheKey = generateLLMCacheKey(
           request.question,
-          selectedModel,
-          temperature,
-          ragContext,
-          conversationHistory
+          context.selectedModel,
+          context.temperature,
+          context.ragContext,
+          context.conversationHistory,
+          request.topicId
         );
         
         const cached = await RedisCacheService.get<QuestionResponse>(llmCacheKey, {
@@ -767,7 +1213,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           llmCacheStats.hits++;
           logger.info('LLM response retrieved from cache', {
             question: request.question.substring(0, 100),
-            model: selectedModel,
+            model: context.selectedModel,
             cacheKey: llmCacheKey.substring(0, 50),
           });
           cachedResponse = cached;
@@ -775,7 +1221,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           llmCacheStats.misses++;
           logger.debug('LLM cache miss', {
             question: request.question.substring(0, 100),
-            model: selectedModel,
+            model: context.selectedModel,
           });
         }
       }
@@ -783,7 +1229,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       if (cachedResponse) {
         logger.info('Returning cached LLM response', {
           question: request.question.substring(0, 100),
-          model: selectedModel,
+          model: context.selectedModel,
         });
         return cachedResponse;
       }
@@ -793,10 +1239,13 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         const retryResult = await RetryService.execute(
           async () => {
             return await openai.chat.completions.create({
-              model: selectedModel,
-              messages,
-              temperature,
-              max_tokens: maxTokens,
+              model: context.selectedModel,
+              messages: context.messages,
+              temperature: context.temperature,
+              max_tokens: context.maxTokens,
+              response_format: getResponseFormat(context.selectedModel),
+            }, {
+              ...(options?.signal && { signal: options.signal }),
             });
           },
           {
@@ -809,7 +1258,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
                 attempt,
                 delay,
                 error: error.message,
-                model: selectedModel,
+                model: context.selectedModel,
                 questionLength: request.question.length,
               });
             },
@@ -827,17 +1276,17 @@ Is this question clearly within the topic? Answer only YES or NO.`;
 
         DegradationService.handleServiceError(ServiceType.OPENAI, openaiError);
         
-        if (ragContext && sources && sources.length > 0) {
+        if (context.ragContext && context.sources && context.sources.length > 0) {
           logger.warn('OpenAI API failed but partial response available', {
             error: openaiError.message,
-            sourcesCount: sources.length,
+            sourcesCount: context.sources.length,
           });
           
           const degradationStatus = DegradationService.getOverallStatus();
           return {
-            answer: `I apologize, but I'm experiencing technical difficulties with the AI service. However, I found ${sources.length} relevant source${sources.length > 1 ? 's' : ''} that may help answer your question. Please try again in a moment, or review the sources provided below.\n\n${sources.map((s, i) => `${i + 1}. ${s.title}${s.url ? ` (${s.url})` : ''}`).join('\n')}`,
-            model: selectedModel,
-            sources,
+            answer: `I apologize, but I'm experiencing technical difficulties with the AI service. However, I found ${context.sources.length} relevant source${context.sources.length > 1 ? 's' : ''} that may help answer your question. Please try again in a moment, or review the sources provided below.\n\n${context.sources.map((s, i) => `${i + 1}. ${s.title}${s.url ? ` (${s.url})` : ''}`).join('\n')}`,
+            model: context.selectedModel,
+            sources: context.sources,
             usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
             degraded: true,
             degradationLevel: DegradationLevel.SEVERE,
@@ -849,13 +1298,105 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         throw openaiError;
       }
 
-      const fullResponse = completion.choices[0]?.message?.content || 'No response generated';
+      const fullResponse = completion.choices[0]?.message?.content || '{}';
       
-      // Parse citations from response if enabled
+      // ── Parse structured JSON response ──────────────────────────────
+      let structured: AIStructuredResponse | null = null;
+      try {
+        const raw = JSON.parse(fullResponse);
+        structured = AIResponseSchema.parse(raw);
+      } catch (parseErr: any) {
+        logger.warn('Structured output parse failed, falling back to text extraction', {
+          error: parseErr?.message,
+          responsePreview: fullResponse.substring(0, 200),
+        });
+      }
+
+      // If structured parsing succeeded, use the clean fields directly.
+      // Otherwise fall back to legacy regex extraction for compatibility.
+      let answer: string;
+      let followUpQuestions: string[] | undefined;
+      let structuredCitedSources: Array<{ index: number; type: 'document' | 'web'; url: string | null }> | undefined;
+
+      if (structured) {
+        answer = structured.answer;
+        followUpQuestions = structured.followUpQuestions.length > 0 ? structured.followUpQuestions : undefined;
+        structuredCitedSources = structured.citedSources;
+
+        logger.info('Structured output parsed successfully', {
+          answerLength: answer.length,
+          followUpCount: structured.followUpQuestions.length,
+          citedSourceCount: structured.citedSources.length,
+        });
+      } else {
+        // Legacy fallback: regex extraction
+        const followUpResult = await ResponseProcessorService.processFollowUpQuestions(
+          fullResponse,
+          request.question,
+          context.topicName
+        );
+        answer = followUpResult.answer;
+        followUpQuestions = followUpResult.questions.length > 0 ? followUpResult.questions : undefined;
+      }
+
+      // ── Citation parsing & validation ───────────────────────────────
+      // With structured output, citedSources comes from JSON directly.
+      // Fall back to regex CitationParserService when structured output is not available.
       let parsedCitations: import('./citation-parser.service').CitationParseResult | undefined;
       let citationValidation: import('./citation-validator.service').CitationValidationResult | undefined;
-      
-      if (request.enableCitationParsing !== false) {
+      let inlineCitations: import('../types/citation').InlineCitationResult | undefined;
+
+      if (structuredCitedSources && structuredCitedSources.length > 0 && context.sources && context.sources.length > 0) {
+        // Build validation from structured citedSources
+        try {
+          const { CitationValidatorService } = await import('./citation-validator.service');
+          const sourceInfos: import('./citation-validator.service').SourceInfo[] = context.sources.map((source, idx) => ({
+            type: source.type,
+            index: idx + 1,
+            title: source.title,
+            url: source.url,
+            documentId: source.documentId,
+            id: source.documentId || source.url,
+          }));
+
+          // Convert structured citedSources to ParsedCitation shape for validator
+          const structuredParsed: import('./citation-parser.service').ParsedCitation[] = structuredCitedSources.map(cs => ({
+            type: cs.type,
+            format: `[${cs.type === 'web' ? 'Web Source' : 'Document'} ${cs.index}]`,
+            index: cs.index,
+            url: cs.url ?? undefined,
+            position: { start: 0, end: 0 },
+          }));
+
+          citationValidation = CitationValidatorService.validateCitationsAgainstSources(
+            structuredParsed,
+            sourceInfos
+          );
+
+          // Build a minimal parsedCitations result for the response
+          parsedCitations = {
+            citations: structuredParsed,
+            textWithoutCitations: answer,
+            citationCount: structuredParsed.length,
+            documentCitations: structuredParsed.filter(c => c.type === 'document'),
+            webCitations: structuredParsed.filter(c => c.type === 'web'),
+            referenceCitations: [],
+            parsingTimeMs: 0,
+          };
+
+          logger.info('Structured citations validated against sources', {
+            citedSourceCount: structuredCitedSources.length,
+            matchedCitations: citationValidation.matchedCitations,
+            unmatchedCitations: citationValidation.unmatchedCitations,
+            isValid: citationValidation.isValid,
+          });
+        } catch (validationError: any) {
+          logger.warn('Failed to validate structured citations against sources', {
+            error: validationError.message,
+          });
+        }
+      } else if (!structured && request.enableCitationParsing !== false) {
+        // Legacy regex-based citation parsing (fallback)
         try {
           const { CitationParserService } = await import('./citation-parser.service');
           
@@ -865,21 +1406,12 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             ...request.citationParseOptions,
           };
           
-          parsedCitations = CitationParserService.parseCitations(fullResponse, parseOptions);
+          parsedCitations = CitationParserService.parseCitations(answer, parseOptions);
           
-          logger.info('Citations parsed from response', {
-            totalCitations: parsedCitations.citationCount,
-            documentCitations: parsedCitations.documentCitations.length,
-            webCitations: parsedCitations.webCitations.length,
-            referenceCitations: parsedCitations.referenceCitations.length,
-            parsingTimeMs: parsedCitations.parsingTimeMs,
-          });
-
-          if (sources && sources.length > 0 && parsedCitations.citations.length > 0) {
+          if (context.sources && context.sources.length > 0 && parsedCitations.citations.length > 0) {
             try {
               const { CitationValidatorService } = await import('./citation-validator.service');
-              
-              const sourceInfos: import('./citation-validator.service').SourceInfo[] = sources.map((source, idx) => ({
+              const sourceInfos: import('./citation-validator.service').SourceInfo[] = context.sources.map((source, idx) => ({
                 type: source.type,
                 index: idx + 1,
                 title: source.title,
@@ -887,112 +1419,16 @@ Is this question clearly within the topic? Answer only YES or NO.`;
                 documentId: source.documentId,
                 id: source.documentId || source.url,
               }));
-
               citationValidation = CitationValidatorService.validateCitationsAgainstSources(
                 parsedCitations.citations,
                 sourceInfos
               );
-
-              logger.info('Citations validated against sources', {
-                totalCitations: parsedCitations.citationCount,
-                matchedCitations: citationValidation.matchedCitations,
-                unmatchedCitations: citationValidation.unmatchedCitations,
-                errors: citationValidation.errors.length,
-                warnings: citationValidation.warnings.length,
-                isValid: citationValidation.isValid,
-              });
-
-              if (citationValidation.errors.length > 0) {
-                logger.warn('Citation validation errors found', {
-                  errorCount: citationValidation.errors.length,
-                  errors: citationValidation.errors.slice(0, 5),
-                });
-              }
-
-              if (citationValidation.warnings.length > 0) {
-                logger.debug('Citation validation warnings', {
-                  warningCount: citationValidation.warnings.length,
-                  warnings: citationValidation.warnings.slice(0, 5),
-                });
-              }
             } catch (validationError: any) {
-              logger.warn('Failed to validate citations against sources', {
-                error: validationError.message,
-              });
+              logger.warn('Failed to validate citations against sources', { error: validationError.message });
             }
           }
         } catch (parseError: any) {
-          logger.warn('Failed to parse citations from response', {
-            error: parseError?.message ?? String(parseError),
-          });
-        }
-      }
-
-      // Parse follow-up questions from the response and extract clean answer
-      const followUpResult = await ResponseProcessorService.processFollowUpQuestions(
-        fullResponse,
-        request.question,
-        topicName
-      );
-      const answer = followUpResult.answer;
-      const followUpQuestions = followUpResult.questions.length > 0 ? followUpResult.questions : undefined;
-
-      // Build inline citation segments
-      let inlineCitations: import('../types/citation').InlineCitationResult | undefined;
-      if (parsedCitations && parsedCitations.citations.length > 0 && sources) {
-        try {
-          const { CitationParserService } = await import('./citation-parser.service');
-          
-          const answerStartInFullResponse = fullResponse.indexOf(answer);
-          const adjustedCitations = parsedCitations.citations
-            .filter(citation => {
-              if (answerStartInFullResponse >= 0) {
-                return citation.position.start >= answerStartInFullResponse &&
-                       citation.position.end <= answerStartInFullResponse + answer.length;
-              }
-              return citation.position.start < answer.length && citation.position.end <= answer.length;
-            })
-            .map(citation => {
-              const adjustedStart = answerStartInFullResponse >= 0
-                ? citation.position.start - answerStartInFullResponse
-                : citation.position.start;
-              const adjustedEnd = answerStartInFullResponse >= 0
-                ? citation.position.end - answerStartInFullResponse
-                : citation.position.end;
-              
-              return {
-                ...citation,
-                position: {
-                  start: adjustedStart,
-                  end: adjustedEnd,
-                },
-              };
-            });
-
-          const sourceInfos = sources.map((source, idx) => ({
-            type: source.type,
-            title: source.title,
-            url: source.url,
-            documentId: source.documentId,
-            index: idx + 1,
-          }));
-
-          inlineCitations = CitationParserService.buildInlineCitationSegments(
-            answer,
-            adjustedCitations,
-            sourceInfos
-          );
-
-          logger.info('Inline citations built', {
-            segmentCount: inlineCitations.segmentCount,
-            citationCount: inlineCitations.citationCount,
-            originalCitationCount: parsedCitations.citations.length,
-            adjustedCitationCount: adjustedCitations.length,
-          });
-        } catch (error: any) {
-          logger.warn('Failed to build inline citations', {
-            error: error.message,
-          });
+          logger.warn('Failed to parse citations from response', { error: parseError?.message ?? String(parseError) });
         }
       }
 
@@ -1017,10 +1453,10 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           totalTokens: costData.totalTokens,
           cost: costData.totalCost,
           metadata: {
-            modelSelectionReason,
+            modelSelectionReason: context.modelSelectionReason,
             question: request.question.substring(0, 200),
-            hasRAGContext: !!ragContext,
-            sourcesCount: sources?.length || 0,
+            hasRAGContext: !!context.ragContext,
+            sourcesCount: context.sources?.length || 0,
           },
         }).catch((error: any) => {
           logger.warn('Failed to track cost', { error: error.message });
@@ -1032,20 +1468,20 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         tokensUsed: completion.usage.total_tokens,
         cost: costData.totalCost,
         hasFollowUpQuestions: !!followUpQuestions,
-        modelSelectionReason,
+        modelSelectionReason: context.modelSelectionReason,
       });
 
       // Check overall degradation status
       const degradationStatus = DegradationService.getOverallStatus();
-      const isDegraded = degradationStatus.level !== DegradationLevel.NONE || contextDegraded;
-      const degradationLevel = contextDegradationLevel || degradationStatus.level;
-      const degradationMessage = contextDegradationMessage || (isDegraded ? degradationStatus.message : undefined);
-      const isPartial = contextPartial || (isDegraded && degradationStatus.canProvidePartialResults);
+      const isDegraded = degradationStatus.level !== DegradationLevel.NONE || context.contextDegraded;
+      const degradationLevel = context.contextDegradationLevel || degradationStatus.level;
+      const degradationMessage = context.contextDegradationMessage || (isDegraded ? degradationStatus.message : undefined);
+      const isPartial = context.contextPartial || (isDegraded && degradationStatus.canProvidePartialResults);
 
       const response: QuestionResponse = {
         answer,
         model: completion.model,
-        sources,
+        sources: context.sources,
         citations: parsedCitations ? {
           total: parsedCitations.citationCount,
           document: parsedCitations.documentCitations.length,
@@ -1087,10 +1523,11 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       if (shouldCache && !isDegraded && !isPartial) {
         const llmCacheKey = generateLLMCacheKey(
           request.question,
-          selectedModel,
-          temperature,
-          ragContext,
-          conversationHistory
+          context.selectedModel,
+          context.temperature,
+          context.ragContext,
+          context.conversationHistory,
+          request.topicId
         );
         
         const cacheSet = await RedisCacheService.set(llmCacheKey, response, {
@@ -1102,14 +1539,14 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           llmCacheStats.sets++;
           logger.debug('LLM response cached', {
             question: request.question.substring(0, 100),
-            model: selectedModel,
+            model: context.selectedModel,
             ttl: LLM_CACHE_TTL,
           });
         } else {
           llmCacheStats.errors++;
           logger.warn('Failed to cache LLM response', {
             question: request.question.substring(0, 100),
-            model: selectedModel,
+            model: context.selectedModel,
           });
         }
       }
@@ -1128,10 +1565,10 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           answer,
           {
             queryId: request.conversationId,
-            sources: sources || [],
+            sources: context.sources || [],
             citations: qualityCitations.length > 0 ? qualityCitations : undefined,
             metadata: {
-              model: completion.model || selectedModel,
+              model: completion.model || context.selectedModel,
               tokenUsage: completion.usage.total_tokens,
               hasCitations: (parsedCitations?.citations?.length || 0) > 0,
               citationValidation: citationValidation?.isValid,
@@ -1145,8 +1582,24 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         });
       }
 
+      // ── LLM-as-judge evaluation (sampled, fire-and-forget) ──────
+      if (userId) {
+        import('./answer-evaluator.service').then(({ AnswerEvaluatorService }) => {
+          AnswerEvaluatorService.maybeEvaluate({
+            question: request.question,
+            answer,
+            sources: context.sources,
+            userId,
+            conversationId: request.conversationId,
+            topicId: request.topicId,
+          });
+        }).catch((err: any) => {
+          logger.warn('Failed to load answer evaluator', { error: err.message });
+        });
+      }
+
       // Save messages to conversation
-      if (request.conversationId && userId) {
+      if (request.conversationId && userId && !options?.skipSave) {
         try {
           const { ConversationService } = await import('./conversation.service');
           const { MessageService } = await import('./message.service');
@@ -1169,31 +1622,33 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             conversationId,
             request.question,
             response.answer,
-            sources,
+            context.sources,
             {
               model: completion.model,
               usage: response.usage,
-              ragUsed: !!ragContext,
+              ragUsed: !!context.ragContext,
               ...(response.followUpQuestions && response.followUpQuestions.length > 0 && { followUpQuestions: response.followUpQuestions }),
             }
           );
 
           logger.info('Messages saved to conversation', { conversationId, userId });
 
-          if (request.enableStateTracking !== false && conversationHistory) {
+          if (request.enableStateTracking !== false && context.conversationHistory) {
             try {
               const { ConversationService: CS } = await import('./conversation.service');
               const { MessageService: MS } = await import('./message.service');
-              const allMessages = await MS.getAllMessages(conversationId, userId!);
-              const allHistory = allMessages.map(msg => ({
-                role: msg.role as 'user' | 'assistant',
-                content: msg.content || '',
-              }));
-
               const stateOptions = {
                 updateThreshold: request.stateTrackingOptions?.updateThreshold ?? 5,
                 ...request.stateTrackingOptions,
               };
+
+              // Only fetch the messages the state extractor will actually analyse
+              const stateMessageLimit = stateOptions.maxMessagesToAnalyze ?? 50;
+              const allMessages = await MS.getAllMessages(conversationId, userId!, { limit: stateMessageLimit });
+              const allHistory = allMessages.map(msg => ({
+                role: msg.role as 'user' | 'assistant',
+                content: msg.content || '',
+              }));
 
               const messageCount = allHistory.length;
               const shouldUpdate = messageCount % (stateOptions.updateThreshold ?? 5) === 0 || messageCount === 1;
@@ -1230,6 +1685,15 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     } catch (error: any) {
       if (error instanceof ValidationError) {
         throw error;
+      }
+
+      // AbortError: client disconnected — not a real error
+      if (error.name === 'AbortError' || error.code === 'ABORT_ERR') {
+        logger.info('Request cancelled by client', {
+          userId,
+          questionLength: request.question?.length,
+        });
+        throw new AppError('Request cancelled by client', 499, 'REQUEST_CANCELLED');
       }
 
       if (error instanceof OpenAI.APIError) {
@@ -1274,12 +1738,180 @@ Is this question clearly within the topic? Answer only YES or NO.`;
   }
 
   // ═════════════════════════════════════════════════════════════════════
+  // Post-stream processing (follow-ups, quality, save, usage logging)
+  // ═════════════════════════════════════════════════════════════════════
+
+  /**
+   * Centralised post-stream business logic.
+   *
+   * Called by the streaming route handler after all chunks have been
+   * collected.  Handles:
+   *   1. Follow-up question extraction (structured or LLM-based)
+   *   2. Answer quality scoring
+   *   3. Conversation creation / message persistence
+   *   4. Usage logging for analytics
+   *
+   * Returns data the route needs to write back over SSE (follow-ups,
+   * quality score, conversationId).
+   */
+  static async postProcessStream(
+    params: PostProcessStreamParams
+  ): Promise<PostProcessStreamResult> {
+    const {
+      fullAnswer,
+      question,
+      userId,
+      sources,
+      topicName,
+      topicId,
+      conversationId,
+      model,
+      isResend,
+      structuredFollowUps,
+    } = params;
+
+    let cleanedAnswer = fullAnswer;
+    let followUpQuestions: string[] | undefined;
+    let qualityScore: number | undefined;
+    let finalConversationId: string | undefined = conversationId;
+
+    // ── 1. Follow-up questions ──────────────────────────────────────
+    if (structuredFollowUps && structuredFollowUps.length > 0) {
+      followUpQuestions = structuredFollowUps;
+    } else {
+      try {
+        const followUpResult = await ResponseProcessorService.processFollowUpQuestions(
+          fullAnswer,
+          question,
+          topicName,
+        );
+        followUpQuestions = followUpResult.questions.length > 0 ? followUpResult.questions : undefined;
+        cleanedAnswer = followUpResult.answer;
+      } catch (err: any) {
+        logger.warn('Follow-up questions processing failed in streaming', { error: err?.message });
+      }
+    }
+
+    // ── 2. Quality score ────────────────────────────────────────────
+    try {
+      qualityScore = ResponseProcessorService.calculateAnswerQualityScore(
+        cleanedAnswer,
+        sources || [],
+        followUpQuestions || [],
+      );
+    } catch (err: any) {
+      logger.warn('Quality score calculation failed', { error: err?.message });
+    }
+
+    // ── 2b. LLM-as-judge evaluation (sampled, fire-and-forget) ────
+    if (userId) {
+      import('../services/answer-evaluator.service').then(({ AnswerEvaluatorService }) => {
+        AnswerEvaluatorService.maybeEvaluate({
+          question,
+          answer: cleanedAnswer,
+          sources: sources ?? undefined,
+          userId,
+          conversationId,
+          topicId,
+        });
+      }).catch((err: any) => {
+        logger.warn('Failed to load answer evaluator (streaming)', { error: err.message });
+      });
+    }
+
+    // ── 3. Persist to conversation ──────────────────────────────────
+    if (conversationId && userId && cleanedAnswer) {
+      try {
+        const { ConversationService } = await import('../services/conversation.service');
+        const { MessageService } = await import('../services/message.service');
+
+        let conversation = await ConversationService.getConversation(conversationId, userId);
+
+        if (!conversation) {
+          const title = ConversationService.generateTitleFromMessage(question);
+          conversation = await ConversationService.createConversation({
+            userId,
+            title,
+            topicId,
+          });
+          finalConversationId = conversation.id;
+          logger.info('Created new conversation for streaming message', {
+            conversationId: finalConversationId,
+            userId,
+          });
+        }
+
+        const metadata: Record<string, any> = {
+          model: model || 'gpt-4o-mini',
+          streaming: true,
+          ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
+          ...(qualityScore !== undefined && { qualityScore }),
+        };
+
+        if (isResend) {
+          await MessageService.saveMessage({
+            conversationId: finalConversationId!,
+            role: 'assistant',
+            content: cleanedAnswer,
+            sources: sources ?? undefined,
+            metadata,
+          });
+        } else {
+          await MessageService.saveMessagePair(
+            finalConversationId!,
+            question,
+            cleanedAnswer,
+            sources,
+            metadata,
+          );
+        }
+
+        logger.info('Messages saved to conversation (streaming)', {
+          conversationId: finalConversationId,
+          userId,
+          isResend,
+        });
+      } catch (saveError: any) {
+        logger.warn('Failed to save messages to conversation (streaming)', {
+          error: saveError.message,
+          conversationId,
+          userId,
+        });
+      }
+    }
+
+    // ── 4. Log usage for analytics ──────────────────────────────────
+    if (userId && cleanedAnswer) {
+      try {
+        const { DatabaseService } = await import('../services/database.service');
+        await DatabaseService.logUsage(userId, 'query', {
+          question: question.substring(0, 200),
+          topicId,
+          model: model || 'gpt-3.5-turbo',
+          hasSources: sources && sources.length > 0,
+          streaming: true,
+        });
+      } catch (usageError: any) {
+        logger.warn('Failed to log query usage (streaming)', { error: usageError?.message });
+      }
+    }
+
+    return {
+      followUpQuestions,
+      qualityScore,
+      cleanedAnswer,
+      conversationId: finalConversationId,
+    };
+  }
+
+  // ═════════════════════════════════════════════════════════════════════
   // Streaming answer pipeline
   // ═════════════════════════════════════════════════════════════════════
 
   static async *answerQuestionStreamInternal(
     request: QuestionRequest,
-    userId?: string
+    userId?: string,
+    options?: { signal?: AbortSignal }
   ): AsyncGenerator<string, void, unknown> {
     try {
       // Validate input
@@ -1291,22 +1923,19 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         throw new ValidationError('Question is too long (max 2000 characters)');
       }
 
-      const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
-      const maxTokens = request.maxTokens ?? this.DEFAULT_MAX_TOKENS;
-
-      // Fetch topic details
-      let topicName: string | undefined;
-      let topicDescription: string | undefined;
-      let topicScopeConfig: Record<string, any> | null | undefined;
+      // Check if we have pre-retrieved context for streaming (from the route)
+      let preloadedTopic;
       if (request.topicId && userId) {
         try {
           const { TopicService } = await import('./topic.service');
           const topic = await TopicService.getTopic(request.topicId, userId);
           if (topic) {
-            topicName = topic.name;
-            topicDescription = topic.description ?? undefined;
-            topicScopeConfig = topic.scope_config ?? null;
-            logger.info('Topic context loaded for streaming', { topicId: request.topicId, topicName });
+            preloadedTopic = {
+              topicName: topic.name,
+              topicDescription: topic.description ?? undefined,
+              topicScopeConfig: topic.scope_config ?? null,
+            };
+            logger.info('Topic context loaded for streaming', { topicId: request.topicId, topicName: topic.name });
           }
         } catch (topicError: any) {
           logger.warn('Failed to fetch topic details for streaming', {
@@ -1316,388 +1945,109 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         }
       }
 
-      // Retrieve RAG context (or use pre-retrieved context from streaming route)
-      let ragContext: string | undefined;
-
-      // Use pre-retrieved context if available (avoids double RAG retrieval in streaming)
+      // Use shared pipeline preparation
+      const context = await this.prepareRequestContext(request, userId, preloadedTopic);
+      
+      // Override RAG context if pre-retrieved (handling the legacy/route-level optimization)
       if (request._preRetrievedRagContext) {
-        ragContext = request._preRetrievedRagContext;
+        context.ragContext = request._preRetrievedRagContext;
+        // Re-build messages with the correct RAG context if it was overridden
+        context.messages = this.buildMessages(
+          request.question,
+          context.ragContext,
+          request.context,
+          context.conversationHistory,
+          request.enableDocumentSearch,
+          request.enableWebSearch,
+          context.timeFilter,
+          context.topicName,
+          context.topicDescription,
+          context.topicScopeConfig,
+            // Extract few-shot examples from the original message construction if possible,
+            // or re-select if needed. Since we can't easily extract, we'll accept
+            // that the messages are rebuilt below.
+        );
         logger.info('Using pre-retrieved RAG context for streaming', {
           userId,
-          contextLength: ragContext.length,
+          contextLength: context.ragContext.length,
         });
-      } else if (userId) {
-        try {
-          const ragOptions: RAGOptions = {
-            userId,
-            // When specific documentIds are provided, omit topicId to avoid filtering out
-            // vectors that don't have topicId metadata (documents not assigned to a topic).
-            topicId: (request.documentIds && request.documentIds.length > 0) ? undefined : request.topicId,
-            documentIds: request.documentIds,
-            enableDocumentSearch: request.enableDocumentSearch !== false,
-            enableWebSearch: request.enableWebSearch !== false,
-            maxDocumentChunks: request.maxDocumentChunks ?? 5,
-            maxWebResults: request.maxSearchResults ?? 5,
-            // Leave minScore as undefined when not provided — lets adaptive threshold run.
-            minScore: request.minScore,
-            topic: request.topic,
-            timeRange: request.timeRange,
-            startDate: request.startDate,
-            endDate: request.endDate,
-            country: request.country,
-            enableQueryExpansion: request.enableQueryExpansion ?? false,
-            expansionStrategy: request.expansionStrategy,
-            maxExpansions: request.maxExpansions,
-            enableQueryRewriting: request.enableQueryRewriting ?? false,
-            queryRewritingOptions: request.queryRewritingOptions,
-            enableWebResultReranking: request.enableWebResultReranking ?? false,
-            webResultRerankingConfig: request.webResultRerankingConfig,
-            enableQualityScoring: request.enableQualityScoring ?? false,
-            qualityScoringConfig: request.qualityScoringConfig,
-            minQualityScore: request.minQualityScore,
-            filterByQuality: request.filterByQuality ?? false,
-            enableReranking: request.enableReranking ?? false,
-            rerankingStrategy: request.rerankingStrategy,
-            rerankingTopK: request.rerankingTopK,
-            rerankingMaxResults: request.rerankingMaxResults,
-            useAdaptiveThreshold: request.useAdaptiveThreshold ?? true,
-            minResults: request.minResults,
-            maxResults: request.maxResults,
-            enableDiversityFilter: request.enableDiversityFilter ?? false,
-            diversityLambda: request.diversityLambda,
-            diversityMaxResults: request.diversityMaxResults,
-            diversitySimilarityThreshold: undefined,
-            enableResultDeduplication: request.enableResultDeduplication ?? false,
-            deduplicationThreshold: request.deduplicationThreshold,
-            deduplicationNearDuplicateThreshold: request.deduplicationNearDuplicateThreshold,
-            useAdaptiveContextSelection: request.useAdaptiveContextSelection ?? true,
-            enableAdaptiveContextSelection: request.enableAdaptiveContextSelection ?? true,
-            adaptiveContextOptions: request.adaptiveContextOptions,
-            minChunks: request.minChunks,
-            maxChunks: request.maxChunks,
-            enableDynamicLimits: request.enableDynamicLimits ?? true,
-            dynamicLimitOptions: request.dynamicLimitOptions,
-            enableRelevanceOrdering: request.enableRelevanceOrdering ?? true,
-            orderingOptions: request.orderingOptions,
-            enableContextCompression: request.enableContextCompression ?? true,
-            compressionOptions: request.compressionOptions,
-            maxContextTokens: request.maxContextTokens,
-            enableContextSummarization: request.enableContextSummarization ?? true,
-            summarizationOptions: request.summarizationOptions,
-            enableSourcePrioritization: request.enableSourcePrioritization ?? true,
-            prioritizationOptions: request.prioritizationOptions,
-            enableTokenBudgeting: request.enableTokenBudgeting ?? true,
-            tokenBudgetOptions: request.tokenBudgetOptions,
-          };
-
-          if (request.enableSearch === false) {
-            ragOptions.enableWebSearch = false;
-          }
-
-          const context = await RAGService.retrieveContext(request.question, ragOptions);
-          ragContext = await RAGService.formatContextForPrompt(context, {
-            enableRelevanceOrdering: ragOptions.enableRelevanceOrdering ?? true,
-            orderingOptions: ragOptions.orderingOptions,
-            enableContextSummarization: ragOptions.enableContextSummarization ?? true,
-            summarizationOptions: ragOptions.summarizationOptions,
-            enableContextCompression: ragOptions.enableContextCompression ?? true,
-            compressionOptions: ragOptions.compressionOptions,
-            enableSourcePrioritization: ragOptions.enableSourcePrioritization ?? true,
-            prioritizationOptions: ragOptions.prioritizationOptions,
-            enableTokenBudgeting: ragOptions.enableTokenBudgeting ?? true,
-            tokenBudgetOptions: {
-              ...ragOptions.tokenBudgetOptions,
-              model: request.model || 'gpt-3.5-turbo',
-            },
-            query: request.question,
-            model: request.model || 'gpt-3.5-turbo',
-            userId: userId,
-          });
-
-          logger.info('RAG context retrieved for streaming', {
-            userId,
-            documentChunks: context.documentContexts.length,
-            webResults: context.webSearchResults.length,
-          });
-        } catch (ragError: any) {
-          logger.warn('RAG retrieval failed during streaming, continuing without RAG context', {
-            error: ragError.message,
-            question: request.question,
-            userId,
-          });
-        }
-      } else {
-        if (request.enableSearch !== false) {
-          try {
-            const searchRequest: SearchRequest = {
-              query: request.question,
-              topic: request.topic,
-              maxResults: request.maxSearchResults ?? 5,
-              timeRange: request.timeRange,
-              startDate: request.startDate,
-              endDate: request.endDate,
-              country: request.country,
-            };
-
-            const searchResponse = await SearchService.search(searchRequest);
-            
-            if (searchResponse.results && searchResponse.results.length > 0) {
-              const webResults = searchResponse.results.map(r => ({
-                title: r.title,
-                url: r.url,
-                content: r.content,
-              }));
-
-              ragContext = await RAGService.formatContextForPrompt({
-                documentContexts: [],
-                webSearchResults: webResults,
-              }, {
-                enableRelevanceOrdering: true,
-                enableContextSummarization: request.enableContextSummarization ?? true,
-                summarizationOptions: request.summarizationOptions,
-                enableContextCompression: request.enableContextCompression ?? true,
-                compressionOptions: request.compressionOptions,
-                enableSourcePrioritization: request.enableSourcePrioritization ?? true,
-                prioritizationOptions: request.prioritizationOptions,
-                enableTokenBudgeting: request.enableTokenBudgeting ?? true,
-                tokenBudgetOptions: {
-                  ...request.tokenBudgetOptions,
-                  model: request.model || 'gpt-3.5-turbo',
-                },
-                query: request.question,
-                model: request.model || 'gpt-3.5-turbo',
-                userId: userId,
-              });
-
-              logger.info('Search results retrieved for streaming (fallback)', {
-                query: request.question,
-                resultsCount: webResults.length,
-              });
-            }
-          } catch (searchError: any) {
-            logger.warn('Search failed during streaming, continuing without search results', {
-              error: searchError.message,
-              question: request.question,
-            });
-          }
-        }
       }
-
-      // Build time filter
-      const timeFilter = request.timeRange || request.startDate || request.endDate || request.topic || request.country
-        ? {
-            timeRange: request.timeRange,
-            startDate: request.startDate,
-            endDate: request.endDate,
-            topic: request.topic,
-            country: request.country,
-          }
-        : undefined;
-
-      // Fetch conversation history
-      let conversationHistory = request.conversationHistory;
-      if (request.conversationId && userId && !conversationHistory) {
-        try {
-          const { MessageService } = await import('./message.service');
-          
-          if (request.enableSlidingWindow !== false) {
-            const slidingWindowOptions = {
-              model: request.model || 'gpt-3.5-turbo',
-              ...request.slidingWindowOptions,
-            };
-            
-            conversationHistory = await MessageService.getSlidingWindowHistory(
-              request.conversationId,
-              userId,
-              slidingWindowOptions
-            );
-            
-            logger.info('Conversation history processed with sliding window', {
-              conversationId: request.conversationId,
-              historyLength: conversationHistory.length,
-            });
-          } else if (request.enableConversationSummarization !== false) {
-            const summarizationOptions = {
-              model: request.model || 'gpt-3.5-turbo',
-              ...request.conversationSummarizationOptions,
-            };
-            
-            conversationHistory = await MessageService.getSummarizedHistory(
-              request.conversationId,
-              userId,
-              summarizationOptions
-            );
-            
-            logger.info('Conversation history summarized', {
-              conversationId: request.conversationId,
-              historyLength: conversationHistory.length,
-            });
-          } else {
-            const messages = await MessageService.getAllMessages(request.conversationId, userId);
-            conversationHistory = messages.map(msg => ({
-              role: msg.role as 'user' | 'assistant',
-              content: msg.content || '',
-            }));
-            
-            logger.info('Conversation history retrieved (no processing)', {
-              conversationId: request.conversationId,
-              historyLength: conversationHistory.length,
-            });
-          }
-        } catch (error: any) {
-          logger.warn('Failed to fetch conversation history, continuing without history', {
-            error: error.message,
-            conversationId: request.conversationId,
-          });
-        }
-      }
-
-      // Filter conversation history
-      if (conversationHistory && conversationHistory.length > 0 && request.enableHistoryFiltering !== false) {
-        try {
-          const { HistoryFilterService } = await import('./history-filter.service');
-          
-          const filterResult = await HistoryFilterService.filterHistory(
-            request.question,
-            conversationHistory,
-            { ...request.historyFilterOptions }
-          );
-          
-          conversationHistory = filterResult.filteredHistory;
-          
-          logger.info('Conversation history filtered by relevance', {
-            originalCount: filterResult.stats.originalCount,
-            filteredCount: filterResult.stats.filteredCount,
-            removedCount: filterResult.stats.removedCount,
-            processingTimeMs: filterResult.stats.processingTimeMs,
-            avgRelevanceScore: filterResult.scores.reduce((sum: number, msg: any) => sum + msg.relevanceScore, 0) / filterResult.scores.length,
-          });
-        } catch (error: any) {
-          logger.warn('Failed to filter conversation history, using original history', {
-            error: error.message,
-          });
-        }
-      }
-
-      // Few-shot examples
-      let fewShotExamplesText = '';
-      let conversationStateText = '';
-      if (request.enableFewShotExamples !== false) {
-        try {
-          const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
-          const hasWebResults = ragContext?.includes('Web Search Results:') || false;
-
-          const fewShotOptions: FewShotSelectionOptions = {
-            query: request.question,
-            hasDocuments,
-            hasWebResults,
-            maxExamples: request.fewShotOptions?.maxExamples ?? 2,
-            maxTokens: request.fewShotOptions?.maxTokens ?? 500,
-            model: request.model || 'gpt-3.5-turbo',
-            preferCitationStyle: request.fewShotOptions?.preferCitationStyle,
-            ...request.fewShotOptions,
-          };
-
-          const fewShotSelection = FewShotSelectorService.selectExamples(fewShotOptions);
-          
-          if (fewShotSelection.examples.length > 0) {
-            fewShotExamplesText = FewShotSelectorService.formatExamplesForPrompt(fewShotSelection.examples);
-            
-            logger.info('Few-shot examples selected', {
-              query: request.question.substring(0, 100),
-              exampleCount: fewShotSelection.examples.length,
-              totalTokens: fewShotSelection.totalTokens,
-              reasoning: fewShotSelection.reasoning,
-            });
-          }
-        } catch (error: any) {
-          logger.warn('Few-shot example selection failed, continuing without examples', {
-            error: error.message,
-          });
-        }
-      }
-
-      // Select model
-      let selectedModel: string;
-      let modelSelectionReason: string;
-      
-      if (request.model) {
-        selectedModel = request.model;
-        modelSelectionReason = 'user-requested';
-      } else {
-        const modelSelection = await this.selectModel(
-          userId,
-          request.question,
-          ragContext,
-          conversationHistory,
-          request.model
-        );
-        selectedModel = modelSelection.model;
-        modelSelectionReason = modelSelection.reason;
-      }
-      
-      if (userId) {
-        try {
-          const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
-          logger.info('Model selected for streaming based on tier', {
-            userId,
-            tier: subscriptionData?.subscription.tier || 'unknown',
-            selectedModel,
-            reason: modelSelectionReason,
-            question: request.question.substring(0, 100),
-          });
-        } catch (error) {
-          // Ignore errors in logging
-        }
-      }
-
-      const messages = this.buildMessages(
-        request.question,
-        ragContext,
-        request.context,
-        conversationHistory,
-        request.enableDocumentSearch,
-        request.enableWebSearch,
-        timeFilter,
-        topicName,
-        topicDescription,
-        topicScopeConfig,
-        fewShotExamplesText,
-        conversationStateText
-      );
 
       logger.info('Sending streaming question to OpenAI with RAG', {
-        model: selectedModel,
+        model: context.selectedModel,
         questionLength: request.question.length,
         hasContext: !!request.context,
-        hasRAGContext: !!ragContext,
-        historyLength: conversationHistory?.length || 0,
-        modelSelectionReason,
+        hasRAGContext: !!context.ragContext,
+        historyLength: context.conversationHistory?.length || 0,
+        modelSelectionReason: context.modelSelectionReason,
       });
 
-      // Call OpenAI API with streaming
+      // Call OpenAI API with streaming + structured output
+      const responseFormat = getResponseFormat(context.selectedModel);
       const stream = await openai.chat.completions.create({
-        model: selectedModel,
-        messages,
-        temperature,
-        max_tokens: maxTokens,
+        model: context.selectedModel,
+        messages: context.messages,
+        temperature: context.temperature,
+        max_tokens: context.maxTokens,
         stream: true,
+        ...(responseFormat && { response_format: responseFormat }),
+      }, {
+        ...(options?.signal && { signal: options.signal }),
       });
+
+      // Use JsonAnswerStreamParser to forward the answer field in real-time
+      // while accumulating the full JSON for post-stream parsing.
+      const parser = new JsonAnswerStreamParser();
 
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || '';
         if (content) {
-          yield content;
+          const answerChunk = parser.feed(content);
+          if (answerChunk) {
+            yield answerChunk;
+          }
         }
       }
 
+      // After stream completes, parse the accumulated JSON for metadata
+      const accumulatedJson = parser.getAccumulatedJson();
+      let structuredMeta: AIStructuredResponse | null = null;
+      try {
+        const raw = JSON.parse(accumulatedJson);
+        structuredMeta = AIResponseSchema.parse(raw);
+      } catch (parseErr: any) {
+        logger.warn('Streaming structured output parse failed', {
+          error: parseErr?.message,
+          jsonPreview: accumulatedJson.substring(0, 200),
+        });
+      }
+
+      // Yield a metadata sentinel object (not a string) so the route handler
+      // can detect follow-ups and cited sources.
+      if (structuredMeta) {
+        yield JSON.stringify({
+          __structured: true,
+          followUpQuestions: structuredMeta.followUpQuestions,
+          citedSources: structuredMeta.citedSources,
+        });
+      }
+
       logger.info('OpenAI streaming response completed', { 
-        model: selectedModel,
-        modelSelectionReason,
+        model: context.selectedModel,
+        modelSelectionReason: context.modelSelectionReason,
       });
     } catch (error: any) {
       if (error instanceof ValidationError) {
         throw error;
+      }
+
+      // AbortError: client disconnected — not a real error
+      if (error.name === 'AbortError' || error.code === 'ABORT_ERR') {
+        logger.info('Stream cancelled by client', {
+          userId,
+          questionLength: request.question?.length,
+        });
+        return; // Gracefully end the generator
       }
 
       if (error instanceof OpenAI.APIError) {
