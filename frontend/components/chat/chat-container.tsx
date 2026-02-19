@@ -78,6 +78,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   const { user } = useAuthStore();
   const {
     currentConversationId,
+    conversationSelectionVersion,
     createConversation,
     selectConversation,
     refreshConversations,
@@ -370,7 +371,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     };
     loadConversationData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentConversationId, setUnifiedFilters, setSelectedTopic, isStreaming, isLoading]);
+  }, [currentConversationId, conversationSelectionVersion, setUnifiedFilters, setSelectedTopic, isStreaming, isLoading]);
 
   // Persist RAG settings
   useEffect(() => {

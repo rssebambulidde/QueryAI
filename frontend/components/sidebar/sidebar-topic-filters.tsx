@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Tag, ChevronDown, ChevronUp, Plus, X, Hash, Calendar, MapPin } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Tag, Plus, X, Hash, Calendar, MapPin } from 'lucide-react';
 import { Topic, topicApi, conversationApi } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useFilterStore } from '@/lib/store/filter-store';
@@ -24,26 +24,17 @@ export const SidebarTopicFilters: React.FC = () => {
   } = useFilterStore();
   const { currentConversationId, refreshConversations } = useConversationStore();
 
-  const [showTopicDropdown, setShowTopicDropdown] = useState(false);
   const [showCreateTopic, setShowCreateTopic] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
   const [newTopicDescription, setNewTopicDescription] = useState('');
   const [createParentId, setCreateParentId] = useState<string | null>(null);
-  const topicDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (topicDropdownRef.current && !topicDropdownRef.current.contains(e.target as Node)) {
-        setShowTopicDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    loadTopics().catch(() => {});
+  }, [loadTopics]);
 
   const handleTopicSelect = (topic: Topic | null) => {
     setSelectedTopic(topic);
-    setShowTopicDropdown(false);
     setUnifiedFilters((prev) => ({
       ...prev,
       topicId: topic?.id ?? null,
@@ -114,80 +105,54 @@ export const SidebarTopicFilters: React.FC = () => {
           <Tag className="w-3.5 h-3.5 text-orange-600" />
           <span className="text-xs font-medium text-gray-700">Topic</span>
         </div>
-        <div className="relative" ref={topicDropdownRef}>
-          {selectedTopic ? (
-            <div className="flex items-center justify-between gap-1 px-2.5 py-1.5 bg-orange-50 border border-orange-200 rounded-md">
-              <span className="flex items-center gap-1.5 min-w-0 flex-1">
-                <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 bg-orange-100 rounded">
-                  Research
-                </span>
-                {/* Breadcrumb trail for nested topics */}
-                {(() => {
-                  const ancestors = getAncestorPath(selectedTopic.id, topics);
-                  if (ancestors.length > 0) {
-                    return (
-                      <span className="text-xs text-orange-600 truncate">
-                        {ancestors.map(a => a.name).join(' › ')} ›{' '}
-                        <span className="font-medium text-orange-900">{selectedTopic.name}</span>
-                      </span>
-                    );
-                  }
-                  return <span className="text-xs font-medium text-orange-900 truncate">{selectedTopic.name}</span>;
-                })()}
+        {selectedTopic && (
+          <div className="flex items-center justify-between gap-1 px-2.5 py-1.5 bg-orange-50 border border-orange-200 rounded-md">
+            <span className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 bg-orange-100 rounded">
+                Research
               </span>
-              <button
-                type="button"
-                onClick={() => handleTopicSelect(null)}
-                className="p-0.5 text-orange-600 hover:bg-orange-100 rounded"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          ) : (
+              {(() => {
+                const ancestors = getAncestorPath(selectedTopic.id, topics);
+                if (ancestors.length > 0) {
+                  return (
+                    <span className="text-xs text-orange-600 truncate">
+                      {ancestors.map(a => a.name).join(' › ')} ›{' '}
+                      <span className="font-medium text-orange-900">{selectedTopic.name}</span>
+                    </span>
+                  );
+                }
+                return <span className="text-xs font-medium text-orange-900 truncate">{selectedTopic.name}</span>;
+              })()}
+            </span>
             <button
               type="button"
-              onClick={() => {
-                setShowTopicDropdown(!showTopicDropdown);
-                if (!showTopicDropdown) loadTopics();
-              }}
-              className="w-full flex items-center justify-between px-2.5 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50 text-left"
+              onClick={() => handleTopicSelect(null)}
+              className="p-0.5 text-orange-600 hover:bg-orange-100 rounded"
             >
-              <span className="text-gray-500">Select topic...</span>
-              {showTopicDropdown ? (
-                <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-              )}
+              <X className="w-3 h-3" />
             </button>
-          )}
+          </div>
+        )}
 
-          {showTopicDropdown && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-56 overflow-y-auto">
-              {isLoadingTopics ? (
-                <div className="px-3 py-2 text-xs text-gray-500">Loading...</div>
-              ) : (
-                <TopicTreeSelector
-                  topics={topics}
-                  selectedTopicId={selectedTopic?.id}
-                  onSelect={(topic) => {
-                    handleTopicSelect(topic);
-                    setShowTopicDropdown(false);
-                  }}
-                  showCreateRoot
-                  onCreateRoot={() => {
-                    setShowTopicDropdown(false);
-                    setCreateParentId(null);
-                    setShowCreateTopic(true);
-                  }}
-                  onCreateChild={(parentId) => {
-                    setShowTopicDropdown(false);
-                    setCreateParentId(parentId);
-                    setShowCreateTopic(true);
-                  }}
-                  className="p-1"
-                />
-              )}
-            </div>
+        <div className="bg-white border border-gray-200 rounded-lg max-h-56 overflow-y-auto">
+          {isLoadingTopics ? (
+            <div className="px-3 py-2 text-xs text-gray-500">Loading...</div>
+          ) : (
+            <TopicTreeSelector
+              topics={topics}
+              selectedTopicId={selectedTopic?.id}
+              onSelect={(topic) => handleTopicSelect(topic)}
+              showCreateRoot
+              onCreateRoot={() => {
+                setCreateParentId(null);
+                setShowCreateTopic(true);
+              }}
+              onCreateChild={(parentId) => {
+                setCreateParentId(parentId);
+                setShowCreateTopic(true);
+              }}
+              className="p-1"
+            />
           )}
         </div>
 

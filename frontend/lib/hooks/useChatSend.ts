@@ -129,6 +129,10 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
     try {
       const messagesResponse = await conversationApi.getMessages(conversationId);
       if (messagesResponse.success && messagesResponse.data) {
+        if (messagesResponse.data.length === 0) {
+          // Avoid wiping optimistic streamed UI when backend persistence is slightly delayed
+          return;
+        }
         setMessages(mapApiMessagesToUi(messagesResponse.data));
         const lastMsg = messagesResponse.data[messagesResponse.data.length - 1];
         if (lastMsg?.metadata) extractResponseMetadata(lastMsg.metadata);

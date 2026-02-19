@@ -7,6 +7,7 @@ import { conversationApi, Conversation, Message } from '../api';
 interface ConversationState {
   conversations: Conversation[];
   currentConversationId: string | null;
+  conversationSelectionVersion: number;
   isLoading: boolean;
   error: string | null;
 
@@ -26,6 +27,7 @@ export const useConversationStore = create<ConversationState>()(
     (set, get) => ({
       conversations: [],
       currentConversationId: null,
+      conversationSelectionVersion: 0,
       isLoading: false,
       error: null,
 
@@ -67,7 +69,10 @@ export const useConversationStore = create<ConversationState>()(
       },
 
       selectConversation: (id: string | null) => {
-        set({ currentConversationId: id });
+        set((state) => ({
+          currentConversationId: id,
+          conversationSelectionVersion: state.conversationSelectionVersion + 1,
+        }));
       },
 
       updateConversation: async (id: string, title: string) => {
