@@ -20,6 +20,7 @@ import { ConversationSkeleton, CollectionSkeleton } from './skeleton-loader';
 import { AccountDropdown } from './account-dropdown';
 import { CitedSourcesPanel } from '@/components/research/cited-sources-panel';
 import { SourceExplorerModal } from '@/components/research/source-explorer-modal';
+import { SidebarTopicFilters } from './sidebar-topic-filters';
 import type { CitedSource } from '@/lib/api';
 
 type TabType = 'chat' | 'collections' | 'sources';
@@ -477,6 +478,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
         {activeTab === 'chat' && (
           <div className="py-2">
+            <SidebarTopicFilters />
+
             {/* Section header with search toggle */}
             <div className="flex items-center justify-between px-4 py-1.5">
               <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
