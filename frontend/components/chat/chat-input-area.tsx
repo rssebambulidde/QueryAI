@@ -40,39 +40,14 @@ export const ChatInputArea: React.FC<
   onCancelQueueJob,
   ragSettings,
   onRagSettingsChange,
-  documents,
-  onDocumentDelete,
 }) => {
-  const processedDocs = (documents || []).filter(
-    (d) => d.status === 'processed' || d.status === 'embedded'
-  );
   const webEnabled = ragSettings?.enableWebSearch !== false;
-  const docsEnabled = ragSettings?.enableDocumentSearch !== false;
 
   const handleWebToggle = (enabled: boolean) => {
     if (onRagSettingsChange && ragSettings) {
       onRagSettingsChange({
         ...ragSettings,
         enableWebSearch: enabled,
-      });
-    }
-  };
-
-  const handleDocsToggle = (enabled: boolean) => {
-    if (onRagSettingsChange && ragSettings) {
-      onRagSettingsChange({
-        ...ragSettings,
-        enableDocumentSearch: enabled,
-      });
-    }
-  };
-
-  const handleDocumentSelectionChange = (ids: string[]) => {
-    if (onRagSettingsChange && ragSettings) {
-      onRagSettingsChange({
-        ...ragSettings,
-        enableDocumentSearch: true,
-        documentIds: ids.length > 0 ? ids : undefined,
       });
     }
   };
@@ -123,12 +98,6 @@ export const ChatInputArea: React.FC<
             onDismissUpload={onDismissUpload}
             webEnabled={webEnabled}
             onWebToggle={handleWebToggle}
-            docsEnabled={docsEnabled}
-            onDocsToggle={handleDocsToggle}
-            processedDocs={processedDocs}
-            selectedDocIds={ragSettings?.documentIds || []}
-            onDocSelectionChange={handleDocumentSelectionChange}
-            onDocumentDelete={onDocumentDelete}
           />
         </div>
       </div>
@@ -165,12 +134,6 @@ export const ChatInputArea: React.FC<
           onDismissUpload={onDismissUpload}
           webEnabled={webEnabled}
           onWebToggle={handleWebToggle}
-          docsEnabled={docsEnabled}
-          onDocsToggle={handleDocsToggle}
-          processedDocs={processedDocs}
-          selectedDocIds={ragSettings?.documentIds || []}
-          onDocSelectionChange={handleDocumentSelectionChange}
-          onDocumentDelete={onDocumentDelete}
         />
       </div>
     </div>

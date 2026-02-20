@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Send, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, Globe, Paperclip } from 'lucide-react';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
-import { DocumentQuickSelect } from './document-quick-select';
-import type { DocumentItem } from '@/lib/api';
+// Document quick-select retired in Phase 2 (v2 migration)
+// import { DocumentQuickSelect } from './document-quick-select';
+// import type { DocumentItem } from '@/lib/api';
 
 /** Accepted MIME types for document upload */
 const ACCEPTED_TYPES = [
@@ -101,18 +102,7 @@ interface ChatInputProps {
   webEnabled?: boolean;
   /** Toggle web search on/off */
   onWebToggle?: (enabled: boolean) => void;
-  /** Whether document search is enabled */
-  docsEnabled?: boolean;
-  /** Toggle document search on/off */
-  onDocsToggle?: (enabled: boolean) => void;
-  /** Processed documents available for search */
-  processedDocs?: DocumentItem[];
-  /** Currently selected document IDs for filtering */
-  selectedDocIds?: string[];
-  /** Callback when document selection changes */
-  onDocSelectionChange?: (ids: string[]) => void;
-  /** Callback to delete a document */
-  onDocumentDelete?: (docId: string) => Promise<void>;
+
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -131,12 +121,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onDismissUpload,
   webEnabled,
   onWebToggle,
-  docsEnabled,
-  onDocsToggle,
-  processedDocs,
-  selectedDocIds,
-  onDocSelectionChange,
-  onDocumentDelete,
 }) => {
   const { isMobile } = useMobile();
   const [message, setMessage] = useState('');
@@ -531,32 +515,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <span>{webEnabled ? 'Web ✓' : 'Web'}</span>
               </button>
             )}
-            {onDocsToggle && (
-              <button
-                type="button"
-                onClick={() => onDocsToggle(!docsEnabled)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
-                  docsEnabled
-                    ? 'border-orange-200 bg-orange-50 text-orange-600'
-                    : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                )}
-                aria-label={docsEnabled ? 'Disable doc search' : 'Enable doc search'}
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>{docsEnabled ? 'Docs ✓' : 'Docs'}</span>
-              </button>
-            )}
 
-            {/* Document selector pill */}
-            {processedDocs && processedDocs.length > 0 && onDocSelectionChange && (
-              <DocumentQuickSelect
-                documents={processedDocs}
-                selectedIds={selectedDocIds || []}
-                onSelectionChange={onDocSelectionChange}
-                onDelete={onDocumentDelete}
-              />
-            )}
           </div>
 
           <input

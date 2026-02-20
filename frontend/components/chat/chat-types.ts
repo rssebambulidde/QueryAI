@@ -6,7 +6,7 @@
  * a single location without circular dependencies.
  */
 
-import type { Source, QuestionResponse, Topic, DocumentItem } from '@/lib/api';
+import type { Source, QuestionResponse, Topic } from '@/lib/api';
 import type { Message, RegenerateOptions, MessageVersionSummary } from './chat-message';
 import type { StreamingState } from './streaming-controls';
 import type { QueryExpansionSettings } from '@/components/advanced/query-expansion-display';
@@ -223,14 +223,10 @@ export interface ChatInputAreaProps {
   activeQueueJobId?: string | null;
   /** Cancel active queue job */
   onCancelQueueJob?: () => void;
-  /** RAG settings for docs-only toggle and document selection */
+  /** RAG settings (web search toggle) */
   ragSettings?: RAGSettings;
   /** Callback to update RAG settings */
   onRagSettingsChange?: (settings: RAGSettings) => void;
-  /** Available documents for quick-select picker */
-  documents?: DocumentItem[];
-  /** Callback to delete a document */
-  onDocumentDelete?: (docId: string) => Promise<void>;
 }
 
 export interface SourcesSidebarProps {

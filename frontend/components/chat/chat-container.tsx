@@ -4,14 +4,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Download } from 'lucide-react';
 import type { Message, MessageVersionSummary } from './chat-message';
 import type { RAGSettings } from './rag-source-selector';
-import { aiApi, conversationApi, topicApi, documentApi, searchApi, queueApi, QuestionRequest, Source } from '@/lib/api';
+import { aiApi, conversationApi, searchApi, queueApi, QuestionRequest, Source } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { useFilterStore } from '@/lib/store/filter-store';
 import { useAuthStore } from '@/lib/store/auth-store';
 import type { UnifiedFilters } from './unified-filter-panel';
 import { useMobile } from '@/lib/hooks/use-mobile';
-import { ResearchModeBanner } from './research-mode-banner';
+// Topic/document UI retired in Phase 2 (v2 migration)
+// import { ResearchModeBanner } from './research-mode-banner';
 import { ResearchSessionSummaryModal } from './research-session-summary-modal';
 import type { StreamingState } from './streaming-controls';
 import { CitationSettings } from './citation-settings';
@@ -27,7 +28,8 @@ import { ChatErrorBoundary } from './chat-error-boundary';
 import { ConversationExportDialog } from './conversation-export-dialog';
 // Chat shortcut UI removed from this component
 import { useChatSend } from '@/lib/hooks/useChatSend';
-import { useDocumentUpload } from '@/lib/hooks/use-document-upload';
+// Document upload retired in Phase 2 (v2 migration)
+// import { useDocumentUpload } from '@/lib/hooks/use-document-upload';
 import type { UploadStatus } from './chat-types';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -88,16 +90,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   } = useConversationStore();
   const { unifiedFilters, setUnifiedFilters, selectedTopic, setSelectedTopic } = useFilterStore();
 
-  // RAG settings (prop-controlled or localStorage)
+  // RAG settings — document search always disabled (Phase 2)
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
-    if (propRagSettings) return propRagSettings;
+    if (propRagSettings) return { ...propRagSettings, enableDocumentSearch: false };
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ragSettings');
       if (saved) {
-        try { return JSON.parse(saved); } catch { /* use defaults */ }
+        try { return { ...JSON.parse(saved), enableDocumentSearch: false }; } catch { /* use defaults */ }
       }
     }
-    return { enableDocumentSearch: true, enableWebSearch: true, maxDocumentChunks: 5, minScore: 0.5, maxWebResults: 5 };
+    return { enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 5, minScore: 0.5, maxWebResults: 5 };
   });
 
   const [showResearchSummaryModal, setShowResearchSummaryModal] = useState(false);
@@ -105,103 +107,36 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   const [isExportOpen, setIsExportOpen] = useState(false);
   
   const [dynamicStarters, setDynamicStarters] = useState<string[] | null>(null);
-  const [documentInfo, setDocumentInfo] = useState<{ totalCount: number; processedCount: number; processingCount: number }>({ totalCount: 0, processedCount: 0, processingCount: 0 });
-  const [documents, setDocuments] = useState<import('@/lib/api').DocumentItem[]>([]);
+  // Document state retired in Phase 2 (v2 migration)
   const [inlineUploadStatus, setInlineUploadStatus] = useState<UploadStatus | null>(null);
   const [lastUploadFile, setLastUploadFile] = useState<File | null>(null);
   const conversationLoadRequestRef = useRef(0);
 
-  // ── Document drag-and-drop upload ──────────────────────────────────────
+  // ── Document drag-and-drop upload (retired in Phase 2) ────────────────
 
-  const { uploadFile, cancelUpload } = useDocumentUpload({
-    topicId: selectedTopic?.id,
-    onProgress: (progress) => {
-      setInlineUploadStatus((prev) => prev ? { ...prev, progress } : { fileName: '', progress, status: 'uploading' });
-    },
-    onSuccess: (document) => {
-      setInlineUploadStatus((prev) => prev ? { ...prev, status: 'completed', progress: 100 } : null);
-      // Auto-include uploaded document in next query context
-      if (document && document.id) {
-        const docId = document.id;
-        if (docId) {
-          setRagSettings((prev) => ({
-            ...prev,
-            enableDocumentSearch: true,
-            documentIds: Array.from(new Set([...(prev.documentIds || []), docId])) as string[],
-          }));
-        }
-      }
-      setTimeout(() => setInlineUploadStatus(null), 3000);
-      toast.success('Document uploaded — it will be available for search shortly');
-    },
-    onError: (err) => {
-      setInlineUploadStatus((prev) => prev ? { ...prev, status: 'error', error: err.message } : null);
-    },
-  });
-
-  const handleFilesDrop = async (files: File[]) => {
-    for (const file of files) {
-      setInlineUploadStatus({ fileName: file.name, progress: 0, status: 'uploading' });
-      setLastUploadFile(file);
-      try {
-        await uploadFile(file);
-      } catch {
-        // Error handled by onError callback
-      }
-    }
+  const handleFilesDrop = async (_files: File[]) => {
+    // Document upload retired in Phase 2
   };
 
   // Handle file selection from ChatInput
-  const handleFileSelect = async (file: File) => {
-    setInlineUploadStatus({ fileName: file.name, progress: 0, status: 'uploading' });
-    setLastUploadFile(file);
-    try {
-      await uploadFile(file);
-    } catch {
-      // Error handled by onError callback
-    }
+  const handleFileSelect = async (_file: File) => {
+    // Document upload retired in Phase 2
   };
 
   // Cancel current upload
   const handleCancelUpload = () => {
-    if (inlineUploadStatus?.status === 'uploading') {
-      // Cancel via abort (hook will handle cleanup)
-      cancelUpload('inline-upload');
-      setInlineUploadStatus(null);
-      setLastUploadFile(null);
-    }
+    setInlineUploadStatus(null);
+    setLastUploadFile(null);
   };
 
   // Retry failed upload
   const handleRetryUpload = async () => {
-    if (lastUploadFile && inlineUploadStatus?.status === 'error') {
-      setInlineUploadStatus({ fileName: lastUploadFile.name, progress: 0, status: 'uploading' });
-      try {
-        await uploadFile(lastUploadFile);
-      } catch {
-        // Error handled by onError callback
-      }
-    }
+    // Document upload retired in Phase 2
   };
 
   // Handle multiple files selection
-  const handleFilesSelect = async (files: File[]) => {
-    // Upload files sequentially (first one shows progress)
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      setInlineUploadStatus({ 
-        fileName: file.name + (files.length > 1 ? ` (${i + 1}/${files.length})` : ''), 
-        progress: 0, 
-        status: 'uploading' 
-      });
-      setLastUploadFile(file);
-      try {
-        await uploadFile(file);
-      } catch {
-        // Error handled by onError callback
-        break; // Stop on first error
-      }
-    }
+  const handleFilesSelect = async (_files: File[]) => {
+    // Document upload retired in Phase 2
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -286,41 +221,17 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     if (propRagSettings) setRagSettings(propRagSettings);
   }, [propRagSettings]);
 
-  // Fetch dynamic starters when entering research mode
+  // Fetch dynamic starters (disabled — topics retired in Phase 2)
   useEffect(() => {
-    if (!selectedTopic?.id) { setDynamicStarters(null); return; }
-    let cancelled = false;
-    aiApi.suggestedStarters(selectedTopic.id)
-      .then((r) => { if (!cancelled && r.success && r.data?.starters?.length) setDynamicStarters(r.data.starters); })
-      .catch(() => { if (!cancelled) setDynamicStarters(null); });
-    return () => { cancelled = true; };
-  }, [selectedTopic?.id]);
+    setDynamicStarters(null);
+  }, []);
 
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isStreaming]);
 
-  // Topic-change messages
-  const prevTopicIdRef = useRef<string | null | undefined>(undefined);
-  useEffect(() => {
-    const nextId = selectedTopic?.id ?? null;
-    if (prevTopicIdRef.current === undefined) { prevTopicIdRef.current = nextId; return; }
-    if (prevTopicIdRef.current === nextId) return;
-    const prev = prevTopicIdRef.current;
-    if (prev !== null && nextId === null) {
-      setMessages((m) => [
-        ...m,
-        { id: `topic-change-${Date.now()}`, role: 'assistant', content: 'Research mode has been disabled. You can ask about any topic.', timestamp: new Date(), isTopicChangeMessage: true },
-      ]);
-    } else if (prev !== null && nextId !== null && selectedTopic) {
-      setMessages((m) => [
-        ...m,
-        { id: `topic-change-${Date.now()}`, role: 'assistant', content: `Research topic is now: **${selectedTopic.name}**. I'll focus on that from here.`, timestamp: new Date(), isTopicChangeMessage: true },
-      ]);
-    }
-    prevTopicIdRef.current = nextId;
-  }, [selectedTopic]);
+  // Topic-change messages (disabled — topics retired in Phase 2)
 
   // Load conversation data
   useEffect(() => {
@@ -338,18 +249,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           const conversationResponse = await conversationApi.get(currentConversationId);
           if (!isStale() && conversationResponse.success && conversationResponse.data) {
             const conversation = conversationResponse.data;
-            let loadedTopic = null;
-            if (conversation.topic_id) {
-              try {
-                const topicResponse = await topicApi.get(conversation.topic_id);
-                if (!isStale() && topicResponse.success && topicResponse.data) { loadedTopic = topicResponse.data; setSelectedTopic(loadedTopic); }
-              } catch (err) { if (!isStale()) { console.error('Failed to load topic:', err); setSelectedTopic(null); } }
-            } else if (!isStale()) { setSelectedTopic(null); }
+            // Topic hydration retired in Phase 2
+            if (!isStale()) { setSelectedTopic(null); }
             const oldFilters = conversation.metadata?.filters || {};
             if (!isStale()) {
               setUnifiedFilters({
-                topicId: loadedTopic?.id || null,
-                topic: loadedTopic,
+                topicId: null,
+                topic: null,
                 keyword: oldFilters.topic,
                 timeRange: oldFilters.timeRange,
                 startDate: oldFilters.startDate,
@@ -389,24 +295,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     }
   }, [ragSettings, propRagSettings]);
 
-  // Load document count for search status display
-  useEffect(() => {
-    const loadDocumentInfo = async () => {
-      try {
-        const response = await documentApi.list();
-        if (response.success && response.data) {
-          const docs = response.data;
-          const processed = docs.filter((d) => d.status === 'processed' || d.status === 'embedded');
-          const processing = docs.filter((d) => d.status === 'processing' || d.status === 'embedding' || d.status === 'extracted');
-          setDocumentInfo({ totalCount: docs.length, processedCount: processed.length, processingCount: processing.length });
-          setDocuments(docs);
-        }
-      } catch (err) { console.error('Failed to load document info:', err); }
-    };
-    loadDocumentInfo();
-    const interval = setInterval(loadDocumentInfo, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Document count loading retired in Phase 2
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Handlers
@@ -592,29 +481,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     setIsLoading(false);
   };
 
-  const handleDocumentDelete = async (docId: string) => {
-    try {
-      const response = await documentApi.delete(docId);
-      if (response.success) {
-        setDocuments((prev) => prev.filter((d) => (d.id || d.path) !== docId));
-        setDocumentInfo((prev) => {
-          if (!prev) return prev;
-          const deleted = documents.find((d) => (d.id || d.path) === docId);
-          const wasProcessed = deleted && (deleted.status === 'processed' || deleted.status === 'embedded');
-          return {
-            totalCount: prev.totalCount - 1,
-            processedCount: wasProcessed ? prev.processedCount - 1 : prev.processedCount,
-            processingCount: prev.processingCount,
-          };
-        });
-        toast.success('Document deleted');
-      }
-    } catch (err) {
-      console.error('Failed to delete document:', err);
-      toast.error('Failed to delete document');
-      throw err;
-    }
-  };
+  // handleDocumentDelete retired in Phase 2
 
   /** Intercepts /search and /queue commands, otherwise delegates to the send hook */
   const handleUserInput = async (content: string) => {
@@ -691,7 +558,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   return (
     <div className="flex flex-col h-full bg-white">
-      <ResearchModeBanner onExit={handleExitResearchMode} />
+      {/* ResearchModeBanner retired in Phase 2 */}
 
       {/* Empty state */}
       {isEmpty && (
@@ -705,7 +572,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           isStreaming={isStreaming}
           onOpenCitationSettings={() => setIsCitationSettingsOpen(true)}
           welcomeGreeting={welcomeGreeting}
-          documentInfo={documentInfo}
           onFilesDrop={handleFilesDrop}
           uploadStatus={inlineUploadStatus}
           onDismissUpload={() => { setInlineUploadStatus(null); setLastUploadFile(null); }}
@@ -713,14 +579,11 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           onFilesSelect={handleFilesSelect}
           onCancelUpload={handleCancelUpload}
           onRetryUpload={handleRetryUpload}
-          showQueueOption={documentInfo.processedCount >= 20 || !!selectedTopic}
           onSendToQueue={handleQueueSend}
           activeQueueJobId={activeQueueJobId}
           onCancelQueueJob={handleCancelQueueJob}
           ragSettings={ragSettings}
           onRagSettingsChange={setRagSettings}
-          documents={documents}
-          onDocumentDelete={handleDocumentDelete}
         />
       )}
 
@@ -790,7 +653,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             isLoading={isLoading}
             isStreaming={isStreaming}
             onOpenCitationSettings={() => setIsCitationSettingsOpen(true)}
-            documentInfo={documentInfo}
             onFilesDrop={handleFilesDrop}
             uploadStatus={inlineUploadStatus}
             onDismissUpload={() => { setInlineUploadStatus(null); setLastUploadFile(null); }}
@@ -798,13 +660,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             onFilesSelect={handleFilesSelect}
             onCancelUpload={handleCancelUpload}
             onRetryUpload={handleRetryUpload}
-            showQueueOption={documentInfo.processedCount >= 20 || !!selectedTopic}
             onSendToQueue={handleQueueSend}
             activeQueueJobId={activeQueueJobId}
             onCancelQueueJob={handleCancelQueueJob}          ragSettings={ragSettings}
           onRagSettingsChange={setRagSettings}
-          documents={documents}
-          onDocumentDelete={handleDocumentDelete}
           />
         </>
       )}
