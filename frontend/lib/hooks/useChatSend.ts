@@ -323,6 +323,10 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
                 assistantMessage = { ...assistantMessage, sources: streamSources };
                 assistantMsgRef.current = assistantMessage;
                 setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+                // Dispatch event to refresh sources panel
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('sourcesUpdated'));
+                }
               }
               continue;
             }
@@ -359,6 +363,10 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
 
           assistantMessage = { ...assistantMessage, followUpQuestions, isStreaming: false, isRefusal: isRefusal || undefined, qualityScore, sources: streamSources || assistantMessage.sources };
           setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+          // Dispatch event to refresh sources panel if sources were present
+          if ((streamSources || assistantMessage.sources) && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('sourcesUpdated'));
+          }
 
           setIsStreaming(false);
           setIsLoading(false);
@@ -430,6 +438,10 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
               responseTime: fallbackTime || undefined,
             };
             setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMsg; return u; });
+            // Dispatch event to refresh sources panel if sources were present
+            if (fallbackResponse.data.sources && typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('sourcesUpdated'));
+            }
             setIsLoading(false);
             responseTimeStartRef.current = null;
 

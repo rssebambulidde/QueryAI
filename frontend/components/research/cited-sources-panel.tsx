@@ -52,6 +52,12 @@ export const CitedSourcesPanel: React.FC<CitedSourcesPanelProps> = ({
 
   useEffect(() => {
     loadSources();
+    // Listen for global sourcesUpdated event to reload sources
+    const handler = () => loadSources();
+    window.addEventListener('sourcesUpdated', handler);
+    return () => {
+      window.removeEventListener('sourcesUpdated', handler);
+    };
   }, [loadSources]);
 
   useEffect(() => {
