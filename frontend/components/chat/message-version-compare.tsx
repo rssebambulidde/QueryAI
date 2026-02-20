@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { X, ChevronLeft, ChevronRight, Globe, FileText } from 'lucide-react';
+import { getMarkdownComponents } from '@/lib/utils/markdown-components';
+import { X, ChevronLeft, ChevronRight, Globe, FileText, Eye, GitCompare } from 'lucide-react';
 import type { MessageVersionSummary } from './chat-message';
 
 // ─── Diff helpers ─────────────────────────────────────────────────────────────
@@ -181,6 +184,7 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
 
   const [leftIdx, setLeftIdx] = useState(initialLeft ?? 0);
   const [rightIdx, setRightIdx] = useState(initialRight ?? sorted.length - 1);
+  const [viewMode, setViewMode] = useState<'formatted' | 'changes'>('formatted');
 
   const leftVersion = sorted[leftIdx];
   const rightVersion = sorted[rightIdx];
@@ -207,13 +211,42 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
               <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{stats.similarity}% similar</span>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-            aria-label="Close comparison"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* View mode toggle */}
+            <div className="flex items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+              <button
+                onClick={() => setViewMode('formatted')}
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                  viewMode === 'formatted'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700',
+                )}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Formatted
+              </button>
+              <button
+                onClick={() => setViewMode('changes')}
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                  viewMode === 'changes'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700',
+                )}
+              >
+                <GitCompare className="w-3.5 h-3.5" />
+                Changes
+              </button>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+              aria-label="Close comparison"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Version selectors */}
@@ -241,20 +274,39 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
 
         {/* Diff panes */}
         <div className="flex-1 overflow-hidden grid grid-cols-2 divide-x divide-gray-200">
-          <DiffPane
-            segments={leftDiff}
-            label={`v${leftVersion.version}`}
-            model={leftVersion.metadata?.model}
-            date={leftVersion.created_at}
-            colorScheme="removed"
-          />
-          <DiffPane
-            segments={rightDiff}
-            label={`v${rightVersion.version}`}
-            model={rightVersion.metadata?.model}
-            date={rightVersion.created_at}
-            colorScheme="added"
-          />
+          {viewMode === 'changes' ? (
+            <>
+              <DiffPane
+                segments={leftDiff}
+                label={`v${leftVersion.version}`}
+                model={leftVersion.metadata?.model}
+                date={leftVersion.created_at}
+                colorScheme="removed"
+              />
+              <DiffPane
+                segments={rightDiff}
+                label={`v${rightVersion.version}`}
+                model={rightVersion.metadata?.model}
+                date={rightVersion.created_at}
+                colorScheme="added"
+              />
+            </>
+          ) : (
+            <>
+              <FormattedPane
+                content={leftVersion.content}
+                label={`v${leftVersion.version}`}
+                model={leftVersion.metadata?.model}
+                date={leftVersion.created_at}
+              />
+              <FormattedPane
+                content={rightVersion.content}
+                label={`v${rightVersion.version}`}
+                model={rightVersion.metadata?.model}
+                date={rightVersion.created_at}
+              />
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -345,6 +397,38 @@ function DiffPane({
             {seg.text}{' '}
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** Markdown-rendered pane for the "Formatted" view mode. */
+function FormattedPane({
+  content,
+  label,
+  model,
+  date,
+}: {
+  content: string;
+  label: string;
+  model?: string;
+  date?: string;
+}) {
+  const mdComponents = useMemo(() => getMarkdownComponents(false), []);
+
+  return (
+    <div className="flex flex-col min-h-0">
+      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-100">
+        <span className="text-sm font-semibold text-gray-700">{label}</span>
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          {model && <span>{model}</span>}
+          {date && <span>{new Date(date).toLocaleString()}</span>}
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 text-sm leading-relaxed text-gray-800 prose prose-sm max-w-none">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+          {content}
+        </ReactMarkdown>
       </div>
     </div>
   );
