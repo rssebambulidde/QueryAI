@@ -102,7 +102,8 @@ interface ChatInputProps {
   webEnabled?: boolean;
   /** Toggle web search on/off */
   onWebToggle?: (enabled: boolean) => void;
-
+  /** Conversation mode — chat mode hides pills/attach. */
+  mode?: 'research' | 'chat';
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -121,7 +122,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onDismissUpload,
   webEnabled,
   onWebToggle,
+  mode,
 }) => {
+  const isChatMode = mode === 'chat';
   const { isMobile } = useMobile();
   const [message, setMessage] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -475,7 +478,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             aria-label="Message input"
           />
 
-          {/* Source control pills row */}
+          {/* Source control pills row — hidden in chat mode */}
+          {!isChatMode && (
           <div className="flex items-center gap-2 px-3 pb-2.5 flex-wrap">
             {/* Attach pill */}
             <button
@@ -517,6 +521,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             )}
 
           </div>
+          )}
 
           <input
             ref={fileInputRef}

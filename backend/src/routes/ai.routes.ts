@@ -303,6 +303,11 @@ router.post(
       // Post-stream processing
       if (request.mode === 'chat') {
         // Chat mode: save messages, skip quality scoring / citation validation
+        // Still emit follow-ups if the structured output included them
+        if (structuredMeta?.followUpQuestions && structuredMeta.followUpQuestions.length > 0) {
+          res.write(StreamingService.formatSSEMessage('followUpQuestions', { questions: structuredMeta.followUpQuestions }));
+        }
+
         if (request.conversationId && userId) {
           try {
             const { ConversationService } = await import('../services/conversation.service');

@@ -144,6 +144,8 @@ export interface ChatMessageListProps {
   isMobile: boolean;
   /** Current conversation ID for citation click-through tracking. */
   conversationId?: string;
+  /** Conversation mode — controls which UI elements are shown per message. */
+  mode?: 'research' | 'chat';
   // Advanced features
   lastResponseData: LastResponseData | null;
   queryExpansionEnabled: boolean;
@@ -227,6 +229,8 @@ export interface ChatInputAreaProps {
   ragSettings?: RAGSettings;
   /** Callback to update RAG settings */
   onRagSettingsChange?: (settings: RAGSettings) => void;
+  /** Conversation mode — controls which input controls are shown. */
+  mode?: 'research' | 'chat';
 }
 
 export interface SourcesSidebarProps {

@@ -95,12 +95,15 @@ interface ChatMessageProps {
   topicId?: string;
   /** Called when user flags a citation from within the message. */
   onFlagCitation?: (messageId: string, sourceUrl: string, sourceTitle: string) => void;
+  /** Conversation mode — chat mode hides citations, sources, regenerate. */
+  mode?: 'research' | 'chat';
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, topicId, onFlagCitation }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, topicId, onFlagCitation, mode }) => {
   const { isMobile } = useMobile();
   const isUser = message.role === 'user';
-  const hasSources = message.sources && message.sources.length > 0;
+  const isChatMode = mode === 'chat';
+  const hasSources = !isChatMode && message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [isHovered, setIsHovered] = useState(false);
@@ -407,7 +410,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               {!isUser && !isStreaming && !message.isStreaming && message.qualityScore !== undefined && (
                 <ConfidenceBadge score={message.qualityScore} />
               )}
-              {!isUser && !isStreaming && !message.isStreaming && citationCount > 0 && (
+              {!isUser && !isStreaming && !message.isStreaming && citationCount > 0 && !isChatMode && (
                 <button
                   onClick={() => onOpenSources?.(message.sources ?? [], '')}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-medium leading-tight hover:bg-blue-100 transition-colors"
@@ -485,8 +488,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   </button>
                 </div>
               )}
-              {/* Regenerate button for assistant messages */}
-              {!isUser && onRegenerate && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
+              {/* Regenerate button for assistant messages — hidden in chat mode */}
+              {!isUser && onRegenerate && !isChatMode && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
                 <div className="relative">
                   <div className="flex items-center">
                     <button
@@ -626,8 +629,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   {flaggedCitations.length} flagged
                 </span>
               )}
-              {/* Flag citation button — visible when message has sources */}
-              {message.sources && message.sources.length > 0 && (
+              {/* Flag citation button — visible when message has sources and not chat mode */}
+              {!isChatMode && message.sources && message.sources.length > 0 && (
                 <div className="relative">
                   <button
                     onClick={() => setShowFlagMenu(!showFlagMenu)}

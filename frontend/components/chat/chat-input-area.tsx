@@ -39,7 +39,9 @@ export const ChatInputArea: React.FC<
   onCancelQueueJob,
   ragSettings,
   onRagSettingsChange,
+  mode,
 }) => {
+  const isChatMode = mode === 'chat';
   const webEnabled = ragSettings?.enableWebSearch !== false;
 
   const handleWebToggle = (enabled: boolean) => {
@@ -73,19 +75,20 @@ export const ChatInputArea: React.FC<
           <ChatInput
             onSend={onSend}
             disabled={disabled}
-            placeholder="Ask me anything..."
-            showQueueOption={showQueueOption}
-            onSendToQueue={onSendToQueue}
+            placeholder={isChatMode ? 'Type a message...' : 'Ask me anything...'}
+            showQueueOption={isChatMode ? false : showQueueOption}
+            onSendToQueue={isChatMode ? undefined : onSendToQueue}
             activeQueueJobId={activeQueueJobId}
             onCancelQueueJob={onCancelQueueJob}
-            onFileSelect={onFileSelect}
-            onFilesSelect={onFilesSelect}
-            uploadStatus={uploadStatus}
-            onCancelUpload={onCancelUpload}
-            onRetryUpload={onRetryUpload}
-            onDismissUpload={onDismissUpload}
-            webEnabled={webEnabled}
-            onWebToggle={handleWebToggle}
+            onFileSelect={isChatMode ? undefined : onFileSelect}
+            onFilesSelect={isChatMode ? undefined : onFilesSelect}
+            uploadStatus={isChatMode ? null : uploadStatus}
+            onCancelUpload={isChatMode ? undefined : onCancelUpload}
+            onRetryUpload={isChatMode ? undefined : onRetryUpload}
+            onDismissUpload={isChatMode ? undefined : onDismissUpload}
+            webEnabled={isChatMode ? undefined : webEnabled}
+            onWebToggle={isChatMode ? undefined : handleWebToggle}
+            mode={mode}
           />
         </div>
       </div>
@@ -99,19 +102,20 @@ export const ChatInputArea: React.FC<
         <ChatInput
           onSend={onSend}
           disabled={disabled}
-          placeholder="Ask me anything..."
-          showQueueOption={showQueueOption}
-          onSendToQueue={onSendToQueue}
+          placeholder={isChatMode ? 'Type a message...' : 'Ask me anything...'}
+          showQueueOption={isChatMode ? false : showQueueOption}
+          onSendToQueue={isChatMode ? undefined : onSendToQueue}
           activeQueueJobId={activeQueueJobId}
           onCancelQueueJob={onCancelQueueJob}
-          onFileSelect={onFileSelect}
-          onFilesSelect={onFilesSelect}
-          uploadStatus={uploadStatus}
-          onCancelUpload={onCancelUpload}
-          onRetryUpload={onRetryUpload}
-          onDismissUpload={onDismissUpload}
-          webEnabled={webEnabled}
-          onWebToggle={handleWebToggle}
+          onFileSelect={isChatMode ? undefined : onFileSelect}
+          onFilesSelect={isChatMode ? undefined : onFilesSelect}
+          uploadStatus={isChatMode ? null : uploadStatus}
+          onCancelUpload={isChatMode ? undefined : onCancelUpload}
+          onRetryUpload={isChatMode ? undefined : onRetryUpload}
+          onDismissUpload={isChatMode ? undefined : onDismissUpload}
+          webEnabled={isChatMode ? undefined : webEnabled}
+          onWebToggle={isChatMode ? undefined : handleWebToggle}
+          mode={mode}
         />
       </div>
     </div>

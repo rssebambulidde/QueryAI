@@ -41,6 +41,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   error,
   selectedTopic,
   isMobile,
+  mode,
   conversationId,
   // Advanced features
   lastResponseData,
@@ -209,6 +210,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                   onCompareVersions={onCompareVersions}
                   conversationId={conversationId}
                   topicId={selectedTopic?.id}
+                  mode={mode}
                 />
 
                 {/* Advanced features after the last assistant message */}

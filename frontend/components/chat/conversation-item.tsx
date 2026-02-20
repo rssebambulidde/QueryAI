@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Conversation } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Trash2, Edit2, Check, X, Folder, MoreVertical, Pin } from 'lucide-react';
+import { Trash2, Edit2, Check, X, Folder, MoreVertical, Pin, Search, MessageCircle } from 'lucide-react';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
@@ -142,6 +142,13 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
           {/* Pin indicator */}
           {isPinned && (
             <Pin className="w-3 h-3 text-gray-400 fill-gray-400 flex-shrink-0" />
+          )}
+
+          {/* Mode indicator */}
+          {conversation.mode === 'chat' ? (
+            <span title="General Chat"><MessageCircle className="w-3 h-3 text-purple-400 flex-shrink-0" /></span>
+          ) : (
+            <span title="Deep Research"><Search className="w-3 h-3 text-blue-400 flex-shrink-0" /></span>
           )}
 
           {/* Title — primary content, clean and simple */}

@@ -507,6 +507,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       {isEmpty && conversationMode !== null && (
         <ChatInputArea
           variant="empty"
+          mode={conversationMode}
           onSend={(msg) => handleUserInput(msg)}
           disabled={isLoading || isStreaming}
           selectedTopic={selectedTopic}
@@ -554,6 +555,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
                 error={error}
                 selectedTopic={selectedTopic}
                 isMobile={isMobile}
+                mode={conversationMode || 'research'}
                 conversationId={currentConversationId ?? undefined}
                 lastResponseData={lastResponseData}
                 queryExpansionEnabled={queryExpansionEnabled}
@@ -589,6 +591,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
           <ChatInputArea
             variant="conversation"
+            mode={conversationMode || 'research'}
             onSend={(msg) => handleUserInput(msg)}
             disabled={isLoading || isStreaming}
             selectedTopic={selectedTopic}
