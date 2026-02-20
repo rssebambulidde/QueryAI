@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Globe, FileText } from 'lucide-react';
 import type { MessageVersionSummary } from './chat-message';
 
 // ─── Diff helpers ─────────────────────────────────────────────────────────────
@@ -234,6 +234,11 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
           />
         </div>
 
+        {/* Source comparison */}
+        {(leftVersion.sources?.length || rightVersion.sources?.length) ? (
+          <SourceComparison left={leftVersion} right={rightVersion} />
+        ) : null}
+
         {/* Diff panes */}
         <div className="flex-1 overflow-hidden grid grid-cols-2 divide-x divide-gray-200">
           <DiffPane
@@ -340,6 +345,62 @@ function DiffPane({
             {seg.text}{' '}
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function SourceComparison({ left, right }: { left: MessageVersionSummary; right: MessageVersionSummary }) {
+  const leftSources = left.sources || [];
+  const rightSources = right.sources || [];
+  const leftUrls = new Set(leftSources.map((s) => s.url || s.title));
+  const rightUrls = new Set(rightSources.map((s) => s.url || s.title));
+
+  const commonCount = leftSources.filter((s) => rightUrls.has(s.url || s.title)).length;
+  const leftOnly = leftSources.filter((s) => !rightUrls.has(s.url || s.title));
+  const rightOnly = rightSources.filter((s) => !leftUrls.has(s.url || s.title));
+
+  const leftOption = left.metadata?.regenerateOptions;
+  const rightOption = right.metadata?.regenerateOptions;
+
+  const getOptionLabel = (opts: any): string | null => {
+    if (!opts) return null;
+    if (opts.maxDocumentChunks > 5 || opts.maxSearchResults > 5) return 'More sources';
+    if (opts.temperature <= 0.3 && opts.maxTokens <= 600) return 'Shorter & precise';
+    if (opts.temperature >= 0.9 && opts.maxTokens >= 4096) return 'Longer & creative';
+    return null;
+  };
+
+  return (
+    <div className="px-5 py-2 bg-gray-50 border-b border-gray-100">
+      <div className="flex items-center gap-4 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500 font-medium">Sources:</span>
+          <span className="text-gray-600">v{left.version}: {leftSources.length}</span>
+          <span className="text-gray-400">vs</span>
+          <span className="text-gray-600">v{right.version}: {rightSources.length}</span>
+          {commonCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">{commonCount} shared</span>
+          )}
+          {leftOnly.length > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-600">{leftOnly.length} only in v{left.version}</span>
+          )}
+          {rightOnly.length > 0 && (
+            <span className="px-1.5 py-0.5 rounded bg-green-50 text-green-600">{rightOnly.length} only in v{right.version}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 ml-auto">
+          {leftOption && getOptionLabel(leftOption) && (
+            <span className="px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-200">
+              v{left.version}: {getOptionLabel(leftOption)}
+            </span>
+          )}
+          {rightOption && getOptionLabel(rightOption) && (
+            <span className="px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-200">
+              v{right.version}: {getOptionLabel(rightOption)}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
