@@ -50,10 +50,11 @@ router.post(
 
     // Validate mode if provided
     if (mode && !['research', 'chat'].includes(mode)) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: { message: "Invalid mode. Must be 'research' or 'chat'." },
       });
+      return;
     }
 
     const conversation = await ConversationService.createConversation({
