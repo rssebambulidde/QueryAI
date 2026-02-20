@@ -456,7 +456,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-center gap-2">
         {/* Input container with source controls inside */}
         <div 
           ref={inputContainerRef}
@@ -505,22 +505,38 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <span>Attach</span>
             </button>
 
-            {/* Web toggle pill */}
+            {/* Web / Docs toggle pills */}
             {onDocsOnlyToggle && (
-              <button
-                type="button"
-                onClick={() => onDocsOnlyToggle(!docsOnly)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
-                  docsOnly
-                    ? 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                    : 'border-blue-200 bg-blue-50 text-blue-600'
-                )}
-                aria-label={docsOnly ? 'Enable web search' : 'Disable web search'}
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span>{docsOnly ? '+ Web' : 'Web ✓'}</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => onDocsOnlyToggle(false)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
+                    !docsOnly
+                      ? 'border-blue-200 bg-blue-50 text-blue-600'
+                      : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                  )}
+                  aria-label="Enable web search"
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>{!docsOnly ? 'Web ✓' : 'Web'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDocsOnlyToggle(true)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
+                    docsOnly
+                      ? 'border-orange-200 bg-orange-50 text-orange-600'
+                      : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                  )}
+                  aria-label="Docs only mode"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>{docsOnly ? 'Docs ✓' : 'Docs'}</span>
+                </button>
+              </>
             )}
 
             {/* Document selector pill */}

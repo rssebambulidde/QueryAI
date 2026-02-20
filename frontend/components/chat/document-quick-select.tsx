@@ -63,12 +63,13 @@ export const DocumentQuickSelect: React.FC<DocumentQuickSelectProps> = ({
   };
 
   const getButtonLabel = () => {
-    if (selectedIds.length === 0) return 'All documents';
+    const total = documents.length;
+    if (selectedIds.length === 0) return `All documents (${total})`;
     if (selectedIds.length === 1) {
       const doc = documents.find((d) => (d.id || d.path) === selectedIds[0]);
       return doc?.name || '1 document';
     }
-    return `${selectedIds.length} documents`;
+    return `${selectedIds.length} of ${total} docs`;
   };
 
   if (documents.length === 0) {
@@ -83,8 +84,8 @@ export const DocumentQuickSelect: React.FC<DocumentQuickSelectProps> = ({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={cn(
-          'flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border transition-colors',
-          'min-h-[32px] max-w-[180px]',
+          'flex items-center gap-2 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
+          'min-h-[28px] max-w-[200px]',
           isOpen
             ? 'border-orange-300 bg-orange-50 text-orange-700'
             : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
