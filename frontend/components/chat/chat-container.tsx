@@ -498,7 +498,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       {/* ResearchModeBanner retired in Phase 2 */}
 
       {/* Empty state: mode selection or input */}
-      {isEmpty && conversationMode === null && (
+      {isEmpty && conversationMode === null && !currentConversationId && (
         <ModeSelector
           onSelectMode={(mode) => setConversationMode(mode)}
           welcomeGreeting={welcomeGreeting}
