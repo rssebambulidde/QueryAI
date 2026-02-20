@@ -52,7 +52,7 @@ router.post(
       enableSearch: rest.enableSearch !== false,
       topic: rest.topic?.trim(),
       maxSearchResults: rest.maxSearchResults ?? 5,
-      enableDocumentSearch: rest.enableDocumentSearch !== false,
+      enableDocumentSearch: false, // v2: document search disabled
       enableWebSearch: rest.enableWebSearch !== false,
       maxDocumentChunks: rest.maxDocumentChunks ?? 5,
     };
@@ -61,9 +61,7 @@ router.post(
       userId,
       questionLength: request.question.length,
       hasContext: !!request.context,
-      enableDocumentSearch: request.enableDocumentSearch,
       enableWebSearch: request.enableWebSearch,
-      topicId: request.topicId,
       useQueue: !!useQueue,
     });
 
@@ -92,8 +90,6 @@ router.post(
           priority: queuePriority,
           metadata: {
             conversationId: request.conversationId,
-            topicId: request.topicId,
-            documentIds: request.documentIds,
           },
         });
 
@@ -124,7 +120,6 @@ router.post(
       const { DatabaseService } = await import('../services/database.service');
       await DatabaseService.logUsage(userId, 'query', {
         question: request.question.substring(0, 200), // Truncate for storage
-        topicId: request.topicId,
         model: request.model || 'gpt-3.5-turbo',
         hasSources: result.sources && result.sources.length > 0,
       });
@@ -174,7 +169,7 @@ router.post(
       enableSearch: rest.enableSearch !== false,
       topic: rest.topic?.trim(),
       maxSearchResults: rest.maxSearchResults ?? 5,
-      enableDocumentSearch: rest.enableDocumentSearch !== false,
+      enableDocumentSearch: false, // v2: document search disabled
       enableWebSearch: rest.enableWebSearch !== false,
       maxDocumentChunks: rest.maxDocumentChunks ?? 5,
     };
@@ -183,9 +178,7 @@ router.post(
       userId,
       questionLength: request.question.length,
       hasContext: !!request.context,
-      enableDocumentSearch: request.enableDocumentSearch,
       enableWebSearch: request.enableWebSearch,
-      topicId: request.topicId,
     });
 
     // Set headers for Server-Sent Events (SSE)
@@ -225,69 +218,7 @@ router.post(
         }
       }
 
-      // Off-topic pre-check (before RAG): skip RAG and stream refusal when enabled (8.x, 13.1)
-      let topicName: string | undefined;
-      let topicDescription: string | undefined;
-      let topicScopeConfig: any;
-      if (request.topicId && userId) {
-        try {
-          const { TopicService } = await import('../services/topic.service');
-          const topic = await TopicService.getTopic(request.topicId, userId);
-          if (topic) {
-            topicName = topic.name;
-            topicDescription = topic.description ?? undefined;
-            topicScopeConfig = topic.scope_config ?? null;
-          }
-        } catch (topicErr: any) {
-          logger.warn('Failed to fetch topic for off-topic pre-check', {
-            topicId: request.topicId,
-            error: topicErr?.message,
-          });
-        }
-      }
-      const preCheckEnabled =
-        !!topicName &&
-        process.env.ENABLE_OFF_TOPIC_PRE_CHECK !== 'false' &&
-        topicScopeConfig?.enable_off_topic_pre_check !== false;
-      if (preCheckEnabled) {
-        const onTopic = await AIService.runOffTopicPreCheck(
-          request.question,
-          topicName!,
-          topicDescription,
-          topicScopeConfig
-        );
-        if (!onTopic) {
-          const refusal = AIService.getRefusalMessage(topicName!);
-          const followUp = AIService.getRefusalFollowUp(topicName!);
-          res.write(StreamingService.formatSSEMessage('chunk', refusal));
-          res.write(StreamingService.formatSSEMessage('followUpQuestions', { questions: [followUp], refusal: true }));
-          if (request.conversationId && userId) {
-            try {
-              const { ConversationService } = await import('../services/conversation.service');
-              const { MessageService } = await import('../services/message.service');
-              let conv = await ConversationService.getConversation(request.conversationId, userId);
-              let cid = request.conversationId;
-              if (!conv) {
-                conv = await ConversationService.createConversation({
-                  userId,
-                  title: ConversationService.generateTitleFromMessage(request.question),
-                  topicId: request.topicId,
-                });
-                cid = conv.id;
-              }
-              await MessageService.saveMessagePair(cid, request.question, refusal, [], {
-                followUpQuestions: [followUp],
-                isRefusal: true,
-              });
-            } catch (e: any) {
-              logger.warn('Failed to save refusal to conversation (streaming)', { error: e?.message });
-            }
-          }
-          res.write(StreamingService.formatSSEMessage('done', {}));
-          res.end();
-          return;
-        }
-      }
+      // v2: Off-topic pre-check removed (topics retired)
 
       // Retrieve RAG context first to get sources and avoid double retrieval
       let sources: any[] | undefined = undefined;
@@ -299,11 +230,7 @@ router.post(
           const { RAGService } = await import('../services/rag.service');
           const ragOptions: any = {
             userId,
-            // When specific documentIds are provided (e.g. docs-only mode), omit topicId
-            // so it doesn't double-filter vectors that may lack topicId metadata.
-            topicId: (request.documentIds && request.documentIds.length > 0) ? undefined : request.topicId,
-            documentIds: request.documentIds,
-            enableDocumentSearch: request.enableDocumentSearch !== false,
+            enableDocumentSearch: false, // v2: document search disabled
             enableWebSearch: request.enableWebSearch !== false,
             maxDocumentChunks: request.maxDocumentChunks ?? 5,
             maxWebResults: request.maxSearchResults ?? 5,
@@ -372,10 +299,8 @@ router.post(
       // Post-stream processing: follow-ups, quality, save, usage log
       const ragSettings: Record<string, any> = {
         enableWebSearch: request.enableWebSearch,
-        enableDocumentSearch: request.enableDocumentSearch,
+        enableDocumentSearch: false,
         maxSearchResults: request.maxSearchResults,
-        maxDocumentChunks: request.maxDocumentChunks,
-        minScore: request.minScore,
         timeRange: request.timeRange,
         startDate: request.startDate,
         endDate: request.endDate,
@@ -390,8 +315,6 @@ router.post(
         question: request.question,
         userId,
         sources,
-        topicName,
-        topicId: request.topicId,
         conversationId: request.conversationId,
         model: request.model,
         isResend,
@@ -645,67 +568,7 @@ router.post(
   })
 );
 
-/**
- * POST /api/ai/research-session-summary (7.1)
- * Generate a research session summary when exiting research mode
- */
-router.post(
-  '/research-session-summary',
-  authenticate,
-  apiLimiter,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { conversationId, topicName } = req.body;
-
-    if (!conversationId || !topicName) {
-      throw new ValidationError('conversationId and topicName are required');
-    }
-
-    assertUUID(conversationId, 'conversationId');
-
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new ValidationError('User not authenticated');
-    }
-
-    const summary = await AIService.generateResearchSessionSummary(conversationId, userId, topicName);
-
-    return res.status(200).json({
-      success: true,
-      data: { summary },
-    });
-  })
-);
-
-/**
- * GET /api/ai/suggested-starters?topicId=:id (6.1)
- * Generate dynamic, AI-generated starter questions for a research topic.
- */
-router.get(
-  '/suggested-starters',
-  authenticate,
-  apiLimiter,
-  asyncHandler(async (req: Request, res: Response) => {
-    const topicId = req.query.topicId as string;
-
-    if (!topicId) {
-      throw new ValidationError('topicId is required');
-    }
-
-    assertUUID(topicId, 'topicId');
-
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new ValidationError('User not authenticated');
-    }
-
-    const starters = await AIService.generateSuggestedStarters(topicId, userId);
-
-    return res.status(200).json({
-      success: true,
-      data: { starters },
-    });
-  })
-);
+// v2: /research-session-summary and /suggested-starters removed (topic features retired)
 
 /**
  * POST /api/ai/ask/queue
@@ -734,12 +597,7 @@ router.post(
       endDate,
       country,
       // RAG options
-      enableDocumentSearch,
       enableWebSearch,
-      topicId,
-      documentIds,
-      maxDocumentChunks,
-      minScore,
       conversationId,
       priority,
     } = req.body;
@@ -749,8 +607,6 @@ router.post(
     }
 
     // Validate UUID params from body
-    if (topicId) assertUUID(topicId, 'topicId');
-    if (documentIds) validateUUIDArray(documentIds, 'documentIds');
     if (conversationId) assertUUID(conversationId, 'conversationId');
 
     const userId = req.user?.id;
@@ -773,12 +629,8 @@ router.post(
       startDate,
       endDate,
       country,
-      enableDocumentSearch: enableDocumentSearch !== false,
+      enableDocumentSearch: false, // v2: document search disabled
       enableWebSearch: enableWebSearch !== false,
-      topicId: topicId,
-      documentIds: documentIds,
-      maxDocumentChunks: maxDocumentChunks ?? 5,
-      minScore: minScore, // Keep as undefined when not provided — lets adaptive threshold run
       conversationId: conversationId,
     };
 
@@ -805,8 +657,6 @@ router.post(
       priority: queuePriority,
       metadata: {
         conversationId,
-        topicId,
-        documentIds,
       },
     });
 
@@ -1064,9 +914,9 @@ router.post(
     const mergedRequest: QuestionRequest = {
       question: userMessage.content,
       conversationId,
-      topicId: conversation.topic_id || undefined,
       ...(savedRagSettings && savedRagSettings),
       ...options,
+      enableDocumentSearch: false, // v2: document search disabled
       // Always include conversation history for multi-turn context
       ...(conversationHistory.length > 0 && { conversationHistory }),
     };

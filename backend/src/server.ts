@@ -10,10 +10,11 @@ import { apiLimiter } from './middleware/rateLimiter';
 import { checkDatabaseHealth } from './config/database';
 import authRoutes from './routes/auth.routes';
 import aiRoutes from './routes/ai.routes';
-import searchRoutes from './routes/search.routes';
-import documentsRoutes from './routes/documents.routes';
+// v2: disabled — topic/document/search features retired
+// import searchRoutes from './routes/search.routes';
+// import documentsRoutes from './routes/documents.routes';
 import conversationsRoutes from './routes/conversations.routes';
-import topicsRoutes from './routes/topics.routes';
+// import topicsRoutes from './routes/topics.routes';
 import collectionsRoutes from './routes/collections.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import subscriptionRoutes from './routes/subscription.routes';
@@ -28,7 +29,7 @@ import connectionsRoutes from './routes/connections.routes';
 import metricsRoutes from './routes/metrics.routes';
 import adminRoutes from './routes/admin.routes';
 import feedbackRoutes from './routes/feedback.routes';
-import workspaceRoutes from './routes/workspace.routes';
+// import workspaceRoutes from './routes/workspace.routes'; // v2: disabled
 
 const app: Express = express();
 
@@ -121,10 +122,11 @@ app.use('/api/', apiLimiter);
 app.use('/api/test', testRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/documents', documentsRoutes);
+// v2: disabled — topic/document/search features retired
+// app.use('/api/search', searchRoutes);
+// app.use('/api/documents', documentsRoutes);
 app.use('/api/conversations', conversationsRoutes);
-app.use('/api/topics', topicsRoutes);
+// app.use('/api/topics', topicsRoutes);
 app.use('/api/collections', collectionsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/subscription', subscriptionRoutes);
@@ -137,7 +139,7 @@ app.use('/api/connections', connectionsRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/feedback', feedbackRoutes);
-app.use('/api/workspace', workspaceRoutes);
+// app.use('/api/workspace', workspaceRoutes); // v2: disabled
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
 }
