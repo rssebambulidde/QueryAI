@@ -618,7 +618,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     // ── Chat mode: skip RAG, use simple conversational prompt ───────
     if (request.mode === 'chat') {
       // Model selection still applies
-      const { selectedModel, modelSelectionReason } = await this.selectModel(request, userId);
+      const modelSelection = await this.selectModel(userId, request.question, undefined, request.conversationHistory, request.model);
+      const selectedModel = modelSelection.model;
+      const modelSelectionReason = modelSelection.reason;
 
       // Load conversation history
       let conversationHistory = request.conversationHistory;
@@ -647,7 +649,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         try {
           const { ConversationStateService } = await import('./conversation-state.service');
           const state = await ConversationStateService.getState(request.conversationId, userId);
-          if (state) conversationStateText = ConversationStateService.formatStateForPrompt(state);
+          if (state) conversationStateText = ConversationStateService.formatStateForContextCompact(state);
         } catch { /* ignore */ }
       }
 
