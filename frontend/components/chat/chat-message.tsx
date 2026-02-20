@@ -90,7 +90,7 @@ interface ChatMessageProps {
   selectedTopicName?: string | null; // For refusal hint (11.2)
   onExitResearchMode?: () => void; // For refusal hint "exit research mode" action
   onDelete?: (messageId: string) => void;
-  onRegenerate?: (messageId: string, options?: RegenerateOptions) => void;
+  onRegenerate?: (messageId: string, options?: RegenerateOptions) => void | Promise<void>;
   onVersionSelect?: (messageId: string, version: MessageVersionSummary) => void;
   onCompareVersions?: (messageId: string, versions: MessageVersionSummary[]) => void;
   /** Conversation ID for citation click-through tracking. */
@@ -127,10 +127,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
     return () => clearInterval(interval);
   }, []);
 
-  // Reset regenerating state when message content changes (regeneration complete)
-  useEffect(() => {
-    setIsRegenerating(false);
-  }, [message.content]);
+  // Wrapper that awaits onRegenerate and always resets the spinner
+  const handleRegenerate = async (options?: RegenerateOptions) => {
+    if (!onRegenerate) return;
+    setIsRegenerating(true);
+    try {
+      await onRegenerate(message.id, options);
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
 
   // Close regenerate menu on outside click
   useEffect(() => {
@@ -502,10 +508,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                 <div className="relative">
                   <div className="flex items-center">
                     <button
-                      onClick={() => {
-                        setIsRegenerating(true);
-                        onRegenerate(message.id);
-                      }}
+                      onClick={() => handleRegenerate()}
                       disabled={isRegenerating}
                       className={cn(
                         'rounded-l hover:bg-opacity-20 transition-colors touch-manipulation',
@@ -534,28 +537,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   {showRegenerateMenu && (
                     <div className="absolute bottom-full right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[180px]">
                       <button
-                        onClick={() => { setShowRegenerateMenu(false); setIsRegenerating(true); onRegenerate(message.id); }}
+                        onClick={() => { setShowRegenerateMenu(false); handleRegenerate(); }}
                         className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
                         Same settings
                       </button>
                       <button
-                        onClick={() => { setShowRegenerateMenu(false); setIsRegenerating(true); onRegenerate(message.id, { maxDocumentChunks: 10, maxSearchResults: 8 }); }}
+                        onClick={() => { setShowRegenerateMenu(false); handleRegenerate({ maxDocumentChunks: 10, maxSearchResults: 8 }); }}
                         className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                       >
                         <BookOpen className="w-3.5 h-3.5" />
                         More sources
                       </button>
                       <button
-                        onClick={() => { setShowRegenerateMenu(false); setIsRegenerating(true); onRegenerate(message.id, { temperature: 0.3, maxTokens: 512 }); }}
+                        onClick={() => { setShowRegenerateMenu(false); handleRegenerate({ temperature: 0.3, maxTokens: 512 }); }}
                         className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                       >
                         <span className="text-xs font-mono w-3.5 h-3.5 flex items-center justify-center">T↓</span>
                         Shorter &amp; precise
                       </button>
                       <button
-                        onClick={() => { setShowRegenerateMenu(false); setIsRegenerating(true); onRegenerate(message.id, { temperature: 0.9, maxTokens: 4096 }); }}
+                        onClick={() => { setShowRegenerateMenu(false); handleRegenerate({ temperature: 0.9, maxTokens: 4096 }); }}
                         className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                       >
                         <span className="text-xs font-mono w-3.5 h-3.5 flex items-center justify-center">T↑</span>
