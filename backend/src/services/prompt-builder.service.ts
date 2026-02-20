@@ -34,10 +34,10 @@ export class PromptBuilderService {
    * output schema rather than a text-based FOLLOW_UP_QUESTIONS block.
    * Kept for backward compatibility with non-structured callers.
    */
-  static getFollowUpBlock(topicName?: string): string {
+  static getFollowUpBlock(): string {
     return `End every non-refusal response with exactly:
 FOLLOW_UP_QUESTIONS:
-followed by 4 bullet questions ("- ") derived from this specific exchange.${topicName ? ` All 4 must stay within the topic "${topicName}".` : ''}`;
+followed by 4 bullet questions ("- ") derived from this specific exchange.`;
   }
 
   /**
@@ -45,12 +45,8 @@ followed by 4 bullet questions ("- ") derived from this specific exchange.${topi
    * The schema is enforced structurally for gpt-4o-mini, but the text instructions
    * are needed for gpt-3.5-turbo's json_object mode and are helpful for all models.
    */
-  static getOutputFormatBlock(topicName?: string): string {
-    let block = JSON_OUTPUT_INSTRUCTIONS;
-    if (topicName) {
-      block += `\n- All 4 follow-up questions must stay within the topic "${topicName}".`;
-    }
-    return block;
+  static getOutputFormatBlock(): string {
+    return JSON_OUTPUT_INSTRUCTIONS;
   }
 
   /**
@@ -68,17 +64,8 @@ followed by 4 bullet questions ("- ") derived from this specific exchange.${topi
     fewShotExamples?: string,
     conversationState?: string
   ): string {
-    const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
-    const hasWebResults = ragContext?.includes('Web Search Results:') || false;
-
-    let modeInstruction = '';
-    if (enableDocumentSearch && !enableWebSearch) {
-      modeInstruction = `IMPORTANT: You are in DOCUMENT-ONLY mode. You MUST ONLY use information from the provided document excerpts. Do NOT use any general knowledge or web information. If the document excerpts do not contain the answer, you must clearly state that the information is not available in the provided documents.`;
-    } else if (!enableDocumentSearch && enableWebSearch) {
-      modeInstruction = `IMPORTANT: You are in WEB-ONLY mode. You MUST ONLY use information from the provided web search results.`;
-    } else if (enableDocumentSearch && enableWebSearch) {
-      modeInstruction = `You can use both document excerpts and web search results. Prioritize document excerpts when they directly answer the question.`;
-    }
+    // v2: Web-only mode — topics and document search retired
+    const modeInstruction = `IMPORTANT: You are in WEB-ONLY mode. You MUST ONLY use information from the provided web search results.`;
 
     // Add time filter context if applicable
     let timeFilterInstruction = '';
@@ -108,27 +95,9 @@ followed by 4 bullet questions ("- ") derived from this specific exchange.${topi
       }
     }
 
-    // Research Topic Mode: when topicName is set, scope all answers. If scope_config.strict !== false, also refuse off-topic (12.1).
-    let topicScopeInstruction = '';
-    if (topicName) {
-      const isStrict = topicScopeConfig?.strict !== false; // default true
-      if (isStrict) {
-        topicScopeInstruction = `\n\nRESEARCH TOPIC MODE (STRICT): You are in **Research Topic Mode**. Your research topic is: **${topicName}**.${topicDescription ? ` Scope: ${topicDescription}` : ''}${this.deriveScopeFromConfig(topicScopeConfig)}
+    // v2: Topic scope retired — no Research Topic Mode
+    const topicScopeInstruction = '';
 
-You MUST:
-- Answer fully and use documents/web search ONLY for questions that are clearly on-topic or reasonably related to "${topicName}".
-- REFUSE off-topic questions: If the user's question is clearly unrelated to "${topicName}", give a short, polite refusal (1–2 sentences). Do NOT provide a substantive answer and do NOT use document or web sources for off-topic questions. Example: "That's outside my current research focus on ${topicName}. Would you like to ask something about ${topicName}?"
-- For questions that are tangential: give a brief, steered answer that ties back to "${topicName}" when possible.
-- When you refuse as off-topic: return only one follow-up question in the "followUpQuestions" array, e.g. "Would you like to ask something about ${topicName}?"`;
-      } else {
-        topicScopeInstruction = `\n\nTOPIC SCOPE: You are currently operating within the topic scope of "${topicName}".${topicDescription ? ` Scope: ${topicDescription}` : ''}${this.deriveScopeFromConfig(topicScopeConfig)}
-
-All your responses should be focused on this specific topic domain. When searching for information or providing answers:
-- Prioritize information directly related to "${topicName}"
-- If information is not available within this topic scope, clearly indicate this limitation
-- Maintain focus on the topic context throughout your response`;
-      }
-    }
 
     // Load enhanced guidelines (sync)
     let citationGuidelines = '';
@@ -189,11 +158,6 @@ General guidelines:
       fullContext += ragContext;
     }
 
-    // Add warning if document-only mode but no documents found
-    if (enableDocumentSearch && !enableWebSearch && !hasDocuments) {
-      fullContext += '\n\nWARNING: Document search was enabled but no relevant document excerpts were found. You must inform the user that the information is not available in their documents.';
-    }
-
     // Add additional context if provided
     if (additionalContext) {
       fullContext += `Additional Context:\n${additionalContext}\n`;
@@ -210,25 +174,16 @@ General guidelines:
 
 ${fullContext}
 
-${enableDocumentSearch && !enableWebSearch ? 'DOCUMENT-ONLY mode: only use information from the document excerpts above.' : 'Use the provided sources to answer the question.'}
+Use the provided sources to answer the question.
 
 Write 3-5 short paragraphs in the "answer" field. Each paragraph: one idea, 2-4 sentences, at least one inline citation, separated by blank lines. Distribute sources across paragraphs. Use **bold** for key terms. No standalone "Sources" section.
 
-${this.getOutputFormatBlock(topicName)}`;
-    }
-
-    // If no context and document-only mode, provide clear instruction
-    if (enableDocumentSearch && !enableWebSearch) {
-      return `${basePrompt}
-
-No document excerpts were found. Inform the user that the information is not available in their documents.
-
-${this.getOutputFormatBlock(topicName)}`;
+${this.getOutputFormatBlock()}`;
     }
 
     return `${basePrompt}
 
-${this.getOutputFormatBlock(topicName)}`;
+${this.getOutputFormatBlock()}`;
   }
 
   /**

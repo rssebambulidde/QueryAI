@@ -76,9 +76,9 @@ export class RetrievalOrchestratorService {
     const normalizedQuery = query.toLowerCase().trim().replace(/\s+/g, ' ');
     const parts = [
       options.userId,
-      options.topicId || '',
-      (options.documentIds || []).sort().join(','),
-      options.enableDocumentSearch ? '1' : '0',
+      '', // v2: topicId removed
+      '', // v2: documentIds removed
+      '0', // v2: document search disabled
       options.enableWebSearch ? '1' : '0',
       options.enableKeywordSearch ? '1' : '0',
       options.maxDocumentChunks || RetrievalConfig.defaults.maxDocumentChunks,
@@ -232,7 +232,7 @@ export class RetrievalOrchestratorService {
         strategy: options.expansionStrategy || 'hybrid',
         maxExpansions: options.maxExpansions ?? 5,
         useCache: true,
-        context: options.topicId ? `Topic ID: ${options.topicId}` : undefined,
+        context: undefined, // v2: topicId removed
       });
 
       logger.info('Query expanded for retrieval', {
@@ -1185,13 +1185,7 @@ export class RetrievalOrchestratorService {
         documentContexts,
         undefined,
         {
-          topicId: options.topicId,
-          ancestorTopicIds: options.ancestorTopicIds,
-          documentIds: options.documentIds,
           searchTypes: {
-            semantic: options.enableDocumentSearch,
-            keyword: options.enableKeywordSearch,
-            hybrid: options.enableDocumentSearch && options.enableKeywordSearch,
             web: options.enableWebSearch,
           },
           webResultsCount: webSearchResult.length,
@@ -1236,30 +1230,19 @@ export class RetrievalOrchestratorService {
     logger.info('Retrieving RAG context', {
       userId: options.userId,
       query: query.substring(0, 100),
-      enableDocumentSearch: options.enableDocumentSearch,
-      enableKeywordSearch: options.enableKeywordSearch,
       enableWebSearch: options.enableWebSearch,
-      maxDocumentChunks,
-      adaptiveContextSelection: options.useAdaptiveContextSelection ?? true,
+      // v2: document search disabled
     });
 
     const updatedOptions: RAGOptions = { ...options, maxDocumentChunks, maxWebResults };
 
-    // Parallel retrieval
-    const [webSearchResult, semanticResult, keywordResult] = await Promise.allSettled([
+    // v2: Skip document retrieval entirely — web-only
+    const [webSearchResult] = await Promise.allSettled([
       this.retrieveWebSearch(query, options),
-      options.enableDocumentSearch
-        ? this.retrieveDocumentContext(query, updatedOptions)
-        : Promise.resolve([] as DocumentContext[]),
-      options.enableKeywordSearch
-        ? this.retrieveDocumentContextKeyword(query, updatedOptions)
-        : Promise.resolve([] as KeywordSearchResult[]),
     ]);
 
     // Extract results
     const webSearchResults = webSearchResult.status === 'fulfilled' ? webSearchResult.value : [];
-    const semanticResults = semanticResult.status === 'fulfilled' ? semanticResult.value : [];
-    const keywordResults = keywordResult.status === 'fulfilled' ? keywordResult.value : [];
 
     // Log failures
     if (webSearchResult.status === 'rejected') {
@@ -1268,45 +1251,18 @@ export class RetrievalOrchestratorService {
         userId: options.userId,
       });
     }
-    if (semanticResult.status === 'rejected') {
-      logger.warn('Semantic search failed during parallel retrieval', {
-        error: semanticResult.reason?.message,
-        userId: options.userId,
-      });
-    }
-    if (keywordResult.status === 'rejected') {
-      logger.warn('Keyword search failed during parallel retrieval', {
-        error: keywordResult.reason?.message,
-        userId: options.userId,
-      });
-    }
 
-    // Merge document results
-    let documentContexts: DocumentContext[] = [];
-
-    if (options.enableDocumentSearch && options.enableKeywordSearch) {
-      documentContexts = await this.combineSearchResults(semanticResults, keywordResults, updatedOptions);
-    } else if (options.enableDocumentSearch) {
-      documentContexts = semanticResults;
-    } else if (options.enableKeywordSearch) {
-      documentContexts = keywordResults.map(result => ({
-        documentId: result.documentId,
-        documentName: result.documentName || 'Unknown Document',
-        chunkIndex: result.chunkIndex,
-        content: result.content,
-        score: result.score,
-      }));
-    }
+    // v2: No document results
+    const documentContexts: DocumentContext[] = [];
 
     // Degradation status
     const degradationStatus = DegradationService.getOverallStatus();
     const isDegraded = degradationStatus.level !== DegradationLevel.NONE;
     const isPartial = isDegraded && (
-      (options.enableDocumentSearch && documentContexts.length === 0 && semanticResult.status === 'rejected') ||
       (options.enableWebSearch && webSearchResults.length === 0 && webSearchResult.status === 'rejected')
     );
 
-    // Collect retrieval metrics (async, non-blocking)
+    // v2: Metrics collection simplified (no document search)
     if (options.userId && documentContexts.length > 0) {
       MetricsService.collectMetrics(
         query,
@@ -1314,13 +1270,7 @@ export class RetrievalOrchestratorService {
         documentContexts,
         undefined,
         {
-          topicId: options.topicId,
-          ancestorTopicIds: options.ancestorTopicIds,
-          documentIds: options.documentIds,
           searchTypes: {
-            semantic: options.enableDocumentSearch,
-            keyword: options.enableKeywordSearch,
-            hybrid: options.enableDocumentSearch && options.enableKeywordSearch,
             web: options.enableWebSearch,
           },
           webResultsCount: webSearchResults.length,

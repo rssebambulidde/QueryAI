@@ -615,45 +615,10 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
     const maxTokens = request.maxTokens ?? this.DEFAULT_MAX_TOKENS;
 
-    // ── Topic details ──────────────────────────────────────────────────
-    let topicName = preloadedTopic?.topicName;
-    let topicDescription = preloadedTopic?.topicDescription;
-    let topicScopeConfig = preloadedTopic?.topicScopeConfig;
-
-    if (!topicName && request.topicId && userId) {
-      const topicResult = await this.fetchTopicDetails(request.topicId, userId);
-      if (topicResult) {
-        topicName = topicResult.topicName;
-        topicDescription = topicResult.topicDescription;
-        topicScopeConfig = topicResult.topicScopeConfig;
-        logger.info('Topic context loaded', { topicId: request.topicId, topicName });
-      }
-    }
-
-    // ── Topic hierarchy (ancestors) ────────────────────────────────────
-    let ancestorTopicIds: string[] | undefined;
-    let ancestorNames: string[] | undefined;
-
-    if (request.topicId && userId) {
-      try {
-        const { TopicService } = await import('./topic.service');
-        const ancestors = await TopicService.getAncestors(request.topicId, userId);
-        if (ancestors.length > 0) {
-          ancestorTopicIds = ancestors.map(a => a.id);
-          ancestorNames = ancestors.map(a => a.name);
-          logger.info('Topic hierarchy resolved', {
-            topicId: request.topicId,
-            ancestorCount: ancestors.length,
-            ancestorNames,
-          });
-        }
-      } catch (ancestorError: any) {
-        logger.warn('Failed to resolve topic ancestors', {
-          topicId: request.topicId,
-          error: ancestorError.message,
-        });
-      }
-    }
+    // ── Topic details (v2: retired) ─────────────────────────────────────
+    const topicName = undefined;
+    const topicDescription = undefined;
+    const topicScopeConfig = undefined;
 
     // ── RAG retrieval ──────────────────────────────────────────────────
     let ragContext: string | undefined;
@@ -667,10 +632,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       try {
         const ragOptions: RAGOptions = {
           userId,
-          topicId: (request.documentIds && request.documentIds.length > 0) ? undefined : request.topicId,
-          ancestorTopicIds: (request.documentIds && request.documentIds.length > 0) ? undefined : ancestorTopicIds,
-          documentIds: request.documentIds,
-          enableDocumentSearch: request.enableDocumentSearch !== false,
+          // v2: Topics & document search retired
+          enableDocumentSearch: false,
           enableWebSearch: request.enableWebSearch !== false,
           maxDocumentChunks: request.maxDocumentChunks ?? 5,
           maxWebResults: request.maxSearchResults ?? 5,
@@ -680,9 +643,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           startDate: request.startDate,
           endDate: request.endDate,
           country: request.country,
-          topicQueryOptions: ancestorNames && ancestorNames.length > 0
-            ? { ancestorNames }
-            : undefined,
+          topicQueryOptions: undefined,
           enableQueryExpansion: request.enableQueryExpansion ?? false,
           expansionStrategy: request.expansionStrategy,
           maxExpansions: request.maxExpansions,
@@ -1102,84 +1063,14 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         throw new ValidationError('Question is too long (max 2000 characters)');
       }
 
-      // ── Fetch topic details early (needed for pre-check decision) ────
-      let preloadedTopic: { topicName: string; topicDescription?: string; topicScopeConfig?: Record<string, any> | null } | undefined;
+      // ── Fetch topic details ── v2: skipped (topics retired)
+      const preloadedTopic = undefined;
 
-      if (request.topicId && userId) {
-        const topicResult = await this.fetchTopicDetails(request.topicId, userId);
-        if (topicResult) {
-          preloadedTopic = topicResult;
-        }
-      }
-
-      // ── Decide whether to run off-topic pre-check ────────────────────
-      const preCheckEnabled =
-        !!preloadedTopic?.topicName &&
-        process.env.ENABLE_OFF_TOPIC_PRE_CHECK !== 'false' &&
-        preloadedTopic?.topicScopeConfig?.enable_off_topic_pre_check !== false;
-
-      // ── Parallelize off-topic pre-check with full context preparation ─
-      // Both only need the preloaded topic to start. On-topic queries save
-      // 300–800 ms; off-topic queries discard the context (small wasted cost).
-      const offTopicPromise = preCheckEnabled && preloadedTopic
-        ? LatencyTrackerService.trackOperation(
-            OperationType.AI_OFF_TOPIC_CHECK,
-            async () => this.runOffTopicPreCheckInternal(
-              request.question,
-              preloadedTopic!.topicName,
-              preloadedTopic!.topicDescription,
-              preloadedTopic!.topicScopeConfig,
-              request.topicId
-            )
-          )
-        : Promise.resolve(true as boolean);
+      // ── Off-topic pre-check ── v2: skipped (topics retired)
 
       const contextPromise = this.prepareRequestContext(request, userId, preloadedTopic);
 
-      const [onTopic, context] = await Promise.all([offTopicPromise, contextPromise]);
-
-      // ── Handle off-topic refusal (discard context) ───────────────────
-      if (preCheckEnabled && !onTopic && preloadedTopic) {
-        const refusal = ResponseProcessorService.getRefusalMessage(preloadedTopic.topicName);
-        const followUp = ResponseProcessorService.getRefusalFollowUp(preloadedTopic.topicName);
-        
-        let conversationIdForResponse = request.conversationId;
-        if (request.conversationId && userId) {
-          try {
-            const { ConversationService } = await import('./conversation.service');
-            const { MessageService } = await import('./message.service');
-            let conversation = await ConversationService.getConversation(request.conversationId, userId);
-            let cid = request.conversationId;
-            if (!conversation) {
-              conversation = await ConversationService.createConversation({
-                userId,
-                title: ConversationService.generateTitleFromMessage(request.question),
-                topicId: request.topicId,
-              });
-              cid = conversation.id;
-              conversationIdForResponse = cid;
-            }
-            await MessageService.saveMessagePair(cid, request.question, refusal, [], {
-              followUpQuestions: [followUp],
-              isRefusal: true,
-            });
-          } catch (e: any) {
-            logger.warn('Failed to save refusal to conversation', { error: e?.message });
-          }
-        }
-
-        const defaultModel = this.GPT35_MODEL;
-        const response: QuestionResponse = {
-          answer: refusal,
-          model: defaultModel,
-          sources: [],
-          followUpQuestions: [followUp],
-          refusal: true,
-          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        };
-        (response as any).conversationId = conversationIdForResponse;
-        return response;
-      }
+      const context = await contextPromise;
 
       logger.info('Sending question to OpenAI with RAG', {
         model: context.selectedModel,
@@ -1203,7 +1094,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           context.temperature,
           context.ragContext,
           context.conversationHistory,
-          request.topicId
+          undefined
         );
         
         const cached = await RedisCacheService.get<QuestionResponse>(llmCacheKey, {
@@ -1529,7 +1420,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           context.temperature,
           context.ragContext,
           context.conversationHistory,
-          request.topicId
+          undefined
         );
         
         const cacheSet = await RedisCacheService.set(llmCacheKey, response, {
@@ -1593,7 +1484,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             sources: context.sources,
             userId,
             conversationId: request.conversationId,
-            topicId: request.topicId,
+            topicId: undefined,
           });
         }).catch((err: any) => {
           logger.warn('Failed to load answer evaluator', { error: err.message });
@@ -1614,7 +1505,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             conversation = await ConversationService.createConversation({
               userId,
               title,
-              topicId: request.topicId,
+              topicId: undefined,
             });
             conversationId = conversation.id;
             logger.info('Created new conversation for message', { conversationId, userId });
@@ -1928,26 +1819,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       }
 
       // Check if we have pre-retrieved context for streaming (from the route)
-      let preloadedTopic;
-      if (request.topicId && userId) {
-        try {
-          const { TopicService } = await import('./topic.service');
-          const topic = await TopicService.getTopic(request.topicId, userId);
-          if (topic) {
-            preloadedTopic = {
-              topicName: topic.name,
-              topicDescription: topic.description ?? undefined,
-              topicScopeConfig: topic.scope_config ?? null,
-            };
-            logger.info('Topic context loaded for streaming', { topicId: request.topicId, topicName: topic.name });
-          }
-        } catch (topicError: any) {
-          logger.warn('Failed to fetch topic details for streaming', {
-            topicId: request.topicId,
-            error: topicError.message,
-          });
-        }
-      }
+      // v2: Topic fetch skipped (topics retired)
+      const preloadedTopic = undefined;
 
       // Use shared pipeline preparation
       const context = await this.prepareRequestContext(request, userId, preloadedTopic);

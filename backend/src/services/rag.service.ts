@@ -176,10 +176,8 @@ export class RAGService {
       {
         userId: options.userId,
         metadata: {
-          enableDocumentSearch: options.enableDocumentSearch,
           enableWebSearch: options.enableWebSearch,
-          enableKeywordSearch: options.enableKeywordSearch,
-          topicId: options.topicId,
+          // v2: document search disabled
         },
       }
     );
@@ -232,9 +230,8 @@ export class RAGService {
       documentChunks: documentContexts.length,
       webResults: webSearchResults.length,
       searchTypes: {
-        semantic: options.enableDocumentSearch,
-        keyword: options.enableKeywordSearch,
-        hybrid: options.enableDocumentSearch && options.enableKeywordSearch,
+        web: options.enableWebSearch,
+        // v2: document search disabled
       },
       rerankingEnabled: options.enableReranking,
       adaptiveSelection: options.enableAdaptiveContextSelection ?? true,
@@ -385,34 +382,7 @@ export class RAGService {
       metadata?: import('../types/source').SourceMetadata;
     }> = [];
 
-    context.documentContexts
-      .filter((doc) => doc.score >= RetrievalConfig.sourceExtractionMinScore)
-      .forEach((doc) => {
-        sources.push({
-          type: 'document',
-          title: doc.documentName,
-          documentId: doc.documentId,
-          snippet: doc.content.substring(0, 200) + (doc.content.length > 200 ? '...' : ''),
-          score: doc.score,
-          pageNumber: doc.pageNumber,
-          sectionTitle: doc.sectionTitle,
-          metadata: {
-            documentType: doc.documentType,
-            fileSize: doc.fileSize,
-            fileSizeFormatted: doc.fileSizeFormatted,
-            author: doc.author,
-            authors: doc.authors,
-            publishedDate: doc.publishedDate,
-            publicationDate: doc.publishedDate,
-            createdAt: doc.createdAt,
-            updatedAt: doc.updatedAt,
-            timestamp: doc.timestamp,
-            pageNumber: doc.pageNumber,
-            sectionTitle: doc.sectionTitle,
-            sectionLevel: doc.sectionLevel,
-          },
-        });
-      });
+    // v2: skip documentContexts — document search is retired
 
     context.webSearchResults.forEach((result) => {
       sources.push({
