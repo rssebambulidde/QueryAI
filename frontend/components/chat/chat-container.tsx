@@ -592,6 +592,30 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     setIsLoading(false);
   };
 
+  const handleDocumentDelete = async (docId: string) => {
+    try {
+      const response = await documentApi.delete(docId);
+      if (response.success) {
+        setDocuments((prev) => prev.filter((d) => (d.id || d.path) !== docId));
+        setDocumentInfo((prev) => {
+          if (!prev) return prev;
+          const deleted = documents.find((d) => (d.id || d.path) === docId);
+          const wasProcessed = deleted && (deleted.status === 'processed' || deleted.status === 'embedded');
+          return {
+            totalCount: prev.totalCount - 1,
+            processedCount: wasProcessed ? prev.processedCount - 1 : prev.processedCount,
+            processingCount: prev.processingCount,
+          };
+        });
+        toast.success('Document deleted');
+      }
+    } catch (err) {
+      console.error('Failed to delete document:', err);
+      toast.error('Failed to delete document');
+      throw err;
+    }
+  };
+
   /** Intercepts /search and /queue commands, otherwise delegates to the send hook */
   const handleUserInput = async (content: string) => {
     const searchMatch = content.match(/^\/search\s+(.+)/i);
@@ -696,6 +720,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           ragSettings={ragSettings}
           onRagSettingsChange={setRagSettings}
           documents={documents}
+          onDocumentDelete={handleDocumentDelete}
         />
       )}
 
@@ -778,7 +803,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             activeQueueJobId={activeQueueJobId}
             onCancelQueueJob={handleCancelQueueJob}          ragSettings={ragSettings}
           onRagSettingsChange={setRagSettings}
-          documents={documents}          />
+          documents={documents}
+          onDocumentDelete={handleDocumentDelete}
+          />
         </>
       )}
 

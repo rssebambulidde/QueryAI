@@ -111,6 +111,8 @@ interface ChatInputProps {
   selectedDocIds?: string[];
   /** Callback when document selection changes */
   onDocSelectionChange?: (ids: string[]) => void;
+  /** Callback to delete a document */
+  onDocumentDelete?: (docId: string) => Promise<void>;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -134,6 +136,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   processedDocs,
   selectedDocIds,
   onDocSelectionChange,
+  onDocumentDelete,
 }) => {
   const { isMobile } = useMobile();
   const [message, setMessage] = useState('');
@@ -551,6 +554,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 documents={processedDocs}
                 selectedIds={selectedDocIds || []}
                 onSelectionChange={onDocSelectionChange}
+                onDelete={onDocumentDelete}
               />
             )}
           </div>

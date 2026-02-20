@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { FileText, ChevronDown, Search, X, Check } from 'lucide-react';
+import { FileText, ChevronDown, Search, X, Check, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DocumentItem } from '@/lib/api';
 
@@ -9,6 +9,7 @@ interface DocumentQuickSelectProps {
   documents: DocumentItem[];
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
+  onDelete?: (docId: string) => Promise<void>;
   disabled?: boolean;
   className?: string;
 }
@@ -17,11 +18,13 @@ export const DocumentQuickSelect: React.FC<DocumentQuickSelectProps> = ({
   documents,
   selectedIds,
   onSelectionChange,
+  onDelete,
   disabled = false,
   className,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -51,6 +54,23 @@ export const DocumentQuickSelect: React.FC<DocumentQuickSelectProps> = ({
       onSelectionChange(selectedIds.filter((id) => id !== docId));
     } else {
       onSelectionChange([...selectedIds, docId]);
+    }
+  };
+
+  const handleDeleteDocument = async (e: React.MouseEvent, docId: string) => {
+    e.stopPropagation();
+    if (!onDelete || deletingId) return;
+    setDeletingId(docId);
+    try {
+      await onDelete(docId);
+      // Remove from selected if it was selected
+      if (selectedIds.includes(docId)) {
+        onSelectionChange(selectedIds.filter((id) => id !== docId));
+      }
+    } catch {
+      // Error handled by parent
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -166,7 +186,7 @@ export const DocumentQuickSelect: React.FC<DocumentQuickSelectProps> = ({
                     type="button"
                     onClick={() => handleToggleDocument(docId)}
                     className={cn(
-                      'w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors',
+                      'group w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors',
                       isSelected ? 'bg-orange-50 text-orange-700' : 'text-gray-700 hover:bg-gray-50'
                     )}
                     role="option"
@@ -182,6 +202,21 @@ export const DocumentQuickSelect: React.FC<DocumentQuickSelectProps> = ({
                     </div>
                     <FileText className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
                     <span className="truncate flex-1">{doc.name || 'Untitled'}</span>
+                    {onDelete && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteDocument(e, docId)}
+                        disabled={deletingId === docId}
+                        className="p-0.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+                        aria-label={`Delete ${doc.name || 'document'}`}
+                      >
+                        {deletingId === docId ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
                   </button>
                 );
               })

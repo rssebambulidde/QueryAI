@@ -41,6 +41,7 @@ export const ChatInputArea: React.FC<
   ragSettings,
   onRagSettingsChange,
   documents,
+  onDocumentDelete,
 }) => {
   const processedDocs = (documents || []).filter(
     (d) => d.status === 'processed' || d.status === 'embedded'
@@ -127,6 +128,7 @@ export const ChatInputArea: React.FC<
             processedDocs={processedDocs}
             selectedDocIds={ragSettings?.documentIds || []}
             onDocSelectionChange={handleDocumentSelectionChange}
+            onDocumentDelete={onDocumentDelete}
           />
         </div>
       </div>
@@ -168,6 +170,7 @@ export const ChatInputArea: React.FC<
           processedDocs={processedDocs}
           selectedDocIds={ragSettings?.documentIds || []}
           onDocSelectionChange={handleDocumentSelectionChange}
+          onDocumentDelete={onDocumentDelete}
         />
       </div>
     </div>

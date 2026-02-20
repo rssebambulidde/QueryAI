@@ -229,6 +229,8 @@ export interface ChatInputAreaProps {
   onRagSettingsChange?: (settings: RAGSettings) => void;
   /** Available documents for quick-select picker */
   documents?: DocumentItem[];
+  /** Callback to delete a document */
+  onDocumentDelete?: (docId: string) => Promise<void>;
 }
 
 export interface SourcesSidebarProps {
