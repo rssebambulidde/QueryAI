@@ -161,6 +161,9 @@ export const QuestionRequestSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().int().positive().max(128000).optional(),
 
+  // ── Conversation mode ───────────────────────────────
+  mode: z.enum(['research', 'chat']).optional(),
+
   // ── Search / topic ──────────────────────────────────
   enableSearch: z.boolean().optional(),
   topic: z.string().max(500).optional(),

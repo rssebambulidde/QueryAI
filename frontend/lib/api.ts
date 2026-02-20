@@ -177,6 +177,7 @@ export interface QuestionRequest {
     role: 'user' | 'assistant';
     content: string;
   }>;
+  mode?: 'research' | 'chat';
   model?: string;
   temperature?: number;
   maxTokens?: number;
@@ -313,6 +314,7 @@ export interface Conversation {
   user_id: string;
   topic_id?: string;
   title?: string;
+  mode?: 'research' | 'chat';
   metadata?: {
     filters?: {
       topic?: string;
@@ -877,7 +879,7 @@ export const conversationApi = {
     return response.data;
   },
 
-  create: async (data: { title?: string; topicId?: string }): Promise<ApiResponse<Conversation>> => {
+  create: async (data: { title?: string; topicId?: string; mode?: 'research' | 'chat' }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.post('/api/conversations', data);
     return response.data;
   },

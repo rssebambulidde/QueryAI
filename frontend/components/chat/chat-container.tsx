@@ -22,6 +22,7 @@ import type { RerankingSettings } from '@/components/advanced/reranking-controls
 import { mapApiMessagesToUi, type ApiMessage, type LastResponseData } from './chat-types';
 import { ChatMessageList } from './chat-message-list';
 import { ChatInputArea } from './chat-input-area';
+import { ModeSelector } from './mode-selector';
 import { SourcesSidebar } from './sources-sidebar';
 import { MessageVersionCompare } from './message-version-compare';
 import { ChatErrorBoundary } from './chat-error-boundary';
@@ -46,6 +47,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   // ═══════════════════════════════════════════════════════════════════════════
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationMode, setConversationMode] = useState<'research' | 'chat' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingState, setStreamingState] = useState<StreamingState>('completed');
@@ -157,6 +159,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     currentConversationId,
     unifiedFilters,
     ragSettings,
+    conversationMode: conversationMode || 'research',
     queryExpansionEnabled,
     queryExpansionSettings,
     rerankingEnabled,
@@ -249,6 +252,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           const conversationResponse = await conversationApi.get(currentConversationId);
           if (!isStale() && conversationResponse.success && conversationResponse.data) {
             const conversation = conversationResponse.data;
+            // Set conversation mode from DB
+            if (!isStale()) { setConversationMode(conversation.mode || 'research'); }
             // Topic hydration retired in Phase 2
             if (!isStale()) { setSelectedTopic(null); }
             const oldFilters = conversation.metadata?.filters || {};
@@ -276,6 +281,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       } else {
         if (isStale()) return;
         setMessages([]);
+        setConversationMode(null);
         setUnifiedFilters({ topicId: null, topic: null });
         setSelectedTopic(null);
         setSourcePanelContext(null);
@@ -491,8 +497,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     <div className="flex flex-col h-full bg-white">
       {/* ResearchModeBanner retired in Phase 2 */}
 
-      {/* Empty state */}
-      {isEmpty && (
+      {/* Empty state: mode selection or input */}
+      {isEmpty && conversationMode === null && (
+        <ModeSelector
+          onSelectMode={(mode) => setConversationMode(mode)}
+          welcomeGreeting={welcomeGreeting}
+        />
+      )}
+      {isEmpty && conversationMode !== null && (
         <ChatInputArea
           variant="empty"
           onSend={(msg) => handleUserInput(msg)}

@@ -25,6 +25,7 @@ export interface UseChatSendDeps {
   currentConversationId: string | null;
   unifiedFilters: UnifiedFilters;
   ragSettings: RAGSettings;
+  conversationMode: 'research' | 'chat';
   queryExpansionEnabled: boolean;
   queryExpansionSettings: QueryExpansionSettings;
   rerankingEnabled: boolean;
@@ -42,7 +43,7 @@ export interface UseChatSendDeps {
   setPreviousCost: (c: { total: number } | null) => void;
 
   // Store actions
-  createConversation: (title?: string, topicId?: string, options?: { autoSelect?: boolean }) => Promise<{ id: string }>;
+  createConversation: (title?: string, topicId?: string, options?: { autoSelect?: boolean; mode?: 'research' | 'chat' }) => Promise<{ id: string }>;
   selectConversation: (id: string | null) => void;
   updateConversationFilters: (id: string, filters: Record<string, any>) => Promise<void>;
   updateConversation: (id: string, title: string) => Promise<void>;
@@ -75,6 +76,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
     currentConversationId,
     unifiedFilters,
     ragSettings,
+    conversationMode,
     queryExpansionEnabled,
     queryExpansionSettings,
     rerankingEnabled,
@@ -178,7 +180,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
       if (!conversationId && !isResend) {
         try {
           const title = generateConversationTitle(content);
-          const newConversation = await createConversation(title, undefined, { autoSelect: false });
+          const newConversation = await createConversation(title, undefined, { autoSelect: false, mode: conversationMode });
           conversationId = newConversation.id;
           if (Object.keys(searchFilters).length > 0) {
             try {
@@ -264,8 +266,9 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           question: content,
           conversationHistory,
           conversationId: conversationId ?? undefined,
-          enableWebSearch: ragSettings.enableWebSearch,
-          enableSearch: ragSettings.enableWebSearch,
+          mode: conversationMode,
+          enableWebSearch: conversationMode === 'chat' ? false : ragSettings.enableWebSearch,
+          enableSearch: conversationMode === 'chat' ? false : ragSettings.enableWebSearch,
           topic: activeFilters.keyword,
           timeRange: activeFilters.timeRange,
           startDate: activeFilters.startDate,

@@ -50,6 +50,67 @@ followed by 4 bullet questions ("- ") derived from this specific exchange.`;
   }
 
   /**
+   * Build a simple conversational system prompt for General Chat mode.
+   * No citation rules, no source formatting, no JSON structured output.
+   * Returns plain text response.
+   */
+  static buildChatPrompt(
+    conversationState?: string
+  ): string {
+    let prompt = `You are a helpful AI assistant. Be concise, accurate, and conversational.
+
+Guidelines:
+- Answer questions directly using your general knowledge
+- Admit uncertainty rather than guessing
+- Use clear formatting: paragraphs, bold for key terms, markdown lists where helpful
+- Be professional but friendly`;
+
+    if (conversationState) {
+      prompt += `\n\n## Conversation Context\n${conversationState}`;
+    }
+
+    return prompt;
+  }
+
+  /**
+   * Build conversation messages for General Chat mode (no RAG, no structured JSON).
+   */
+  static buildChatMessages(
+    question: string,
+    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
+    conversationState?: string
+  ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+
+    messages.push({
+      role: 'system',
+      content: this.buildChatPrompt(conversationState),
+    });
+
+    // Add conversation history
+    if (conversationHistory && conversationHistory.length > 0) {
+      const recentHistory = conversationHistory.slice(-10);
+      for (const msg of recentHistory) {
+        let content = (msg.content || '').trim();
+        if (msg.role === 'assistant') {
+          content = content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
+          if (content.startsWith('{') && content.includes('"answer"')) {
+            try {
+              const parsed = JSON.parse(content);
+              if (typeof parsed.answer === 'string') content = parsed.answer;
+            } catch { /* keep as-is */ }
+          }
+        }
+        messages.push({ role: msg.role, content });
+      }
+    }
+
+    messages.push({ role: 'user', content: question });
+
+    return messages;
+  }
+
+  /**
    * Build system prompt with RAG context (documents + web search)
    */
   static buildSystemPrompt(

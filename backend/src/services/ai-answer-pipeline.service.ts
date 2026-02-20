@@ -615,6 +615,68 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     const temperature = request.temperature ?? this.DEFAULT_TEMPERATURE;
     const maxTokens = request.maxTokens ?? this.DEFAULT_MAX_TOKENS;
 
+    // ── Chat mode: skip RAG, use simple conversational prompt ───────
+    if (request.mode === 'chat') {
+      // Model selection still applies
+      const { selectedModel, modelSelectionReason } = await this.selectModel(request, userId);
+
+      // Load conversation history
+      let conversationHistory = request.conversationHistory;
+      if (request.conversationId && userId && (!conversationHistory || conversationHistory.length === 0)) {
+        try {
+          const { MessageService } = await import('./message.service');
+          const dbMessages = await MessageService.getAllMessages(request.conversationId, userId, { unlimited: true });
+          if (dbMessages.length > 0) {
+            conversationHistory = dbMessages.map((m) => ({
+              role: m.role as 'user' | 'assistant',
+              content: m.content,
+            }));
+          }
+        } catch (historyError: any) {
+          logger.warn('Failed to load conversation history for chat mode', { error: historyError.message });
+        }
+      }
+      // Apply sliding window (keep last 10)
+      if (conversationHistory && conversationHistory.length > 10) {
+        conversationHistory = conversationHistory.slice(-10);
+      }
+
+      // Conversation state tracking
+      let conversationStateText: string | undefined;
+      if (request.enableStateTracking !== false && request.conversationId && userId) {
+        try {
+          const { ConversationStateService } = await import('./conversation-state.service');
+          const state = await ConversationStateService.getState(request.conversationId, userId);
+          if (state) conversationStateText = ConversationStateService.formatStateForPrompt(state);
+        } catch { /* ignore */ }
+      }
+
+      const messages = PromptBuilderService.buildChatMessages(
+        request.question,
+        conversationHistory,
+        conversationStateText
+      );
+
+      return {
+        ragContext: undefined,
+        sources: undefined,
+        conversationHistory,
+        selectedModel,
+        modelSelectionReason,
+        messages,
+        topicName: undefined,
+        topicDescription: undefined,
+        topicScopeConfig: undefined,
+        timeFilter: undefined,
+        temperature,
+        maxTokens,
+        contextDegraded: false,
+        contextDegradationLevel: undefined,
+        contextDegradationMessage: undefined,
+        contextPartial: false,
+      };
+    }
+
     // ── Topic details (v2: retired) ─────────────────────────────────────
     const topicName = undefined;
     const topicDescription = undefined;
@@ -1859,8 +1921,10 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         modelSelectionReason: context.modelSelectionReason,
       });
 
-      // Call OpenAI API with streaming + structured output
-      const responseFormat = getResponseFormat(context.selectedModel);
+      // Call OpenAI API with streaming
+      // Chat mode: plain text response; Research mode: structured JSON output
+      const isChatMode = request.mode === 'chat';
+      const responseFormat = isChatMode ? undefined : getResponseFormat(context.selectedModel);
       const stream = await openai.chat.completions.create({
         model: context.selectedModel,
         messages: context.messages,
@@ -1872,41 +1936,51 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         ...(options?.signal && { signal: options.signal }),
       });
 
-      // Use JsonAnswerStreamParser to forward the answer field in real-time
-      // while accumulating the full JSON for post-stream parsing.
-      const parser = new JsonAnswerStreamParser();
-
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || '';
-        if (content) {
-          const answerChunk = parser.feed(content);
-          if (answerChunk) {
-            yield answerChunk;
+      if (isChatMode) {
+        // Chat mode: yield raw text chunks directly (no JSON parsing)
+        for await (const chunk of stream) {
+          const content = chunk.choices[0]?.delta?.content || '';
+          if (content) {
+            yield content;
           }
         }
-      }
+      } else {
+        // Research mode: use JsonAnswerStreamParser to forward the answer field
+        // in real-time while accumulating the full JSON for post-stream parsing.
+        const parser = new JsonAnswerStreamParser();
 
-      // After stream completes, parse the accumulated JSON for metadata
-      const accumulatedJson = parser.getAccumulatedJson();
-      let structuredMeta: AIStructuredResponse | null = null;
-      try {
-        const raw = JSON.parse(accumulatedJson);
-        structuredMeta = AIResponseSchema.parse(raw);
-      } catch (parseErr: any) {
-        logger.warn('Streaming structured output parse failed', {
-          error: parseErr?.message,
-          jsonPreview: accumulatedJson.substring(0, 200),
-        });
-      }
+        for await (const chunk of stream) {
+          const content = chunk.choices[0]?.delta?.content || '';
+          if (content) {
+            const answerChunk = parser.feed(content);
+            if (answerChunk) {
+              yield answerChunk;
+            }
+          }
+        }
 
-      // Yield a metadata sentinel object (not a string) so the route handler
-      // can detect follow-ups and cited sources.
-      if (structuredMeta) {
-        yield JSON.stringify({
-          __structured: true,
-          followUpQuestions: structuredMeta.followUpQuestions,
-          citedSources: structuredMeta.citedSources,
-        });
+        // After stream completes, parse the accumulated JSON for metadata
+        const accumulatedJson = parser.getAccumulatedJson();
+        let structuredMeta: AIStructuredResponse | null = null;
+        try {
+          const raw = JSON.parse(accumulatedJson);
+          structuredMeta = AIResponseSchema.parse(raw);
+        } catch (parseErr: any) {
+          logger.warn('Streaming structured output parse failed', {
+            error: parseErr?.message,
+            jsonPreview: accumulatedJson.substring(0, 200),
+          });
+        }
+
+        // Yield a metadata sentinel object so the route handler
+        // can detect follow-ups and cited sources.
+        if (structuredMeta) {
+          yield JSON.stringify({
+            __structured: true,
+            followUpQuestions: structuredMeta.followUpQuestions,
+            citedSources: structuredMeta.citedSources,
+          });
+        }
       }
 
       logger.info('OpenAI streaming response completed', { 

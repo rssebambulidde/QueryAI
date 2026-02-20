@@ -55,12 +55,14 @@ router.post(
       enableDocumentSearch: false, // v2: document search disabled
       enableWebSearch: rest.enableWebSearch !== false,
       maxDocumentChunks: rest.maxDocumentChunks ?? 5,
+      mode: rest.mode || 'research',
     };
 
-    logger.info('AI question request with RAG', {
+    logger.info('AI question request', {
       userId,
       questionLength: request.question.length,
       hasContext: !!request.context,
+      mode: request.mode,
       enableWebSearch: request.enableWebSearch,
       useQueue: !!useQueue,
     });
@@ -172,12 +174,14 @@ router.post(
       enableDocumentSearch: false, // v2: document search disabled
       enableWebSearch: rest.enableWebSearch !== false,
       maxDocumentChunks: rest.maxDocumentChunks ?? 5,
+      mode: rest.mode || 'research',
     };
 
-    logger.info('AI streaming question request with RAG', {
+    logger.info('AI streaming question request', {
       userId,
       questionLength: request.question.length,
       hasContext: !!request.context,
+      mode: request.mode,
       enableWebSearch: request.enableWebSearch,
     });
 
@@ -220,12 +224,12 @@ router.post(
 
       // v2: Off-topic pre-check removed (topics retired)
 
-      // Retrieve RAG context first to get sources and avoid double retrieval
+      // ── RAG retrieval (research mode only) ─────────────────────────
       let sources: any[] | undefined = undefined;
       let ragContext: any = null;
       let formattedRagContext: string | undefined = undefined;
       
-      if (userId) {
+      if (request.mode !== 'chat' && userId) {
         try {
           const { RAGService } = await import('../services/rag.service');
           const ragOptions: any = {
@@ -296,37 +300,70 @@ router.post(
         }
       }
       
-      // Post-stream processing: follow-ups, quality, save, usage log
-      const ragSettings: Record<string, any> = {
-        enableWebSearch: request.enableWebSearch,
-        enableDocumentSearch: false,
-        maxSearchResults: request.maxSearchResults,
-        timeRange: request.timeRange,
-        startDate: request.startDate,
-        endDate: request.endDate,
-        country: request.country,
-        topic: request.topic,
-      };
-      // Strip undefined values so metadata stays clean
-      Object.keys(ragSettings).forEach((k) => ragSettings[k] === undefined && delete ragSettings[k]);
+      // Post-stream processing
+      if (request.mode === 'chat') {
+        // Chat mode: save messages, skip quality scoring / citation validation
+        if (request.conversationId && userId) {
+          try {
+            const { ConversationService } = await import('../services/conversation.service');
+            const { MessageService } = await import('../services/message.service');
 
-      const postResult = await AIAnswerPipelineService.postProcessStream({
-        fullAnswer,
-        question: request.question,
-        userId,
-        sources,
-        conversationId: request.conversationId,
-        model: request.model,
-        isResend,
-        structuredFollowUps: structuredMeta?.followUpQuestions,
-        ragSettings,
-      });
+            let conversationId = request.conversationId;
+            let conversation = await ConversationService.getConversation(conversationId, userId);
 
-      if (postResult.followUpQuestions && postResult.followUpQuestions.length > 0) {
-        res.write(StreamingService.formatSSEMessage('followUpQuestions', { questions: postResult.followUpQuestions }));
-      }
-      if (postResult.qualityScore !== undefined) {
-        res.write(StreamingService.formatSSEMessage('qualityScore', { score: postResult.qualityScore }));
+            if (!conversation) {
+              const title = ConversationService.generateTitleFromMessage(request.question);
+              conversation = await ConversationService.createConversation({
+                userId,
+                title,
+                mode: 'chat',
+              });
+              conversationId = conversation.id;
+            }
+
+            await MessageService.saveMessagePair(
+              conversationId,
+              request.question,
+              fullAnswer,
+              undefined, // no sources
+              { model: request.model || 'gpt-4o-mini', isResend },
+            );
+          } catch (saveError: any) {
+            logger.warn('Failed to save chat messages', { error: saveError.message });
+          }
+        }
+      } else {
+        // Research mode: full post-processing (follow-ups, quality, save, usage log)
+        const ragSettingsObj: Record<string, any> = {
+          enableWebSearch: request.enableWebSearch,
+          enableDocumentSearch: false,
+          maxSearchResults: request.maxSearchResults,
+          timeRange: request.timeRange,
+          startDate: request.startDate,
+          endDate: request.endDate,
+          country: request.country,
+          topic: request.topic,
+        };
+        Object.keys(ragSettingsObj).forEach((k) => ragSettingsObj[k] === undefined && delete ragSettingsObj[k]);
+
+        const postResult = await AIAnswerPipelineService.postProcessStream({
+          fullAnswer,
+          question: request.question,
+          userId,
+          sources,
+          conversationId: request.conversationId,
+          model: request.model,
+          isResend,
+          structuredFollowUps: structuredMeta?.followUpQuestions,
+          ragSettings: ragSettingsObj,
+        });
+
+        if (postResult.followUpQuestions && postResult.followUpQuestions.length > 0) {
+          res.write(StreamingService.formatSSEMessage('followUpQuestions', { questions: postResult.followUpQuestions }));
+        }
+        if (postResult.qualityScore !== undefined) {
+          res.write(StreamingService.formatSSEMessage('qualityScore', { score: postResult.qualityScore }));
+        }
       }
 
       // Send completion message
