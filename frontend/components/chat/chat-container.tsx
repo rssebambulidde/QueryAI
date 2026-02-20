@@ -614,7 +614,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
                 onVersionSelect={handleVersionSelect}
                 onCompareVersions={handleCompareVersions}
                 onFollowUpClick={(q) => handleSend(q)}
-                onExitResearchMode={handleExitResearchMode}
+                onExitResearchMode={() => {}}
                 onOpenSources={(sources, query) => setSourcePanelContext({ sources, query })}
                 onPauseStreaming={handlePauseStreaming}
                 onResumeStreaming={handleResumeStreaming}
