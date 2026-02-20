@@ -243,12 +243,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   }, [collections, debouncedCollectionSearchQuery]);
 
   const handleNewConversation = async () => {
-    try {
-      await createConversation();
-      toast.success('New conversation created');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create conversation');
-    }
+    // Clear selection to show the ModeSelector — DB conversation is created on first message
+    selectConversation(null);
   };
 
   const handleDeleteConversation = async (id: string, e: React.MouseEvent) => {
