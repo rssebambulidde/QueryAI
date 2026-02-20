@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { getMarkdownComponents } from '@/lib/utils/markdown-components';
 import { X, ChevronLeft, ChevronRight, Globe, FileText, Eye, GitCompare } from 'lucide-react';
 import type { MessageVersionSummary } from './chat-message';
+import type { Source } from '@/lib/api';
 
 // ─── Diff helpers ─────────────────────────────────────────────────────────────
 
@@ -161,6 +162,33 @@ function computeStats(left: DiffSegment[], right: DiffSegment[]) {
   return { removed, added, same: Math.max(sameLeft, sameRight), similarity };
 }
 
+/**
+ * Replace [Web Source N] / [Document N] citation patterns with actual source titles.
+ * Handles both `[Web Source N]` and `[Web Source N](url)` markdown link formats.
+ */
+function resolveCitationTitles(content: string, sources?: Source[]): string {
+  if (!sources || sources.length === 0) return content;
+
+  const webSources = sources.filter((s) => s.type === 'web');
+  const docSources = sources.filter((s) => s.type === 'document');
+
+  return content.replace(
+    /\[(Web Source|Document)\s+(\d+)\](?:\(([^)]+)\))?/gi,
+    (fullMatch, typeStr, numStr, url) => {
+      const type = typeStr.toLowerCase().includes('web') ? 'web' : 'document';
+      const idx = parseInt(numStr, 10) - 1;
+      const pool = type === 'web' ? webSources : docSources;
+      const source = pool[idx];
+
+      if (!source) return fullMatch; // keep original if not found
+
+      const title = source.title || fullMatch;
+      const href = url || source.url || '#';
+      return `[${title}](${href})`;
+    },
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface MessageVersionCompareProps {
@@ -279,14 +307,12 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
               <DiffPane
                 segments={leftDiff}
                 label={`v${leftVersion.version}`}
-                model={leftVersion.metadata?.model}
                 date={leftVersion.created_at}
                 colorScheme="removed"
               />
               <DiffPane
                 segments={rightDiff}
                 label={`v${rightVersion.version}`}
-                model={rightVersion.metadata?.model}
                 date={rightVersion.created_at}
                 colorScheme="added"
               />
@@ -295,14 +321,14 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
             <>
               <FormattedPane
                 content={leftVersion.content}
+                sources={leftVersion.sources}
                 label={`v${leftVersion.version}`}
-                model={leftVersion.metadata?.model}
                 date={leftVersion.created_at}
               />
               <FormattedPane
                 content={rightVersion.content}
+                sources={rightVersion.sources}
                 label={`v${rightVersion.version}`}
-                model={rightVersion.metadata?.model}
                 date={rightVersion.created_at}
               />
             </>
@@ -363,23 +389,19 @@ function VersionSelector({
 function DiffPane({
   segments,
   label,
-  model,
   date,
   colorScheme,
 }: {
   segments: DiffSegment[];
   label: string;
-  model?: string;
   date?: string;
   colorScheme: 'added' | 'removed';
 }) {
-
   return (
     <div className="flex flex-col min-h-0">
       <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-100">
         <span className="text-sm font-semibold text-gray-700">{label}</span>
         <div className="flex items-center gap-2 text-xs text-gray-400">
-          {model && <span>{model}</span>}
           {date && <span>{new Date(date).toLocaleString()}</span>}
         </div>
       </div>
@@ -405,29 +427,29 @@ function DiffPane({
 /** Markdown-rendered pane for the "Formatted" view mode. */
 function FormattedPane({
   content,
+  sources,
   label,
-  model,
   date,
 }: {
   content: string;
+  sources?: Source[];
   label: string;
-  model?: string;
   date?: string;
 }) {
   const mdComponents = useMemo(() => getMarkdownComponents(false), []);
+  const resolvedContent = useMemo(() => resolveCitationTitles(content, sources), [content, sources]);
 
   return (
     <div className="flex flex-col min-h-0">
       <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-100">
         <span className="text-sm font-semibold text-gray-700">{label}</span>
         <div className="flex items-center gap-2 text-xs text-gray-400">
-          {model && <span>{model}</span>}
           {date && <span>{new Date(date).toLocaleString()}</span>}
         </div>
       </div>
       <div className="flex-1 overflow-y-auto p-4 text-sm leading-relaxed text-gray-800 prose prose-sm max-w-none">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-          {content}
+          {resolvedContent}
         </ReactMarkdown>
       </div>
     </div>
