@@ -519,11 +519,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   {showRegenerateMenu && (
                     <div className="absolute bottom-full right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[180px]">
                       <button
-                        onClick={() => { setShowRegenerateMenu(false); handleRegenerate({ temperature: 0.8 }); }}
+                        onClick={() => { setShowRegenerateMenu(false); handleRegenerate({}); }}
                         className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
-                        Same settings
+                        Regenerate
                       </button>
                       <button
                         onClick={() => { setShowRegenerateMenu(false); handleRegenerate({ maxDocumentChunks: 15, maxSearchResults: 12, enableWebSearch: true, enableDocumentSearch: true, temperature: 0.7 }); }}

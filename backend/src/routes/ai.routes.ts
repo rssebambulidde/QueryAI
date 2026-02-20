@@ -370,6 +370,21 @@ router.post(
       }
       
       // Post-stream processing: follow-ups, quality, save, usage log
+      const ragSettings: Record<string, any> = {
+        enableWebSearch: request.enableWebSearch,
+        enableDocumentSearch: request.enableDocumentSearch,
+        maxSearchResults: request.maxSearchResults,
+        maxDocumentChunks: request.maxDocumentChunks,
+        minScore: request.minScore,
+        timeRange: request.timeRange,
+        startDate: request.startDate,
+        endDate: request.endDate,
+        country: request.country,
+        topic: request.topic,
+      };
+      // Strip undefined values so metadata stays clean
+      Object.keys(ragSettings).forEach((k) => ragSettings[k] === undefined && delete ragSettings[k]);
+
       const postResult = await AIAnswerPipelineService.postProcessStream({
         fullAnswer,
         question: request.question,
@@ -381,6 +396,7 @@ router.post(
         model: request.model,
         isResend,
         structuredFollowUps: structuredMeta?.followUpQuestions,
+        ragSettings,
       });
 
       if (postResult.followUpQuestions && postResult.followUpQuestions.length > 0) {
@@ -1035,11 +1051,24 @@ router.post(
     }
 
     // 3. Build a QuestionRequest from the original user message + overrides
+    //    Restore RAG settings from the original assistant metadata so
+    //    regeneration replays the same retrieval config by default.
+    const savedRagSettings = originalAssistant.metadata?.ragSettings as Record<string, any> | undefined;
+
+    // Build conversation history from all messages before the target index
+    const conversationHistory = allMessages
+      .slice(0, assistantIdx)
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
     const mergedRequest: QuestionRequest = {
       question: userMessage.content,
       conversationId,
       topicId: conversation.topic_id || undefined,
+      ...(savedRagSettings && savedRagSettings),
       ...options,
+      // Always include conversation history for multi-turn context
+      ...(conversationHistory.length > 0 && { conversationHistory }),
     };
 
     logger.info('Regenerating response (new version)', {

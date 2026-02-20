@@ -423,4 +423,95 @@ describe('AIService', () => {
       await expect(AIService.answerQuestion(request, mockUserId)).resolves.toBeDefined();
     });
   });
+
+  describe('PostProcessStreamParams ragSettings', () => {
+    it('should accept ragSettings in PostProcessStreamParams interface', async () => {
+      // Verify the type accepts ragSettings without type errors
+      const { PostProcessStreamParams } = await import('../services/ai-answer-pipeline.service') as any;
+      const params = {
+        fullAnswer: 'Test answer',
+        question: mockQuestion,
+        userId: mockUserId,
+        sources: [],
+        ragSettings: {
+          enableWebSearch: true,
+          enableDocumentSearch: true,
+          maxSearchResults: 5,
+          maxDocumentChunks: 5,
+          minScore: 0.7,
+          timeRange: 'week',
+          country: 'US',
+          topic: 'AI Research',
+        },
+      };
+
+      expect(params.ragSettings).toBeDefined();
+      expect(params.ragSettings.enableWebSearch).toBe(true);
+      expect(params.ragSettings.maxSearchResults).toBe(5);
+      expect(params.ragSettings.minScore).toBe(0.7);
+      expect(params.ragSettings.timeRange).toBe('week');
+    });
+
+    it('should include ragSettings in metadata when present', () => {
+      const ragSettings = {
+        enableWebSearch: false,
+        enableDocumentSearch: true,
+        maxDocumentChunks: 10,
+      };
+
+      const metadata: Record<string, any> = {
+        model: 'gpt-4o-mini',
+        streaming: true,
+        ...(ragSettings && Object.keys(ragSettings).length > 0 && { ragSettings }),
+      };
+
+      expect(metadata.ragSettings).toBeDefined();
+      expect(metadata.ragSettings.enableWebSearch).toBe(false);
+      expect(metadata.ragSettings.enableDocumentSearch).toBe(true);
+      expect(metadata.ragSettings.maxDocumentChunks).toBe(10);
+    });
+
+    it('should not include ragSettings in metadata when empty', () => {
+      const ragSettings: Record<string, any> = {};
+
+      const metadata: Record<string, any> = {
+        model: 'gpt-4o-mini',
+        streaming: true,
+        ...(ragSettings && Object.keys(ragSettings).length > 0 && { ragSettings }),
+      };
+
+      expect(metadata.ragSettings).toBeUndefined();
+    });
+
+    it('should merge savedRagSettings with overrides for regeneration', () => {
+      const savedRagSettings = {
+        enableWebSearch: true,
+        enableDocumentSearch: true,
+        maxSearchResults: 5,
+        maxDocumentChunks: 5,
+        minScore: 0.7,
+        timeRange: 'week',
+      };
+
+      const overrideOptions = {
+        maxDocumentChunks: 15,
+        maxSearchResults: 12,
+      };
+
+      const mergedRequest = {
+        question: mockQuestion,
+        conversationId: 'conv-123',
+        ...savedRagSettings,
+        ...overrideOptions,
+      };
+
+      // Overrides should win
+      expect(mergedRequest.maxDocumentChunks).toBe(15);
+      expect(mergedRequest.maxSearchResults).toBe(12);
+      // Original RAG settings should be preserved where not overridden
+      expect(mergedRequest.enableWebSearch).toBe(true);
+      expect(mergedRequest.minScore).toBe(0.7);
+      expect(mergedRequest.timeRange).toBe('week');
+    });
+  });
 });

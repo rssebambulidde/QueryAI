@@ -110,6 +110,8 @@ export interface PostProcessStreamParams {
   model?: string;
   isResend?: boolean;
   structuredFollowUps?: string[];
+  /** Original RAG settings so regeneration can replay the same retrieval config */
+  ragSettings?: Record<string, any>;
 }
 
 export interface PostProcessStreamResult {
@@ -1768,6 +1770,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       model,
       isResend,
       structuredFollowUps,
+      ragSettings,
     } = params;
 
     let cleanedAnswer = fullAnswer;
@@ -1846,6 +1849,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           streaming: true,
           ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
           ...(qualityScore !== undefined && { qualityScore }),
+          ...(ragSettings && Object.keys(ragSettings).length > 0 && { ragSettings }),
         };
 
         if (isResend) {
