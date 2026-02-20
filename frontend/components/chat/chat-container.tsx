@@ -329,10 +329,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         question: content,
         conversationHistory: messages.map((m) => ({ role: m.role, content: m.content })),
         conversationId: currentConversationId ?? undefined,
-        enableDocumentSearch: ragSettings.enableDocumentSearch,
         enableWebSearch: ragSettings.enableWebSearch,
-        topicId: selectedTopic?.id,
-        topic: selectedTopic?.name || unifiedFilters.keyword,
+        topic: unifiedFilters.keyword,
       };
 
       const response = await queueApi.submit(request, 'normal');
