@@ -165,8 +165,6 @@ export interface ChatMessageListProps {
   onFollowUpClick: (question: string) => void;
   onExitResearchMode: () => void;
   onOpenSources: (sources: Source[], query: string) => void;
-  onActionResponse: (content: string, actionType: string, messageSources?: Source[]) => Promise<void>;
-  onStreamActionResponse: (actionType: string, messageSources: Source[] | undefined, stream: AsyncGenerator<string, void, unknown>) => Promise<void>;
   // Streaming handlers
   onPauseStreaming: () => void;
   onResumeStreaming: () => void;

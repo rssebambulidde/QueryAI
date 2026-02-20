@@ -11,12 +11,10 @@ import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
 import { EnhancedContentProcessor } from './enhanced-content-processor';
 import { ChatErrorBoundary } from './chat-error-boundary';
-import { AIActionButtons } from './ai-action-buttons';
 import { SourceBreakdown } from './source-breakdown';
-import { Source, aiApi } from '@/lib/api';
+import { Source } from '@/lib/api';
 import { analyticsApi, feedbackApi } from '@/lib/api';
 import type { FlaggedCitation } from '@/lib/api';
-import { exportToPdf } from '@/lib/export-pdf';
 import { ResponseTimeIndicator } from '@/components/health/response-time-indicator';
 import { ConfidenceBadge } from './confidence-badge';
 import { useMobile } from '@/lib/hooks/use-mobile';
@@ -82,8 +80,6 @@ interface ChatMessageProps {
   onEdit?: (messageId: string, newContent: string) => void;
   onFollowUpClick?: (question: string) => void;
   userQuestion?: string; // The user's original question for context
-  onActionResponse?: (content: string, actionType?: 'summary' | 'essay' | 'report') => void; // Callback for action responses (non-streaming fallback)
-  onStreamActionResponse?: (actionType: 'summary' | 'essay' | 'report', stream: AsyncGenerator<string, void, unknown>) => Promise<void>; // Streaming action callback
   /** Open Perplexity-style sources sidebar with this message's sources and optional query for header */
   onOpenSources?: (sources: Source[], query?: string) => void;
   isStreaming?: boolean; // Whether the message is currently streaming
@@ -101,14 +97,14 @@ interface ChatMessageProps {
   onFlagCitation?: (messageId: string, sourceUrl: string, sourceTitle: string) => void;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onActionResponse, onStreamActionResponse, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, topicId, onFlagCitation }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, topicId, onFlagCitation }) => {
   const { isMobile } = useMobile();
   const isUser = message.role === 'user';
   const hasSources = message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const [isHovered, setIsHovered] = useState(false);
-  const [isActionLoading, setIsActionLoading] = useState(false);
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
   const [showRegenerateMenu, setShowRegenerateMenu] = useState(false);
@@ -554,111 +550,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   )}
                 </div>
               )}
-              {/* Ellipsis menu for assistant messages with actions */}
-              {!isUser && (onActionResponse || onStreamActionResponse) && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
-                <AIActionButtons
-                  onSummarize={async () => {
-                    if (!userQuestion) return;
-                    const cleanContent = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
-                    if (onStreamActionResponse) {
-                      setIsActionLoading(true);
-                      try {
-                        const stream = aiApi.summarizeStream(cleanContent, userQuestion, message.sources);
-                        await onStreamActionResponse('summary', stream);
-                      } catch (error: any) {
-                        toast.error(error.message || 'Failed to generate summary');
-                      } finally {
-                        setIsActionLoading(false);
-                      }
-                    } else if (onActionResponse) {
-                      setIsActionLoading(true);
-                      try {
-                        const response = await aiApi.summarize(cleanContent, userQuestion, message.sources);
-                        if (response.success && response.data) {
-                          onActionResponse(response.data.summary, 'summary');
-                        } else {
-                          toast.error(response.message || 'Failed to generate summary');
-                        }
-                      } catch (error: any) {
-                        toast.error(error.message || 'Failed to generate summary');
-                      } finally {
-                        setIsActionLoading(false);
-                      }
-                    }
-                  }}
-                  onWriteEssay={async () => {
-                    if (!userQuestion) return;
-                    const cleanContent = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
-                    if (onStreamActionResponse) {
-                      setIsActionLoading(true);
-                      try {
-                        const stream = aiApi.writeEssayStream(cleanContent, userQuestion, message.sources);
-                        await onStreamActionResponse('essay', stream);
-                      } catch (error: any) {
-                        toast.error(error.message || 'Failed to generate essay');
-                      } finally {
-                        setIsActionLoading(false);
-                      }
-                    } else if (onActionResponse) {
-                      setIsActionLoading(true);
-                      try {
-                        const response = await aiApi.writeEssay(cleanContent, userQuestion, message.sources);
-                        if (response.success && response.data) {
-                          onActionResponse(response.data.essay, 'essay');
-                        } else {
-                          toast.error(response.message || 'Failed to generate essay');
-                        }
-                      } catch (error: any) {
-                        toast.error(error.message || 'Failed to generate essay');
-                      } finally {
-                        setIsActionLoading(false);
-                      }
-                    }
-                  }}
-                  onDetailedReport={async () => {
-                    if (!userQuestion) return;
-                    const cleanContent = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
-                    if (onStreamActionResponse) {
-                      setIsActionLoading(true);
-                      try {
-                        const stream = aiApi.generateReportStream(cleanContent, userQuestion, message.sources);
-                        await onStreamActionResponse('report', stream);
-                      } catch (error: any) {
-                        toast.error(error.message || 'Failed to generate report');
-                      } finally {
-                        setIsActionLoading(false);
-                      }
-                    } else if (onActionResponse) {
-                      setIsActionLoading(true);
-                      try {
-                        const response = await aiApi.generateReport(cleanContent, userQuestion, message.sources);
-                        if (response.success && response.data) {
-                          onActionResponse(response.data.report, 'report');
-                        } else {
-                          toast.error(response.message || 'Failed to generate report');
-                        }
-                      } catch (error: any) {
-                        toast.error(error.message || 'Failed to generate report');
-                      } finally {
-                        setIsActionLoading(false);
-                      }
-                    }
-                  }}
-                  onExport={() => {
-                    try {
-                      const content = message.content.replace(/FOLLOW_UP_QUESTIONS:[\s\S]*$/i, '').trim();
-                      exportToPdf({
-                        question: userQuestion ?? '',
-                        answer: content,
-                        sources: message.sources ?? [],
-                      });
-                    } catch {
-                      toast.error('Failed to export PDF');
-                    }
-                  }}
-                  isLoading={isActionLoading}
-                />
-              )}
+
             </div>
           </div>
         </div>

@@ -63,8 +63,6 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   onFollowUpClick,
   onExitResearchMode,
   onOpenSources,
-  onActionResponse,
-  onStreamActionResponse,
   onPauseStreaming,
   onResumeStreaming,
   onCancelStreaming,
@@ -199,12 +197,6 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                   userQuestion={userQuestion}
                   selectedTopicName={selectedTopic?.name ?? null}
                   onExitResearchMode={onExitResearchMode}
-                  onActionResponse={async (content, actionType) => {
-                    await onActionResponse(content, actionType ?? '', message.sources);
-                  }}
-                  onStreamActionResponse={async (actionType, stream) => {
-                    await onStreamActionResponse(actionType, message.sources, stream);
-                  }}
                   onOpenSources={
                     message.sources && message.sources.length > 0
                       ? (sources, query) => onOpenSources(sources, query ?? '')

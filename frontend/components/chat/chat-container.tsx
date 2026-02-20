@@ -657,90 +657,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     setCompareVersions(versions);
   };
 
-  // ── Action response (summary / essay / report) ──────────────────────────
-
-  const handleActionResponse = async (content: string, actionType: string, messageSources?: Source[]) => {
-    const actionMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content,
-      timestamp: new Date(),
-      sources: messageSources,
-      isActionResponse: true,
-    };
-    setMessages((prev) => [...prev, actionMessage]);
-    if (currentConversationId && actionType) {
-      try {
-        await conversationApi.saveMessage(currentConversationId, {
-          role: 'assistant',
-          content,
-          sources: messageSources,
-          metadata: { isActionResponse: true, actionType },
-        });
-      } catch {
-        toast.error('Could not save to conversation');
-      }
-    }
-  };
-
-  /**
-   * Streaming action response handler.
-   * Creates a placeholder message immediately, then feeds chunks into it
-   * so the user sees text appear incrementally ("Writing..." indicator).
-   */
-  const handleStreamActionResponse = async (
-    actionType: string,
-    messageSources: Source[] | undefined,
-    stream: AsyncGenerator<string, void, unknown>
-  ) => {
-    const messageId = (Date.now() + 1).toString();
-
-    // Insert streaming placeholder
-    const placeholder: Message = {
-      id: messageId,
-      role: 'assistant',
-      content: '',
-      timestamp: new Date(),
-      sources: messageSources,
-      isActionResponse: true,
-      isStreaming: true,
-    };
-    setMessages((prev) => [...prev, placeholder]);
-
-    let fullContent = '';
-    try {
-      for await (const chunk of stream) {
-        fullContent += chunk;
-        // Update the streaming message with accumulated content
-        const snapshot = fullContent;
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, content: snapshot } : m))
-        );
-      }
-    } catch (error: any) {
-      toast.error(error?.message || `Failed to generate ${actionType}`);
-    }
-
-    // Mark streaming complete
-    setMessages((prev) =>
-      prev.map((m) => (m.id === messageId ? { ...m, isStreaming: false, content: fullContent } : m))
-    );
-
-    // Save to conversation
-    if (currentConversationId && actionType && fullContent) {
-      try {
-        await conversationApi.saveMessage(currentConversationId, {
-          role: 'assistant',
-          content: fullContent,
-          sources: messageSources,
-          metadata: { isActionResponse: true, actionType },
-        });
-      } catch {
-        toast.error('Could not save to conversation');
-      }
-    }
-  };
-
   // ── Keyboard shortcuts ──────────────────────────────────────────────────
 
   // Keyboard shortcuts removed for the chat UI (feature intentionally disabled)
@@ -827,8 +743,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
                 onFollowUpClick={(q) => handleSend(q)}
                 onExitResearchMode={handleExitResearchMode}
                 onOpenSources={(sources, query) => setSourcePanelContext({ sources, query })}
-                onActionResponse={handleActionResponse}
-                onStreamActionResponse={handleStreamActionResponse}
                 onPauseStreaming={handlePauseStreaming}
                 onResumeStreaming={handleResumeStreaming}
                 onCancelStreaming={handleCancelStreaming}
