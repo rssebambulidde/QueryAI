@@ -25,11 +25,14 @@ export namespace Database {
     updated_at: string;
   }
 
+  export type ConversationMode = 'research' | 'chat';
+
   export interface Conversation {
     id: string;
     user_id: string;
     topic_id?: string;
     title?: string;
+    mode: ConversationMode;
     metadata?: Record<string, any>; // Stores filter settings and other conversation-specific data
     created_at: string;
     updated_at: string;

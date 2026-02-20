@@ -8,6 +8,7 @@ export interface CreateConversationInput {
   userId: string;
   title?: string;
   topicId?: string;
+  mode?: 'research' | 'chat';
 }
 
 export interface UpdateConversationInput {
@@ -44,6 +45,7 @@ export class ConversationService {
           user_id: input.userId,
           title: input.title || 'New Conversation',
           topic_id: input.topicId || null,
+          mode: input.mode || 'research',
         })
         .select()
         .single();

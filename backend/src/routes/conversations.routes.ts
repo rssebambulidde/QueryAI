@@ -46,12 +46,21 @@ router.post(
   '/',
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
-    const { title, topicId } = req.body;
+    const { title, topicId, mode } = req.body;
+
+    // Validate mode if provided
+    if (mode && !['research', 'chat'].includes(mode)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: "Invalid mode. Must be 'research' or 'chat'." },
+      });
+    }
 
     const conversation = await ConversationService.createConversation({
       userId,
       title,
       topicId,
+      mode: mode || 'research',
     });
 
     res.status(201).json({
