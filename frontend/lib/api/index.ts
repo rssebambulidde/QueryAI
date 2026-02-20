@@ -1,9 +1,8 @@
 export * from './client';
 export * from './auth';
 export * from './ai';
-export * from './documents';
+// Documents & Topics API modules retired in v2 (still available from @/lib/api barrel)
 export * from './conversations';
-export * from './topics';
 export * from './collections';
 export * from './analytics';
 export * from './subscriptions';

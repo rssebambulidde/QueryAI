@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { ChatInput } from './chat-input';
-import { ResearchModeBar } from './research-mode-bar';
 import { MessageSquare } from 'lucide-react';
 import type { ChatInputAreaProps } from './chat-types';
 import { cn } from '@/lib/utils';
@@ -70,18 +69,7 @@ export const ChatInputArea: React.FC<
             </p>
           </div>
 
-          {/* Research-mode starters (centred) */}
-          <ResearchModeBar
-            selectedTopic={selectedTopic}
-            dynamicStarters={dynamicStarters}
-            onSend={onSend}
-            isLoading={isLoading}
-            isStreaming={isStreaming}
-            centered
-            className="px-4 pt-1 pb-2"
-          />
-
-          {/* Centred input */}
+          {/* Input */}
           <ChatInput
             onSend={onSend}
             disabled={disabled}
@@ -108,16 +96,6 @@ export const ChatInputArea: React.FC<
   return (
     <div className="bg-white border-t border-gray-200 shadow-lg relative flex justify-center">
       <div className="w-full max-w-4xl mx-auto px-4 pb-4">
-        {/* Research-mode starters (horizontal scroll) */}
-        <ResearchModeBar
-          selectedTopic={selectedTopic}
-          dynamicStarters={dynamicStarters}
-          onSend={onSend}
-          isLoading={isLoading}
-          isStreaming={isStreaming}
-          className="px-4 pt-3 pb-1"
-        />
-
         <ChatInput
           onSend={onSend}
           disabled={disabled}

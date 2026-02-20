@@ -13,7 +13,7 @@ import type { UnifiedFilters } from './unified-filter-panel';
 import { useMobile } from '@/lib/hooks/use-mobile';
 // Topic/document UI retired in Phase 2 (v2 migration)
 // import { ResearchModeBanner } from './research-mode-banner';
-import { ResearchSessionSummaryModal } from './research-session-summary-modal';
+// import { ResearchSessionSummaryModal } from './research-session-summary-modal';
 import type { StreamingState } from './streaming-controls';
 import { CitationSettings } from './citation-settings';
 import type { QueryExpansionSettings } from '@/components/advanced/query-expansion-display';
@@ -102,7 +102,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     return { enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 5, minScore: 0.5, maxWebResults: 5 };
   });
 
-  const [showResearchSummaryModal, setShowResearchSummaryModal] = useState(false);
+  // const [showResearchSummaryModal, setShowResearchSummaryModal] = useState(false);
   const [compareVersions, setCompareVersions] = useState<MessageVersionSummary[] | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
   
@@ -498,22 +498,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     await handleSend(content);
   };
 
-  // ── Research mode ────────────────────────────────────────────────────────
-
-  const handleExitResearchMode = () => {
-    const hasEligible = currentConversationId && selectedTopic && messages.some((m) => m.role === 'assistant' && (m.content?.length || 0) > 100);
-    if (hasEligible) { setShowResearchSummaryModal(true); }
-    else {
-      if (currentConversationId) conversationApi.update(currentConversationId, { topicId: null }).then(() => refreshConversations()).catch(console.warn);
-      setSelectedTopic(null);
-    }
-  };
-
-  const handleCloseResearchSummaryModal = () => {
-    setShowResearchSummaryModal(false);
-    if (currentConversationId) conversationApi.update(currentConversationId, { topicId: null as any }).then(() => refreshConversations()).catch(console.warn);
-    setSelectedTopic(null);
-  };
+  // Research mode retired in v2
 
   // ── Delete message (optimistic) ──────────────────────────────────────────
 
@@ -669,16 +654,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       )}
 
       {/* Modals */}
-      <ResearchSessionSummaryModal
-        open={showResearchSummaryModal}
-        onClose={handleCloseResearchSummaryModal}
-        onRequestSummary={async () => {
-          if (!currentConversationId || !selectedTopic) return null;
-          const r = await aiApi.researchSessionSummary(currentConversationId, selectedTopic.name);
-          return r.success && r.data ? r.data.summary : null;
-        }}
-        topicName={selectedTopic?.name || ''}
-      />
       <CitationSettings isOpen={isCitationSettingsOpen} onClose={() => setIsCitationSettingsOpen(false)} />
       {compareVersions && (
         <MessageVersionCompare versions={compareVersions} onClose={() => setCompareVersions(null)} />
