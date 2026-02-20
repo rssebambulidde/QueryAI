@@ -153,6 +153,8 @@ export class CitedSourceService {
   ): Promise<CitedSource[]> {
     const { topicId, startDate, endDate, limit = 50, offset = 0 } = options || {};
 
+    logger.info('Fetching cited sources', { userId, topicId, startDate, endDate, limit, offset });
+
     const { data, error } = await supabaseAdmin.schema('private').rpc('get_user_cited_sources', {
       p_user_id: userId,
       p_topic_id: topicId || null,
@@ -163,10 +165,11 @@ export class CitedSourceService {
     });
 
     if (error) {
-      logger.error('Error fetching cited sources', { error: error.message, userId });
+      logger.error('Error fetching cited sources', { error: error.message, code: (error as any).code, details: (error as any).details, hint: (error as any).hint, userId });
       return [];
     }
 
+    logger.info('Cited sources result', { userId, count: Array.isArray(data) ? data.length : 'not-array', dataType: typeof data });
     return (data || []) as CitedSource[];
   }
 
