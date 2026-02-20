@@ -66,7 +66,6 @@ export class CitationClickService {
     const domain = extractDomain(params.sourceUrl);
 
     const { data, error } = await supabaseAdmin
-      .schema('private' as any)
       .rpc('record_citation_click', {
         p_user_id: params.userId,
         p_conversation_id: params.conversationId ?? null,
@@ -97,7 +96,6 @@ export class CitationClickService {
    */
   static async getClickStats(days: number = 30): Promise<CitationClickStats> {
     const { data, error } = await supabaseAdmin
-      .schema('private' as any)
       .rpc('get_citation_click_stats', { p_days: days });
 
     if (error) {
@@ -120,7 +118,6 @@ export class CitationClickService {
    */
   static async getDomainClickRates(days: number = 30): Promise<DomainClickRate[]> {
     const { data, error } = await supabaseAdmin
-      .schema('private' as any)
       .rpc('get_domain_click_through_rates', { p_days: days });
 
     if (error) {
@@ -151,7 +148,6 @@ export class CitationClickService {
     }
 
     const { data, error } = await supabaseAdmin
-      .schema('private' as any)
       .rpc('get_domain_click_boost_scores', { p_days: days });
 
     if (error) {

@@ -65,7 +65,6 @@ export class FeedbackService {
    */
   static async submitFeedback(params: SubmitFeedbackParams): Promise<string> {
     const { data, error } = await supabaseAdmin
-      .schema('private' as any)
       .rpc('upsert_message_feedback', {
         p_user_id: params.userId,
         p_message_id: params.messageId,
@@ -201,7 +200,6 @@ export class FeedbackService {
     groupBy: 'day' | 'week' | 'month' = 'day',
   ) {
     const { data, error } = await supabaseAdmin
-      .schema('private' as any)
       .rpc('get_feedback_analytics', {
         p_days: days,
         p_group_by: groupBy,
@@ -219,7 +217,6 @@ export class FeedbackService {
    */
   static async getByModel(days: number = 30) {
     const { data, error } = await supabaseAdmin
-      .schema('private' as any)
       .rpc('get_feedback_by_model', {
         p_days: days,
       });
@@ -236,7 +233,6 @@ export class FeedbackService {
    */
   static async getByTopic(days: number = 30, limit: number = 20) {
     const { data, error } = await supabaseAdmin
-      .schema('private' as any)
       .rpc('get_feedback_by_topic', {
         p_days: days,
         p_limit: limit,

@@ -121,7 +121,7 @@ export class MessageService {
         throw new ValidationError('Assistant message content is required');
       }
 
-      const { data, error } = await supabaseAdmin.schema('private').rpc('save_message_pair', {
+      const { data, error } = await supabaseAdmin.rpc('save_message_pair', {
         p_conversation_id: conversationId,
         p_user_content: userContent.trim(),
         p_assistant_content: assistantContent.trim(),
@@ -685,7 +685,6 @@ export class MessageService {
       }
 
       const { data, error } = await supabaseAdmin
-        .schema('private' as any)
         .rpc('get_message_versions', { p_message_id: messageId });
 
       if (error) {

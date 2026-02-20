@@ -352,7 +352,6 @@ export class TopicService {
   ): Promise<TopicAncestor[]> {
     try {
       const { data, error } = await supabaseAdmin
-        .schema('private')
         .rpc('get_topic_ancestors', {
           p_topic_id: topicId,
           p_user_id: userId,
@@ -379,7 +378,6 @@ export class TopicService {
   ): Promise<string[]> {
     try {
       const { data, error } = await supabaseAdmin
-        .schema('private')
         .rpc('get_topic_descendants', {
           p_topic_id: topicId,
           p_user_id: userId,

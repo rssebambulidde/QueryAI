@@ -227,7 +227,6 @@ ${sourceSummary || '(no sources provided)'}`;
     groupBy: 'day' | 'week' | 'month' = 'day',
   ) {
     const { data, error } = await supabaseAdmin
-      .schema('private' as any)
       .rpc('get_evaluation_aggregates', {
         p_days: days,
         p_group_by: groupBy,

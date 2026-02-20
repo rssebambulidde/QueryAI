@@ -128,7 +128,6 @@ export class ConversationService {
       // Fast path: single RPC returns conversations + metadata in one round trip
       if (options?.includeMetadata) {
         const { data: rpcData, error: rpcError } = await supabaseAdmin
-          .schema('private' as any)
           .rpc('get_conversations_with_metadata', {
             p_user_id: userId,
             p_limit: limit,
