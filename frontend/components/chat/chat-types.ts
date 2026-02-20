@@ -231,6 +231,8 @@ export interface ChatInputAreaProps {
   onRagSettingsChange?: (settings: RAGSettings) => void;
   /** Conversation mode — controls which input controls are shown. */
   mode?: 'research' | 'chat';
+  /** Callback to change the conversation mode. */
+  onModeChange?: (mode: 'research' | 'chat') => void;
 }
 
 export interface SourcesSidebarProps {

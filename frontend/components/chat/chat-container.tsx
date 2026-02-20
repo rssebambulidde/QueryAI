@@ -22,7 +22,6 @@ import type { RerankingSettings } from '@/components/advanced/reranking-controls
 import { mapApiMessagesToUi, type ApiMessage, type LastResponseData } from './chat-types';
 import { ChatMessageList } from './chat-message-list';
 import { ChatInputArea } from './chat-input-area';
-import { ModeSelector } from './mode-selector';
 import { SourcesSidebar } from './sources-sidebar';
 import { MessageVersionCompare } from './message-version-compare';
 import { ChatErrorBoundary } from './chat-error-boundary';
@@ -47,7 +46,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   // ═══════════════════════════════════════════════════════════════════════════
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversationMode, setConversationMode] = useState<'research' | 'chat' | null>(null);
+  const [conversationMode, setConversationMode] = useState<'research' | 'chat'>('chat');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingState, setStreamingState] = useState<StreamingState>('completed');
@@ -159,7 +158,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     currentConversationId,
     unifiedFilters,
     ragSettings,
-    conversationMode: conversationMode || 'research',
+    conversationMode: conversationMode || 'chat',
     queryExpansionEnabled,
     queryExpansionSettings,
     rerankingEnabled,
@@ -253,7 +252,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           if (!isStale() && conversationResponse.success && conversationResponse.data) {
             const conversation = conversationResponse.data;
             // Set conversation mode from DB
-            if (!isStale()) { setConversationMode(conversation.mode || 'research'); }
+            if (!isStale()) { setConversationMode(conversation.mode || 'chat'); }
             // Topic hydration retired in Phase 2
             if (!isStale()) { setSelectedTopic(null); }
             const oldFilters = conversation.metadata?.filters || {};
@@ -281,7 +280,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       } else {
         if (isStale()) return;
         setMessages([]);
-        setConversationMode(null);
+        setConversationMode('chat');
         setUnifiedFilters({ topicId: null, topic: null });
         setSelectedTopic(null);
         setSourcePanelContext(null);
@@ -497,17 +496,12 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     <div className="flex flex-col h-full bg-white">
       {/* ResearchModeBanner retired in Phase 2 */}
 
-      {/* Empty state: mode selection or input */}
-      {isEmpty && conversationMode === null && !currentConversationId && (
-        <ModeSelector
-          onSelectMode={(mode) => setConversationMode(mode)}
-          welcomeGreeting={welcomeGreeting}
-        />
-      )}
-      {isEmpty && conversationMode !== null && (
+      {/* Empty state: input area with inline mode dropup */}
+      {isEmpty && !currentConversationId && (
         <ChatInputArea
           variant="empty"
           mode={conversationMode}
+          onModeChange={setConversationMode}
           onSend={(msg) => handleUserInput(msg)}
           disabled={isLoading || isStreaming}
           selectedTopic={selectedTopic}
@@ -555,7 +549,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
                 error={error}
                 selectedTopic={selectedTopic}
                 isMobile={isMobile}
-                mode={conversationMode || 'research'}
+                mode={conversationMode || 'chat'}
                 conversationId={currentConversationId ?? undefined}
                 lastResponseData={lastResponseData}
                 queryExpansionEnabled={queryExpansionEnabled}
@@ -591,7 +585,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
           <ChatInputArea
             variant="conversation"
-            mode={conversationMode || 'research'}
+            mode={conversationMode || 'chat'}
+            onModeChange={!messages.length ? setConversationMode : undefined}
             onSend={(msg) => handleUserInput(msg)}
             disabled={isLoading || isStreaming}
             selectedTopic={selectedTopic}

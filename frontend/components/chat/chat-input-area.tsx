@@ -40,6 +40,7 @@ export const ChatInputArea: React.FC<
   ragSettings,
   onRagSettingsChange,
   mode,
+  onModeChange,
 }) => {
   const isChatMode = mode === 'chat';
   const webEnabled = ragSettings?.enableWebSearch !== false;
@@ -100,6 +101,7 @@ export const ChatInputArea: React.FC<
             webEnabled={isChatMode ? undefined : webEnabled}
             onWebToggle={isChatMode ? undefined : handleWebToggle}
             mode={mode}
+            onModeChange={onModeChange}
           />
         </div>
       </div>
@@ -127,6 +129,7 @@ export const ChatInputArea: React.FC<
           webEnabled={isChatMode ? undefined : webEnabled}
           onWebToggle={isChatMode ? undefined : handleWebToggle}
           mode={mode}
+          onModeChange={onModeChange}
         />
       </div>
     </div>

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, DragEvent, ClipboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, Globe, Paperclip } from 'lucide-react';
+import { Send, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, Globe, Paperclip, ChevronUp, Search, MessageCircle } from 'lucide-react';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 // Document quick-select retired in Phase 2 (v2 migration)
@@ -104,6 +104,8 @@ interface ChatInputProps {
   onWebToggle?: (enabled: boolean) => void;
   /** Conversation mode — chat mode hides pills/attach. */
   mode?: 'research' | 'chat';
+  /** Callback to change the conversation mode via inline dropup. */
+  onModeChange?: (mode: 'research' | 'chat') => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -123,6 +125,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   webEnabled,
   onWebToggle,
   mode,
+  onModeChange,
 }) => {
   const isChatMode = mode === 'chat';
   const { isMobile } = useMobile();
@@ -130,11 +133,25 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [showModeMenu, setShowModeMenu] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const dragCounterRef = useRef(0);
+  const modeMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close mode menu on outside click
+  useEffect(() => {
+    if (!showModeMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (modeMenuRef.current && !modeMenuRef.current.contains(e.target as Node)) {
+        setShowModeMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showModeMenu]);
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
@@ -478,10 +495,75 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             aria-label="Message input"
           />
 
-          {/* Source control pills row — hidden in chat mode */}
-          {!isChatMode && (
+          {/* Source control pills row */}
           <div className="flex items-center gap-2 px-3 pb-2.5 flex-wrap">
-            {/* Attach pill */}
+            {/* Mode selector dropup */}
+            {onModeChange && (
+              <div ref={modeMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowModeMenu((v) => !v)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
+                    isChatMode
+                      ? 'border-purple-200 bg-purple-50 text-purple-600'
+                      : 'border-blue-200 bg-blue-50 text-blue-600'
+                  )}
+                  aria-label="Select mode"
+                  aria-expanded={showModeMenu}
+                  aria-haspopup="listbox"
+                >
+                  {isChatMode ? (
+                    <MessageCircle className="w-3.5 h-3.5" />
+                  ) : (
+                    <Search className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isChatMode ? 'General' : 'Deep Research'}</span>
+                  <ChevronUp className={cn('w-3 h-3 transition-transform', showModeMenu ? 'rotate-180' : '')} />
+                </button>
+
+                {/* Dropup menu */}
+                {showModeMenu && (
+                  <div className="absolute bottom-full left-0 mb-2 w-56 bg-white rounded-xl border border-gray-200 shadow-lg py-1 z-50" role="listbox">
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={isChatMode}
+                      onClick={() => { onModeChange('chat'); setShowModeMenu(false); }}
+                      className={cn(
+                        'w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors',
+                        isChatMode && 'bg-purple-50/60'
+                      )}
+                    >
+                      <MessageCircle className="w-4 h-4 mt-0.5 text-purple-500 shrink-0" />
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">General</div>
+                        <div className="text-xs text-gray-500">Quick answers and conversation</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={!isChatMode}
+                      onClick={() => { onModeChange('research'); setShowModeMenu(false); }}
+                      className={cn(
+                        'w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors',
+                        !isChatMode && 'bg-blue-50/60'
+                      )}
+                    >
+                      <Search className="w-4 h-4 mt-0.5 text-blue-500 shrink-0" />
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">Deep Research</div>
+                        <div className="text-xs text-gray-500">Sources, citations & web search</div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Attach pill — research mode only */}
+            {!isChatMode && (
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -501,9 +583,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               )}
               <span>Attach</span>
             </button>
+            )}
 
-            {/* Web / Docs toggle pills */}
-            {onWebToggle && (
+            {/* Web toggle pill — research mode only */}
+            {!isChatMode && onWebToggle && (
               <button
                 type="button"
                 onClick={() => onWebToggle(!webEnabled)}
@@ -521,7 +604,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             )}
 
           </div>
-          )}
 
           <input
             ref={fileInputRef}
