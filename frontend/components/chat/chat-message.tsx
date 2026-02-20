@@ -119,6 +119,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [flaggedCitations, setFlaggedCitations] = useState<FlaggedCitation[]>([]);
+  const [showFlagMenu, setShowFlagMenu] = useState(false);
   const { toast } = useToast();
 
   // Re-render every 60s to keep relative timestamps fresh
@@ -146,6 +147,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
     return () => document.removeEventListener('click', handler);
   }, [showRegenerateMenu]);
 
+  // Close flag menu on outside click
+  useEffect(() => {
+    if (!showFlagMenu) return;
+    const handler = () => setShowFlagMenu(false);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [showFlagMenu]);
+
   // ─── Feedback handler ─────────────────────────────────────────
   const handleFeedback = async (rating: -1 | 1) => {
     // Toggle off if same rating clicked again
@@ -159,49 +168,26 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
     }
 
     setFeedbackRating(rating);
-    // Show comment form when thumbs down
-    if (rating === -1) {
-      setShowFeedbackComment(true);
-    } else {
-      setShowFeedbackComment(false);
-      // Submit thumbs-up immediately
-      setFeedbackSubmitting(true);
-      try {
-        await feedbackApi.submitFeedback({
-          messageId: message.id,
-          conversationId,
-          topicId,
-          rating,
-          flaggedCitations: flaggedCitations.length > 0 ? flaggedCitations : undefined,
-          question: userQuestion,
-          answer: message.content,
-          sources: message.sources?.map(s => ({ type: s.type, title: s.title, url: s.url, snippet: s.snippet })),
-        });
-        toast.success('Thanks for the feedback!');
-      } catch {
-        toast.error('Failed to submit feedback');
-        setFeedbackRating(null);
-      } finally {
-        setFeedbackSubmitting(false);
-      }
-    }
+    // Show comment form for both thumbs up and thumbs down
+    setShowFeedbackComment(true);
   };
 
-  const submitNegativeFeedback = async () => {
+  const submitFeedbackWithComment = async () => {
+    if (!feedbackRating) return;
     setFeedbackSubmitting(true);
     try {
       await feedbackApi.submitFeedback({
         messageId: message.id,
         conversationId,
         topicId,
-        rating: -1,
+        rating: feedbackRating,
         comment: feedbackComment.trim() || undefined,
         flaggedCitations: flaggedCitations.length > 0 ? flaggedCitations : undefined,
         question: userQuestion,
         answer: message.content,
         sources: message.sources?.map(s => ({ type: s.type, title: s.title, url: s.url, snippet: s.snippet })),
       });
-      toast.success('Feedback submitted — we\'ll review this answer');
+      toast.success(feedbackRating === 1 ? 'Thanks for the feedback!' : 'Feedback submitted — we\'ll review this answer');
       setShowFeedbackComment(false);
     } catch {
       toast.error('Failed to submit feedback');
@@ -748,26 +734,69 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   {flaggedCitations.length} flagged
                 </span>
               )}
+              {/* Flag citation button — visible when message has sources */}
+              {message.sources && message.sources.length > 0 && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowFlagMenu(!showFlagMenu)}
+                    className={cn(
+                      'inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors',
+                      showFlagMenu
+                        ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                        : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 border border-transparent'
+                    )}
+                    title="Flag a citation"
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                  </button>
+                  {showFlagMenu && (
+                    <div className="absolute bottom-full left-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[240px] max-w-[320px] max-h-[200px] overflow-y-auto">
+                      <div className="px-3 py-1.5 text-[11px] font-medium text-gray-500 uppercase tracking-wide border-b border-gray-100">Flag citations</div>
+                      {message.sources.map((src, idx) => {
+                        const isFlagged = flaggedCitations.some(c => c.sourceUrl === (src.url || ''));
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              handleFlagCitation(src.url || '', src.title || `Source ${idx + 1}`);
+                            }}
+                            className={cn(
+                              'w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 transition-colors',
+                              isFlagged
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'text-gray-700 hover:bg-gray-50'
+                            )}
+                          >
+                            <Flag className={cn('w-3 h-3 flex-shrink-0', isFlagged ? 'text-amber-600' : 'text-gray-400')} />
+                            <span className="truncate">{src.title || src.url || `Source ${idx + 1}`}</span>
+                            {isFlagged && <Check className="w-3 h-3 ml-auto text-amber-600 flex-shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Comment form for negative feedback */}
-            {showFeedbackComment && feedbackRating === -1 && (
+            {/* Comment form for feedback */}
+            {showFeedbackComment && feedbackRating && (
               <div className="mt-2 space-y-2 p-3 rounded-lg border border-gray-200 bg-gray-50">
                 <div className="flex items-center gap-1.5 text-xs text-gray-600">
                   <MessageSquare className="w-3.5 h-3.5" />
-                  What went wrong? (optional)
+                  {feedbackRating === 1 ? 'What was helpful? (optional)' : 'What went wrong? (optional)'}
                 </div>
                 <textarea
                   value={feedbackComment}
                   onChange={(e) => setFeedbackComment(e.target.value)}
-                  placeholder="The answer was inaccurate, missing information, etc."
+                  placeholder={feedbackRating === 1 ? 'The answer was accurate, well-sourced, etc.' : 'The answer was inaccurate, missing information, etc.'}
                   className="w-full p-2 text-sm border border-gray-200 rounded-lg bg-white resize-none focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-400"
                   rows={2}
                   maxLength={2000}
                 />
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={submitNegativeFeedback}
+                    onClick={submitFeedbackWithComment}
                     disabled={feedbackSubmitting}
                     className="px-3 py-1.5 text-xs font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors"
                   >
