@@ -152,11 +152,19 @@ export class MessageService {
 
           return { userMessage, assistantMessage };
         } catch (assistantSaveError) {
-          await supabaseAdmin
+          const { error: rollbackError } = await supabaseAdmin
             .from('messages')
             .delete()
-            .eq('id', userMessage.id)
-            .catch(() => {});
+            .eq('id', userMessage.id);
+
+          if (rollbackError) {
+            logger.warn('Failed to rollback user message after assistant save failure', {
+              conversationId,
+              messageId: userMessage.id,
+              error: rollbackError.message,
+            });
+          }
+
           throw assistantSaveError;
         }
       }
