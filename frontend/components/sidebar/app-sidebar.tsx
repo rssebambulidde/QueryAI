@@ -800,6 +800,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           source={explorerSource}
           isOpen={!!explorerSource}
           onClose={() => setExplorerSource(null)}
+          onNavigateToConversation={() => {
+            onTabChange('chat');
+            if (pathname !== '/dashboard') {
+              router.push('/dashboard');
+            }
+          }}
         />
       )}
     </div>

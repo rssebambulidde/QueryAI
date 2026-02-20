@@ -13,12 +13,14 @@ interface SourceExplorerModalProps {
   source: CitedSource;
   isOpen: boolean;
   onClose: () => void;
+  onNavigateToConversation?: (conversationId: string) => void;
 }
 
 export const SourceExplorerModal: React.FC<SourceExplorerModalProps> = ({
   source,
   isOpen,
   onClose,
+  onNavigateToConversation,
 }) => {
   const { isMobile } = useMobile();
   const [conversations, setConversations] = useState<SourceConversation[]>([]);
@@ -54,6 +56,7 @@ export const SourceExplorerModal: React.FC<SourceExplorerModalProps> = ({
   const handleNavigate = (conversationId: string) => {
     selectConversation(conversationId);
     onClose();
+    onNavigateToConversation?.(conversationId);
   };
 
   const handleOpenUrl = () => {
