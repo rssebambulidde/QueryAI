@@ -357,6 +357,31 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             {user?.avatar_url ? (
               <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-white text-xs font-semibold">
+                {getUserInitials()}
+              </div>
+            )}
+          </button>
+          <AccountDropdown
+            isOpen={isAccountDropdownOpen}
+            onClose={() => setIsAccountDropdownOpen(false)}
+            subscriptionTier={subscriptionTier}
+            anchorRef={accountButtonRef}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Expanded sidebar ─────────────────────────────────────────────
+  return (
+    <div className={cn(
+      'flex flex-col bg-white border-r border-gray-100 w-[260px] flex-shrink-0',
+      isMobile ? 'h-full min-h-0' : 'h-full'
+    )}>
+      {/* ── Change 1: Branded header with action buttons ── */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-white text-[11px] font-bold">
             Q
