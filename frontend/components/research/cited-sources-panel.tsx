@@ -29,10 +29,14 @@ export const CitedSourcesPanel: React.FC<CitedSourcesPanelProps> = ({
     setIsLoading(true);
     try {
       const res = await analyticsApi.getCitedSources({ limit: 50 });
+      console.log('[CitedSourcesPanel] API response:', JSON.stringify(res).slice(0, 500));
       if (res.success && res.data) {
-        setSources(res.data.sources);
+        setSources(res.data.sources || []);
+      } else {
+        console.warn('[CitedSourcesPanel] Unexpected response shape:', res);
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error('[CitedSourcesPanel] Load error:', err?.response?.status, err?.response?.data || err?.message);
       toast.error('Failed to load cited sources');
     } finally {
       setIsLoading(false);
