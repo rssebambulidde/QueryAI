@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Sparkles, BookOpen, LayoutGrid } from 'lucide-react';
+import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Sparkles, BookOpen } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -20,7 +20,8 @@ import { ConversationSkeleton, CollectionSkeleton } from './skeleton-loader';
 import { AccountDropdown } from './account-dropdown';
 import { CitedSourcesPanel } from '@/components/research/cited-sources-panel';
 import { SourceExplorerModal } from '@/components/research/source-explorer-modal';
-import { SidebarTopicFilters } from './sidebar-topic-filters';
+// Topic filters retired in Phase 2 (v2 migration)
+// import { SidebarTopicFilters } from './sidebar-topic-filters';
 import type { CitedSource } from '@/lib/api';
 
 type TabType = 'chat' | 'collections' | 'sources';
@@ -56,7 +57,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
-  const isWorkspacePage = pathname === '/workspace';
+  // Retired in Phase 2 (v2 migration)
+  // const isWorkspacePage = pathname === '/workspace';
 
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const debouncedCollectionSearchQuery = useDebounce(collectionSearchQuery, 300);
@@ -326,16 +328,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <BookOpen className="w-5 h-5" />
           </button>
-          <button
-            onClick={() => router.push('/workspace')}
-            className={cn(
-              'w-10 h-10 flex items-center justify-center rounded-lg transition-colors',
-              isWorkspacePage ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-            )}
-            title="Research Workspace"
-          >
-            <LayoutGrid className="w-5 h-5" />
-          </button>
           {user?.role === 'super_admin' && (
             <button
               onClick={() => router.push('/dashboard/settings/super-admin')}
@@ -447,18 +439,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             <BookOpen className="w-[18px] h-[18px]" />
             My Sources
           </button>
-          <button
-            onClick={() => router.push('/workspace')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors',
-              isWorkspacePage
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            )}
-          >
-            <LayoutGrid className="w-[18px] h-[18px]" />
-            Research Workspace
-          </button>
           {user?.role === 'super_admin' && (
             <button
               onClick={() => router.push('/dashboard/settings/super-admin')}
@@ -478,7 +458,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
         {activeTab === 'chat' && (
           <div className="py-2">
-            <SidebarTopicFilters />
+            {/* Topic filters retired in Phase 2 (v2 migration) */}
 
             {/* Section header with search toggle */}
             <div className="flex items-center justify-between px-4 py-1.5">
