@@ -97,10 +97,14 @@ interface ChatInputProps {
   onRetryUpload?: () => void;
   /** Dismiss upload status banner */
   onDismissUpload?: () => void;
-  /** Whether web search is disabled (docs-only mode) */
-  docsOnly?: boolean;
-  /** Toggle docs-only / web+docs mode */
-  onDocsOnlyToggle?: (docsOnly: boolean) => void;
+  /** Whether web search is enabled */
+  webEnabled?: boolean;
+  /** Toggle web search on/off */
+  onWebToggle?: (enabled: boolean) => void;
+  /** Whether document search is enabled */
+  docsEnabled?: boolean;
+  /** Toggle document search on/off */
+  onDocsToggle?: (enabled: boolean) => void;
   /** Processed documents available for search */
   processedDocs?: DocumentItem[];
   /** Currently selected document IDs for filtering */
@@ -123,8 +127,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onCancelUpload,
   onRetryUpload,
   onDismissUpload,
-  docsOnly,
-  onDocsOnlyToggle,
+  webEnabled,
+  onWebToggle,
+  docsEnabled,
+  onDocsToggle,
   processedDocs,
   selectedDocIds,
   onDocSelectionChange,
@@ -506,37 +512,37 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </button>
 
             {/* Web / Docs toggle pills */}
-            {onDocsOnlyToggle && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onDocsOnlyToggle(false)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
-                    !docsOnly
-                      ? 'border-blue-200 bg-blue-50 text-blue-600'
-                      : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                  )}
-                  aria-label="Enable web search"
-                >
-                  <Globe className="w-3.5 h-3.5" />
-                  <span>{!docsOnly ? 'Web ✓' : 'Web'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDocsOnlyToggle(true)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
-                    docsOnly
-                      ? 'border-orange-200 bg-orange-50 text-orange-600'
-                      : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                  )}
-                  aria-label="Docs only mode"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>{docsOnly ? 'Docs ✓' : 'Docs'}</span>
-                </button>
-              </>
+            {onWebToggle && (
+              <button
+                type="button"
+                onClick={() => onWebToggle(!webEnabled)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
+                  webEnabled
+                    ? 'border-blue-200 bg-blue-50 text-blue-600'
+                    : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                )}
+                aria-label={webEnabled ? 'Disable web search' : 'Enable web search'}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>{webEnabled ? 'Web ✓' : 'Web'}</span>
+              </button>
+            )}
+            {onDocsToggle && (
+              <button
+                type="button"
+                onClick={() => onDocsToggle(!docsEnabled)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
+                  docsEnabled
+                    ? 'border-orange-200 bg-orange-50 text-orange-600'
+                    : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                )}
+                aria-label={docsEnabled ? 'Disable doc search' : 'Enable doc search'}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>{docsEnabled ? 'Docs ✓' : 'Docs'}</span>
+              </button>
             )}
 
             {/* Document selector pill */}

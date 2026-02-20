@@ -3,7 +3,6 @@
 import React from 'react';
 import { ChatInput } from './chat-input';
 import { ResearchModeBar } from './research-mode-bar';
-import { ProcessingStatusBadge } from './processing-status-badge';
 import { MessageSquare } from 'lucide-react';
 import type { ChatInputAreaProps } from './chat-types';
 import { cn } from '@/lib/utils';
@@ -46,14 +45,23 @@ export const ChatInputArea: React.FC<
   const processedDocs = (documents || []).filter(
     (d) => d.status === 'processed' || d.status === 'embedded'
   );
-  const docsOnly = ragSettings?.enableDocumentSearch === true && ragSettings?.enableWebSearch === false;
+  const webEnabled = ragSettings?.enableWebSearch !== false;
+  const docsEnabled = ragSettings?.enableDocumentSearch !== false;
 
-  const handleDocsOnlyToggle = (newDocsOnly: boolean) => {
+  const handleWebToggle = (enabled: boolean) => {
     if (onRagSettingsChange && ragSettings) {
       onRagSettingsChange({
         ...ragSettings,
-        enableDocumentSearch: true,
-        enableWebSearch: !newDocsOnly,
+        enableWebSearch: enabled,
+      });
+    }
+  };
+
+  const handleDocsToggle = (enabled: boolean) => {
+    if (onRagSettingsChange && ragSettings) {
+      onRagSettingsChange({
+        ...ragSettings,
+        enableDocumentSearch: enabled,
       });
     }
   };
@@ -84,20 +92,6 @@ export const ChatInputArea: React.FC<
             <p className="text-gray-500">
               I can search your documents and the web to provide comprehensive answers with sources.
             </p>
-            {documentInfo && documentInfo.totalCount > 0 && (
-              <div className="mt-3 flex items-center justify-center gap-2">
-                <ProcessingStatusBadge
-                  totalCount={documentInfo.totalCount}
-                  processedCount={documentInfo.processedCount}
-                  processingCount={documentInfo.processingCount}
-                />
-                {selectedTopic && (
-                  <span className="text-xs text-gray-400">
-                    in {selectedTopic.name}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Research-mode starters (centred) */}
@@ -126,8 +120,10 @@ export const ChatInputArea: React.FC<
             onCancelUpload={onCancelUpload}
             onRetryUpload={onRetryUpload}
             onDismissUpload={onDismissUpload}
-            docsOnly={docsOnly}
-            onDocsOnlyToggle={handleDocsOnlyToggle}
+            webEnabled={webEnabled}
+            onWebToggle={handleWebToggle}
+            docsEnabled={docsEnabled}
+            onDocsToggle={handleDocsToggle}
             processedDocs={processedDocs}
             selectedDocIds={ragSettings?.documentIds || []}
             onDocSelectionChange={handleDocumentSelectionChange}
@@ -141,22 +137,6 @@ export const ChatInputArea: React.FC<
   return (
     <div className="bg-white border-t border-gray-200 shadow-lg relative flex justify-center">
       <div className="w-full max-w-3xl mx-auto px-4 pb-4">
-        {/* Document processing status */}
-        {documentInfo && documentInfo.totalCount > 0 && (
-          <div className="flex items-center gap-2 px-4 pt-3 pb-1">
-            <ProcessingStatusBadge
-              totalCount={documentInfo.totalCount}
-              processedCount={documentInfo.processedCount}
-              processingCount={documentInfo.processingCount}
-            />
-            {selectedTopic && (
-              <span className="text-xs text-gray-400">
-                in {selectedTopic.name}
-              </span>
-            )}
-          </div>
-        )}
-
         {/* Research-mode starters (horizontal scroll) */}
         <ResearchModeBar
           selectedTopic={selectedTopic}
@@ -181,8 +161,10 @@ export const ChatInputArea: React.FC<
           onCancelUpload={onCancelUpload}
           onRetryUpload={onRetryUpload}
           onDismissUpload={onDismissUpload}
-          docsOnly={docsOnly}
-          onDocsOnlyToggle={handleDocsOnlyToggle}
+          webEnabled={webEnabled}
+          onWebToggle={handleWebToggle}
+          docsEnabled={docsEnabled}
+          onDocsToggle={handleDocsToggle}
           processedDocs={processedDocs}
           selectedDocIds={ragSettings?.documentIds || []}
           onDocSelectionChange={handleDocumentSelectionChange}
