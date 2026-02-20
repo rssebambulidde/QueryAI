@@ -4,8 +4,6 @@ import React from 'react';
 import { ChatInput } from './chat-input';
 import { ResearchModeBar } from './research-mode-bar';
 import { ProcessingStatusBadge } from './processing-status-badge';
-import { DocsOnlyToggle } from './docs-only-toggle';
-import { DocumentQuickSelect } from './document-quick-select';
 import { MessageSquare } from 'lucide-react';
 import type { ChatInputAreaProps } from './chat-types';
 import { cn } from '@/lib/utils';
@@ -102,22 +100,6 @@ export const ChatInputArea: React.FC<
             )}
           </div>
 
-          {/* Docs-only toggle + document picker (empty state) */}
-          {processedDocs.length > 0 && (
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <DocsOnlyToggle
-                docsOnly={docsOnly}
-                onToggle={handleDocsOnlyToggle}
-                processedCount={processedDocs.length}
-              />
-              <DocumentQuickSelect
-                documents={processedDocs}
-                selectedIds={ragSettings?.documentIds || []}
-                onSelectionChange={handleDocumentSelectionChange}
-              />
-            </div>
-          )}
-
           {/* Research-mode starters (centred) */}
           <ResearchModeBar
             selectedTopic={selectedTopic}
@@ -144,6 +126,11 @@ export const ChatInputArea: React.FC<
             onCancelUpload={onCancelUpload}
             onRetryUpload={onRetryUpload}
             onDismissUpload={onDismissUpload}
+            docsOnly={docsOnly}
+            onDocsOnlyToggle={handleDocsOnlyToggle}
+            processedDocs={processedDocs}
+            selectedDocIds={ragSettings?.documentIds || []}
+            onDocSelectionChange={handleDocumentSelectionChange}
           />
         </div>
       </div>
@@ -167,22 +154,6 @@ export const ChatInputArea: React.FC<
                 in {selectedTopic.name}
               </span>
             )}
-          </div>
-        )}
-
-        {/* Docs-only toggle + document picker (conversation mode) */}
-        {processedDocs.length > 0 && (
-          <div className="flex items-center gap-2 px-4 pt-1 pb-1">
-            <DocsOnlyToggle
-              docsOnly={docsOnly}
-              onToggle={handleDocsOnlyToggle}
-              processedCount={processedDocs.length}
-            />
-            <DocumentQuickSelect
-              documents={processedDocs}
-              selectedIds={ragSettings?.documentIds || []}
-              onSelectionChange={handleDocumentSelectionChange}
-            />
           </div>
         )}
 
@@ -210,6 +181,11 @@ export const ChatInputArea: React.FC<
           onCancelUpload={onCancelUpload}
           onRetryUpload={onRetryUpload}
           onDismissUpload={onDismissUpload}
+          docsOnly={docsOnly}
+          onDocsOnlyToggle={handleDocsOnlyToggle}
+          processedDocs={processedDocs}
+          selectedDocIds={ragSettings?.documentIds || []}
+          onDocSelectionChange={handleDocumentSelectionChange}
         />
       </div>
     </div>

@@ -2,9 +2,11 @@
 
 import React, { useState, useRef, useEffect, useCallback, DragEvent, ClipboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Plus, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload } from 'lucide-react';
+import { Send, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, Globe, Paperclip } from 'lucide-react';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { DocumentQuickSelect } from './document-quick-select';
+import type { DocumentItem } from '@/lib/api';
 
 /** Accepted MIME types for document upload */
 const ACCEPTED_TYPES = [
@@ -95,6 +97,16 @@ interface ChatInputProps {
   onRetryUpload?: () => void;
   /** Dismiss upload status banner */
   onDismissUpload?: () => void;
+  /** Whether web search is disabled (docs-only mode) */
+  docsOnly?: boolean;
+  /** Toggle docs-only / web+docs mode */
+  onDocsOnlyToggle?: (docsOnly: boolean) => void;
+  /** Processed documents available for search */
+  processedDocs?: DocumentItem[];
+  /** Currently selected document IDs for filtering */
+  selectedDocIds?: string[];
+  /** Callback when document selection changes */
+  onDocSelectionChange?: (ids: string[]) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -111,90 +123,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onCancelUpload,
   onRetryUpload,
   onDismissUpload,
+  docsOnly,
+  onDocsOnlyToggle,
+  processedDocs,
+  selectedDocIds,
+  onDocSelectionChange,
 }) => {
   const { isMobile } = useMobile();
   const [message, setMessage] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
-  const [menuIndex, setMenuIndex] = useState(0);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const plusButtonRef = useRef<HTMLButtonElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const dragCounterRef = useRef(0);
-
-  // Menu items for keyboard navigation
-  const menuItems = [
-    { id: 'add-files', label: 'Add files', icon: <Upload className="w-5 h-5 text-gray-400" /> },
-  ];
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        showUploadMenu &&
-        menuRef.current &&
-        !menuRef.current.contains(e.target as Node) &&
-        plusButtonRef.current &&
-        !plusButtonRef.current.contains(e.target as Node)
-      ) {
-        setShowUploadMenu(false);
-        setMenuIndex(0);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showUploadMenu]);
-
-  // Keyboard shortcuts for menu
-  useEffect(() => {
-    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (showUploadMenu) {
-        switch (e.key) {
-          case 'Escape':
-            e.preventDefault();
-            setShowUploadMenu(false);
-            setMenuIndex(0);
-            plusButtonRef.current?.focus();
-            break;
-          case 'ArrowUp':
-            e.preventDefault();
-            setMenuIndex((prev) => (prev > 0 ? prev - 1 : menuItems.length - 1));
-            break;
-          case 'ArrowDown':
-            e.preventDefault();
-            setMenuIndex((prev) => (prev < menuItems.length - 1 ? prev + 1 : 0));
-            break;
-          case 'Enter':
-            e.preventDefault();
-            handleMenuItemClick(menuItems[menuIndex].id);
-            break;
-        }
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showUploadMenu, menuIndex]);
-
-  // Focus trap for accessibility - focus first button when menu opens
-  useEffect(() => {
-    if (showUploadMenu && menuRef.current) {
-      const firstButton = menuRef.current.querySelector('button');
-      firstButton?.focus();
-    }
-  }, [showUploadMenu]);
-
-  const handleMenuItemClick = (itemId: string) => {
-    setShowUploadMenu(false);
-    setMenuIndex(0);
-    if (itemId === 'add-files') {
-      if (fileInputRef.current) fileInputRef.current.click();
-    }
-  };
 
   const handleSend = () => {
     if (message.trim() && !disabled) {
@@ -220,11 +164,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
-  };
-
-  const handlePlusClick = () => {
-    setShowUploadMenu((prev) => !prev);
-    setMenuIndex(0);
   };
 
   // Validate and process files
@@ -518,84 +457,80 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       )}
 
       <div className="flex items-end gap-2">
-        {/* Input container with + button inside */}
+        {/* Input container with source controls inside */}
         <div 
           ref={inputContainerRef}
           className={cn(
-            'flex-1 relative flex items-start border rounded-2xl bg-white transition-all',
+            'flex-1 relative flex flex-col border rounded-2xl bg-white transition-all',
             isDragging ? 'border-orange-400 ring-2 ring-orange-200' : 'border-gray-300',
             'focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-transparent'
           )}
         >
-          {/* Plus button inside input */}
-          <div className="relative">
+          {/* Text input */}
+          <textarea
+            ref={textInputRef}
+            value={message}
+            onChange={(e) => { setMessage(e.target.value); autoResize(); }}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={1}
+            className={cn(
+              'w-full px-4 py-3 bg-transparent focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-400 resize-none text-base leading-6 rounded-t-2xl'
+            )}
+            style={{ minHeight: '48px', maxHeight: '200px' }}
+            aria-label="Message input"
+          />
+
+          {/* Source control pills row */}
+          <div className="flex items-center gap-2 px-3 pb-2.5 flex-wrap">
+            {/* Attach pill */}
             <button
-              ref={plusButtonRef}
               type="button"
-              className={cn(
-                'w-9 h-9 ml-1 mt-1.5 flex-shrink-0 flex items-center justify-center rounded-full transition-colors',
-                isUploading ? 'cursor-not-allowed' : 'hover:bg-gray-100'
-              )}
-              aria-label="Upload document"
-              aria-expanded={showUploadMenu}
-              aria-haspopup="menu"
-              tabIndex={0}
-              onClick={handlePlusClick}
+              onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
+                isUploading
+                  ? 'border-orange-200 bg-orange-50 text-orange-500 cursor-not-allowed'
+                  : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+              )}
+              aria-label="Attach files"
             >
               {isUploading ? (
-                <Loader2 className="w-5 h-5 text-orange-500 animate-spin" aria-hidden="true" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <Plus className={cn('w-5 h-5 transition-transform duration-200', showUploadMenu ? 'rotate-45 text-gray-600' : 'text-gray-400')} aria-hidden="true" />
+                <Paperclip className="w-3.5 h-3.5" />
               )}
+              <span>Attach</span>
             </button>
 
-            {/* Upward popup menu with animation */}
-            <div
-              ref={menuRef}
-              className={cn(
-                'absolute bottom-full left-0 mb-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 transition-all duration-200 origin-bottom',
-                isMobile ? 'left-0 right-0 min-w-[calc(100vw-2rem)] -ml-3' : 'min-w-[220px]',
-                showUploadMenu 
-                  ? 'opacity-100 scale-100 translate-y-0' 
-                  : 'opacity-0 scale-95 translate-y-2 pointer-events-none'
-              )}
-              role="menu"
-              aria-orientation="vertical"
-              aria-labelledby="upload-menu-button"
-            >
-              {/* Menu header */}
-              <div className="px-4 py-2 border-b border-gray-100 mb-1">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Attachments</span>
-              </div>
-              
-              {menuItems.map((item, index) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="menuitem"
-                  onClick={() => handleMenuItemClick(item.id)}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-4 py-2.5 text-left text-gray-700 transition-colors',
-                    index === menuIndex ? 'bg-gray-100' : 'hover:bg-gray-50'
-                  )}
-                  tabIndex={showUploadMenu ? 0 : -1}
-                >
-                  {item.icon}
-                  <div className="flex-1">
-                    <span className="text-sm font-medium">{item.label}</span>
-                    <p className="text-xs text-gray-400">PDF, DOC, TXT, CSV</p>
-                  </div>
-                </button>
-              ))}
+            {/* Web toggle pill */}
+            {onDocsOnlyToggle && (
+              <button
+                type="button"
+                onClick={() => onDocsOnlyToggle(!docsOnly)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
+                  docsOnly
+                    ? 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                    : 'border-blue-200 bg-blue-50 text-blue-600'
+                )}
+                aria-label={docsOnly ? 'Enable web search' : 'Disable web search'}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>{docsOnly ? '+ Web' : 'Web ✓'}</span>
+              </button>
+            )}
 
-              {/* Drag hint */}
-              <div className="mt-1 px-4 py-2 border-t border-gray-100">
-                <p className="text-xs text-gray-400">
-                  Tip: Drag & drop or paste (Ctrl+V) files anywhere
-                </p>
-              </div>
-            </div>
+            {/* Document selector pill */}
+            {processedDocs && processedDocs.length > 0 && onDocSelectionChange && (
+              <DocumentQuickSelect
+                documents={processedDocs}
+                selectedIds={selectedDocIds || []}
+                onSelectionChange={onDocSelectionChange}
+              />
+            )}
           </div>
 
           <input
@@ -607,22 +542,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onChange={handleFileChange}
             disabled={isUploading}
             aria-hidden="true"
-          />
-
-          {/* Text input */}
-          <textarea
-            ref={textInputRef}
-            value={message}
-            onChange={(e) => { setMessage(e.target.value); autoResize(); }}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
-            className={cn(
-              'flex-1 px-3 py-3 bg-transparent focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-400 resize-none text-base leading-6'
-            )}
-            style={{ minHeight: '52px', maxHeight: '200px' }}
-            aria-label="Message input"
           />
         </div>
 
