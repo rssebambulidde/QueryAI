@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ChatInput } from './chat-input';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Search, MessageCircle } from 'lucide-react';
 import type { ChatInputAreaProps } from './chat-types';
 import { cn } from '@/lib/utils';
 
@@ -60,14 +60,25 @@ export const ChatInputArea: React.FC<
         <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Greeting */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full mb-4">
-              <MessageSquare className="w-8 h-8 text-orange-600" />
+            <div className={cn(
+              'inline-flex items-center justify-center w-16 h-16 rounded-full mb-4',
+              isChatMode
+                ? 'bg-gradient-to-br from-purple-100 to-purple-200'
+                : 'bg-gradient-to-br from-blue-100 to-blue-200'
+            )}>
+              {isChatMode
+                ? <MessageCircle className="w-8 h-8 text-purple-600" />
+                : <Search className="w-8 h-8 text-blue-600" />
+              }
             </div>
             <h3 className="text-2xl font-semibold text-gray-900 mb-2">
               {welcomeGreeting ?? 'Hi there!'}
             </h3>
             <p className="text-gray-500">
-              I can search your documents and the web to provide comprehensive answers with sources.
+              {isChatMode
+                ? 'Fast AI answers from general knowledge — no web search needed.'
+                : 'Web-powered AI with cited sources for research and fact-checking.'
+              }
             </p>
           </div>
 
