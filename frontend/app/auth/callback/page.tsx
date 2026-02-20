@@ -20,7 +20,10 @@ export default function AuthCallbackPage() {
       setTokens(accessToken, refreshToken, expiresIn * 1000 + Date.now());
       setUser({ id, email, full_name: fullName, role: 'user', subscriptionTier: 'free' });
       try {
-        await authApi.getMe();
+        const meResponse = await authApi.getMe();
+        if (meResponse.success && meResponse.data?.user) {
+          setUser(meResponse.data.user);
+        }
       } catch {
         // Profile may be created by /me
       }

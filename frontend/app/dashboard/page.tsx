@@ -131,29 +131,18 @@ function DashboardContent() {
   // Skip if we already have user data from login (to avoid redundant API calls)
   useEffect(() => {
     if (!hasCheckedAuth) {
-      // If we already have user data and are authenticated, skip checkAuth
-      // Login already provides fresh user data, so we don't need to call checkAuth immediately
-      // Only call checkAuth if we don't have user data yet
-      if (isAuthenticated && user) {
-        // We have user data from login, just mark as checked
-        console.log('[Dashboard] User data already available from login, skipping checkAuth');
-        setHasCheckedAuth(true);
-      } else {
-        // No user data yet, call checkAuth to get it
-        checkAuth()
-          .then(() => {
-            // After auth check, verify subscription tier is loaded
-            if (typeof window !== 'undefined') {
-              console.log('[Dashboard] Auth check complete - User subscription tier:', user?.subscriptionTier);
-            }
-          })
-          .catch(() => {
-            // Auth check failed, will redirect below
-          })
-          .finally(() => {
-            setHasCheckedAuth(true);
-          });
-      }
+      checkAuth()
+        .then(() => {
+          if (typeof window !== 'undefined') {
+            console.log('[Dashboard] Auth check complete - User subscription tier:', user?.subscriptionTier);
+          }
+        })
+        .catch(() => {
+          // Auth check failed, will redirect below
+        })
+        .finally(() => {
+          setHasCheckedAuth(true);
+        });
     }
     // Only run once on mount - don't add dependencies that would cause re-runs
     // eslint-disable-next-line react-hooks/exhaustive-deps
