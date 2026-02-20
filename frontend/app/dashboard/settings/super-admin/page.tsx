@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
-import { ShieldCheck, Key, BarChart3, Activity, CheckSquare, TestTube, Users, DollarSign, TrendingUp, Palette } from 'lucide-react';
+import { ShieldCheck, Key, BarChart3, Activity, CheckSquare, TestTube, Users, DollarSign, TrendingUp, Palette, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 
@@ -18,8 +18,9 @@ const UserManagement = dynamic(() => import('@/components/super-admin/user-manag
 const UsageAnalytics = dynamic(() => import('@/components/super-admin/usage-analytics'), { ssr: false });
 const CostAnalytics = dynamic(() => import('@/components/super-admin/cost-analytics'), { ssr: false });
 const WhiteLabel = dynamic(() => import('@/components/super-admin/white-label'), { ssr: false });
+const FeedbackDashboard = dynamic(() => import('@/components/super-admin/feedback-dashboard'), { ssr: false });
 
-type TabId = 'api' | 'analytics' | 'health' | 'validation' | 'ab-testing' | 'users' | 'usage' | 'cost' | 'white-label';
+type TabId = 'api' | 'analytics' | 'health' | 'validation' | 'ab-testing' | 'users' | 'usage' | 'cost' | 'white-label' | 'feedback';
 
 interface Tab {
   id: TabId;
@@ -37,6 +38,7 @@ const tabs: Tab[] = [
   { id: 'usage', label: 'Usage Analytics', icon: TrendingUp },
   { id: 'cost', label: 'Cost Analytics', icon: DollarSign },
   { id: 'white-label', label: 'White Label', icon: Palette },
+  { id: 'feedback', label: 'Feedback', icon: MessageSquare },
 ];
 
 export default function SuperAdminPage() {
@@ -86,6 +88,8 @@ export default function SuperAdminPage() {
         return <CostAnalytics />;
       case 'white-label':
         return <WhiteLabel />;
+      case 'feedback':
+        return <FeedbackDashboard />;
       default:
         return <ApiSettings />;
     }
