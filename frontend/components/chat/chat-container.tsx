@@ -109,6 +109,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   const [documents, setDocuments] = useState<import('@/lib/api').DocumentItem[]>([]);
   const [inlineUploadStatus, setInlineUploadStatus] = useState<UploadStatus | null>(null);
   const [lastUploadFile, setLastUploadFile] = useState<File | null>(null);
+  const conversationLoadRequestRef = useRef(0);
 
   // ── Document drag-and-drop upload ──────────────────────────────────────
 
@@ -323,43 +324,51 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   // Load conversation data
   useEffect(() => {
+    const requestId = ++conversationLoadRequestRef.current;
+    const isStale = () => requestId !== conversationLoadRequestRef.current;
+
     const loadConversationData = async () => {
       if (currentConversationId) {
         setSourcePanelContext(null);
         try {
           const messagesResponse = await conversationApi.getMessages(currentConversationId);
-          if (messagesResponse.success && messagesResponse.data) {
+          if (!isStale() && messagesResponse.success && messagesResponse.data) {
             setMessages(mapApiMessagesToUi(messagesResponse.data as ApiMessage[]));
           }
           const conversationResponse = await conversationApi.get(currentConversationId);
-          if (conversationResponse.success && conversationResponse.data) {
+          if (!isStale() && conversationResponse.success && conversationResponse.data) {
             const conversation = conversationResponse.data;
             let loadedTopic = null;
             if (conversation.topic_id) {
               try {
                 const topicResponse = await topicApi.get(conversation.topic_id);
-                if (topicResponse.success && topicResponse.data) { loadedTopic = topicResponse.data; setSelectedTopic(loadedTopic); }
-              } catch (err) { console.error('Failed to load topic:', err); setSelectedTopic(null); }
-            } else { setSelectedTopic(null); }
+                if (!isStale() && topicResponse.success && topicResponse.data) { loadedTopic = topicResponse.data; setSelectedTopic(loadedTopic); }
+              } catch (err) { if (!isStale()) { console.error('Failed to load topic:', err); setSelectedTopic(null); } }
+            } else if (!isStale()) { setSelectedTopic(null); }
             const oldFilters = conversation.metadata?.filters || {};
-            setUnifiedFilters({
-              topicId: loadedTopic?.id || null,
-              topic: loadedTopic,
-              keyword: oldFilters.topic,
-              timeRange: oldFilters.timeRange,
-              startDate: oldFilters.startDate,
-              endDate: oldFilters.endDate,
-              country: oldFilters.country,
-            });
+            if (!isStale()) {
+              setUnifiedFilters({
+                topicId: loadedTopic?.id || null,
+                topic: loadedTopic,
+                keyword: oldFilters.topic,
+                timeRange: oldFilters.timeRange,
+                startDate: oldFilters.startDate,
+                endDate: oldFilters.endDate,
+                country: oldFilters.country,
+              });
+            }
           }
         } catch (err) {
-          console.error('Failed to load conversation:', err);
-          toast.error('Failed to load conversation data');
-          setMessages([]);
-          setUnifiedFilters({ topicId: null, topic: null });
-          setSelectedTopic(null);
+          if (!isStale()) {
+            console.error('Failed to load conversation:', err);
+            toast.error('Failed to load conversation data');
+            setMessages([]);
+            setUnifiedFilters({ topicId: null, topic: null });
+            setSelectedTopic(null);
+          }
         }
       } else {
+        if (isStale()) return;
         setMessages([]);
         setUnifiedFilters({ topicId: null, topic: null });
         setSelectedTopic(null);
@@ -367,6 +376,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       }
     };
     loadConversationData();
+    return () => {
+      conversationLoadRequestRef.current += 1;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentConversationId, conversationSelectionVersion, setUnifiedFilters, setSelectedTopic]);
 
