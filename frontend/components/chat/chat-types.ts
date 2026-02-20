@@ -70,6 +70,7 @@ export type ApiMessage = {
     selectionReasoning?: string;
     usage?: QuestionResponse['usage'];
     cost?: QuestionResponse['cost'];
+    versions?: MessageVersionSummary[];
   };
   usage?: {
     promptTokens: number;
