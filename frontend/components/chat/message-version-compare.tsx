@@ -7,90 +7,155 @@ import type { MessageVersionSummary } from './chat-message';
 
 // ─── Diff helpers ─────────────────────────────────────────────────────────────
 
-/** Split text into sentences for comparison. */
-function splitSentences(text: string): string[] {
-  // Split on sentence-ending punctuation followed by whitespace or end-of-string
-  return text
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+/** Split text into words, preserving whitespace boundaries for clean display. */
+function splitWords(text: string): string[] {
+  return text.split(/(\s+)/).filter(Boolean);
+}
+
+/** Normalise a token for comparison (lowercase, trim). */
+function norm(w: string): string {
+  return w.trim().toLowerCase();
 }
 
 export type DiffSegment = {
   text: string;
-  type: 'same' | 'added' | 'removed' | 'changed';
+  type: 'same' | 'added' | 'removed';
 };
 
 /**
- * Simple sentence-level diff between two texts.
+ * Word-level diff between two texts using LCS.
  * Returns diff segments for both left (old) and right (new) sides.
  */
-function diffSentences(
+function diffWords(
   oldText: string,
   newText: string,
 ): { left: DiffSegment[]; right: DiffSegment[] } {
-  const oldSentences = splitSentences(oldText);
-  const newSentences = splitSentences(newText);
+  const oldWords = splitWords(oldText).filter((w) => w.trim());
+  const newWords = splitWords(newText).filter((w) => w.trim());
 
-  // Build a set for quick lookup
-  const oldSet = new Set(oldSentences);
-  const newSet = new Set(newSentences);
+  // Compute LCS on normalised words for better matching
+  const m = oldWords.length;
+  const n = newWords.length;
 
-  // Use longest common subsequence for alignment
-  const lcs = computeLCS(oldSentences, newSentences);
-  const lcsSet = new Set(lcs);
+  // For very large texts, fall back to a cheaper heuristic
+  if (m * n > 2_000_000) {
+    return cheapDiff(oldWords, newWords);
+  }
 
-  const left: DiffSegment[] = oldSentences.map((s) => ({
-    text: s,
-    type: lcsSet.has(s) ? 'same' : (newSet.has(s) ? 'same' : 'removed'),
-  }));
-
-  const right: DiffSegment[] = newSentences.map((s) => ({
-    text: s,
-    type: lcsSet.has(s) ? 'same' : (oldSet.has(s) ? 'same' : 'added'),
-  }));
-
-  return { left, right };
-}
-
-/** Compute longest common subsequence of two string arrays. */
-function computeLCS(a: string[], b: string[]): string[] {
-  const m = a.length;
-  const n = b.length;
-  // Use compact DP
+  // Standard DP-based LCS
   const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+      dp[i][j] =
+        norm(oldWords[i - 1]) === norm(newWords[j - 1])
+          ? dp[i - 1][j - 1] + 1
+          : Math.max(dp[i - 1][j], dp[i][j - 1]);
     }
   }
-  // Backtrack
-  const result: string[] = [];
+
+  // Backtrack to build segments
+  const left: DiffSegment[] = [];
+  const right: DiffSegment[] = [];
   let i = m;
   let j = n;
-  while (i > 0 && j > 0) {
-    if (a[i - 1] === b[j - 1]) {
-      result.unshift(a[i - 1]);
+
+  // Temp accumulators (collected in reverse)
+  const leftAcc: DiffSegment[] = [];
+  const rightAcc: DiffSegment[] = [];
+
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && norm(oldWords[i - 1]) === norm(newWords[j - 1])) {
+      leftAcc.push({ text: oldWords[i - 1], type: 'same' });
+      rightAcc.push({ text: newWords[j - 1], type: 'same' });
       i--;
       j--;
-    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
-      i--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      rightAcc.push({ text: newWords[j - 1], type: 'added' });
+      j--;
     } else {
-      j--;
+      leftAcc.push({ text: oldWords[i - 1], type: 'removed' });
+      i--;
     }
   }
-  return result;
+
+  leftAcc.reverse();
+  rightAcc.reverse();
+
+  // Merge consecutive segments of the same type for cleaner display
+  const merge = (segs: DiffSegment[]): DiffSegment[] => {
+    const merged: DiffSegment[] = [];
+    for (const seg of segs) {
+      const last = merged[merged.length - 1];
+      if (last && last.type === seg.type) {
+        last.text += ' ' + seg.text;
+      } else {
+        merged.push({ ...seg });
+      }
+    }
+    return merged;
+  };
+
+  return { left: merge(leftAcc), right: merge(rightAcc) };
+}
+
+/** Cheap word-set diff for very long texts. */
+function cheapDiff(
+  oldWords: string[],
+  newWords: string[],
+): { left: DiffSegment[]; right: DiffSegment[] } {
+  const oldSet = new Set(oldWords.map(norm));
+  const newSet = new Set(newWords.map(norm));
+
+  const left: DiffSegment[] = [];
+  const right: DiffSegment[] = [];
+
+  let curType: DiffSegment['type'] | null = null;
+  let buf = '';
+  for (const w of oldWords) {
+    const t = newSet.has(norm(w)) ? 'same' : 'removed';
+    if (t === curType) {
+      buf += ' ' + w;
+    } else {
+      if (curType) left.push({ text: buf, type: curType });
+      curType = t;
+      buf = w;
+    }
+  }
+  if (curType) left.push({ text: buf, type: curType });
+
+  curType = null;
+  buf = '';
+  for (const w of newWords) {
+    const t = oldSet.has(norm(w)) ? 'same' : 'added';
+    if (t === curType) {
+      buf += ' ' + w;
+    } else {
+      if (curType) right.push({ text: buf, type: curType });
+      curType = t;
+      buf = w;
+    }
+  }
+  if (curType) right.push({ text: buf, type: curType });
+
+  return { left, right };
 }
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
 function computeStats(left: DiffSegment[], right: DiffSegment[]) {
-  const removed = left.filter((s) => s.type === 'removed').length;
-  const added = right.filter((s) => s.type === 'added').length;
-  const same = left.filter((s) => s.type === 'same').length;
-  const total = Math.max(left.length, right.length, 1);
-  const similarity = Math.round((same / total) * 100);
-  return { removed, added, same, similarity };
+  // Count words in each segment type for accurate stats
+  const countWords = (segs: DiffSegment[], type: DiffSegment['type']) =>
+    segs.filter((s) => s.type === type).reduce((acc, s) => acc + s.text.split(/\s+/).filter(Boolean).length, 0);
+
+  const removed = countWords(left, 'removed');
+  const added = countWords(right, 'added');
+  const sameLeft = countWords(left, 'same');
+  const sameRight = countWords(right, 'same');
+  const totalLeft = sameLeft + removed;
+  const totalRight = sameRight + added;
+  const total = Math.max(totalLeft, totalRight, 1);
+  const similarity = Math.round((Math.max(sameLeft, sameRight) / total) * 100);
+  return { removed, added, same: Math.max(sameLeft, sameRight), similarity };
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -121,7 +186,7 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
   const rightVersion = sorted[rightIdx];
 
   const { left: leftDiff, right: rightDiff } = useMemo(
-    () => diffSentences(leftVersion?.content ?? '', rightVersion?.content ?? ''),
+    () => diffWords(leftVersion?.content ?? '', rightVersion?.content ?? ''),
     [leftVersion?.content, rightVersion?.content],
   );
 
@@ -137,8 +202,8 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-gray-900">Compare Versions</h2>
             <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">{stats.removed} removed</span>
-              <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">{stats.added} added</span>
+              <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">{stats.removed} words removed</span>
+              <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">{stats.added} words added</span>
               <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{stats.similarity}% similar</span>
             </div>
           </div>
@@ -251,8 +316,6 @@ function DiffPane({
   date?: string;
   colorScheme: 'added' | 'removed';
 }) {
-  const bgColor = colorScheme === 'added' ? 'bg-green-50' : 'bg-red-50';
-  const textColor = colorScheme === 'added' ? 'text-green-800' : 'text-red-800';
 
   return (
     <div className="flex flex-col min-h-0">
@@ -272,7 +335,6 @@ function DiffPane({
               seg.type === 'same' && '',
               seg.type === 'removed' && 'bg-red-100 text-red-800 line-through decoration-red-400/60',
               seg.type === 'added' && 'bg-green-100 text-green-800',
-              seg.type === 'changed' && cn(bgColor, textColor),
             )}
           >
             {seg.text}{' '}
