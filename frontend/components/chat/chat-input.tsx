@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, KeyboardEvent, useRef, useEffect, useCallback, DragEvent, ClipboardEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback, DragEvent, ClipboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Send, Plus, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload } from 'lucide-react';
 import { useMobile } from '@/lib/hooks/use-mobile';
@@ -124,7 +124,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const plusButtonRef = useRef<HTMLButtonElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
-  const textInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
   const dragCounterRef = useRef(0);
 
   // Menu items for keyboard navigation
@@ -200,14 +200,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (message.trim() && !disabled) {
       onSend(message.trim());
       setMessage('');
+      // Reset textarea height
+      if (textInputRef.current) {
+        textInputRef.current.style.height = 'auto';
+      }
     }
   };
 
-  const handleKeyPress = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  // Auto-resize textarea to fit content
+  const autoResize = () => {
+    const el = textInputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   };
 
   const handlePlusClick = () => {
@@ -505,12 +517,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-end gap-2">
         {/* Input container with + button inside */}
         <div 
           ref={inputContainerRef}
           className={cn(
-            'flex-1 relative flex items-center border rounded-xl bg-white transition-all',
+            'flex-1 relative flex items-start border rounded-2xl bg-white transition-all',
             isDragging ? 'border-orange-400 ring-2 ring-orange-200' : 'border-gray-300',
             'focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-transparent'
           )}
@@ -521,7 +533,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               ref={plusButtonRef}
               type="button"
               className={cn(
-                'w-9 h-9 ml-1 flex-shrink-0 flex items-center justify-center rounded-full transition-colors',
+                'w-9 h-9 ml-1 mt-1.5 flex-shrink-0 flex items-center justify-center rounded-full transition-colors',
                 isUploading ? 'cursor-not-allowed' : 'hover:bg-gray-100'
               )}
               aria-label="Upload document"
@@ -598,18 +610,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           />
 
           {/* Text input */}
-          <input
+          <textarea
             ref={textInputRef}
-            type="text"
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onChange={(e) => { setMessage(e.target.value); autoResize(); }}
+            onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}
+            rows={1}
             className={cn(
-              'flex-1 px-3 py-2.5 bg-transparent focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-400'
+              'flex-1 px-3 py-3 bg-transparent focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-400 resize-none text-base leading-6'
             )}
-            style={{ minHeight: '44px' }}
+            style={{ minHeight: '52px', maxHeight: '200px' }}
             aria-label="Message input"
           />
         </div>
@@ -618,7 +630,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         {activeQueueJobId ? (
           <Button
             onClick={onCancelQueueJob}
-            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-sm transition-all duration-200 flex items-center gap-2 touch-manipulation min-h-[44px]"
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl shadow-sm transition-all duration-200 flex items-center gap-2 touch-manipulation min-h-[52px]"
             aria-label="Cancel queued request"
           >
             <Square className="w-4 h-4" />
@@ -628,7 +640,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <Button
             onClick={handleSend}
             disabled={disabled || !message.trim()}
-            className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 touch-manipulation min-h-[44px] ml-2"
+            className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-2xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 touch-manipulation min-h-[52px] ml-2"
             aria-label="Send message"
           >
             <Send className="w-4 h-4" />
