@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { apiClient } from '@/lib/api';
-import { Search, UserCheck, UserX, Shield, ShieldCheck, Loader2 } from 'lucide-react';
+import { Search, UserCheck, UserX, ShieldCheck, Loader2 } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
@@ -15,7 +15,7 @@ interface User {
   id: string;
   email: string;
   full_name?: string;
-  role: 'user' | 'admin' | 'super_admin';
+  role: 'user' | 'super_admin';
   created_at: string;
 }
 
@@ -53,7 +53,7 @@ export default function UserManagement() {
     }
   };
 
-  const updateUserRole = async (userId: string, newRole: 'user' | 'admin' | 'super_admin') => {
+  const updateUserRole = async (userId: string, newRole: 'user' | 'super_admin') => {
     try {
       setUpdatingRole(userId);
       const response = await apiClient.put(`/api/admin/users/${userId}/role`, {
@@ -84,12 +84,6 @@ export default function UserManagement() {
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-purple-100 text-purple-800">
           <ShieldCheck className="w-3 h-3" />
           Super Admin
-        </span>
-      ),
-      admin: (
-        <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-800">
-          <Shield className="w-3 h-3" />
-          Admin
         </span>
       ),
       user: (
@@ -175,13 +169,12 @@ export default function UserManagement() {
                       <select
                         value={user.role}
                         onChange={(e) =>
-                          updateUserRole(user.id, e.target.value as 'user' | 'admin' | 'super_admin')
+                          updateUserRole(user.id, e.target.value as 'user' | 'super_admin')
                         }
                         disabled={updatingRole === user.id}
                         className="flex-1 text-sm border rounded px-3 py-2 min-h-[44px] touch-manipulation"
                       >
                         <option value="user">User</option>
-                        <option value="admin">Admin</option>
                         <option value="super_admin">Super Admin</option>
                       </select>
                       {updatingRole === user.id && (
@@ -226,13 +219,12 @@ export default function UserManagement() {
                             <select
                               value={user.role}
                               onChange={(e) =>
-                                updateUserRole(user.id, e.target.value as 'user' | 'admin' | 'super_admin')
+                                updateUserRole(user.id, e.target.value as 'user' | 'super_admin')
                               }
                               disabled={updatingRole === user.id}
                               className="text-sm border rounded px-2 py-1"
                             >
                               <option value="user">User</option>
-                              <option value="admin">Admin</option>
                               <option value="super_admin">Super Admin</option>
                             </select>
                             {updatingRole === user.id && (

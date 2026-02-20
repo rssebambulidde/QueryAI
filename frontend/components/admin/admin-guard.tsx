@@ -7,7 +7,7 @@ import { useUserRole } from '@/lib/hooks/use-user-role';
 
 interface AdminGuardProps {
   children: React.ReactNode;
-  /** Require super_admin role instead of admin */
+  /** @deprecated Only super_admin role exists now. Kept for backward compatibility. */
   requireOwner?: boolean;
   /** Redirect path if unauthorized (default: /dashboard) */
   redirectTo?: string;
@@ -27,7 +27,7 @@ export function AdminGuard({
 }: AdminGuardProps) {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
-  const { isAdmin, isSuperAdmin, hasSuperAdminAccess } = useUserRole();
+  const { isSuperAdmin } = useUserRole();
 
   useEffect(() => {
     if (isLoading) return;
@@ -37,12 +37,10 @@ export function AdminGuard({
       return;
     }
 
-    const hasAccess = requireOwner ? hasSuperAdminAccess() : isAdmin;
-    
-    if (!hasAccess) {
+    if (!isSuperAdmin) {
       router.push(redirectTo);
     }
-  }, [isAuthenticated, isLoading, isAdmin, isSuperAdmin, requireOwner, hasSuperAdminAccess, router, redirectTo]);
+  }, [isAuthenticated, isLoading, isSuperAdmin, router, redirectTo]);
 
   if (isLoading && showLoading) {
     return (
@@ -59,9 +57,7 @@ export function AdminGuard({
     return null;
   }
 
-  const hasAccess = requireOwner ? hasSuperAdminAccess() : isAdmin;
-  
-  if (!hasAccess) {
+  if (!isSuperAdmin) {
     return null;
   }
 

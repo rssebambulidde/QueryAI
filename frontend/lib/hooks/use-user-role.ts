@@ -11,15 +11,15 @@ export function useUserRole() {
 
   const role = user?.role || 'user';
   
-  const isAdmin = role === 'admin' || role === 'super_admin';
   const isSuperAdmin = role === 'super_admin';
+  const isAdmin = isSuperAdmin; // Only super_admin exists now
   const isUser = role === 'user';
 
   /**
-   * Check if user has admin or super_admin access
+   * Check if user has super_admin access
    */
   const hasAdminAccess = (): boolean => {
-    return isAdmin;
+    return isSuperAdmin;
   };
 
   /**
@@ -32,11 +32,10 @@ export function useUserRole() {
   /**
    * Check if user has access to a specific role level
    */
-  const hasRole = (requiredRole: 'user' | 'admin' | 'super_admin'): boolean => {
+  const hasRole = (requiredRole: 'user' | 'super_admin'): boolean => {
     const roleHierarchy: Record<string, number> = {
       user: 1,
-      admin: 2,
-      super_admin: 3,
+      super_admin: 2,
     };
     
     const userLevel = roleHierarchy[role] || 0;

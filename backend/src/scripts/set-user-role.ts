@@ -1,18 +1,18 @@
 /**
- * Script to set user role (admin/owner)
+ * Script to set user role
  * Usage: 
  *   ts-node src/scripts/set-user-role.ts <userId> <role>
  *   ts-node src/scripts/set-user-role.ts <email> <role> --by-email
  * 
  * Example:
- *   ts-node src/scripts/set-user-role.ts user@example.com owner --by-email
- *   ts-node src/scripts/set-user-role.ts 123e4567-e89b-12d3-a456-426614174000 admin
+ *   ts-node src/scripts/set-user-role.ts user@example.com super_admin --by-email
+ *   ts-node src/scripts/set-user-role.ts 123e4567-e89b-12d3-a456-426614174000 super_admin
  */
 
 import { supabaseAdmin } from '../config/database';
 import logger from '../config/logger';
 
-async function setUserRole(userIdOrEmail: string, role: 'user' | 'admin' | 'owner', byEmail: boolean = false) {
+async function setUserRole(userIdOrEmail: string, role: 'user' | 'super_admin', byEmail: boolean = false) {
   try {
     let userId: string;
 
@@ -35,8 +35,8 @@ async function setUserRole(userIdOrEmail: string, role: 'user' | 'admin' | 'owne
     }
 
     // Validate role
-    if (!['user', 'admin', 'owner'].includes(role)) {
-      logger.error(`Invalid role: ${role}. Must be 'user', 'admin', or 'owner'`);
+    if (!['user', 'super_admin'].includes(role)) {
+      logger.error(`Invalid role: ${role}. Must be 'user' or 'super_admin'`);
       process.exit(1);
     }
 
@@ -75,15 +75,15 @@ if (args.length < 2) {
   console.log('  ts-node set-user-role.ts <email> <role> --by-email');
   console.log('');
   console.log('Examples:');
-  console.log('  ts-node set-user-role.ts user@example.com owner --by-email');
-  console.log('  ts-node set-user-role.ts 123e4567-e89b-12d3-a456-426614174000 admin');
+  console.log('  ts-node set-user-role.ts user@example.com super_admin --by-email');
+  console.log('  ts-node set-user-role.ts 123e4567-e89b-12d3-a456-426614174000 super_admin');
   console.log('');
-  console.log('Roles: user, admin, owner');
+  console.log('Roles: user, super_admin');
   process.exit(1);
 }
 
 const userIdOrEmail = args[0];
-const role = args[1] as 'user' | 'admin' | 'owner';
+const role = args[1] as 'user' | 'super_admin';
 const byEmail = args.includes('--by-email');
 
 setUserRole(userIdOrEmail, role, byEmail);

@@ -20,7 +20,7 @@ export interface AuthResponse {
     id: string;
     email: string;
     full_name?: string;
-    role?: 'user' | 'admin' | 'super_admin';
+    role?: 'user' | 'super_admin';
     subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
   };
   session: {

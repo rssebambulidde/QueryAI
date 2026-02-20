@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
-import { requireAdmin, requireSuperAdmin } from '../middleware/authorization.middleware';
+import { requireSuperAdmin } from '../middleware/authorization.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
 import { ValidationError, AuthorizationError } from '../types/error';
 import { supabaseAdmin } from '../config/database';
@@ -112,8 +112,8 @@ router.put(
     const userId = Array.isArray(id) ? id[0] : id;
     const { role } = req.body;
 
-    if (!role || !['user', 'admin', 'super_admin'].includes(role)) {
-      throw new ValidationError('Invalid role. Must be: user, admin, or super_admin');
+    if (!role || !['user', 'super_admin'].includes(role)) {
+      throw new ValidationError('Invalid role. Must be: user or super_admin');
     }
 
     // Prevent changing own role (security measure)
@@ -163,8 +163,8 @@ router.put(
     const userEmail = Array.isArray(email) ? email[0] : email;
     const { role } = req.body;
 
-    if (!role || !['user', 'admin', 'super_admin'].includes(role)) {
-      throw new ValidationError('Invalid role. Must be: user, admin, or super_admin');
+    if (!role || !['user', 'super_admin'].includes(role)) {
+      throw new ValidationError('Invalid role. Must be: user or super_admin');
     }
 
     // Find user by email
