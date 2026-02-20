@@ -246,12 +246,12 @@ export class MessageService {
       const limit = options?.limit ?? 100;
       const offset = options?.offset ?? 0;
 
-      const { data, error } = await supabaseAdmin
+      // Fetch all messages for the conversation (including child versions)
+      const { data: allMessages, error } = await supabaseAdmin
         .from('messages')
         .select('*')
         .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true })
-        .range(offset, offset + limit - 1);
+        .order('created_at', { ascending: true });
 
       if (error) {
         logger.error('Error fetching messages:', error);
@@ -262,7 +262,52 @@ export class MessageService {
         );
       }
 
-      return data || [];
+      if (!allMessages || allMessages.length === 0) return [];
+
+      // Build a map of root message ID → all versions (root + children)
+      const versionMap = new Map<string, Database.Message[]>();
+      for (const msg of allMessages) {
+        if (msg.parent_message_id) {
+          const rootId = msg.parent_message_id;
+          if (!versionMap.has(rootId)) versionMap.set(rootId, []);
+          versionMap.get(rootId)!.push(msg);
+        }
+      }
+
+      // Filter to only root messages (no parent) and apply pagination
+      const rootMessages = allMessages.filter((m) => !m.parent_message_id);
+      const paginated = rootMessages.slice(offset, offset + limit);
+
+      // For root messages that have child versions, find the latest version
+      // and attach version summaries so the frontend can show version pills
+      return paginated.map((msg) => {
+        const children = versionMap.get(msg.id);
+        if (!children || children.length === 0) return msg;
+
+        // All versions: root (v1) + children, sorted by version
+        const allVersions = [msg, ...children].sort((a, b) => (a.version ?? 1) - (b.version ?? 1));
+        const latest = allVersions[allVersions.length - 1];
+
+        // Return the latest version's content but with the root's ID and
+        // version summaries attached in metadata
+        return {
+          ...msg,
+          content: latest.content,
+          sources: latest.sources,
+          version: latest.version ?? 1,
+          metadata: {
+            ...latest.metadata,
+            versions: allVersions.map((v) => ({
+              id: v.id,
+              version: v.version ?? 1,
+              content: v.content,
+              sources: v.sources,
+              metadata: v.metadata,
+              created_at: v.created_at,
+            })),
+          },
+        };
+      });
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
@@ -303,7 +348,8 @@ export class MessageService {
       let query = supabaseAdmin
         .from('messages')
         .select('*')
-        .eq('conversation_id', conversationId);
+        .eq('conversation_id', conversationId)
+        .is('parent_message_id', null);
 
       if (limit) {
         // Fetch the last N rows efficiently: order DESC, limit, then

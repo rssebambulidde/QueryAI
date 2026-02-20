@@ -375,7 +375,6 @@ router.get(
     const days = Math.min(parseInt(req.query.days as string, 10) || 30, 365);
 
     const { data, error } = await supabaseAdmin
-      .schema('private' as any)
       .rpc('get_regeneration_quality_stats', { p_days: days });
 
     if (error) {

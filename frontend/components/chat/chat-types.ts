@@ -110,6 +110,7 @@ export function mapApiMessagesToUi(apiMessages: ApiMessage[]): Message[] {
       qualityScore: msg.metadata?.qualityScore,
       version: msg.version,
       parentMessageId: msg.parent_message_id,
+      versions: msg.metadata?.versions as MessageVersionSummary[] | undefined,
     };
   });
 }
