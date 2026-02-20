@@ -146,7 +146,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
 
           {/* Mode indicator */}
           {conversation.mode === 'chat' ? (
-            <span title="General Chat"><MessageCircle className="w-3 h-3 text-purple-400 flex-shrink-0" /></span>
+            <span title="Express"><MessageCircle className="w-3 h-3 text-purple-400 flex-shrink-0" /></span>
           ) : (
             <span title="Deep Research"><Search className="w-3 h-3 text-blue-400 flex-shrink-0" /></span>
           )}

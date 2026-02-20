@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, DragEvent, ClipboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, Globe, Paperclip, ChevronUp, Search, MessageCircle } from 'lucide-react';
+import { Send, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, ChevronUp, Search, MessageCircle } from 'lucide-react';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 // Document quick-select retired in Phase 2 (v2 migration)
@@ -518,7 +518,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   ) : (
                     <Search className="w-3.5 h-3.5" />
                   )}
-                  <span>{isChatMode ? 'General' : 'Deep Research'}</span>
+                  <span>{isChatMode ? 'Express' : 'Deep Research'}</span>
                   <ChevronUp className={cn('w-3 h-3 transition-transform', showModeMenu ? 'rotate-180' : '')} />
                 </button>
 
@@ -537,7 +537,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     >
                       <MessageCircle className="w-4 h-4 mt-0.5 text-purple-500 shrink-0" />
                       <div>
-                        <div className="text-sm font-medium text-gray-900">General</div>
+                        <div className="text-sm font-medium text-gray-900">Express</div>
                         <div className="text-xs text-gray-500">Quick answers and conversation</div>
                       </div>
                     </button>
@@ -562,46 +562,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               </div>
             )}
 
-            {/* Attach pill — research mode only */}
-            {!isChatMode && (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
-                isUploading
-                  ? 'border-orange-200 bg-orange-50 text-orange-500 cursor-not-allowed'
-                  : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-              )}
-              aria-label="Attach files"
-            >
-              {isUploading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Paperclip className="w-3.5 h-3.5" />
-              )}
-              <span>Attach</span>
-            </button>
-            )}
 
-            {/* Web toggle pill — research mode only */}
-            {!isChatMode && onWebToggle && (
-              <button
-                type="button"
-                onClick={() => onWebToggle(!webEnabled)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
-                  webEnabled
-                    ? 'border-blue-200 bg-blue-50 text-blue-600'
-                    : 'border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700'
-                )}
-                aria-label={webEnabled ? 'Disable web search' : 'Enable web search'}
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span>{webEnabled ? 'Web ✓' : 'Web'}</span>
-              </button>
-            )}
 
           </div>
 

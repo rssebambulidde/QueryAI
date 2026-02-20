@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ChatInput } from './chat-input';
-import { MessageSquare, Search, MessageCircle } from 'lucide-react';
+import { Search, MessageCircle } from 'lucide-react';
 import type { ChatInputAreaProps } from './chat-types';
 import { cn } from '@/lib/utils';
 
@@ -77,8 +77,8 @@ export const ChatInputArea: React.FC<
             </h3>
             <p className="text-gray-500">
               {isChatMode
-                ? 'Fast AI answers from general knowledge — no web search needed.'
-                : 'Web-powered AI with cited sources for research and fact-checking.'
+                ? 'Fast AI answers — quick and conversational.'
+                : 'In-depth research with cited sources and web search.'
               }
             </p>
           </div>

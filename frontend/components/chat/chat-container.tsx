@@ -586,7 +586,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           <ChatInputArea
             variant="conversation"
             mode={conversationMode || 'chat'}
-            onModeChange={!messages.length ? setConversationMode : undefined}
+            onModeChange={setConversationMode}
             onSend={(msg) => handleUserInput(msg)}
             disabled={isLoading || isStreaming}
             selectedTopic={selectedTopic}
