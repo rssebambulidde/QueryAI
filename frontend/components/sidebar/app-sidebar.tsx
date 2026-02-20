@@ -357,26 +357,62 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             {user?.avatar_url ? (
               <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-white text-xs font-semibold">
-                {getUserInitials()}
-              </div>
-            )}
-          </button>
-          <AccountDropdown
-            isOpen={isAccountDropdownOpen}
-            onClose={() => setIsAccountDropdownOpen(false)}
-            subscriptionTier={subscriptionTier}
-            anchorRef={accountButtonRef}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Expanded sidebar ─────────────────────────────────────────────
-  return (
-    <div className={cn(
+            return (
+              <div
+                className={cn(
+                  'flex flex-col h-full bg-white border-r border-gray-100 shadow-sm',
+                  isCollapsed && !isMobile ? 'w-[60px] min-w-[60px] max-w-[60px]' : 'w-[270px] min-w-[270px] max-w-[270px]',
+                  isMobile && 'w-full min-w-0 max-w-full',
+                )}
+              >
+                {/* ...existing code... */}
+                {/* Sidebar tab buttons */}
+                <div className="flex items-center gap-1 px-2 py-2 border-b border-gray-100">
+                  <button
+                    className={cn(
+                      'flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                      activeTab === 'chat' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                    )}
+                    onClick={() => onTabChange('chat')}
+                    title="Chat"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span className="hidden sm:inline">Chat</span>
+                  </button>
+                  <button
+                    className={cn(
+                      'flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                      activeTab === 'collections' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                    )}
+                    onClick={() => onTabChange('collections')}
+                    title="Collections"
+                  >
+                    <Folder className="w-4 h-4" />
+                    <span className="hidden sm:inline">Collections</span>
+                  </button>
+                  <button
+                    className={cn(
+                      'flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                      activeTab === 'sources' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                    )}
+                    onClick={() => onTabChange('sources')}
+                    title="My Sources"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    <span className="hidden sm:inline">Sources</span>
+                  </button>
+                </div>
+                <div className="flex-1 flex flex-col overflow-y-auto">
+                  {/* ...existing code... */}
+                  {activeTab === 'sources' && (
+                    <div className="py-2 h-full">
+                      <CitedSourcesPanel
+                        onSourceExplore={setExplorerSource}
+                        className="h-full"
+                      />
+                    </div>
+                  )}
+                </div>
       'flex flex-col bg-white border-r border-gray-100 w-[260px] flex-shrink-0',
       isMobile ? 'h-full min-h-0' : 'h-full'
     )}>
