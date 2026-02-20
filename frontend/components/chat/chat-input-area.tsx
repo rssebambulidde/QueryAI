@@ -81,7 +81,7 @@ export const ChatInputArea: React.FC<
   if (variant === 'empty') {
     return (
       <div className="flex flex-1 min-h-0 items-center justify-center">
-        <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Greeting */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full mb-4">
@@ -138,7 +138,7 @@ export const ChatInputArea: React.FC<
   // ── Conversation-mode variant (bottom bar) ───────────────────────────────
   return (
     <div className="bg-white border-t border-gray-200 shadow-lg relative flex justify-center">
-      <div className="w-full max-w-3xl mx-auto px-4 pb-4">
+      <div className="w-full max-w-4xl mx-auto px-4 pb-4">
         {/* Research-mode starters (horizontal scroll) */}
         <ResearchModeBar
           selectedTopic={selectedTopic}
