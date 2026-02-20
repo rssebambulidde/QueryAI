@@ -130,12 +130,35 @@ export class MessageService {
       });
 
       if (error) {
-        logger.error('Error saving message pair via RPC:', error);
-        throw new AppError(
-          `Failed to save message pair: ${error.message}`,
-          500,
-          'MESSAGE_PAIR_SAVE_ERROR'
-        );
+        logger.warn('save_message_pair RPC failed, falling back to sequential save', {
+          conversationId,
+          error: error.message,
+        });
+
+        const userMessage = await this.saveMessage({
+          conversationId,
+          role: 'user',
+          content: userContent.trim(),
+        });
+
+        try {
+          const assistantMessage = await this.saveMessage({
+            conversationId,
+            role: 'assistant',
+            content: assistantContent.trim(),
+            sources: assistantSources,
+            metadata: assistantMetadata,
+          });
+
+          return { userMessage, assistantMessage };
+        } catch (assistantSaveError) {
+          await supabaseAdmin
+            .from('messages')
+            .delete()
+            .eq('id', userMessage.id)
+            .catch(() => {});
+          throw assistantSaveError;
+        }
       }
 
       // The RPC returns a JSONB object with userMessage / assistantMessage

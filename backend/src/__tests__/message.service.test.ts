@@ -241,12 +241,36 @@ describe('MessageService', () => {
       expect(pair.assistantMessage.sources).toEqual(sources);
     });
 
-    it('should throw on RPC error', async () => {
+    it('should fallback to sequential save when RPC fails', async () => {
       (supabaseAdmin.rpc as any).mockResolvedValue({ data: null, error: { message: 'DB error' } });
 
-      await expect(
-        MessageService.saveMessagePair(mockConversationId, 'Q', 'A')
-      ).rejects.toThrow(AppError);
+      (supabaseAdmin.from as any)
+        .mockReturnValueOnce({
+          insert: jest.fn(() => ({
+            select: jest.fn(() => ({
+              single: (jest.fn() as any).mockResolvedValue({
+                data: { ...mockMessage, id: 'msg-user-fallback', role: 'user', content: 'Q' },
+                error: null,
+              }),
+            })),
+          })),
+        })
+        .mockReturnValueOnce({
+          insert: jest.fn(() => ({
+            select: jest.fn(() => ({
+              single: (jest.fn() as any).mockResolvedValue({
+                data: { ...mockMessage, id: 'msg-assistant-fallback', role: 'assistant', content: 'A' },
+                error: null,
+              }),
+            })),
+          })),
+        });
+
+      const pair = await MessageService.saveMessagePair(mockConversationId, 'Q', 'A');
+
+      expect(pair.userMessage.role).toBe('user');
+      expect(pair.assistantMessage.role).toBe('assistant');
+      expect(ConversationService.updateConversationTimestamp).toHaveBeenCalled();
     });
 
     it('should validate required fields', async () => {
