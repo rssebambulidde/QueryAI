@@ -30,15 +30,15 @@ interface Tab {
 
 const tabs: Tab[] = [
   { id: 'api', label: 'API', icon: Key },
-  { id: 'analytics', label: 'Analytics Dashboard', icon: BarChart3 },
-  { id: 'health', label: 'Health Monitoring', icon: Activity },
-  { id: 'validation', label: 'Validation Reports', icon: CheckSquare },
-  { id: 'ab-testing', label: 'A/B Testing', icon: TestTube },
-  { id: 'users', label: 'User Management', icon: Users },
-  { id: 'usage', label: 'Usage Analytics', icon: TrendingUp },
-  { id: 'cost', label: 'Cost Analytics', icon: DollarSign },
-  { id: 'white-label', label: 'White Label', icon: Palette },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'feedback', label: 'Feedback', icon: MessageSquare },
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'health', label: 'Health', icon: Activity },
+  { id: 'validation', label: 'Validation', icon: CheckSquare },
+  { id: 'ab-testing', label: 'A/B Testing', icon: TestTube },
+  { id: 'usage', label: 'Usage', icon: TrendingUp },
+  { id: 'cost', label: 'Cost', icon: DollarSign },
+  { id: 'white-label', label: 'White Label', icon: Palette },
 ];
 
 export default function SuperAdminPage() {
@@ -110,7 +110,7 @@ export default function SuperAdminPage() {
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
+        <nav className="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
