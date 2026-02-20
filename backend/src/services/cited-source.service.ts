@@ -79,7 +79,7 @@ export class CitedSourceService {
   static async upsertCitedSource(input: UpsertCitedSourceInput): Promise<string | null> {
     try {
       const domain = extractDomain(input.sourceUrl);
-      const { data, error } = await supabaseAdmin.schema('private').rpc('upsert_cited_source', {
+      const { data, error } = await supabaseAdmin.rpc('upsert_cited_source', {
         p_user_id: input.userId,
         p_source_url: input.sourceUrl,
         p_source_type: input.sourceType,
@@ -153,9 +153,7 @@ export class CitedSourceService {
   ): Promise<CitedSource[]> {
     const { topicId, startDate, endDate, limit = 50, offset = 0 } = options || {};
 
-    logger.info('Fetching cited sources', { userId, topicId, startDate, endDate, limit, offset });
-
-    const { data, error } = await supabaseAdmin.schema('private').rpc('get_user_cited_sources', {
+    const { data, error } = await supabaseAdmin.rpc('get_user_cited_sources', {
       p_user_id: userId,
       p_topic_id: topicId || null,
       p_start_date: startDate || null,
@@ -165,11 +163,10 @@ export class CitedSourceService {
     });
 
     if (error) {
-      logger.error('Error fetching cited sources', { error: error.message, code: (error as any).code, details: (error as any).details, hint: (error as any).hint, userId });
+      logger.error('Error fetching cited sources', { error: error.message, userId });
       return [];
     }
 
-    logger.info('Cited sources result', { userId, count: Array.isArray(data) ? data.length : 'not-array', dataType: typeof data });
     return (data || []) as CitedSource[];
   }
 
@@ -183,7 +180,7 @@ export class CitedSourceService {
   ): Promise<SourceConversation[]> {
     const { limit = 50, offset = 0 } = options || {};
 
-    const { data, error } = await supabaseAdmin.schema('private').rpc('get_source_conversations', {
+    const { data, error } = await supabaseAdmin.rpc('get_source_conversations', {
       p_user_id: userId,
       p_cited_source_id: citedSourceId,
       p_limit: Math.min(limit, 100),
@@ -206,7 +203,7 @@ export class CitedSourceService {
     topicId: string,
     limit: number = 20
   ): Promise<TopicCitedSource[]> {
-    const { data, error } = await supabaseAdmin.schema('private').rpc('get_topic_cited_sources', {
+    const { data, error } = await supabaseAdmin.rpc('get_topic_cited_sources', {
       p_user_id: userId,
       p_topic_id: topicId,
       p_limit: Math.min(limit, 50),
