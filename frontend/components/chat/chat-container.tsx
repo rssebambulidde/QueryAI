@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Download } from 'lucide-react';
 import type { Message, MessageVersionSummary } from './chat-message';
 import type { RAGSettings } from './rag-source-selector';
-import { aiApi, conversationApi, searchApi, queueApi, QuestionRequest, Source } from '@/lib/api';
+import { aiApi, conversationApi, queueApi, QuestionRequest, Source } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { useFilterStore } from '@/lib/store/filter-store';
@@ -303,54 +303,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   // ── /search command ────────────────────────────────────────────────────
 
-  const handleSemanticSearch = async (query: string) => {
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: `/search ${query}`, timestamp: new Date() };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await searchApi.semantic(query, {
-        topK: 10,
-        topicId: selectedTopic?.id,
-        minScore: 0.5,
-      });
-      const searchResults = (result.data?.results || []).map((r: any) => ({
-        id: r.id,
-        documentId: r.documentId || r.metadata?.documentId,
-        title: r.metadata?.title || r.metadata?.filename || r.title,
-        content: r.content || r.metadata?.text || '',
-        score: r.score,
-      }));
-      const assistantMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: searchResults.length > 0
-          ? `Found ${searchResults.length} document result${searchResults.length !== 1 ? 's' : ''} for "${query}":`
-          : `No documents found matching "${query}". Try a different query or upload more documents.`,
-        timestamp: new Date(),
-        searchResults: searchResults.length > 0 ? searchResults : undefined,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (err: any) {
-      console.error('Semantic search failed:', err);
-      let errorMsg = err.message || 'Document search failed.';
-      if (err.response?.status === 429) {
-        errorMsg = 'Rate limit exceeded. Try again in 30s.';
-      } else if (err.response?.status === 403) {
-        errorMsg = err.response?.data?.error?.message || 'Subscription limit reached. Upgrade your plan to continue.';
-      } else if (err.message?.toLowerCase().includes('network')) {
-        errorMsg = 'Network error. Please check your connection and retry.';
-      }
-      setError(errorMsg);
-      setMessages((prev) => [...prev, {
-        id: (Date.now() + 1).toString(), role: 'assistant',
-        content: errorMsg,
-        timestamp: new Date(),
-      }]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // handleSemanticSearch retired in v2 (document search removed)
 
   // ── Queue-based async send ──────────────────────────────────────────────
 
@@ -483,13 +436,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   // handleDocumentDelete retired in Phase 2
 
-  /** Intercepts /search and /queue commands, otherwise delegates to the send hook */
+  /** Intercepts /queue commands, otherwise delegates to the send hook */
   const handleUserInput = async (content: string) => {
-    const searchMatch = content.match(/^\/search\s+(.+)/i);
-    if (searchMatch) {
-      await handleSemanticSearch(searchMatch[1].trim());
-      return;
-    }
     const queueMatch = content.match(/^\/queue\s+(.+)/i);
     if (queueMatch) {
       await handleQueueSend(queueMatch[1].trim());

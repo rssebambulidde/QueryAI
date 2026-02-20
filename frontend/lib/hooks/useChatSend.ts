@@ -143,7 +143,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
   };
 
   const buildSearchFilters = (filters: UnifiedFilters) => ({
-    topic: filters.topic?.name || filters.keyword,
+    topic: filters.keyword,
     timeRange: filters.timeRange,
     startDate: filters.startDate,
     endDate: filters.endDate,
@@ -177,8 +177,8 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
       let conversationId = currentConversationId;
       if (!conversationId && !isResend) {
         try {
-          const title = generateConversationTitle(content, activeFilters.topic?.name);
-          const newConversation = await createConversation(title, activeFilters.topicId || undefined, { autoSelect: false });
+          const title = generateConversationTitle(content);
+          const newConversation = await createConversation(title, undefined, { autoSelect: false });
           conversationId = newConversation.id;
           if (Object.keys(searchFilters).length > 0) {
             try {
@@ -201,7 +201,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
         setMessages((prev) => [...prev, userMessage]);
         if (conversationId && isFirstMessage) {
           try {
-            const title = generateConversationTitle(content, activeFilters.topic?.name);
+            const title = generateConversationTitle(content);
             if (title) await updateConversation(conversationId, title);
           } catch (err) {
             console.error('Failed to update conversation title:', err);
@@ -264,14 +264,9 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           question: content,
           conversationHistory,
           conversationId: conversationId ?? undefined,
-          enableDocumentSearch: ragSettings.enableDocumentSearch,
           enableWebSearch: ragSettings.enableWebSearch,
-          documentIds: ragSettings.documentIds,
-          maxDocumentChunks: ragSettings.maxDocumentChunks,
-          minScore: ragSettings.minScore,
-          topicId: activeFilters.topicId || activeFilters.topic?.id,
           enableSearch: ragSettings.enableWebSearch,
-          topic: activeFilters.topic?.name || activeFilters.keyword,
+          topic: activeFilters.keyword,
           timeRange: activeFilters.timeRange,
           startDate: activeFilters.startDate,
           endDate: activeFilters.endDate,
@@ -481,8 +476,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           const ed = err.response?.data?.error;
           const code = ed?.code || 'FORBIDDEN';
           if (code === 'QUERY_LIMIT_EXCEEDED') { errorMessage = `You have reached your query limit. You've used ${ed?.used || 0} of ${ed?.limit || 0} queries this month.`; showUpgradeLink = true; }
-          else if (code === 'DOCUMENT_UPLOAD_LIMIT_EXCEEDED') { errorMessage = `Document upload limit reached. You've uploaded ${ed?.used || 0} of ${ed?.limit || 0} documents this month.`; showUpgradeLink = true; }
-          else if (code === 'TOPIC_LIMIT_EXCEEDED') { errorMessage = `Topic limit reached. You've created ${ed?.used || 0} of ${ed?.limit || 0} topics.`; showUpgradeLink = true; }
+          else if (code === 'DOCUMENT_UPLOAD_LIMIT_EXCEEDED') { errorMessage = `Document upload limit reached.`; showUpgradeLink = true; }
           else if (code === 'FEATURE_NOT_AVAILABLE') { errorMessage = `This feature requires a ${ed?.requiredTier || 'premium'} subscription. Your current tier is ${ed?.currentTier || 'free'}.`; showUpgradeLink = true; }
           else { errorMessage = ed?.message || 'Access denied. This feature may require a premium subscription.'; showUpgradeLink = true; }
         } else if (err.message) { errorMessage = err.message; }

@@ -188,12 +188,7 @@ export interface QuestionRequest {
   endDate?: string;
   country?: string;
   // RAG options
-  enableDocumentSearch?: boolean;
   enableWebSearch?: boolean;
-  topicId?: string;
-  documentIds?: string[];
-  maxDocumentChunks?: number;
-  minScore?: number;
   // Conversation management
   conversationId?: string;
   resendUserMessageId?: string; // When editing: update this user message and replace following assistant
@@ -300,6 +295,7 @@ export interface DocumentItem {
   metadata?: Record<string, unknown>;
 }
 
+/** @deprecated Topics retired in v2 — kept for type compatibility */
 export interface Topic {
   id: string;
   user_id: string;
@@ -310,18 +306,6 @@ export interface Topic {
   topic_path?: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface TopicTreeNode extends Topic {
-  children: TopicTreeNode[];
-}
-
-export interface TopicAncestor {
-  id: string;
-  name: string;
-  description?: string | null;
-  parent_topic_id?: string | null;
-  depth: number;
 }
 
 export interface Conversation {
@@ -796,12 +780,7 @@ export interface SemanticSearchResult {
   metadata?: Record<string, any>;
 }
 
-export const searchApi = {
-  semantic: async (query: string, options?: { topK?: number; topicId?: string; documentIds?: string[]; minScore?: number }): Promise<ApiResponse<{ query: string; results: SemanticSearchResult[]; count: number }>> => {
-    const response = await apiClient.post('/api/search/semantic', { query, ...options });
-    return response.data;
-  },
-};
+// searchApi.semantic retired in v2 (document search removed)
 
 // ─── Queue API ───────────────────────────────────────────────────────────────
 
@@ -876,71 +855,10 @@ export interface DocumentProcessingStatus {
   embeddingError: string | null;
 }
 
-// Document API
+// Document API — trimmed to getText only (used by source-panel for preview)
 export const documentApi = {
-  list: async (): Promise<ApiResponse<DocumentItem[]>> => {
-    const response = await apiClient.get('/api/documents');
-    return response.data;
-  },
-
-  upload: async (file: File, onProgress?: (progress: number) => void, topicId?: string): Promise<ApiResponse<DocumentItem>> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (topicId) {
-      formData.append('topicId', topicId);
-    }
-
-    // Auto-extract text and auto-embed for RAG search
-    const response = await apiClient.post('/api/documents/upload?autoExtract=true&autoEmbed=true', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: (progressEvent) => {
-        if (onProgress && progressEvent.total) {
-          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          onProgress(progress);
-        }
-      },
-    });
-    return response.data;
-  },
-
-  delete: async (pathOrId: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.delete('/api/documents', {
-      data: { id: pathOrId, path: pathOrId },
-    });
-    return response.data;
-  },
-
-  download: async (path: string): Promise<Blob> => {
-    const response = await apiClient.get(`/api/documents/download?path=${encodeURIComponent(path)}`, {
-      responseType: 'blob',
-    });
-    return response.data;
-  },
-
-  process: async (documentId: string, options?: { maxChunkSize?: number; overlapSize?: number }): Promise<ApiResponse<void>> => {
-    const response = await apiClient.post(`/api/documents/${documentId}/process`, options || {});
-    return response.data;
-  },
-
-  clearProcessing: async (documentId: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.post(`/api/documents/${documentId}/clear-processing`);
-    return response.data;
-  },
-
-  update: async (documentId: string, data: { metadata?: Record<string, unknown>; filename?: string }): Promise<ApiResponse<{ id: string; filename?: string; metadata?: Record<string, unknown> }>> => {
-    const response = await apiClient.patch(`/api/documents/${documentId}`, data);
-    return response.data;
-  },
-
   getText: async (documentId: string): Promise<ApiResponse<{ documentId: string; text: string; stats: { length: number; wordCount: number; pageCount?: number; paragraphCount?: number }; extractedAt: string }>> => {
     const response = await apiClient.get(`/api/documents/${documentId}/text`);
-    return response.data;
-  },
-
-  getProcessingStatus: async (documentId: string): Promise<ApiResponse<DocumentProcessingStatus>> => {
-    const response = await apiClient.get(`/api/documents/${documentId}/status`);
     return response.data;
   },
 };
@@ -1004,48 +922,7 @@ export const conversationApi = {
   },
 };
 
-// Topic API
-export const topicApi = {
-  list: async (): Promise<ApiResponse<Topic[]>> => {
-    const response = await apiClient.get('/api/topics');
-    return response.data;
-  },
-
-  tree: async (): Promise<ApiResponse<TopicTreeNode[]>> => {
-    const response = await apiClient.get('/api/topics/tree');
-    return response.data;
-  },
-
-  get: async (id: string): Promise<ApiResponse<Topic>> => {
-    const response = await apiClient.get(`/api/topics/${id}`);
-    return response.data;
-  },
-
-  getAncestors: async (id: string): Promise<ApiResponse<TopicAncestor[]>> => {
-    const response = await apiClient.get(`/api/topics/${id}/ancestors`);
-    return response.data;
-  },
-
-  getDescendants: async (id: string): Promise<ApiResponse<string[]>> => {
-    const response = await apiClient.get(`/api/topics/${id}/descendants`);
-    return response.data;
-  },
-
-  create: async (data: { name: string; description?: string; scopeConfig?: Record<string, any>; parentTopicId?: string | null }): Promise<ApiResponse<Topic>> => {
-    const response = await apiClient.post('/api/topics', data);
-    return response.data;
-  },
-
-  update: async (id: string, data: { name?: string; description?: string; scopeConfig?: Record<string, any>; parentTopicId?: string | null }): Promise<ApiResponse<Topic>> => {
-    const response = await apiClient.put(`/api/topics/${id}`, data);
-    return response.data;
-  },
-
-  delete: async (id: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.delete(`/api/topics/${id}`);
-    return response.data;
-  },
-};
+// topicApi retired in v2
 
 // Collection types
 export interface Collection {
