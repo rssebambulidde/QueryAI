@@ -6,20 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
 import { RAGSettings, RAGSourceSelector } from '@/components/chat/rag-source-selector';
-import { topicApi, Topic } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface SearchPreferencesProps {
   className?: string;
-  documentCount?: number;
-  hasProcessedDocuments?: boolean;
 }
 
 export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
   className,
-  documentCount = 0,
-  hasProcessedDocuments = false,
 }) => {
   const [ragSettings, setRagSettings] = useState<RAGSettings>({
     enableDocumentSearch: true,
@@ -28,17 +23,13 @@ export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
     minScore: 0.7,
     maxWebResults: 5,
   });
-  const [defaultTopicId, setDefaultTopicId] = useState<string | null>(null);
-  const [availableTopics, setAvailableTopics] = useState<Topic[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const { isMobile } = useMobile();
 
   // Load saved preferences
   useEffect(() => {
     loadPreferences();
-    loadTopics();
   }, []);
 
   const loadPreferences = () => {
@@ -52,25 +43,6 @@ export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
           console.error('Failed to parse saved RAG settings:', e);
         }
       }
-      
-      const savedTopic = localStorage.getItem('defaultTopicId');
-      if (savedTopic) {
-        setDefaultTopicId(savedTopic);
-      }
-    }
-  };
-
-  const loadTopics = async () => {
-    try {
-      setIsLoading(true);
-      const response = await topicApi.list();
-      if (response.success && response.data) {
-        setAvailableTopics(response.data);
-      }
-    } catch (error: any) {
-      console.error('Failed to load topics:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -80,11 +52,6 @@ export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
       // Save to localStorage (can be extended to save to backend)
       if (typeof window !== 'undefined') {
         localStorage.setItem('defaultRAGSettings', JSON.stringify(ragSettings));
-        if (defaultTopicId) {
-          localStorage.setItem('defaultTopicId', defaultTopicId);
-        } else {
-          localStorage.removeItem('defaultTopicId');
-        }
       }
 
       // Note: Backend API endpoint for saving preferences may need to be implemented
@@ -107,7 +74,6 @@ export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
       maxWebResults: 5,
     };
     setRagSettings(defaultSettings);
-    setDefaultTopicId(null);
     toast.success('Preferences reset to defaults');
   };
 
@@ -130,8 +96,6 @@ export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
         <RAGSourceSelector
           settings={ragSettings}
           onChange={setRagSettings}
-          documentCount={documentCount}
-          hasProcessedDocuments={hasProcessedDocuments}
         />
       </div>
 
@@ -220,50 +184,6 @@ export const SearchPreferences: React.FC<SearchPreferencesProps> = ({
               Maximum number of web search results to include per query
             </p>
           </div>
-        </div>
-      </div>
-
-      {/* Default Topic Filter */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Default Topic Filter</h3>
-        <div className="space-y-3">
-          <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer touch-manipulation min-h-[44px]">
-            <input
-              type="radio"
-              name="defaultTopic"
-              checked={defaultTopicId === null}
-              onChange={() => setDefaultTopicId(null)}
-              className="w-5 h-5 sm:w-4 sm:h-4 text-orange-600 border-gray-300 focus:ring-orange-500 flex-shrink-0"
-            />
-            <div>
-              <div className="text-sm font-medium text-gray-900">No Default Topic</div>
-              <div className="text-xs text-gray-500">Search across all topics</div>
-            </div>
-          </label>
-          {isLoading ? (
-            <div className="text-sm text-gray-500">Loading topics...</div>
-          ) : (
-            availableTopics.map((topic) => (
-              <label
-                key={topic.id}
-                className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer touch-manipulation min-h-[44px]"
-              >
-                <input
-                  type="radio"
-                  name="defaultTopic"
-                  checked={defaultTopicId === topic.id}
-                  onChange={() => setDefaultTopicId(topic.id)}
-                  className="w-5 h-5 sm:w-4 sm:h-4 text-orange-600 border-gray-300 focus:ring-orange-500 flex-shrink-0"
-                />
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-gray-900">{topic.name}</div>
-                  {topic.description && (
-                    <div className="text-xs text-gray-500">{topic.description}</div>
-                  )}
-                </div>
-              </label>
-            ))
-          )}
         </div>
       </div>
 

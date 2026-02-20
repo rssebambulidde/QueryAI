@@ -8,7 +8,6 @@ import { ChatInterface } from '@/components/chat/chat-interface';
 import { CollectionManager } from '@/components/collections/collection-manager';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { RAGSettings } from '@/components/chat/rag-source-selector';
-import { documentApi } from '@/lib/api';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { BottomNavigation } from '@/components/mobile/bottom-navigation';
 import { MobileSidebar, HamburgerMenu } from '@/components/mobile/mobile-sidebar';
@@ -44,8 +43,6 @@ function DashboardContent() {
       maxWebResults: 5,
     };
   });
-  const [documentCount, setDocumentCount] = useState(0);
-  const [hasProcessedDocuments, setHasProcessedDocuments] = useState(false);
   const { selectConversation } = useConversationStore();
 
   // Read tab from URL query parameter on mount and when it changes
@@ -53,12 +50,6 @@ function DashboardContent() {
     const tabParam = searchParams.get('tab');
     if (tabParam && ['chat', 'collections', 'sources'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
-    } else if (tabParam === 'documents') {
-      // Redirect to settings/documents
-      router.replace('/dashboard/settings/documents');
-    } else if (tabParam === 'topics') {
-      // Redirect to settings/topics
-      router.replace('/dashboard/settings/topics');
     } else if (tabParam === 'subscription') {
       // Redirect to settings/subscription
       router.replace('/dashboard/settings/subscription');
@@ -155,27 +146,6 @@ function DashboardContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, isLoading, hasCheckedAuth]); // router is stable, no need to include
-
-  // Load document count when chat tab is active
-  useEffect(() => {
-    if (activeTab === 'chat') {
-      const loadDocumentCount = async () => {
-        try {
-          const response = await documentApi.list();
-          if (response.success && response.data) {
-            const processedDocs = response.data.filter(
-              (doc) => doc.status === 'processed' || doc.status === 'embedded'
-            );
-            setDocumentCount(processedDocs.length);
-            setHasProcessedDocuments(processedDocs.length > 0);
-          }
-        } catch (err) {
-          console.warn('Failed to load document count:', err);
-        }
-      };
-      loadDocumentCount();
-    }
-  }, [activeTab]);
 
   // Save RAG settings to localStorage
   useEffect(() => {

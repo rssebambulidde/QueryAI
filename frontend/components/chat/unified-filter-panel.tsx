@@ -5,8 +5,7 @@ import { Filter, X, Calendar, MapPin, Hash, Tag, Plus, Sparkles, Info } from 'lu
 import { TimeRange, Topic } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
-import { TopicCreationModal } from './topic-creation-modal';
-import { KeywordTopicSuggestions } from './keyword-topic-suggestions';
+// TopicCreationModal & KeywordTopicSuggestions retired in v2
 
 export interface UnifiedFilters {
   // Persistent (Topic)
@@ -54,21 +53,8 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
 }) => {
   const { isMobile } = useMobile();
   const [showTopicDropdown, setShowTopicDropdown] = useState(false);
-  const [showCreateTopic, setShowCreateTopic] = useState(false);
-  const [createTopicInitialName, setCreateTopicInitialName] = useState('');
   const [useCustomDates, setUseCustomDates] = useState(false);
-  const [showKeywordSuggestion, setShowKeywordSuggestion] = useState(false);
   const topicDropdownRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  // Check if keyword should suggest creating a topic
-  useEffect(() => {
-    if (filters.keyword && filters.keyword.trim().length > 2 && !selectedTopic) {
-      setShowKeywordSuggestion(true);
-    } else {
-      setShowKeywordSuggestion(false);
-    }
-  }, [filters.keyword, selectedTopic]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -95,17 +81,8 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
   };
 
   const handleTopicCreated = (newTopic: Topic) => {
-    setShowCreateTopic(false);
-    setCreateTopicInitialName('');
     handleTopicSelect(newTopic);
     if (onLoadTopics) onLoadTopics();
-  };
-
-  const handleSaveKeywordAsTopic = () => {
-    if (!filters.keyword || !filters.keyword.trim()) return;
-    setCreateTopicInitialName(filters.keyword.trim());
-    setShowCreateTopic(true);
-    setShowKeywordSuggestion(false);
   };
 
   const handleKeywordChange = (value: string) => {
@@ -140,7 +117,7 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
 
   const hasFilters = selectedTopic || filters.keyword || filters.timeRange || filters.startDate || filters.endDate || filters.country;
 
-  // Find matching topics for keyword suggestion
+  // Find matching topics for keyword
   const matchingTopics = filters.keyword && filters.keyword.trim().length > 2
     ? topics.filter(t => 
         t.name.toLowerCase().includes(filters.keyword!.toLowerCase()) ||
@@ -150,7 +127,6 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
 
   return (
     <div 
-      ref={panelRef}
       className={cn(
         "bg-white border border-gray-200 rounded-xl shadow-xl animate-in fade-in slide-in-from-bottom-2 relative z-[100] flex flex-col",
         isMobile ? "max-h-[90vh] w-full mx-2" : "max-h-[80vh]"
@@ -243,30 +219,9 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
                   {topics.length === 0 ? (
                     <div className="p-3 text-xs text-gray-500 text-center">
                       <p>No topics yet.</p>
-                      <button
-                        onClick={() => {
-                          setShowTopicDropdown(false);
-                          setShowCreateTopic(true);
-                        }}
-                        className="mt-2 text-orange-600 hover:text-orange-700 font-medium"
-                      >
-                        Create your first topic
-                      </button>
                     </div>
                   ) : (
                     <>
-                      <div className="p-2 border-b border-gray-100">
-                        <button
-                          onClick={() => {
-                            setShowTopicDropdown(false);
-                            setShowCreateTopic(true);
-                          }}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-orange-600 hover:bg-orange-50 rounded transition-colors"
-                        >
-                          <Plus className="w-3 h-3" />
-                          Create New Topic
-                        </button>
-                      </div>
                       {topics.map((topic) => (
                         <button
                           key={topic.id}
@@ -286,14 +241,6 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
             </div>
           )}
 
-          {/* Create Topic Modal */}
-          <TopicCreationModal
-            isOpen={showCreateTopic}
-            initialName={createTopicInitialName}
-            disabled={disabled}
-            onClose={() => { setShowCreateTopic(false); setCreateTopicInitialName(''); }}
-            onCreated={handleTopicCreated}
-          />
         </div>
 
         {/* Divider */}
@@ -335,15 +282,6 @@ export const UnifiedFilterPanel: React.FC<UnifiedFilterPanelProps> = ({
                 </div>
               )}
             </div>
-            
-            <KeywordTopicSuggestions
-              keyword={filters.keyword}
-              showKeywordSuggestion={showKeywordSuggestion}
-              matchingTopics={matchingTopics}
-              selectedTopic={selectedTopic}
-              onSaveKeywordAsTopic={handleSaveKeywordAsTopic}
-              onTopicSelect={handleTopicSelect}
-            />
           </div>
 
           {/* Time Range Filter */}

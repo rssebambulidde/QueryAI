@@ -9,8 +9,6 @@ import {
   FileText,
   Settings as SettingsIcon,
   CreditCard,
-  Folder,
-  Tag,
   ArrowLeft,
   Users,
   ShieldCheck,
@@ -37,8 +35,7 @@ interface SettingsNavItem {
 const settingsNav: SettingsNavItem[] = [
   { href: '/dashboard/settings/profile', label: 'Profile', icon: User, group: 'account' },
   { href: '/dashboard/settings/subscription', label: 'Subscription', icon: CreditCard, group: 'account' },
-  { href: '/dashboard/settings/documents', label: 'Documents', icon: Folder, group: 'research' },
-  { href: '/dashboard/settings/topics', label: 'Topics', icon: Tag, group: 'research' },
+  // Documents & Topics retired in v2
   { href: '/dashboard/settings/search', label: 'Search', icon: Search, group: 'research' },
   { href: '/dashboard/settings/citations', label: 'Citations', icon: FileText, group: 'research' },
   { href: '/dashboard/settings/advanced', label: 'Advanced RAG', icon: SettingsIcon, group: 'advanced' },
