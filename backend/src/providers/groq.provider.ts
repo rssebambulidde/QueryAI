@@ -19,7 +19,26 @@ import type {
 // ─── Model catalogue ─────────────────────────────────────────────────────────
 
 const GROQ_MODELS: ModelInfo[] = [
-  // ── Meta Llama family ────────────────────────────────────────────────────
+  // ── Meta Llama 4 family ──────────────────────────────────────────────────
+  {
+    id: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    displayName: 'Llama 4 Scout 17B',
+    contextWindow: 131_072,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.11,
+    outputCostPer1M: 0.34,
+    capabilities: ['chat', 'vision'],
+  },
+  {
+    id: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+    displayName: 'Llama 4 Maverick 17B',
+    contextWindow: 131_072,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.50,
+    outputCostPer1M: 0.77,
+    capabilities: ['chat', 'vision'],
+  },
+  // ── Meta Llama 3 family ──────────────────────────────────────────────────
   {
     id: 'llama-3.3-70b-versatile',
     displayName: 'Llama 3.3 70B',
@@ -29,6 +48,15 @@ const GROQ_MODELS: ModelInfo[] = [
     outputCostPer1M: 0.79,
     capabilities: ['chat', 'structured_output'],
     isDefault: true,
+  },
+  {
+    id: 'llama-3.3-70b-specdec',
+    displayName: 'Llama 3.3 70B SpecDec',
+    contextWindow: 128_000,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.59,
+    outputCostPer1M: 0.79,
+    capabilities: ['chat'],
   },
   {
     id: 'llama-3.1-8b-instant',
@@ -83,6 +111,15 @@ const GROQ_MODELS: ModelInfo[] = [
     maxOutputTokens: 32_768,
     inputCostPer1M: 0.24,
     outputCostPer1M: 0.24,
+    capabilities: ['chat'],
+  },
+  {
+    id: 'mistral-saba-24b',
+    displayName: 'Mistral Saba 24B',
+    contextWindow: 32_768,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.20,
+    outputCostPer1M: 0.20,
     capabilities: ['chat'],
   },
   // ── Google (Groq-hosted) ─────────────────────────────────────────────────

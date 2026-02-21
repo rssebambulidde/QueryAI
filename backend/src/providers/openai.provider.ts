@@ -19,6 +19,16 @@ import type {
 // ─── Model catalogue ─────────────────────────────────────────────────────────
 
 const OPENAI_MODELS: ModelInfo[] = [
+  // ── GPT-4.5 family ───────────────────────────────────────────────────────
+  {
+    id: 'gpt-4.5-preview',
+    displayName: 'GPT-4.5 Preview',
+    contextWindow: 128_000,
+    maxOutputTokens: 16_384,
+    inputCostPer1M: 75.00,
+    outputCostPer1M: 150.00,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
   // ── GPT-4o family ────────────────────────────────────────────────────────
   {
     id: 'gpt-4o',
@@ -140,6 +150,15 @@ const OPENAI_MODELS: ModelInfo[] = [
     maxOutputTokens: 100_000,
     inputCostPer1M: 1.10,
     outputCostPer1M: 4.40,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
+  {
+    id: 'o3-pro',
+    displayName: 'o3 Pro',
+    contextWindow: 200_000,
+    maxOutputTokens: 100_000,
+    inputCostPer1M: 20.00,
+    outputCostPer1M: 80.00,
     capabilities: ['chat', 'structured_output', 'vision'],
   },
 ];
