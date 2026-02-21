@@ -19,6 +19,8 @@ interface EnvConfig {
   // AI Services
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
+  GOOGLE_AI_API_KEY?: string;
+  GROQ_API_KEY?: string;
   EMBEDDING_MODEL?: string; // Embedding model: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
   EMBEDDING_BATCH_SIZE?: string; // Batch size for embedding generation (default: 100, max: 2048)
 
@@ -121,6 +123,8 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
     'BREVO_SENDER_NAME',
     'EMBEDDING_MODEL',
     'COHERE_API_KEY',
+    'GOOGLE_AI_API_KEY',
+    'GROQ_API_KEY',
     'ANSWER_EVAL_SAMPLE_RATE',
     'REDIS_URL',
     'REDIS_HOST',
@@ -151,6 +155,8 @@ const config: EnvConfig = {
   // AI Services (OpenAI is optional but recommended for AI features)
   OPENAI_API_KEY: getEnvVar('OPENAI_API_KEY'),
   ANTHROPIC_API_KEY: getEnvVar('ANTHROPIC_API_KEY'),
+  GOOGLE_AI_API_KEY: getEnvVar('GOOGLE_AI_API_KEY'),
+  GROQ_API_KEY: getEnvVar('GROQ_API_KEY'),
   EMBEDDING_MODEL: getEnvVar('EMBEDDING_MODEL', 'text-embedding-3-small'),
 
   // Search API

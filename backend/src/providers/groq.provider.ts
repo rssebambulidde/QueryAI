@@ -1,0 +1,139 @@
+/**
+ * Groq LLM Provider (fast inference)
+ *
+ * Groq uses an OpenAI-compatible API, so the implementation mirrors the
+ * OpenAI provider but points at Groq's endpoint with its own models.
+ */
+
+import Groq from 'groq-sdk';
+import config from '../config/env';
+import logger from '../config/logger';
+import type {
+  LLMProvider,
+  ModelInfo,
+  ChatCompletionParams,
+  ChatCompletionResult,
+  ChatStreamMeta,
+} from './llm-provider.interface';
+
+// ─── Model catalogue ─────────────────────────────────────────────────────────
+
+const GROQ_MODELS: ModelInfo[] = [
+  {
+    id: 'llama-3.3-70b-versatile',
+    displayName: 'Llama 3.3 70B',
+    contextWindow: 128_000,
+    maxOutputTokens: 32_768,
+    inputCostPer1M: 0.59,
+    outputCostPer1M: 0.79,
+    capabilities: ['chat', 'structured_output'],
+    isDefault: true,
+  },
+  {
+    id: 'mixtral-8x7b-32768',
+    displayName: 'Mixtral 8x7B',
+    contextWindow: 32_768,
+    maxOutputTokens: 32_768,
+    inputCostPer1M: 0.24,
+    outputCostPer1M: 0.24,
+    capabilities: ['chat'],
+  },
+];
+
+// ─── Provider implementation ─────────────────────────────────────────────────
+
+export class GroqProvider implements LLMProvider {
+  readonly id = 'groq' as const;
+  readonly displayName = 'Groq';
+  readonly supportedModels = GROQ_MODELS;
+
+  private client: Groq | null = null;
+
+  private getClient(): Groq {
+    if (!this.client) {
+      if (!config.GROQ_API_KEY) {
+        throw new Error('GROQ_API_KEY is not configured.');
+      }
+      this.client = new Groq({ apiKey: config.GROQ_API_KEY });
+    }
+    return this.client;
+  }
+
+  // ── Non-streaming ────────────────────────────────────────────────────────
+
+  async chatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResult> {
+    const { model, messages, temperature, maxTokens, responseFormat, signal } = params;
+
+    const response = await this.getClient().chat.completions.create(
+      {
+        model,
+        messages: messages as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+        temperature: temperature ?? 0.7,
+        max_tokens: maxTokens,
+        ...(responseFormat === 'json' && {
+          response_format: { type: 'json_object' as const },
+        }),
+      },
+      ...(signal ? [{ signal }] : []),
+    );
+
+    const choice = response.choices[0];
+
+    return {
+      content: choice?.message?.content ?? '',
+      model: response.model,
+      usage: {
+        promptTokens: response.usage?.prompt_tokens ?? 0,
+        completionTokens: response.usage?.completion_tokens ?? 0,
+        totalTokens: response.usage?.total_tokens ?? 0,
+      },
+      finishReason: choice?.finish_reason ?? 'unknown',
+    };
+  }
+
+  // ── Streaming ────────────────────────────────────────────────────────────
+
+  async *chatCompletionStream(
+    params: ChatCompletionParams,
+  ): AsyncGenerator<string, ChatStreamMeta, unknown> {
+    const { model, messages, temperature, maxTokens, responseFormat, signal } = params;
+
+    const stream = await this.getClient().chat.completions.create(
+      {
+        model,
+        messages: messages as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+        temperature: temperature ?? 0.7,
+        max_tokens: maxTokens,
+        stream: true,
+        ...(responseFormat === 'json' && {
+          response_format: { type: 'json_object' as const },
+        }),
+      },
+      ...(signal ? [{ signal }] : []),
+    );
+
+    let promptTokens = 0;
+    let completionTokens = 0;
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) yield content;
+
+      // Groq may include usage info (x_groq field)
+      if ((chunk as any).x_groq?.usage) {
+        const usage = (chunk as any).x_groq.usage;
+        promptTokens = usage.prompt_tokens ?? 0;
+        completionTokens = usage.completion_tokens ?? 0;
+      }
+    }
+
+    return {
+      model,
+      usage: {
+        promptTokens,
+        completionTokens,
+        totalTokens: promptTokens + completionTokens,
+      },
+    };
+  }
+}
