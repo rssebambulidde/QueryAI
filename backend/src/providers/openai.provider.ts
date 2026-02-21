@@ -19,16 +19,7 @@ import type {
 // ─── Model catalogue ─────────────────────────────────────────────────────────
 
 const OPENAI_MODELS: ModelInfo[] = [
-  {
-    id: 'gpt-4o-mini',
-    displayName: 'GPT-4o Mini',
-    contextWindow: 128_000,
-    maxOutputTokens: 16_384,
-    inputCostPer1M: 0.15,
-    outputCostPer1M: 0.60,
-    capabilities: ['chat', 'structured_output', 'vision'],
-    isDefault: true,
-  },
+  // ── GPT-4o family ────────────────────────────────────────────────────────
   {
     id: 'gpt-4o',
     displayName: 'GPT-4o',
@@ -39,6 +30,55 @@ const OPENAI_MODELS: ModelInfo[] = [
     capabilities: ['chat', 'structured_output', 'vision'],
   },
   {
+    id: 'gpt-4o-mini',
+    displayName: 'GPT-4o Mini',
+    contextWindow: 128_000,
+    maxOutputTokens: 16_384,
+    inputCostPer1M: 0.15,
+    outputCostPer1M: 0.60,
+    capabilities: ['chat', 'structured_output', 'vision'],
+    isDefault: true,
+  },
+  // ── GPT-4.1 family ───────────────────────────────────────────────────────
+  {
+    id: 'gpt-4.1',
+    displayName: 'GPT-4.1',
+    contextWindow: 1_047_576,
+    maxOutputTokens: 32_768,
+    inputCostPer1M: 2.00,
+    outputCostPer1M: 8.00,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
+  {
+    id: 'gpt-4.1-mini',
+    displayName: 'GPT-4.1 Mini',
+    contextWindow: 1_047_576,
+    maxOutputTokens: 32_768,
+    inputCostPer1M: 0.40,
+    outputCostPer1M: 1.60,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
+  {
+    id: 'gpt-4.1-nano',
+    displayName: 'GPT-4.1 Nano',
+    contextWindow: 1_047_576,
+    maxOutputTokens: 32_768,
+    inputCostPer1M: 0.10,
+    outputCostPer1M: 0.40,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
+  // ── GPT-4 Turbo ──────────────────────────────────────────────────────────
+  {
+    id: 'gpt-4-turbo',
+    displayName: 'GPT-4 Turbo',
+    contextWindow: 128_000,
+    maxOutputTokens: 4_096,
+    inputCostPer1M: 10.00,
+    outputCostPer1M: 30.00,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
+  // ── GPT-3.5 ──────────────────────────────────────────────────────────────
+  {
     id: 'gpt-3.5-turbo',
     displayName: 'GPT-3.5 Turbo',
     contextWindow: 16_385,
@@ -46,6 +86,16 @@ const OPENAI_MODELS: ModelInfo[] = [
     inputCostPer1M: 0.50,
     outputCostPer1M: 1.50,
     capabilities: ['chat', 'structured_output'],
+  },
+  // ── o-series (reasoning) ─────────────────────────────────────────────────
+  {
+    id: 'o1',
+    displayName: 'o1',
+    contextWindow: 200_000,
+    maxOutputTokens: 100_000,
+    inputCostPer1M: 15.00,
+    outputCostPer1M: 60.00,
+    capabilities: ['chat', 'vision'],
   },
   {
     id: 'o1-mini',
@@ -57,6 +107,24 @@ const OPENAI_MODELS: ModelInfo[] = [
     capabilities: ['chat'],
   },
   {
+    id: 'o1-pro',
+    displayName: 'o1 Pro',
+    contextWindow: 200_000,
+    maxOutputTokens: 100_000,
+    inputCostPer1M: 150.00,
+    outputCostPer1M: 600.00,
+    capabilities: ['chat'],
+  },
+  {
+    id: 'o3',
+    displayName: 'o3',
+    contextWindow: 200_000,
+    maxOutputTokens: 100_000,
+    inputCostPer1M: 10.00,
+    outputCostPer1M: 40.00,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
+  {
     id: 'o3-mini',
     displayName: 'o3 Mini',
     contextWindow: 200_000,
@@ -64,6 +132,15 @@ const OPENAI_MODELS: ModelInfo[] = [
     inputCostPer1M: 1.10,
     outputCostPer1M: 4.40,
     capabilities: ['chat', 'structured_output'],
+  },
+  {
+    id: 'o4-mini',
+    displayName: 'o4 Mini',
+    contextWindow: 200_000,
+    maxOutputTokens: 100_000,
+    inputCostPer1M: 1.10,
+    outputCostPer1M: 4.40,
+    capabilities: ['chat', 'structured_output', 'vision'],
   },
 ];
 

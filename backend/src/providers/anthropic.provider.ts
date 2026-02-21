@@ -20,6 +20,16 @@ import type {
 // ─── Model catalogue ─────────────────────────────────────────────────────────
 
 const ANTHROPIC_MODELS: ModelInfo[] = [
+  // ── Claude 4 family ──────────────────────────────────────────────────────
+  {
+    id: 'claude-opus-4-20250514',
+    displayName: 'Claude Opus 4',
+    contextWindow: 200_000,
+    maxOutputTokens: 32_000,
+    inputCostPer1M: 15.00,
+    outputCostPer1M: 75.00,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
   {
     id: 'claude-sonnet-4-20250514',
     displayName: 'Claude Sonnet 4',
@@ -30,6 +40,16 @@ const ANTHROPIC_MODELS: ModelInfo[] = [
     capabilities: ['chat', 'structured_output', 'vision'],
     isDefault: true,
   },
+  // ── Claude 3.5 family ────────────────────────────────────────────────────
+  {
+    id: 'claude-3-5-sonnet-20241022',
+    displayName: 'Claude 3.5 Sonnet v2',
+    contextWindow: 200_000,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 3.00,
+    outputCostPer1M: 15.00,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
   {
     id: 'claude-3-5-haiku-20241022',
     displayName: 'Claude 3.5 Haiku',
@@ -37,6 +57,25 @@ const ANTHROPIC_MODELS: ModelInfo[] = [
     maxOutputTokens: 8_192,
     inputCostPer1M: 0.80,
     outputCostPer1M: 4.00,
+    capabilities: ['chat', 'vision'],
+  },
+  // ── Claude 3 family ──────────────────────────────────────────────────────
+  {
+    id: 'claude-3-opus-20240229',
+    displayName: 'Claude 3 Opus',
+    contextWindow: 200_000,
+    maxOutputTokens: 4_096,
+    inputCostPer1M: 15.00,
+    outputCostPer1M: 75.00,
+    capabilities: ['chat', 'vision'],
+  },
+  {
+    id: 'claude-3-haiku-20240307',
+    displayName: 'Claude 3 Haiku',
+    contextWindow: 200_000,
+    maxOutputTokens: 4_096,
+    inputCostPer1M: 0.25,
+    outputCostPer1M: 1.25,
     capabilities: ['chat', 'vision'],
   },
 ];

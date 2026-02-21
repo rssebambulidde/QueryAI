@@ -21,6 +21,27 @@ import type {
 // ─── Model catalogue ─────────────────────────────────────────────────────────
 
 const GOOGLE_MODELS: ModelInfo[] = [
+  // ── Gemini 2.5 family ────────────────────────────────────────────────────
+  {
+    id: 'gemini-2.5-pro',
+    displayName: 'Gemini 2.5 Pro',
+    contextWindow: 1_048_576,
+    maxOutputTokens: 65_536,
+    inputCostPer1M: 1.25,
+    outputCostPer1M: 10.00,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
+  {
+    id: 'gemini-2.5-flash',
+    displayName: 'Gemini 2.5 Flash',
+    contextWindow: 1_048_576,
+    maxOutputTokens: 65_536,
+    inputCostPer1M: 0.15,
+    outputCostPer1M: 0.60,
+    capabilities: ['chat', 'structured_output', 'vision'],
+    isDefault: true,
+  },
+  // ── Gemini 2.0 family ────────────────────────────────────────────────────
   {
     id: 'gemini-2.0-flash',
     displayName: 'Gemini 2.0 Flash',
@@ -29,15 +50,42 @@ const GOOGLE_MODELS: ModelInfo[] = [
     inputCostPer1M: 0.10,
     outputCostPer1M: 0.40,
     capabilities: ['chat', 'structured_output', 'vision'],
-    isDefault: true,
   },
   {
-    id: 'gemini-2.0-pro',
-    displayName: 'Gemini 2.0 Pro',
+    id: 'gemini-2.0-flash-lite',
+    displayName: 'Gemini 2.0 Flash Lite',
+    contextWindow: 1_048_576,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.075,
+    outputCostPer1M: 0.30,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
+  // ── Gemini 1.5 family ────────────────────────────────────────────────────
+  {
+    id: 'gemini-1.5-pro',
+    displayName: 'Gemini 1.5 Pro',
     contextWindow: 2_097_152,
     maxOutputTokens: 8_192,
     inputCostPer1M: 1.25,
-    outputCostPer1M: 10.00,
+    outputCostPer1M: 5.00,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
+  {
+    id: 'gemini-1.5-flash',
+    displayName: 'Gemini 1.5 Flash',
+    contextWindow: 1_048_576,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.075,
+    outputCostPer1M: 0.30,
+    capabilities: ['chat', 'structured_output', 'vision'],
+  },
+  {
+    id: 'gemini-1.5-flash-8b',
+    displayName: 'Gemini 1.5 Flash 8B',
+    contextWindow: 1_048_576,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.0375,
+    outputCostPer1M: 0.15,
     capabilities: ['chat', 'structured_output', 'vision'],
   },
 ];

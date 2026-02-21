@@ -19,6 +19,7 @@ import type {
 // ─── Model catalogue ─────────────────────────────────────────────────────────
 
 const GROQ_MODELS: ModelInfo[] = [
+  // ── Meta Llama family ────────────────────────────────────────────────────
   {
     id: 'llama-3.3-70b-versatile',
     displayName: 'Llama 3.3 70B',
@@ -30,12 +31,88 @@ const GROQ_MODELS: ModelInfo[] = [
     isDefault: true,
   },
   {
+    id: 'llama-3.1-8b-instant',
+    displayName: 'Llama 3.1 8B',
+    contextWindow: 128_000,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.05,
+    outputCostPer1M: 0.08,
+    capabilities: ['chat', 'structured_output'],
+  },
+  {
+    id: 'llama-3.2-1b-preview',
+    displayName: 'Llama 3.2 1B',
+    contextWindow: 128_000,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.04,
+    outputCostPer1M: 0.04,
+    capabilities: ['chat'],
+  },
+  {
+    id: 'llama-3.2-3b-preview',
+    displayName: 'Llama 3.2 3B',
+    contextWindow: 128_000,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.06,
+    outputCostPer1M: 0.06,
+    capabilities: ['chat'],
+  },
+  {
+    id: 'llama-3.2-11b-vision-preview',
+    displayName: 'Llama 3.2 11B Vision',
+    contextWindow: 128_000,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.18,
+    outputCostPer1M: 0.18,
+    capabilities: ['chat', 'vision'],
+  },
+  {
+    id: 'llama-3.2-90b-vision-preview',
+    displayName: 'Llama 3.2 90B Vision',
+    contextWindow: 128_000,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.90,
+    outputCostPer1M: 0.90,
+    capabilities: ['chat', 'vision'],
+  },
+  // ── Mistral family ───────────────────────────────────────────────────────
+  {
     id: 'mixtral-8x7b-32768',
     displayName: 'Mixtral 8x7B',
     contextWindow: 32_768,
     maxOutputTokens: 32_768,
     inputCostPer1M: 0.24,
     outputCostPer1M: 0.24,
+    capabilities: ['chat'],
+  },
+  // ── Google (Groq-hosted) ─────────────────────────────────────────────────
+  {
+    id: 'gemma2-9b-it',
+    displayName: 'Gemma 2 9B',
+    contextWindow: 8_192,
+    maxOutputTokens: 8_192,
+    inputCostPer1M: 0.20,
+    outputCostPer1M: 0.20,
+    capabilities: ['chat'],
+  },
+  // ── DeepSeek (Groq-hosted) ───────────────────────────────────────────────
+  {
+    id: 'deepseek-r1-distill-llama-70b',
+    displayName: 'DeepSeek R1 Distill 70B',
+    contextWindow: 128_000,
+    maxOutputTokens: 16_384,
+    inputCostPer1M: 0.75,
+    outputCostPer1M: 0.99,
+    capabilities: ['chat'],
+  },
+  // ── Qwen (Groq-hosted) ──────────────────────────────────────────────────
+  {
+    id: 'qwen-qwq-32b',
+    displayName: 'Qwen QwQ 32B',
+    contextWindow: 128_000,
+    maxOutputTokens: 32_768,
+    inputCostPer1M: 0.29,
+    outputCostPer1M: 0.39,
     capabilities: ['chat'],
   },
 ];
