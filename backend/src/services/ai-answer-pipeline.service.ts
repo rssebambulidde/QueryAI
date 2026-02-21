@@ -1233,13 +1233,17 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       const fullResponse = completion.content || '{}';
       
       // ── Parse structured JSON response ──────────────────────────────
+      // Non-OpenAI providers (especially Anthropic) may wrap JSON in
+      // markdown fences or add preamble — sanitize before parsing.
       let structured: AIStructuredResponse | null = null;
       try {
-        const raw = JSON.parse(fullResponse);
+        const sanitized = JsonAnswerStreamParser.sanitizeJson(fullResponse);
+        const raw = JSON.parse(sanitized);
         structured = AIResponseSchema.parse(raw);
       } catch (parseErr: any) {
         logger.warn('Structured output parse failed, falling back to text extraction', {
           error: parseErr?.message,
+          provider: context.provider.id,
           responsePreview: fullResponse.substring(0, 200),
         });
       }
@@ -1943,6 +1947,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       } else {
         // Research mode: use JsonAnswerStreamParser to forward the answer field
         // in real-time while accumulating the full JSON for post-stream parsing.
+        // Works across all providers (OpenAI, Anthropic, Google, Groq) — the
+        // parser handles markdown fences, preamble text, and unicode escapes.
         const parser = new JsonAnswerStreamParser();
 
         for await (const content of stream) {
@@ -1954,7 +1960,24 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           }
         }
 
-        // After stream completes, parse the accumulated JSON for metadata
+        // Fallback: if the provider ignored JSON instructions and returned plain
+        // text (common with Anthropic prompt-injection JSON mode), yield the raw
+        // accumulated text so the user still sees something.
+        if (!parser.foundAnswerField()) {
+          const raw = parser.getRawAccumulated().trim();
+          if (raw) {
+            logger.warn('Provider did not return structured JSON — falling back to raw text', {
+              provider: context.provider.id,
+              model: context.selectedModel,
+              rawPreview: raw.substring(0, 200),
+            });
+            yield raw;
+          }
+        }
+
+        // After stream completes, parse the accumulated JSON for metadata.
+        // getAccumulatedJson() strips markdown fences and preamble that
+        // non-OpenAI providers (especially Anthropic) may add.
         const accumulatedJson = parser.getAccumulatedJson();
         let structuredMeta: AIStructuredResponse | null = null;
         try {
@@ -1963,6 +1986,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         } catch (parseErr: any) {
           logger.warn('Streaming structured output parse failed', {
             error: parseErr?.message,
+            provider: context.provider.id,
             jsonPreview: accumulatedJson.substring(0, 200),
           });
         }

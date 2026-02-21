@@ -84,12 +84,20 @@ describe('JsonAnswerStreamParser', () => {
     expect(result).toBe(answerText);
   });
 
-  it('handles answer with unicode content', () => {
+  it('handles answer with unicode escapes (\\uXXXX)', () => {
     const json = '{"answer":"Caf\\u00e9 is French","followUpQuestions":[]}';
     const result = parser.feed(json);
-    // \\u escapes are not decoded by our parser — they pass through as-is
-    // JSON.parse would decode them, but our character-level parser doesn't
-    expect(result).toContain('Caf');
+    expect(result).toBe('Café is French');
+    expect(parser.isAnswerComplete()).toBe(true);
+  });
+
+  it('decodes multi-character unicode escapes in streaming', () => {
+    // Feed the \\uXXXX across chunk boundaries
+    let output = '';
+    output += parser.feed('{"answer":"Hello \\u');
+    output += parser.feed('00');
+    output += parser.feed('e9 world","followUpQuestions":[]}');
+    expect(output).toBe('Hello é world');
   });
 
   it('handles empty answer field', () => {
@@ -97,5 +105,113 @@ describe('JsonAnswerStreamParser', () => {
     const result = parser.feed(json);
     expect(result).toBe('');
     expect(parser.isAnswerComplete()).toBe(true);
+  });
+
+  // ── Non-OpenAI provider scenarios ──────────────────────────────────
+
+  describe('Anthropic (markdown fence wrapping)', () => {
+    it('extracts answer from JSON wrapped in ```json fences', () => {
+      const fenced = '```json\n{"answer":"Anthropic says hello","followUpQuestions":[],"citedSources":[]}\n```';
+      const result = parser.feed(fenced);
+      expect(result).toBe('Anthropic says hello');
+      expect(parser.isAnswerComplete()).toBe(true);
+    });
+
+    it('sanitizes accumulated JSON by stripping fences', () => {
+      const fenced = '```json\n{"answer":"test","followUpQuestions":[],"citedSources":[]}\n```';
+      parser.feed(fenced);
+      const sanitized = parser.getAccumulatedJson();
+      expect(() => JSON.parse(sanitized)).not.toThrow();
+      expect(JSON.parse(sanitized).answer).toBe('test');
+    });
+
+    it('handles preamble text before JSON', () => {
+      const withPreamble = 'Here is the JSON response:\n{"answer":"from preamble","followUpQuestions":[]}';
+      const result = parser.feed(withPreamble);
+      expect(result).toBe('from preamble');
+      expect(parser.isAnswerComplete()).toBe(true);
+    });
+
+    it('sanitizes accumulated JSON with preamble', () => {
+      const withPreamble = 'Here is the response:\n{"answer":"x","followUpQuestions":[]}';
+      parser.feed(withPreamble);
+      const sanitized = parser.getAccumulatedJson();
+      expect(() => JSON.parse(sanitized)).not.toThrow();
+    });
+
+    it('handles preamble plus fences streamed in chunks', () => {
+      let output = '';
+      output += parser.feed('Sure! Here is');
+      output += parser.feed(' the JSON:\n```json\n{');
+      output += parser.feed('"answer":"chunked');
+      output += parser.feed(' anthropic"');
+      output += parser.feed(',"followUpQuestions":[]}\n```');
+      expect(output).toBe('chunked anthropic');
+      expect(parser.isAnswerComplete()).toBe(true);
+    });
+  });
+
+  describe('Google Gemini (coarser chunks)', () => {
+    it('handles large chunks typical of Gemini streaming', () => {
+      // Gemini tends to yield bigger chunks
+      let output = '';
+      output += parser.feed('{"answer":"Gemini provides a detailed response about quantum computing. ');
+      output += parser.feed('The field has seen rapid advances in recent years.');
+      output += parser.feed('","followUpQuestions":["What are qubits?","How does entanglement work?"],"citedSources":[]}');
+      expect(output).toBe(
+        'Gemini provides a detailed response about quantum computing. ' +
+        'The field has seen rapid advances in recent years.'
+      );
+      expect(parser.isAnswerComplete()).toBe(true);
+    });
+  });
+
+  describe('plain text fallback', () => {
+    it('reports foundAnswerField=false when no JSON is received', () => {
+      parser.feed('This is just plain text without any JSON structure.');
+      expect(parser.foundAnswerField()).toBe(false);
+      expect(parser.isAnswerComplete()).toBe(false);
+    });
+
+    it('provides raw accumulated text via getRawAccumulated', () => {
+      const plainText = 'The model ignored JSON instructions and returned this.';
+      parser.feed(plainText);
+      expect(parser.getRawAccumulated()).toBe(plainText);
+      expect(parser.foundAnswerField()).toBe(false);
+    });
+  });
+
+  describe('sanitizeJson (static)', () => {
+    it('strips ```json fences', () => {
+      const input = '```json\n{"key":"value"}\n```';
+      expect(JsonAnswerStreamParser.sanitizeJson(input)).toBe('{"key":"value"}');
+    });
+
+    it('strips ``` fences without json label', () => {
+      const input = '```\n{"key":"value"}\n```';
+      expect(JsonAnswerStreamParser.sanitizeJson(input)).toBe('{"key":"value"}');
+    });
+
+    it('strips preamble before first {', () => {
+      const input = 'Here is the JSON:\n{"answer":"test"}';
+      expect(JsonAnswerStreamParser.sanitizeJson(input)).toBe('{"answer":"test"}');
+    });
+
+    it('strips trailing text after last }', () => {
+      const input = '{"answer":"test"}\n\nSome trailing text';
+      expect(JsonAnswerStreamParser.sanitizeJson(input)).toBe('{"answer":"test"}');
+    });
+
+    it('handles clean JSON unchanged', () => {
+      const input = '{"answer":"clean","followUpQuestions":[]}';
+      expect(JsonAnswerStreamParser.sanitizeJson(input)).toBe(input);
+    });
+
+    it('handles fences + preamble + trailer combo', () => {
+      const input = 'Response:\n```json\n{"answer":"combo"}\n```\nDone!';
+      const result = JsonAnswerStreamParser.sanitizeJson(input);
+      expect(() => JSON.parse(result)).not.toThrow();
+      expect(JSON.parse(result).answer).toBe('combo');
+    });
   });
 });
