@@ -320,6 +320,13 @@ initializeQueue().catch((error) => {
   logger.error('Queue initialization error:', error);
 });
 
+// Initialize LLM provider registry (register providers + load config from DB)
+import('./providers/provider-registry').then(({ ProviderRegistry }) =>
+  ProviderRegistry.initialize(),
+).catch((error) => {
+  logger.error('Provider registry initialization error:', error);
+});
+
 // Check if running as Railway cron job
 if (process.env.RAILWAY_CRON === 'true') {
   logger.info('Running as Railway cron job...');
