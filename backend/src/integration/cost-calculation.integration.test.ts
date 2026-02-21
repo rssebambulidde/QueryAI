@@ -24,10 +24,35 @@ jest.mock('../config/logger', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 
+jest.mock('../providers/provider-registry', () => ({
+  ProviderRegistry: {
+    listProviders: jest.fn().mockReturnValue([
+      {
+        id: 'openai',
+        displayName: 'OpenAI',
+        models: [
+          { id: 'gpt-4o-mini', inputCostPer1M: 0.15, outputCostPer1M: 0.60 },
+          { id: 'gpt-4o', inputCostPer1M: 2.50, outputCostPer1M: 10.00 },
+        ],
+        configured: true,
+      },
+      {
+        id: 'anthropic',
+        displayName: 'Anthropic',
+        models: [
+          { id: 'claude-sonnet-4-20250514', inputCostPer1M: 3.00, outputCostPer1M: 15.00 },
+        ],
+        configured: true,
+      },
+    ]),
+  },
+}));
+
 describe('Integration: Cost calculation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLogUsage.mockResolvedValue(true);
+    CostTrackingService._resetPricingCache();
   });
 
   it('trackCost then getUserCostStats aggregates correctly', async () => {

@@ -1,39 +1,24 @@
 /**
  * Cost Tracking Service
- * Tracks API costs per query and model usage for analytics
+ *
+ * Tracks API costs per query and model usage for analytics.
+ * Pricing is sourced dynamically from the provider model catalogues
+ * (OpenAI, Anthropic, Google, Groq) via ProviderRegistry.
  */
 
 import { DatabaseService } from './database.service';
 import logger from '../config/logger';
+import { ProviderRegistry } from '../providers/provider-registry';
 
-// OpenAI pricing (as of 2024, update as needed)
-// Prices are per 1K tokens
-const OPENAI_PRICING: Record<string, { input: number; output: number }> = {
-  'gpt-4': {
-    input: 0.03, // $0.03 per 1K input tokens
-    output: 0.06, // $0.06 per 1K output tokens
-  },
-  'gpt-4-turbo': {
-    input: 0.01, // $0.01 per 1K input tokens
-    output: 0.03, // $0.03 per 1K output tokens
-  },
-  'gpt-4o': {
-    input: 0.005, // $0.005 per 1K input tokens
-    output: 0.015, // $0.015 per 1K output tokens
-  },
-  'gpt-4o-mini': {
-    input: 0.00015, // $0.00015 per 1K input tokens
-    output: 0.0006, // $0.0006 per 1K output tokens
-  },
-  'gpt-3.5-turbo': {
-    input: 0.0005, // $0.0005 per 1K input tokens
-    output: 0.0015, // $0.0015 per 1K output tokens
-  },
-  'gpt-3.5-turbo-16k': {
-    input: 0.003, // $0.003 per 1K input tokens
-    output: 0.004, // $0.004 per 1K output tokens
-  },
-};
+// ── Pricing types & fallback ─────────────────────────────────────────────────
+
+interface ModelPricing {
+  inputPer1M: number;   // USD per 1 M input tokens
+  outputPer1M: number;  // USD per 1 M output tokens
+}
+
+/** Conservative fallback for truly unknown models (roughly GPT-4o-mini rates). */
+const FALLBACK_PRICING: ModelPricing = { inputPer1M: 0.15, outputPer1M: 0.60 };
 
 export interface QueryCost {
   model: string;
@@ -61,6 +46,74 @@ export interface CostTrackingData {
  * Cost Tracking Service
  */
 export class CostTrackingService {
+
+  // ── Pricing cache ────────────────────────────────────────────────────────
+
+  /** Lazily-built map: model ID (lowercase) → per-1M pricing. */
+  private static pricingCache: Map<string, ModelPricing> | null = null;
+
+  /**
+   * Build (or return cached) pricing map from all provider model catalogues.
+   */
+  private static getPricingMap(): Map<string, ModelPricing> {
+    if (CostTrackingService.pricingCache) return CostTrackingService.pricingCache;
+
+    const map = new Map<string, ModelPricing>();
+
+    try {
+      const providers = ProviderRegistry.listProviders();
+      for (const provider of providers) {
+        for (const model of provider.models) {
+          map.set(model.id.toLowerCase(), {
+            inputPer1M: model.inputCostPer1M,
+            outputPer1M: model.outputCostPer1M,
+          });
+        }
+      }
+    } catch (err: any) {
+      logger.warn('Could not load pricing from provider registry', { error: err?.message });
+    }
+
+    if (map.size > 0) CostTrackingService.pricingCache = map;
+    return map;
+  }
+
+  /**
+   * Resolve model ID → pricing.  Tries exact match, then longest-prefix
+   * match (APIs often return versioned names like "gpt-4o-2024-08-06").
+   * Returns [resolvedModelId, pricing].
+   */
+  private static resolveModel(model: string): [string, ModelPricing] {
+    const map = CostTrackingService.getPricingMap();
+    const normalized = model.toLowerCase().trim();
+
+    // 1. Exact match
+    const exact = map.get(normalized);
+    if (exact) return [normalized, exact];
+
+    // 2. Longest catalogue ID that is a prefix of the returned model name
+    let bestId: string | null = null;
+    let bestLen = 0;
+    for (const [catalogueId, pricing] of map) {
+      if (normalized.startsWith(catalogueId) && catalogueId.length > bestLen) {
+        bestId = catalogueId;
+        bestLen = catalogueId.length;
+      }
+    }
+    if (bestId) return [bestId, map.get(bestId)!];
+
+    // 3. Fallback
+    logger.warn('Unknown model for cost tracking, using fallback pricing', { model });
+    return [model.toLowerCase().trim(), FALLBACK_PRICING];
+  }
+
+  /** @internal  Reset cached pricing map (test-only). */
+  static _resetPricingCache(): void {
+    CostTrackingService.pricingCache = null;
+  }
+
+  // ── Cost calculation ─────────────────────────────────────────────────────
+
   /**
    * Calculate cost for a query based on model and token usage
    */
@@ -69,48 +122,23 @@ export class CostTrackingService {
     promptTokens: number,
     completionTokens: number
   ): QueryCost {
-    // Normalize model name (handle variations)
-    const normalizedModel = this.normalizeModelName(model);
-    
-    // Get pricing for model (default to GPT-3.5 Turbo if unknown)
-    const pricing = OPENAI_PRICING[normalizedModel] || OPENAI_PRICING['gpt-3.5-turbo'];
-    
-    // Calculate costs
-    const inputCost = (promptTokens / 1000) * pricing.input;
-    const outputCost = (completionTokens / 1000) * pricing.output;
+    const [resolvedModel, pricing] = CostTrackingService.resolveModel(model);
+
+    // ModelInfo prices are per 1 M tokens
+    const inputCost = (promptTokens / 1_000_000) * pricing.inputPer1M;
+    const outputCost = (completionTokens / 1_000_000) * pricing.outputPer1M;
     const totalCost = inputCost + outputCost;
-    
+
     return {
-      model: normalizedModel,
+      model: resolvedModel,
       promptTokens,
       completionTokens,
       totalTokens: promptTokens + completionTokens,
-      inputCost: Math.round(inputCost * 1000000) / 1000000, // Round to 6 decimal places
-      outputCost: Math.round(outputCost * 1000000) / 1000000,
-      totalCost: Math.round(totalCost * 1000000) / 1000000,
+      inputCost: Math.round(inputCost * 1_000_000) / 1_000_000, // Round to 6 decimal places
+      outputCost: Math.round(outputCost * 1_000_000) / 1_000_000,
+      totalCost: Math.round(totalCost * 1_000_000) / 1_000_000,
       timestamp: new Date().toISOString(),
     };
-  }
-
-  /**
-   * Normalize model name to handle variations
-   */
-  private static normalizeModelName(model: string): string {
-    const normalized = model.toLowerCase().trim();
-    
-    // Handle GPT-4 variations
-    if (normalized.includes('gpt-4o-mini')) return 'gpt-4o-mini';
-    if (normalized.includes('gpt-4o')) return 'gpt-4o';
-    if (normalized.includes('gpt-4-turbo')) return 'gpt-4-turbo';
-    if (normalized.includes('gpt-4')) return 'gpt-4';
-    
-    // Handle GPT-3.5 variations
-    if (normalized.includes('gpt-3.5-turbo-16k')) return 'gpt-3.5-turbo-16k';
-    if (normalized.includes('gpt-3.5-turbo')) return 'gpt-3.5-turbo';
-    if (normalized.includes('gpt-3.5')) return 'gpt-3.5-turbo';
-    
-    // Default to GPT-3.5 Turbo for unknown models
-    return 'gpt-3.5-turbo';
   }
 
   /**
@@ -270,18 +298,18 @@ export class CostTrackingService {
   }
 
   /**
-   * Get cost comparison between models
+   * Get cost comparison between all available models
    */
   static getCostComparison(
     promptTokens: number,
     completionTokens: number
   ): Record<string, QueryCost> {
-    const models = Object.keys(OPENAI_PRICING);
+    const map = CostTrackingService.getPricingMap();
     const comparison: Record<string, QueryCost> = {};
 
-    models.forEach((model) => {
-      comparison[model] = this.calculateCost(model, promptTokens, completionTokens);
-    });
+    for (const modelId of map.keys()) {
+      comparison[modelId] = this.calculateCost(modelId, promptTokens, completionTokens);
+    }
 
     return comparison;
   }
