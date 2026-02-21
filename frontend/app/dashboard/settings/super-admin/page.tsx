@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
-import { ShieldCheck, Key, BarChart3, Activity, CheckSquare, TestTube, Users, DollarSign, TrendingUp, Palette, MessageSquare } from 'lucide-react';
+import { ShieldCheck, Key, BarChart3, Activity, CheckSquare, TestTube, Users, DollarSign, TrendingUp, Palette, MessageSquare, Cpu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 
@@ -19,8 +19,9 @@ const UsageAnalytics = dynamic(() => import('@/components/super-admin/usage-anal
 const CostAnalytics = dynamic(() => import('@/components/super-admin/cost-analytics'), { ssr: false });
 const WhiteLabel = dynamic(() => import('@/components/super-admin/white-label'), { ssr: false });
 const FeedbackDashboard = dynamic(() => import('@/components/super-admin/feedback-dashboard'), { ssr: false });
+const LLMSettings = dynamic(() => import('@/components/super-admin/llm-settings'), { ssr: false });
 
-type TabId = 'api' | 'analytics' | 'health' | 'validation' | 'ab-testing' | 'users' | 'usage' | 'cost' | 'white-label' | 'feedback';
+type TabId = 'api' | 'analytics' | 'health' | 'validation' | 'ab-testing' | 'users' | 'usage' | 'cost' | 'white-label' | 'feedback' | 'llm';
 
 interface Tab {
   id: TabId;
@@ -39,6 +40,7 @@ const tabs: Tab[] = [
   { id: 'usage', label: 'Usage', icon: TrendingUp },
   { id: 'cost', label: 'Cost', icon: DollarSign },
   { id: 'white-label', label: 'White Label', icon: Palette },
+  { id: 'llm', label: 'LLM', icon: Cpu },
 ];
 
 export default function SuperAdminPage() {
@@ -90,6 +92,8 @@ export default function SuperAdminPage() {
         return <WhiteLabel />;
       case 'feedback':
         return <FeedbackDashboard />;
+      case 'llm':
+        return <LLMSettings />;
       default:
         return <ApiSettings />;
     }

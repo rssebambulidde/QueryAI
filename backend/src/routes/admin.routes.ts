@@ -363,4 +363,255 @@ router.get(
   })
 );
 
+// ══════════════════════════════════════════════════════════════════════════════
+// LLM Settings
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/admin/settings/llm
+ * Returns current provider config per mode, available providers & models.
+ */
+router.get(
+  '/settings/llm',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const { ProviderRegistry } = await import('../providers/provider-registry');
+    const { SystemSettingsService } = await import('../services/system-settings.service');
+
+    const providers = ProviderRegistry.listProviders();
+    const chatConfig = ProviderRegistry.getActiveConfig('chat');
+    const researchConfig = ProviderRegistry.getActiveConfig('research');
+    const defaults = await SystemSettingsService.get<{ temperature?: number; maxTokens?: number }>('llm_defaults');
+    const featureFlags = await SystemSettingsService.get<Record<string, boolean>>('feature_flags');
+
+    // Return which providers have API keys configured (redacted)
+    const apiKeyStatus: Record<string, boolean> = {};
+    for (const p of providers) {
+      apiKeyStatus[p.id] = p.configured;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        chatConfig,
+        researchConfig,
+        providers,
+        apiKeyStatus,
+        defaults: defaults ?? { temperature: 0.7, maxTokens: 4096 },
+        featureFlags: featureFlags ?? {},
+      },
+    });
+  })
+);
+
+/**
+ * PUT /api/admin/settings/llm
+ * Update provider + model for a mode (chat or research).
+ * Body: { mode: 'chat' | 'research', providerId: string, modelId: string }
+ */
+router.put(
+  '/settings/llm',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { mode, providerId, modelId } = req.body;
+
+    if (!mode || !['chat', 'research'].includes(mode)) {
+      throw new ValidationError('mode must be "chat" or "research"');
+    }
+    if (!providerId || typeof providerId !== 'string') {
+      throw new ValidationError('providerId is required');
+    }
+    if (!modelId || typeof modelId !== 'string') {
+      throw new ValidationError('modelId is required');
+    }
+
+    const { ProviderRegistry } = await import('../providers/provider-registry');
+
+    // Validate the provider exists
+    const providers = ProviderRegistry.listProviders();
+    const target = providers.find((p) => p.id === providerId);
+    if (!target) {
+      throw new ValidationError(`Unknown provider: ${providerId}`);
+    }
+    // Validate the model exists in that provider
+    const modelExists = target.models.some((m) => m.id === modelId);
+    if (!modelExists) {
+      throw new ValidationError(`Model "${modelId}" is not available in provider "${providerId}"`);
+    }
+
+    await ProviderRegistry.setAndPersistConfig(mode, providerId, modelId, req.user!.id);
+
+    logger.info('Admin updated LLM config', { mode, providerId, modelId, userId: req.user!.id });
+
+    res.json({
+      success: true,
+      data: { mode, providerId, modelId },
+    });
+  })
+);
+
+/**
+ * PUT /api/admin/settings/llm/api-keys
+ * Set API keys per provider. Keys are stored as redacted hashes in system_settings.
+ * The real keys remain in env vars — this endpoint is for future runtime key rotation.
+ * Body: { keys: { openai?: string, anthropic?: string, google?: string, groq?: string } }
+ */
+router.put(
+  '/settings/llm/api-keys',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { keys } = req.body;
+
+    if (!keys || typeof keys !== 'object') {
+      throw new ValidationError('keys object is required');
+    }
+
+    const allowedProviders = ['openai', 'anthropic', 'google', 'groq'];
+    const sanitized: Record<string, string> = {};
+
+    for (const [provider, key] of Object.entries(keys)) {
+      if (!allowedProviders.includes(provider)) {
+        throw new ValidationError(`Unknown provider: ${provider}`);
+      }
+      if (typeof key !== 'string' || key.length < 10) {
+        throw new ValidationError(`Invalid API key for ${provider}`);
+      }
+      // Store a redacted version (first 8 + last 4 chars)
+      sanitized[provider] = `${key.substring(0, 8)}...${key.substring(key.length - 4)}`;
+    }
+
+    const { SystemSettingsService } = await import('../services/system-settings.service');
+    await SystemSettingsService.set('llm_api_keys', sanitized, req.user!.id);
+
+    logger.info('Admin updated LLM API keys', { providers: Object.keys(sanitized), userId: req.user!.id });
+
+    res.json({
+      success: true,
+      data: { providers: Object.keys(sanitized) },
+    });
+  })
+);
+
+/**
+ * POST /api/admin/settings/llm/test
+ * Test a provider + model connection by sending a simple prompt.
+ * Body: { providerId: string, modelId: string }
+ */
+router.post(
+  '/settings/llm/test',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { providerId, modelId } = req.body;
+
+    if (!providerId || typeof providerId !== 'string') {
+      throw new ValidationError('providerId is required');
+    }
+    if (!modelId || typeof modelId !== 'string') {
+      throw new ValidationError('modelId is required');
+    }
+
+    const { ProviderRegistry } = await import('../providers/provider-registry');
+    const provider = ProviderRegistry.getProvider(providerId);
+
+    if (!provider) {
+      throw new ValidationError(`Provider "${providerId}" is not registered (missing API key?)`);
+    }
+
+    const modelExists = provider.supportedModels.some((m) => m.id === modelId);
+    if (!modelExists) {
+      throw new ValidationError(`Model "${modelId}" not found in provider "${providerId}"`);
+    }
+
+    const startTime = Date.now();
+    try {
+      const result = await provider.chatCompletion({
+        model: modelId,
+        messages: [{ role: 'user', content: 'Say "hello" in one word.' }],
+        temperature: 0,
+        maxTokens: 20,
+      });
+
+      const latencyMs = Date.now() - startTime;
+
+      logger.info('Admin LLM connection test succeeded', { providerId, modelId, latencyMs });
+
+      res.json({
+        success: true,
+        data: {
+          status: 'ok',
+          response: result.content.substring(0, 100),
+          model: result.model,
+          latencyMs,
+          tokensUsed: result.usage.totalTokens,
+        },
+      });
+    } catch (err: any) {
+      const latencyMs = Date.now() - startTime;
+      logger.error('Admin LLM connection test failed', { providerId, modelId, error: err.message });
+
+      res.json({
+        success: false,
+        error: {
+          message: `Connection test failed: ${err.message}`,
+          latencyMs,
+        },
+      });
+    }
+  })
+);
+
+/**
+ * PUT /api/admin/settings/llm/defaults
+ * Update default temperature and max tokens.
+ * Body: { temperature?: number, maxTokens?: number }
+ */
+router.put(
+  '/settings/llm/defaults',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { temperature, maxTokens } = req.body;
+
+    const updates: Record<string, number> = {};
+    if (temperature !== undefined) {
+      if (typeof temperature !== 'number' || temperature < 0 || temperature > 2) {
+        throw new ValidationError('temperature must be a number between 0 and 2');
+      }
+      updates.temperature = temperature;
+    }
+    if (maxTokens !== undefined) {
+      if (typeof maxTokens !== 'number' || maxTokens < 100 || maxTokens > 128000) {
+        throw new ValidationError('maxTokens must be a number between 100 and 128000');
+      }
+      updates.maxTokens = maxTokens;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      throw new ValidationError('At least one of temperature or maxTokens must be provided');
+    }
+
+    const { SystemSettingsService } = await import('../services/system-settings.service');
+    const existing = (await SystemSettingsService.get<Record<string, number>>('llm_defaults')) ?? {};
+    const merged = { ...existing, ...updates };
+
+    await SystemSettingsService.set('llm_defaults', merged, req.user!.id);
+
+    logger.info('Admin updated LLM defaults', { ...updates, userId: req.user!.id });
+
+    res.json({
+      success: true,
+      data: merged,
+    });
+  })
+);
+
 export default router;

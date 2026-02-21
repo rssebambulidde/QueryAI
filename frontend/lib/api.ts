@@ -2026,6 +2026,96 @@ export const workspaceApi = {
   },
 };
 
+// ── Admin LLM Settings API ───────────────────────────────────────────────────
+
+export interface LLMProviderModel {
+  id: string;
+  displayName: string;
+  contextWindow: number;
+  maxOutputTokens: number;
+  inputCostPer1M: number;
+  outputCostPer1M: number;
+  capabilities: string[];
+  isDefault?: boolean;
+}
+
+export interface LLMProviderInfo {
+  id: string;
+  displayName: string;
+  models: LLMProviderModel[];
+  configured: boolean;
+}
+
+export interface LLMModeConfig {
+  providerId: string;
+  modelId: string;
+}
+
+export interface LLMDefaults {
+  temperature: number;
+  maxTokens: number;
+}
+
+export interface LLMSettingsResponse {
+  chatConfig: LLMModeConfig;
+  researchConfig: LLMModeConfig;
+  providers: LLMProviderInfo[];
+  apiKeyStatus: Record<string, boolean>;
+  defaults: LLMDefaults;
+  featureFlags: Record<string, boolean>;
+}
+
+export interface LLMTestResult {
+  status: string;
+  response: string;
+  model: string;
+  latencyMs: number;
+  tokensUsed: number;
+}
+
+export const adminApi = {
+  /** Get current LLM settings, providers, models. */
+  getLLMSettings: async (): Promise<ApiResponse<LLMSettingsResponse>> => {
+    const response = await apiClient.get('/api/admin/settings/llm');
+    return response.data;
+  },
+
+  /** Update provider + model for a mode. */
+  updateLLMSettings: async (
+    mode: 'chat' | 'research',
+    providerId: string,
+    modelId: string,
+  ): Promise<ApiResponse<{ mode: string; providerId: string; modelId: string }>> => {
+    const response = await apiClient.put('/api/admin/settings/llm', { mode, providerId, modelId });
+    return response.data;
+  },
+
+  /** Update API keys per provider (redacted on server). */
+  updateLLMApiKeys: async (
+    keys: Record<string, string>,
+  ): Promise<ApiResponse<{ providers: string[] }>> => {
+    const response = await apiClient.put('/api/admin/settings/llm/api-keys', { keys });
+    return response.data;
+  },
+
+  /** Test a provider + model connection. */
+  testLLMConnection: async (
+    providerId: string,
+    modelId: string,
+  ): Promise<ApiResponse<LLMTestResult>> => {
+    const response = await apiClient.post('/api/admin/settings/llm/test', { providerId, modelId });
+    return response.data;
+  },
+
+  /** Update default temperature / max tokens. */
+  updateLLMDefaults: async (
+    defaults: Partial<LLMDefaults>,
+  ): Promise<ApiResponse<LLMDefaults>> => {
+    const response = await apiClient.put('/api/admin/settings/llm/defaults', defaults);
+    return response.data;
+  },
+};
+
 // Export A/B Testing API
 export { abTestingApi } from './api-ab-testing';
 export type {
