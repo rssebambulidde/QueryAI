@@ -5,7 +5,7 @@
 
 import { supabaseAdmin } from '../config/database';
 import { Database } from '../types/database';
-import { openai } from '../config/openai';
+import { ProviderRegistry } from '../providers/provider-registry';
 import logger from '../config/logger';
 import { AppError } from '../types/error';
 import { TokenCountService, type EncodingType } from './token-count.service';
@@ -172,9 +172,10 @@ export class ConversationStateService {
     startTime: number
   ): Promise<ConversationState> {
     try {
+      const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
       const response = await Promise.race([
-        openai.chat.completions.create({
-          model: options.model,
+        provider.chatCompletion({
+          model: providerModel,
           messages: [
             {
               role: 'system',
@@ -186,15 +187,15 @@ export class ConversationStateService {
             },
           ],
           temperature: 0.3,
-          max_tokens: 1000,
-          response_format: { type: 'json_object' },
+          maxTokens: 1000,
+          responseFormat: 'json',
         }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Extraction timeout')), options.maxExtractionTimeMs)
         ),
       ]);
 
-      const content = response.choices[0]?.message?.content;
+      const content = response.content;
       if (!content) {
         throw new Error('No content in API response');
       }

@@ -1,5 +1,5 @@
 import logger from '../config/logger';
-import OpenAI from 'openai';
+import type { ChatMessage } from '../providers/llm-provider.interface';
 import { CitationValidatorService } from './citation-validator.service';
 import { AnswerQualityService } from './answer-quality.service';
 import { ConflictResolutionService } from './conflict-resolution.service';
@@ -79,8 +79,8 @@ Guidelines:
     question: string,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
     conversationState?: string
-  ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
-    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  ): ChatMessage[] {
+    const messages: ChatMessage[] = [];
 
     messages.push({
       role: 'system',
@@ -263,8 +263,8 @@ ${this.getOutputFormatBlock()}`;
     topicScopeConfig?: Record<string, any> | null,
     fewShotExamples?: string,
     conversationState?: string
-  ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
-    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+  ): ChatMessage[] {
+    const messages: ChatMessage[] = [];
 
     // Add system prompt with RAG context and few-shot examples
     messages.push({

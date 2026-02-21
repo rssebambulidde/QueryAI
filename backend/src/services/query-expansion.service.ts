@@ -4,7 +4,7 @@
  * Supports multiple expansion strategies: LLM-based, embedding-based synonyms, and hybrid
  */
 
-import { openai } from '../config/openai';
+import { ProviderRegistry } from '../providers/provider-registry';
 import { EmbeddingService } from './embedding.service';
 import logger from '../config/logger';
 import { AppError } from '../types/error';
@@ -129,8 +129,9 @@ Query: "${query}"${context}
 
 Related terms:`;
 
-      const response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+      const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+      const response = await provider.chatCompletion({
+        model: providerModel,
         messages: [
           {
             role: 'system',
@@ -142,10 +143,10 @@ Related terms:`;
           },
         ],
         temperature: 0.7,
-        max_tokens: 100,
+        maxTokens: 100,
       });
 
-      const content = response.choices[0]?.message?.content?.trim();
+      const content = response.content?.trim();
       if (!content) {
         throw new AppError('LLM returned empty expansion', 500, 'LLM_EXPANSION_ERROR');
       }

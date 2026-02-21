@@ -3,7 +3,7 @@
  * Summarizes conversation history using LLM to preserve key information and context
  */
 
-import { openai } from '../config/openai';
+import { ProviderRegistry } from '../providers/provider-registry';
 import logger from '../config/logger';
 import { TokenCountService } from './token-count.service';
 import { Database } from '../types/database';
@@ -120,8 +120,9 @@ ${conversationText}
 Provide a clear, structured summary that captures the essential information:`;
 
       // Perform summarization with timeout
-      const summarizationPromise = openai.chat.completions.create({
-        model: opts.model,
+      const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+      const summarizationPromise = provider.chatCompletion({
+        model: providerModel,
         messages: [
           {
             role: 'system',
@@ -133,7 +134,7 @@ Provide a clear, structured summary that captures the essential information:`;
           },
         ],
         temperature: opts.temperature,
-        max_tokens: opts.maxSummaryTokens,
+        maxTokens: opts.maxSummaryTokens,
       });
 
       // Add timeout
@@ -142,7 +143,7 @@ Provide a clear, structured summary that captures the essential information:`;
       });
 
       const completion = await Promise.race([summarizationPromise, timeoutPromise]);
-      const summary = completion.choices[0]?.message?.content || '';
+      const summary = completion.content || '';
 
       // Count summary tokens
       const summaryTokens = TokenCountService.countTokens(summary, encodingType);

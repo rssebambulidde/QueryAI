@@ -17,10 +17,11 @@
  * while preserving the exact same behaviour.
  */
 
-import { openai } from '../config/openai';
 import logger from '../config/logger';
 import { AppError, ValidationError } from '../types/error';
-import OpenAI from 'openai';
+import OpenAI from 'openai'; // Kept for OpenAI.APIError instanceof checks
+import { ProviderRegistry } from '../providers/provider-registry';
+import type { LLMProvider, ChatMessage, ChatCompletionResult } from '../providers/llm-provider.interface';
 import { SearchService, SearchRequest } from './search.service';
 import { RAGService, RAGOptions } from './rag.service';
 import { FewShotSelectorService, FewShotSelectionOptions } from './few-shot-selector.service';
@@ -34,7 +35,7 @@ import { CostTrackingService } from './cost-tracking.service';
 import { SubscriptionService } from './subscription.service';
 import { PromptBuilderService } from './prompt-builder.service';
 import { ResponseProcessorService } from './response-processor.service';
-import { getResponseFormat, AIResponseSchema, type AIStructuredResponse } from '../schemas/ai-response.schema';
+import { AIResponseSchema, type AIStructuredResponse } from '../schemas/ai-response.schema';
 import { JsonAnswerStreamParser } from '../utils/json-stream-parser';
 import crypto from 'crypto';
 
@@ -86,7 +87,9 @@ export interface PreparedContext {
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> | undefined;
   selectedModel: string;
   modelSelectionReason: string;
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  /** The resolved LLM provider instance that matches selectedModel. */
+  provider: LLMProvider;
+  messages: ChatMessage[];
   topicName: string | undefined;
   topicDescription: string | undefined;
   topicScopeConfig: Record<string, any> | null | undefined;
@@ -341,11 +344,12 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     try {
       const retryResult = await RetryService.execute(
         async () => {
-          return await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo',
+          const { provider, model } = ProviderRegistry.getForMode('chat');
+          return await provider.chatCompletion({
+            model,
             messages: [{ role: 'user', content: prompt }],
             temperature: 0,
-            max_tokens: 10,
+            maxTokens: 10,
           });
         },
         {
@@ -357,7 +361,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       );
 
       const completion = retryResult.result;
-      const text = (completion.choices[0]?.message?.content || '').trim().toUpperCase();
+      const text = (completion.content || '').trim().toUpperCase();
       const onTopic = !/^NO\b/.test(text);
 
       // Store result in cache
@@ -487,59 +491,27 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     question: string,
     ragContext?: string,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
-    requestedModel?: string
-  ): Promise<{ model: string; reason: string }> {
+    requestedModel?: string,
+    mode: 'chat' | 'research' = 'chat'
+  ): Promise<{ model: string; provider: LLMProvider; reason: string }> {
     if (requestedModel) {
-      return { model: requestedModel, reason: 'user-requested' };
-    }
-
-    if (!userId) {
-      return { model: this.GPT35_MODEL, reason: 'no-user-default' };
-    }
-
-    try {
-      const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
-
-      if (!subscriptionData) {
-        return { model: this.GPT35_MODEL, reason: 'no-subscription-default' };
-      }
-
-      const tier = subscriptionData.subscription.tier;
-
-      if (tier === 'free' || tier === 'starter' || tier === 'premium') {
-        return { model: this.GPT35_MODEL, reason: `tier-${tier}-gpt35-only` };
-      }
-
-      if (tier === 'pro') {
-        // Deterministic, complexity-based model selection (Item 22).
-        // No randomness — the same question always picks the same model,
-        // which makes LLM response caching reliable.
-        const { tier: complexity, score, signals } = this.assessComplexity(
-          question, ragContext, conversationHistory
-        );
-
-        logger.debug('Complexity assessment for model selection', {
-          complexity, score, signals, userId,
-        });
-
-        if (complexity === 'high') {
-          return { model: this.GPT4_MODEL, reason: `pro-tier-high-complexity(${score})` };
+      // If a specific model was requested, find the provider that owns it
+      const providers = ProviderRegistry.listProviders();
+      for (const p of providers) {
+        if (!p.configured) continue;
+        const hasModel = p.models.some((m) => m.id === requestedModel);
+        if (hasModel) {
+          const provider = ProviderRegistry.getProvider(p.id)!;
+          return { model: requestedModel, provider, reason: 'user-requested' };
         }
-        if (complexity === 'medium') {
-          return { model: this.GPT4_MODEL, reason: `pro-tier-medium-complexity(${score})` };
-        }
-        // LOW complexity → cost-effective model
-        return { model: this.GPT35_MODEL, reason: `pro-tier-low-complexity(${score})` };
       }
-
-      return { model: this.GPT35_MODEL, reason: 'default-fallback' };
-    } catch (error: any) {
-      logger.error('Failed to select model based on tier', {
-        error: error.message,
-        userId,
-      });
-      return { model: this.GPT35_MODEL, reason: 'error-fallback' };
+      // Requested model not found in any provider — fall through to default
+      logger.warn('Requested model not found in any provider, using default', { requestedModel });
     }
+
+    // Use the admin-configured provider+model for the given mode
+    const { provider, model } = ProviderRegistry.getForMode(mode);
+    return { model, provider, reason: `registry-${mode}` };
   }
 
   static buildMessages(
@@ -555,7 +527,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     topicScopeConfig?: Record<string, any> | null,
     fewShotExamples?: string,
     conversationState?: string
-  ): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+  ): ChatMessage[] {
     return PromptBuilderService.buildMessages(
       question,
       ragContext,
@@ -618,8 +590,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     // ── Chat mode: skip RAG, use simple conversational prompt ───────
     if (request.mode === 'chat') {
       // Model selection still applies
-      const modelSelection = await this.selectModel(userId, request.question, undefined, request.conversationHistory, request.model);
+      const modelSelection = await this.selectModel(userId, request.question, undefined, request.conversationHistory, request.model, 'chat');
       const selectedModel = modelSelection.model;
+      const selectedProvider = modelSelection.provider;
       const modelSelectionReason = modelSelection.reason;
 
       // Load conversation history
@@ -665,6 +638,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         conversationHistory,
         selectedModel,
         modelSelectionReason,
+        provider: selectedProvider,
         messages,
         topicName: undefined,
         topicDescription: undefined,
@@ -985,22 +959,20 @@ Is this question clearly within the topic? Answer only YES or NO.`;
 
     // ── Model selection ────────────────────────────────────────────────
     let selectedModel: string;
+    let selectedProvider: LLMProvider;
     let modelSelectionReason: string;
 
-    if (request.model) {
-      selectedModel = request.model;
-      modelSelectionReason = 'user-requested';
-    } else {
-      const modelSelection = await this.selectModel(
-        userId,
-        request.question,
-        ragContext,
-        conversationHistory,
-        request.model
-      );
-      selectedModel = modelSelection.model;
-      modelSelectionReason = modelSelection.reason;
-    }
+    const modelSelection = await this.selectModel(
+      userId,
+      request.question,
+      ragContext,
+      conversationHistory,
+      request.model,
+      'research'
+    );
+    selectedModel = modelSelection.model;
+    selectedProvider = modelSelection.provider;
+    modelSelectionReason = modelSelection.reason;
 
     if (userId) {
       try {
@@ -1094,6 +1066,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       conversationHistory,
       selectedModel,
       modelSelectionReason,
+      provider: selectedProvider,
       messages,
       topicName,
       topicDescription,
@@ -1136,7 +1109,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
 
       const context = await contextPromise;
 
-      logger.info('Sending question to OpenAI with RAG', {
+      logger.info('Sending question to LLM provider', {
+        provider: context.provider.id,
         model: context.selectedModel,
         questionLength: request.question.length,
         hasContext: !!request.context,
@@ -1148,7 +1122,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
 
       // Check LLM response cache
       const shouldCache = !context.conversationHistory || context.conversationHistory.length <= 10;
-      let completion: OpenAI.Chat.Completions.ChatCompletion | undefined;
+      let completion: ChatCompletionResult | undefined;
       let cachedResponse: QuestionResponse | null = null;
       
       if (shouldCache) {
@@ -1191,18 +1165,17 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         return cachedResponse;
       }
 
-      // Call OpenAI API with retry logic and circuit breaker
+      // Call LLM provider with retry logic and circuit breaker
       try {
         const retryResult = await RetryService.execute(
           async () => {
-            return await openai.chat.completions.create({
+            return await context.provider.chatCompletion({
               model: context.selectedModel,
-              messages: context.messages,
+              messages: context.messages as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
               temperature: context.temperature,
-              max_tokens: context.maxTokens,
-              response_format: getResponseFormat(context.selectedModel),
-            }, {
-              ...(options?.signal && { signal: options.signal }),
+              maxTokens: context.maxTokens,
+              responseFormat: 'json',
+              signal: options?.signal,
             });
           },
           {
@@ -1211,11 +1184,12 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             multiplier: 2,
             maxDelay: 30000,
             onRetry: (error, attempt, delay) => {
-              logger.warn('Retrying OpenAI API call', {
+              logger.warn('Retrying LLM API call', {
                 attempt,
                 delay,
                 error: error.message,
                 model: context.selectedModel,
+                provider: context.provider.id,
                 questionLength: request.question.length,
               });
             },
@@ -1234,8 +1208,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         DegradationService.handleServiceError(ServiceType.OPENAI, openaiError);
         
         if (context.ragContext && context.sources && context.sources.length > 0) {
-          logger.warn('OpenAI API failed but partial response available', {
+          logger.warn('LLM API failed but partial response available', {
             error: openaiError.message,
+            provider: context.provider.id,
             sourcesCount: context.sources.length,
           });
           
@@ -1255,7 +1230,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         throw openaiError;
       }
 
-      const fullResponse = completion.choices[0]?.message?.content || '{}';
+      const fullResponse = completion.content || '{}';
       
       // ── Parse structured JSON response ──────────────────────────────
       let structured: AIStructuredResponse | null = null;
@@ -1390,14 +1365,14 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       }
 
       if (!completion.usage) {
-        throw new AppError('OpenAI API did not return usage information', 500, 'AI_API_ERROR');
+        throw new AppError('LLM API did not return usage information', 500, 'AI_API_ERROR');
       }
 
       // Calculate and track cost
       const costData = CostTrackingService.calculateCost(
         completion.model,
-        completion.usage.prompt_tokens,
-        completion.usage.completion_tokens
+        completion.usage.promptTokens,
+        completion.usage.completionTokens
       );
       
       if (userId) {
@@ -1410,6 +1385,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           totalTokens: costData.totalTokens,
           cost: costData.totalCost,
           metadata: {
+            provider: context.provider.id,
             modelSelectionReason: context.modelSelectionReason,
             question: request.question.substring(0, 200),
             hasRAGContext: !!context.ragContext,
@@ -1420,9 +1396,10 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         });
       }
 
-      logger.info('OpenAI response received', {
+      logger.info('LLM response received', {
+        provider: context.provider.id,
         model: completion.model,
-        tokensUsed: completion.usage.total_tokens,
+        tokensUsed: completion.usage.totalTokens,
         cost: costData.totalCost,
         hasFollowUpQuestions: !!followUpQuestions,
         modelSelectionReason: context.modelSelectionReason,
@@ -1466,9 +1443,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         } : undefined,
         followUpQuestions: followUpQuestions && followUpQuestions.length > 0 ? followUpQuestions : undefined,
         usage: {
-          promptTokens: completion.usage.prompt_tokens,
-          completionTokens: completion.usage.completion_tokens,
-          totalTokens: completion.usage.total_tokens,
+          promptTokens: completion.usage.promptTokens,
+          completionTokens: completion.usage.completionTokens,
+          totalTokens: completion.usage.totalTokens,
         },
         degraded: isDegraded,
         degradationLevel: isDegraded ? degradationLevel : undefined,
@@ -1526,7 +1503,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             citations: qualityCitations.length > 0 ? qualityCitations : undefined,
             metadata: {
               model: completion.model || context.selectedModel,
-              tokenUsage: completion.usage.total_tokens,
+              tokenUsage: completion.usage.totalTokens,
               hasCitations: (parsedCitations?.citations?.length || 0) > 0,
               citationValidation: citationValidation?.isValid,
             },
@@ -1662,7 +1639,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           },
         }).catch(() => {});
 
-        logger.error('OpenAI API error:', {
+        logger.error('LLM API error:', {
           status: error.status,
           code: error.code,
           message: error.message,
@@ -1670,13 +1647,13 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         });
 
         if (error.status === 401) {
-          throw new AppError('Invalid OpenAI API key', 500, 'AI_API_KEY_INVALID');
+          throw new AppError('Invalid API key for LLM provider', 500, 'AI_API_KEY_INVALID');
         }
         if (error.status === 429) {
-          throw new AppError('OpenAI API rate limit exceeded. Please try again later.', 429, 'AI_RATE_LIMIT');
+          throw new AppError('LLM API rate limit exceeded. Please try again later.', 429, 'AI_RATE_LIMIT');
         }
         if (error.status === 500 || error.status === 503) {
-          throw new AppError('OpenAI API is temporarily unavailable. Please try again later.', 503, 'AI_SERVICE_UNAVAILABLE');
+          throw new AppError('LLM API is temporarily unavailable. Please try again later.', 503, 'AI_SERVICE_UNAVAILABLE');
         }
         if (error.code === 'context_length_exceeded') {
           throw new ValidationError('Question or context is too long. Please shorten your question.', 'CONTEXT_TOO_LONG');
@@ -1687,6 +1664,25 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           500,
           'AI_API_ERROR'
         );
+      }
+
+      // Provider-agnostic error handling (Anthropic, Google, Groq errors)
+      const status = error?.status || error?.statusCode;
+      if (status) {
+        ErrorTrackerService.trackError(ErrorServiceType.AI, error, {
+          userId,
+          metadata: { operation: 'answerQuestion', questionLength: request.question.length },
+        }).catch(() => {});
+
+        logger.error('LLM provider error:', { status, message: error.message });
+
+        if (status === 401) throw new AppError('Invalid API key for LLM provider', 500, 'AI_API_KEY_INVALID');
+        if (status === 429) throw new AppError('LLM API rate limit exceeded. Please try again later.', 429, 'AI_RATE_LIMIT');
+        if (status === 500 || status === 503) throw new AppError('LLM API is temporarily unavailable. Please try again later.', 503, 'AI_SERVICE_UNAVAILABLE');
+        if (error.message?.includes('context') && error.message?.includes('length')) {
+          throw new ValidationError('Question or context is too long. Please shorten your question.', 'CONTEXT_TOO_LONG');
+        }
+        throw new AppError(`AI service error: ${error.message || 'Unknown error'}`, 500, 'AI_API_ERROR');
       }
 
       logger.error('Unexpected error in AI service:', error);
@@ -1914,7 +1910,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         });
       }
 
-      logger.info('Sending streaming question to OpenAI with RAG', {
+      logger.info('Sending streaming question to LLM with RAG', {
+        provider: context.provider.id,
         model: context.selectedModel,
         questionLength: request.question.length,
         hasContext: !!request.context,
@@ -1923,25 +1920,22 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         modelSelectionReason: context.modelSelectionReason,
       });
 
-      // Call OpenAI API with streaming
+      // Call LLM provider with streaming
       // Chat mode: plain text response; Research mode: structured JSON output
       const isChatMode = request.mode === 'chat';
-      const responseFormat = isChatMode ? undefined : getResponseFormat(context.selectedModel);
-      const stream = await openai.chat.completions.create({
+      const useJson = !isChatMode; // Research mode expects JSON structured output
+      const stream = context.provider.chatCompletionStream({
         model: context.selectedModel,
-        messages: context.messages,
+        messages: context.messages as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
         temperature: context.temperature,
-        max_tokens: context.maxTokens,
-        stream: true,
-        ...(responseFormat && { response_format: responseFormat }),
-      }, {
-        ...(options?.signal && { signal: options.signal }),
+        maxTokens: context.maxTokens,
+        responseFormat: useJson ? 'json' : 'text',
+        signal: options?.signal,
       });
 
       if (isChatMode) {
         // Chat mode: yield raw text chunks directly (no JSON parsing)
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content || '';
+        for await (const content of stream) {
           if (content) {
             yield content;
           }
@@ -1951,8 +1945,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         // in real-time while accumulating the full JSON for post-stream parsing.
         const parser = new JsonAnswerStreamParser();
 
-        for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content || '';
+        for await (const content of stream) {
           if (content) {
             const answerChunk = parser.feed(content);
             if (answerChunk) {
@@ -1985,7 +1978,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         }
       }
 
-      logger.info('OpenAI streaming response completed', { 
+      logger.info('LLM streaming response completed', { 
+        provider: context.provider.id,
         model: context.selectedModel,
         modelSelectionReason: context.modelSelectionReason,
       });
@@ -2003,32 +1997,26 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         return; // Gracefully end the generator
       }
 
+      // OpenAI-specific error (still imported for backward compat)
       if (error instanceof OpenAI.APIError) {
         logger.error('OpenAI API error (streaming):', {
           status: error.status,
           code: error.code,
           message: error.message,
-          type: error.type,
         });
+      }
 
-        if (error.status === 401) {
-          throw new AppError('Invalid OpenAI API key', 500, 'AI_API_KEY_INVALID');
-        }
-        if (error.status === 429) {
-          throw new AppError('OpenAI API rate limit exceeded. Please try again later.', 429, 'AI_RATE_LIMIT');
-        }
-        if (error.status === 500 || error.status === 503) {
-          throw new AppError('OpenAI API is temporarily unavailable. Please try again later.', 503, 'AI_SERVICE_UNAVAILABLE');
-        }
-        if (error.code === 'context_length_exceeded') {
+      // Provider-agnostic error handling
+      const status = error?.status || error?.statusCode;
+      if (status) {
+        logger.error('LLM provider error (streaming):', { status, message: error.message });
+        if (status === 401) throw new AppError('Invalid API key for LLM provider', 500, 'AI_API_KEY_INVALID');
+        if (status === 429) throw new AppError('LLM API rate limit exceeded. Please try again later.', 429, 'AI_RATE_LIMIT');
+        if (status === 500 || status === 503) throw new AppError('LLM API is temporarily unavailable. Please try again later.', 503, 'AI_SERVICE_UNAVAILABLE');
+        if (error.message?.includes('context') && error.message?.includes('length')) {
           throw new ValidationError('Question or context is too long. Please shorten your question.', 'CONTEXT_TOO_LONG');
         }
-
-        throw new AppError(
-          `AI service error: ${error.message || 'Unknown error'}`,
-          500,
-          'AI_API_ERROR'
-        );
+        throw new AppError(`AI service error: ${error.message || 'Unknown error'}`, 500, 'AI_API_ERROR');
       }
 
       logger.error('Unexpected error in AI service (streaming):', error);

@@ -8,7 +8,7 @@
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type { LLMProvider, ModelInfo, ChatCompletionParams, ChatCompletionResult, ChatStreamMeta, TokenUsage } from './llm-provider.interface';
+export type { LLMProvider, ModelInfo, ChatCompletionParams, ChatCompletionResult, ChatStreamMeta, TokenUsage, ChatMessage } from './llm-provider.interface';
 export type { ModeConfig, ProviderListItem } from './provider-registry';
 
 // ─── Concrete providers ──────────────────────────────────────────────────────

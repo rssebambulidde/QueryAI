@@ -61,3 +61,6 @@ export interface TokenUsage {
   completionTokens: number;
   totalTokens: number;
 }
+
+/** Convenience alias used across services in place of OpenAI-specific message types. */
+export type ChatMessage = ChatCompletionParams['messages'][number];

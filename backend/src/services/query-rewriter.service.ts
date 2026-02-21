@@ -4,7 +4,7 @@
  * Generates multiple query variations and combines results
  */
 
-import { openai } from '../config/openai';
+import { ProviderRegistry } from '../providers/provider-registry';
 import logger from '../config/logger';
 import { AppError } from '../types/error';
 
@@ -124,17 +124,18 @@ Return a JSON object with a "variations" array containing the query strings. Exa
       : `Original query: "${query}"\n\nGenerate ${maxVariations} query variations.`;
 
     try {
-      const response = await openai.chat.completions.create({
-        model,
+      const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+      const response = await provider.chatCompletion({
+        model: providerModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
         temperature,
-        max_tokens: 200, // Enough for multiple queries
+        maxTokens: 200,
       });
 
-      const content = response.choices[0]?.message?.content;
+      const content = response.content;
       if (!content) {
         throw new AppError('No response from LLM for query rewriting', 500);
       }

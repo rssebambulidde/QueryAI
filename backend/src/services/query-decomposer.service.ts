@@ -16,7 +16,7 @@
  *    from ContextSelectorService for the "should decompose?" gate
  */
 
-import { openai } from '../config/openai';
+import { ProviderRegistry } from '../providers/provider-registry';
 import { ContextSelectorService } from './context-selector.service';
 import logger from '../config/logger';
 
@@ -102,8 +102,9 @@ export class QueryDecomposerService {
    */
   static async decompose(query: string): Promise<DecompositionResult> {
     try {
-      const completion = await openai.chat.completions.create({
-        model: DECOMPOSER_MODEL,
+      const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+      const completion = await provider.chatCompletion({
+        model: providerModel,
         messages: [
           {
             role: 'system',
@@ -127,11 +128,11 @@ Respond ONLY with JSON (no markdown). Schema:
           },
         ],
         temperature: 0,
-        max_tokens: DECOMPOSER_MAX_TOKENS,
-        response_format: { type: 'json_object' },
+        maxTokens: DECOMPOSER_MAX_TOKENS,
+        responseFormat: 'json',
       });
 
-      const raw = completion.choices[0]?.message?.content;
+      const raw = completion.content;
       if (!raw) {
         return this.fallback(query, 'empty LLM response');
       }

@@ -9,7 +9,7 @@
  * queries so it has zero impact on user-facing latency.
  */
 
-import { openai } from '../config/openai';
+import { ProviderRegistry } from '../providers/provider-registry';
 import logger from '../config/logger';
 import { supabaseAdmin } from '../config/database';
 import config from '../config/env';
@@ -154,18 +154,19 @@ ${answer.substring(0, 3000)}
 **Sources (${(sources || []).length}):**
 ${sourceSummary || '(no sources provided)'}`;
 
-    const completion = await openai.chat.completions.create({
-      model: EVALUATOR_MODEL,
+    const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+    const completion = await provider.chatCompletion({
+      model: providerModel,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
       temperature: 0,
-      max_tokens: EVAL_MAX_TOKENS,
-      response_format: { type: 'json_object' },
+      maxTokens: EVAL_MAX_TOKENS,
+      responseFormat: 'json',
     });
 
-    const raw = completion.choices[0]?.message?.content;
+    const raw = completion.content;
     if (!raw) {
       throw new Error('Empty response from evaluation model');
     }

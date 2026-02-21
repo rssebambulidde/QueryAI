@@ -4,7 +4,7 @@
  * Optimized for contexts that are too long, with emphasis on citation preservation
  */
 
-import { openai } from '../config/openai';
+import { ProviderRegistry } from '../providers/provider-registry';
 import { TokenCountService } from './token-count.service';
 import logger from '../config/logger';
 import { RAGContext, DocumentContext } from './rag.service';
@@ -160,8 +160,9 @@ export class ContextSummarizerService {
       }
       prompt += `\nSummary:`;
 
-      const response = await openai.chat.completions.create({
-        model: config.model,
+      const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+      const response = await provider.chatCompletion({
+        model: providerModel,
         messages: [
           {
             role: 'system',
@@ -172,11 +173,11 @@ export class ContextSummarizerService {
             content: prompt,
           },
         ],
-        max_tokens: config.maxSummaryTokens,
+        maxTokens: config.maxSummaryTokens,
         temperature: config.temperature,
       });
 
-      const summary = response.choices[0]?.message?.content || doc.content;
+      const summary = response.content || doc.content;
       const processingTime = Date.now() - startTime;
 
       if (processingTime > config.maxSummarizationTimeMs) {
@@ -238,8 +239,9 @@ export class ContextSummarizerService {
       }
       prompt += `\nSummary:`;
 
-      const response = await openai.chat.completions.create({
-        model: config.model,
+      const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+      const response = await provider.chatCompletion({
+        model: providerModel,
         messages: [
           {
             role: 'system',
@@ -250,11 +252,11 @@ export class ContextSummarizerService {
             content: prompt,
           },
         ],
-        max_tokens: config.maxSummaryTokens,
+        maxTokens: config.maxSummaryTokens,
         temperature: config.temperature,
       });
 
-      const summary = response.choices[0]?.message?.content || result.content;
+      const summary = response.content || result.content;
       const processingTime = Date.now() - startTime;
 
       if (processingTime > config.maxSummarizationTimeMs) {

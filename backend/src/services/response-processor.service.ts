@@ -1,4 +1,4 @@
-import { openai } from '../config/openai';
+import { ProviderRegistry } from '../providers/provider-registry';
 import logger from '../config/logger';
 import { RetryService } from './retry.service';
 import { LatencyTrackerService, OperationType } from './latency-tracker.service';
@@ -56,11 +56,12 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
       // Use retry service for follow-up question generation
       const retryResult = await RetryService.execute(
         async () => {
-          return await openai.chat.completions.create({
-            model: this.DEFAULT_MODEL,
+          const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+          return await provider.chatCompletion({
+            model: providerModel,
             messages: [{ role: 'user', content: prompt }],
             temperature: 0.5,
-            max_tokens: 300,
+            maxTokens: 300,
           });
         },
         {
@@ -72,7 +73,7 @@ Output only the 4 questions, one per line. No numbering or bullets. Each must be
       );
 
       const c = retryResult.result;
-      const text = c.choices[0]?.message?.content || '';
+      const text = c.content || '';
       const lines = text.split('\n').map((l) => l.replace(/^\s*[-*•]?\s*\d*\.?\s*/, '').trim()).filter((l) => l.length > 5 && l.length < 200);
       return lines.slice(0, 4);
     } catch (err: any) {

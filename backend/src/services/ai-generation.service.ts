@@ -13,7 +13,7 @@
  * the core question-answering pipeline.
  */
 
-import { openai } from '../config/openai';
+import { ProviderRegistry } from '../providers/provider-registry';
 import logger from '../config/logger';
 import { AppError } from '../types/error';
 import { RetryService } from './retry.service';
@@ -63,11 +63,12 @@ Research Session Summary:`;
     try {
       const retryResult = await RetryService.execute(
         async () => {
-          return await openai.chat.completions.create({
-            model: DEFAULT_MODEL,
+          const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+          return await provider.chatCompletion({
+            model: providerModel,
             messages: [{ role: 'user', content: prompt }],
             temperature: 0.4,
-            max_tokens: 800,
+            maxTokens: 800,
           });
         },
         {
@@ -79,7 +80,7 @@ Research Session Summary:`;
       );
 
       const completion = retryResult.result;
-      return completion.choices[0]?.message?.content || 'Summary could not be generated.';
+      return completion.content || 'Summary could not be generated.';
     } catch (err: any) {
       logger.error('Error generating research session summary:', err);
       throw new AppError('Failed to generate research session summary', 500, 'RESEARCH_SUMMARY_ERROR');
@@ -114,11 +115,12 @@ Output only the 4 questions, one per line. No numbering, bullets, or extra text.
     try {
       const retryResult = await RetryService.execute(
         async () => {
-          return await openai.chat.completions.create({
-            model: DEFAULT_MODEL,
+          const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+          return await provider.chatCompletion({
+            model: providerModel,
             messages: [{ role: 'user', content: prompt }],
             temperature: 0.6,
-            max_tokens: 400,
+            maxTokens: 400,
           });
         },
         {
@@ -130,7 +132,7 @@ Output only the 4 questions, one per line. No numbering, bullets, or extra text.
       );
 
       const completion = retryResult.result;
-      const text = completion.choices[0]?.message?.content || '';
+      const text = completion.content || '';
       const lines = text.split('\n').map((l) => l.replace(/^\s*[-*•]?\s*\d*\.?\s*/, '').trim()).filter((l) => l.length > 5 && l.length < 200);
       return lines.slice(0, 4);
     } catch (err: any) {
@@ -166,11 +168,12 @@ Summary:`;
     try {
       const retryResult = await RetryService.execute(
         async () => {
-          return await openai.chat.completions.create({
-            model: DEFAULT_MODEL,
+          const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+          return await provider.chatCompletion({
+            model: providerModel,
             messages: [{ role: 'user', content: prompt }],
             temperature: DEFAULT_TEMPERATURE,
-            max_tokens: 300,
+            maxTokens: 300,
           });
         },
         {
@@ -182,7 +185,7 @@ Summary:`;
       );
 
       const completion = retryResult.result;
-      return completion.choices[0]?.message?.content || 'Summary could not be generated.';
+      return completion.content || 'Summary could not be generated.';
     } catch (error: any) {
       logger.error('Error generating summary:', error);
       throw new AppError('Failed to generate summary', 500, 'SUMMARY_ERROR');
@@ -224,11 +227,12 @@ Essay:`;
     try {
       const retryResult = await RetryService.execute(
         async () => {
-          return await openai.chat.completions.create({
-            model: DEFAULT_MODEL,
+          const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+          return await provider.chatCompletion({
+            model: providerModel,
             messages: [{ role: 'user', content: prompt }],
             temperature: DEFAULT_TEMPERATURE,
-            max_tokens: 1500,
+            maxTokens: 1500,
           });
         },
         {
@@ -240,7 +244,7 @@ Essay:`;
       );
 
       const completion = retryResult.result;
-      return completion.choices[0]?.message?.content || 'Essay could not be generated.';
+      return completion.content || 'Essay could not be generated.';
     } catch (error: any) {
       logger.error('Error generating essay:', error);
       throw new AppError('Failed to generate essay', 500, 'ESSAY_ERROR');
@@ -283,11 +287,12 @@ Report:`;
     try {
       const retryResult = await RetryService.execute(
         async () => {
-          return await openai.chat.completions.create({
-            model: DEFAULT_MODEL,
+          const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+          return await provider.chatCompletion({
+            model: providerModel,
             messages: [{ role: 'user', content: prompt }],
             temperature: DEFAULT_TEMPERATURE,
-            max_tokens: 2500,
+            maxTokens: 2500,
           });
         },
         {
@@ -299,7 +304,7 @@ Report:`;
       );
 
       const completion = retryResult.result;
-      return completion.choices[0]?.message?.content || 'Report could not be generated.';
+      return completion.content || 'Report could not be generated.';
     } catch (error: any) {
       logger.error('Error generating detailed report:', error);
       throw new AppError('Failed to generate detailed report', 500, 'REPORT_ERROR');
@@ -415,19 +420,16 @@ Report:`;
     errorCode: string
   ): AsyncGenerator<string, void, unknown> {
     try {
-      const stream = await openai.chat.completions.create({
-        model: DEFAULT_MODEL,
+      const { provider, model: providerModel } = ProviderRegistry.getForMode('chat');
+      const stream = provider.chatCompletionStream({
+        model: providerModel,
         messages: [{ role: 'user', content: prompt }],
         temperature: DEFAULT_TEMPERATURE,
-        max_tokens: maxTokens,
-        stream: true,
+        maxTokens: maxTokens,
       });
 
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content;
-        if (content) {
-          yield content;
-        }
+      for await (const content of stream) {
+        yield content;
       }
     } catch (error: any) {
       logger.error(`Streaming generation error [${errorCode}]:`, error);
