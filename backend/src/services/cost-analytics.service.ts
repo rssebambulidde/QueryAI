@@ -28,6 +28,22 @@ export interface CostSummary {
   >;
 }
 
+export interface PlatformCostStats {
+  period: { start: string; end: string };
+  totalCost: number;
+  totalQueries: number;
+  totalTokens: number;
+  averageCostPerQuery: number;
+  modelBreakdown: Array<{
+    model: string;
+    queries: number;
+    totalCost: number;
+    totalTokens: number;
+    avgCostPerQuery: number;
+  }>;
+  dailyTrend: Array<{ date: string; cost: number; queries: number }>;
+}
+
 export interface CostAnalyticsQuery {
   userId: string;
   startDate: string;
@@ -157,6 +173,97 @@ export class CostAnalyticsService {
         userId,
       });
       return [];
+    }
+  }
+
+  /**
+   * Platform-wide cost stats (all users).  Used by the admin LLM usage monitor.
+   */
+  static async getPlatformCostStats(
+    startDate: Date,
+    endDate: Date,
+  ): Promise<PlatformCostStats> {
+    try {
+      const { supabaseAdmin } = await import('../config/database');
+
+      const { data: rows, error } = await supabaseAdmin
+        .from('usage_logs')
+        .select('created_at, metadata')
+        .eq('type', 'query')
+        .gte('created_at', startDate.toISOString())
+        .lte('created_at', endDate.toISOString())
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        logger.error('Platform cost stats query failed', { error: error.message });
+        return {
+          period: { start: startDate.toISOString(), end: endDate.toISOString() },
+          totalCost: 0, totalQueries: 0, totalTokens: 0, averageCostPerQuery: 0,
+          modelBreakdown: [], dailyTrend: [],
+        };
+      }
+
+      let totalCost = 0;
+      let totalQueries = 0;
+      let totalTokens = 0;
+      const modelMap = new Map<string, { queries: number; cost: number; tokens: number }>();
+      const dayMap = new Map<string, { cost: number; queries: number }>();
+
+      for (const row of rows || []) {
+        const meta = row.metadata as Record<string, unknown> | null;
+        if (!meta || typeof meta.cost !== 'number') continue;
+
+        const cost = meta.cost as number;
+        const model = String(meta.model || 'unknown');
+        const tokens = Number(meta.totalTokens) || 0;
+
+        totalCost += cost;
+        totalQueries += 1;
+        totalTokens += tokens;
+
+        const m = modelMap.get(model) || { queries: 0, cost: 0, tokens: 0 };
+        m.queries += 1;
+        m.cost += cost;
+        m.tokens += tokens;
+        modelMap.set(model, m);
+
+        const dateKey = new Date(row.created_at as string).toISOString().slice(0, 10);
+        const d = dayMap.get(dateKey) || { cost: 0, queries: 0 };
+        d.cost += cost;
+        d.queries += 1;
+        dayMap.set(dateKey, d);
+      }
+
+      const modelBreakdown = Array.from(modelMap.entries())
+        .map(([model, s]) => ({
+          model,
+          queries: s.queries,
+          totalCost: Math.round(s.cost * 1e6) / 1e6,
+          totalTokens: s.tokens,
+          avgCostPerQuery: s.queries > 0 ? Math.round((s.cost / s.queries) * 1e6) / 1e6 : 0,
+        }))
+        .sort((a, b) => b.totalCost - a.totalCost);
+
+      const dailyTrend = Array.from(dayMap.entries())
+        .map(([date, v]) => ({ date, cost: Math.round(v.cost * 1e6) / 1e6, queries: v.queries }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      return {
+        period: { start: startDate.toISOString(), end: endDate.toISOString() },
+        totalCost: Math.round(totalCost * 1e6) / 1e6,
+        totalQueries,
+        totalTokens,
+        averageCostPerQuery: totalQueries > 0 ? Math.round((totalCost / totalQueries) * 1e6) / 1e6 : 0,
+        modelBreakdown,
+        dailyTrend,
+      };
+    } catch (err: unknown) {
+      logger.error('Platform cost stats failed', { error: err instanceof Error ? err.message : String(err) });
+      return {
+        period: { start: startDate.toISOString(), end: endDate.toISOString() },
+        totalCost: 0, totalQueries: 0, totalTokens: 0, averageCostPerQuery: 0,
+        modelBreakdown: [], dailyTrend: [],
+      };
     }
   }
 

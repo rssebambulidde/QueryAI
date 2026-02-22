@@ -569,6 +569,29 @@ router.post(
 );
 
 /**
+ * GET /api/admin/settings/llm/usage
+ * Platform-wide LLM cost and usage stats.  Query: days (1-365, default 30).
+ */
+router.get(
+  '/settings/llm/usage',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const days = Math.min(Math.max(parseInt(req.query.days as string) || 30, 1), 365);
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0);
+
+    const { CostAnalyticsService } = await import('../services/cost-analytics.service');
+    const stats = await CostAnalyticsService.getPlatformCostStats(startDate, endDate);
+
+    res.json({ success: true, data: stats });
+  })
+);
+
+/**
  * PUT /api/admin/settings/llm/defaults
  * Update default temperature and max tokens.
  * Body: { temperature?: number, maxTokens?: number }

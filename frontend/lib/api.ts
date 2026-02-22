@@ -2114,7 +2114,31 @@ export const adminApi = {
     const response = await apiClient.put('/api/admin/settings/llm/defaults', defaults);
     return response.data;
   },
+
+  /** Get platform-wide LLM usage / cost stats. */
+  getLLMUsageStats: async (
+    days: number = 30,
+  ): Promise<ApiResponse<LLMUsageStats>> => {
+    const response = await apiClient.get('/api/admin/settings/llm/usage', { params: { days } });
+    return response.data;
+  },
 };
+
+export interface LLMUsageStats {
+  period: { start: string; end: string };
+  totalCost: number;
+  totalQueries: number;
+  totalTokens: number;
+  averageCostPerQuery: number;
+  modelBreakdown: Array<{
+    model: string;
+    queries: number;
+    totalCost: number;
+    totalTokens: number;
+    avgCostPerQuery: number;
+  }>;
+  dailyTrend: Array<{ date: string; cost: number; queries: number }>;
+}
 
 // Export A/B Testing API
 export { abTestingApi } from './api-ab-testing';

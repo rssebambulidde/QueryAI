@@ -24,6 +24,7 @@ import {
   Calculator,
   TrendingUp,
   TrendingDown,
+  Activity,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +35,7 @@ import {
   type LLMProviderInfo,
   type LLMProviderModel,
   type LLMModeConfig,
+  type LLMUsageStats,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -297,6 +299,9 @@ export default function LLMSettings() {
       {settings.providers.length > 0 && (
         <CostProfitEstimator providers={settings.providers} />
       )}
+
+      {/* ── LLM Usage Monitor ───────────────────────────────────────────── */}
+      <LLMUsageMonitor />
 
       {/* ── Default Parameters ──────────────────────────────────────────── */}
       <Section title="Default Parameters" icon={Settings2}>
@@ -706,6 +711,188 @@ function ModelComparisonTable({ providers }: { providers: LLMProviderInfo[] }) {
             </span>
             <span>Dimmed rows = provider not configured</span>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── LLM Usage Monitor ────────────────────────────────────────────────────────
+
+function LLMUsageMonitor() {
+  const { toast } = useToast();
+  const [expanded, setExpanded] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState<LLMUsageStats | null>(null);
+  const [days, setDays] = useState(30);
+
+  const fetchStats = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await adminApi.getLLMUsageStats(days);
+      if (res.success && res.data) setStats(res.data);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error?.message || 'Failed to load usage stats');
+    } finally {
+      setLoading(false);
+    }
+  }, [days, toast]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200">
+      <button
+        className="w-full flex items-center justify-between p-6 text-left"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+          <Activity className="w-5 h-5 text-orange-500" />
+          LLM API Usage Monitor
+        </h3>
+        <ChevronUp className={cn('w-5 h-5 text-gray-400 transition-transform', !expanded && 'rotate-180')} />
+      </button>
+
+      {expanded && (
+        <div className="px-6 pb-6 space-y-5">
+          {/* Period selector */}
+          <div className="flex items-center gap-3">
+            <label className="text-xs font-medium text-gray-500">Period:</label>
+            {[7, 14, 30, 60, 90].map((d) => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                className={cn(
+                  'px-3 py-1 rounded-full text-xs font-medium transition-colors',
+                  days === d
+                    ? 'bg-orange-100 text-orange-700'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200',
+                )}
+              >
+                {d}d
+              </button>
+            ))}
+            <button onClick={fetchStats} disabled={loading} className="ml-auto text-gray-400 hover:text-gray-600">
+              <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
+            </button>
+          </div>
+
+          {loading && !stats && (
+            <div className="flex items-center justify-center py-8 text-gray-400">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading usage data…
+            </div>
+          )}
+
+          {stats && (
+            <>
+              {/* Summary cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <p className="text-[10px] font-medium text-blue-600 uppercase">Total Queries</p>
+                  <p className="text-lg font-bold text-blue-900">{stats.totalQueries.toLocaleString()}</p>
+                </div>
+                <div className="bg-red-50 rounded-lg p-3 border border-red-200">
+                  <p className="text-[10px] font-medium text-red-600 uppercase">Total LLM Cost</p>
+                  <p className="text-lg font-bold text-red-900">${stats.totalCost.toFixed(4)}</p>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                  <p className="text-[10px] font-medium text-purple-600 uppercase">Total Tokens</p>
+                  <p className="text-lg font-bold text-purple-900">{stats.totalTokens.toLocaleString()}</p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                  <p className="text-[10px] font-medium text-orange-600 uppercase">Avg Cost/Query</p>
+                  <p className="text-lg font-bold text-orange-900">${stats.averageCostPerQuery.toFixed(6)}</p>
+                </div>
+              </div>
+
+              {/* Daily trend mini chart (text-based bar chart) */}
+              {stats.dailyTrend.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Daily Cost Trend</h4>
+                  <div className="bg-gray-50 rounded-lg border border-gray-200 p-3 overflow-x-auto">
+                    <div className="flex items-end gap-[2px] h-24 min-w-[400px]">
+                      {(() => {
+                        const maxCost = Math.max(...stats.dailyTrend.map((d) => d.cost), 0.000001);
+                        return stats.dailyTrend.map((d) => {
+                          const pct = (d.cost / maxCost) * 100;
+                          return (
+                            <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+                              <div
+                                className="w-full bg-orange-400 rounded-t-sm min-h-[2px] transition-all group-hover:bg-orange-500"
+                                style={{ height: `${Math.max(pct, 2)}%` }}
+                              />
+                              {/* Tooltip */}
+                              <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-900 text-white text-[10px] rounded px-2 py-1 whitespace-nowrap z-10">
+                                {d.date}: ${d.cost.toFixed(4)} · {d.queries} queries
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                      <span>{stats.dailyTrend[0]?.date}</span>
+                      <span>{stats.dailyTrend[stats.dailyTrend.length - 1]?.date}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Model breakdown table */}
+              {stats.modelBreakdown.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Cost by Model</h4>
+                  <div className="overflow-x-auto rounded-lg border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Model</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Queries</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Total Cost</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Avg Cost/Query</th>
+                          <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">Total Tokens</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Share</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white">
+                        {stats.modelBreakdown.map((m) => {
+                          const sharePct = stats.totalCost > 0 ? (m.totalCost / stats.totalCost) * 100 : 0;
+                          return (
+                            <tr key={m.model} className="hover:bg-gray-50">
+                              <td className="px-3 py-2 font-medium text-gray-900 font-mono text-xs">{m.model}</td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">{m.queries.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-red-600">${m.totalCost.toFixed(4)}</td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">${m.avgCostPerQuery.toFixed(6)}</td>
+                              <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">{m.totalTokens.toLocaleString()}</td>
+                              <td className="px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-orange-400 rounded-full"
+                                      style={{ width: `${sharePct}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] text-gray-500 w-10 text-right">{sharePct.toFixed(1)}%</span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {stats.totalQueries === 0 && (
+                <div className="text-center py-8 text-gray-400 text-sm">
+                  No LLM usage recorded in the last {days} days.
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
