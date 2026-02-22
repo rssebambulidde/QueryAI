@@ -15,6 +15,10 @@ import {
   AlertTriangle,
   ExternalLink,
   KeyRound,
+  BarChart3,
+  ChevronUp,
+  ArrowUpDown,
+  Star,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -279,6 +283,11 @@ export default function LLMSettings() {
         />
       </div>
 
+      {/* ── Model Comparison ────────────────────────────────────────────── */}
+      {settings.providers.length > 0 && (
+        <ModelComparisonTable providers={settings.providers} />
+      )}
+
       {/* ── Default Parameters ──────────────────────────────────────────── */}
       <Section title="Default Parameters" icon={Settings2}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -416,6 +425,278 @@ function ProviderCard({
           )}
           Test connection
         </Button>
+      )}
+    </div>
+  );
+}
+
+// ── Mode recommendation helper ────────────────────────────────────────────
+
+type ModeFit = 'chat' | 'research' | 'both';
+
+function getModeFit(model: LLMProviderModel): ModeFit {
+  const isReasoning = /^o[0-9]/.test(model.id) || model.id.includes('deepseek-r1') || model.id.includes('qwq');
+  if (isReasoning) return 'research';
+
+  const isOpus = model.id.includes('opus');
+  if (isOpus) return 'research';
+
+  // Very cheap models → chat; expensive → research; middle → both
+  if (model.inputCostPer1M <= 0.20) return 'chat';
+  if (model.inputCostPer1M >= 10) return 'research';
+  if (model.inputCostPer1M >= 2) return 'both';
+  return 'both';
+}
+
+function getCostTier(inputCost: number): 'budget' | 'standard' | 'premium' {
+  if (inputCost <= 0.25) return 'budget';
+  if (inputCost <= 5) return 'standard';
+  return 'premium';
+}
+
+// ── Model Comparison Table ────────────────────────────────────────────────
+
+type SortField = 'provider' | 'model' | 'context' | 'inputCost' | 'outputCost' | 'mode';
+
+function ModelComparisonTable({ providers }: { providers: LLMProviderInfo[] }) {
+  const [expanded, setExpanded] = useState(true);
+  const [sortField, setSortField] = useState<SortField>('inputCost');
+  const [sortAsc, setSortAsc] = useState(true);
+  const [filterProvider, setFilterProvider] = useState<string>('all');
+  const [filterMode, setFilterMode] = useState<string>('all');
+
+  // Flatten all models with provider info
+  const allModels = React.useMemo(() => {
+    return providers.flatMap((p) =>
+      p.models.map((m) => ({
+        ...m,
+        providerId: p.id,
+        providerName: p.displayName,
+        configured: p.configured,
+        modeFit: getModeFit(m),
+        costTier: getCostTier(m.inputCostPer1M),
+      })),
+    );
+  }, [providers]);
+
+  // Filter
+  const filtered = React.useMemo(() => {
+    let result = allModels;
+    if (filterProvider !== 'all') result = result.filter((m) => m.providerId === filterProvider);
+    if (filterMode !== 'all') result = result.filter((m) => m.modeFit === filterMode || m.modeFit === 'both');
+    return result;
+  }, [allModels, filterProvider, filterMode]);
+
+  // Sort
+  const sorted = React.useMemo(() => {
+    const arr = [...filtered];
+    const dir = sortAsc ? 1 : -1;
+    arr.sort((a, b) => {
+      switch (sortField) {
+        case 'provider': return dir * a.providerName.localeCompare(b.providerName);
+        case 'model': return dir * a.displayName.localeCompare(b.displayName);
+        case 'context': return dir * (a.contextWindow - b.contextWindow);
+        case 'inputCost': return dir * (a.inputCostPer1M - b.inputCostPer1M);
+        case 'outputCost': return dir * (a.outputCostPer1M - b.outputCostPer1M);
+        case 'mode': return dir * a.modeFit.localeCompare(b.modeFit);
+        default: return 0;
+      }
+    });
+    return arr;
+  }, [filtered, sortField, sortAsc]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) setSortAsc(!sortAsc);
+    else { setSortField(field); setSortAsc(true); }
+  };
+
+  const SortHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
+    <th
+      className="px-3 py-2 text-left text-xs font-semibold text-gray-600 cursor-pointer hover:text-gray-900 select-none whitespace-nowrap"
+      onClick={() => handleSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        {sortField === field ? (
+          <ChevronUp className={cn('w-3 h-3 transition-transform', !sortAsc && 'rotate-180')} />
+        ) : (
+          <ArrowUpDown className="w-3 h-3 text-gray-300" />
+        )}
+      </span>
+    </th>
+  );
+
+  const PROVIDER_COLORS: Record<string, string> = {
+    openai: 'bg-green-100 text-green-800',
+    anthropic: 'bg-amber-100 text-amber-800',
+    google: 'bg-blue-100 text-blue-800',
+    groq: 'bg-purple-100 text-purple-800',
+  };
+
+  const MODE_LABELS: Record<ModeFit, { label: string; color: string }> = {
+    chat: { label: 'Express Chat', color: 'bg-sky-100 text-sky-700' },
+    research: { label: 'Deep Research', color: 'bg-indigo-100 text-indigo-700' },
+    both: { label: 'Both', color: 'bg-gray-100 text-gray-700' },
+  };
+
+  const TIER_LABELS: Record<string, { label: string; color: string }> = {
+    budget: { label: 'Budget', color: 'text-green-600' },
+    standard: { label: 'Standard', color: 'text-yellow-600' },
+    premium: { label: 'Premium', color: 'text-red-600' },
+  };
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200">
+      {/* Header */}
+      <button
+        className="w-full flex items-center justify-between p-6 text-left"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+          <BarChart3 className="w-5 h-5 text-orange-500" />
+          Model Comparison
+        </h3>
+        <ChevronUp className={cn('w-5 h-5 text-gray-400 transition-transform', !expanded && 'rotate-180')} />
+      </button>
+
+      {expanded && (
+        <div className="px-6 pb-6">
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-500">Provider:</label>
+              <select
+                value={filterProvider}
+                onChange={(e) => setFilterProvider(e.target.value)}
+                className="rounded-md border border-gray-300 bg-white py-1 pl-2 pr-6 text-xs shadow-sm focus:border-orange-500 focus:ring-orange-500 appearance-none"
+              >
+                <option value="all">All providers</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.displayName}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-500">Mode:</label>
+              <select
+                value={filterMode}
+                onChange={(e) => setFilterMode(e.target.value)}
+                className="rounded-md border border-gray-300 bg-white py-1 pl-2 pr-6 text-xs shadow-sm focus:border-orange-500 focus:ring-orange-500 appearance-none"
+              >
+                <option value="all">All modes</option>
+                <option value="chat">Express Chat</option>
+                <option value="research">Deep Research</option>
+              </select>
+            </div>
+            <span className="text-xs text-gray-400">
+              {sorted.length} of {allModels.length} models
+            </span>
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <SortHeader field="provider">Provider</SortHeader>
+                  <SortHeader field="model">Model</SortHeader>
+                  <SortHeader field="context">Context</SortHeader>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap">Max Output</th>
+                  <SortHeader field="inputCost">Input $/1M</SortHeader>
+                  <SortHeader field="outputCost">Output $/1M</SortHeader>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Capabilities</th>
+                  <SortHeader field="mode">Best For</SortHeader>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Tier</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {sorted.map((m) => {
+                  const modeInfo = MODE_LABELS[m.modeFit];
+                  const tierInfo = TIER_LABELS[m.costTier];
+                  return (
+                    <tr
+                      key={`${m.providerId}-${m.id}`}
+                      className={cn(
+                        'hover:bg-gray-50 transition-colors',
+                        !m.configured && 'opacity-50',
+                      )}
+                    >
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={cn('inline-block px-2 py-0.5 rounded-full text-[11px] font-medium', PROVIDER_COLORS[m.providerId] || 'bg-gray-100 text-gray-700')}>
+                          {m.providerName}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">
+                        {m.displayName}
+                        {m.isDefault && (
+                          <Star className="inline w-3 h-3 ml-1 text-orange-400 fill-orange-400" />
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-gray-600 whitespace-nowrap font-mono text-xs">
+                        {m.contextWindow >= 1_000_000
+                          ? `${(m.contextWindow / 1_000_000).toFixed(1)}M`
+                          : `${(m.contextWindow / 1_000).toFixed(0)}K`}
+                      </td>
+                      <td className="px-3 py-2 text-gray-600 whitespace-nowrap font-mono text-xs">
+                        {(m.maxOutputTokens / 1_000).toFixed(0)}K
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">
+                        <span className={tierInfo.color}>{formatCost(m.inputCostPer1M)}</span>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">
+                        <span className={tierInfo.color}>{formatCost(m.outputCostPer1M)}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          {m.capabilities.map((cap) => (
+                            <span
+                              key={cap}
+                              className={cn(
+                                'inline-block px-1.5 py-0.5 rounded text-[10px] font-medium',
+                                cap === 'vision'
+                                  ? 'bg-pink-50 text-pink-600'
+                                  : cap === 'structured_output'
+                                    ? 'bg-emerald-50 text-emerald-600'
+                                    : 'bg-gray-50 text-gray-500',
+                              )}
+                            >
+                              {cap === 'structured_output' ? 'JSON' : cap}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={cn('inline-block px-2 py-0.5 rounded-full text-[11px] font-medium', modeInfo.color)}>
+                          {modeInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs">
+                        <span className={tierInfo.color}>{tierInfo.label}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Legend */}
+          <div className="mt-4 flex flex-wrap items-center gap-4 text-[11px] text-gray-500">
+            <span className="flex items-center gap-1">
+              <Star className="w-3 h-3 text-orange-400 fill-orange-400" /> Provider default
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-green-500" /> Budget — cheapest, great for high-volume chat
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-yellow-500" /> Standard — balanced cost &amp; quality
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-full bg-red-500" /> Premium — highest quality, best for research
+            </span>
+            <span>Dimmed rows = provider not configured</span>
+          </div>
+        </div>
       )}
     </div>
   );
