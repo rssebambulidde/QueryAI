@@ -134,12 +134,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [showModeMenu, setShowModeMenu] = useState(false);
+  const [researchHintDismissed, setResearchHintDismissed] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const dragCounterRef = useRef(0);
   const modeMenuRef = useRef<HTMLDivElement>(null);
+
+  // Detect research-like keywords when user is in chat/Express mode
+  const RESEARCH_KEYWORDS = /\b(latest|current news|recent|source|sources|evidence|study|studies|research|statistics|data|report|cite|citation|according to|fact.?check|202[4-9]|203\d)\b/i;
+  const showResearchHint = isChatMode && !researchHintDismissed && message.length >= 10 && RESEARCH_KEYWORDS.test(message);
+
+  // Reset dismissed state when mode changes
+  useEffect(() => {
+    setResearchHintDismissed(false);
+  }, [mode]);
 
   // Close mode menu on outside click
   useEffect(() => {
@@ -383,6 +393,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Smart mode suggestion — hint to switch to Deep Research */}
+      {showResearchHint && onModeChange && (
+        <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200 text-xs animate-in fade-in slide-in-from-top-1 duration-200">
+          <Search className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+          <span className="text-blue-700 flex-1">This might benefit from <strong>Deep Research</strong> mode for sources &amp; citations.</span>
+          <button
+            type="button"
+            onClick={() => { onModeChange('research'); setResearchHintDismissed(true); }}
+            className="px-2.5 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium flex-shrink-0"
+          >
+            Switch
+          </button>
+          <button
+            type="button"
+            onClick={() => setResearchHintDismissed(true)}
+            className="text-blue-400 hover:text-blue-600 flex-shrink-0"
+            aria-label="Dismiss suggestion"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

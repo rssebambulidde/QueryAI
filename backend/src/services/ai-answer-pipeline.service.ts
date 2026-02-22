@@ -113,6 +113,8 @@ export interface PostProcessStreamParams {
   model?: string;
   isResend?: boolean;
   structuredFollowUps?: string[];
+  /** Structured cited-source objects emitted by the LLM (used for citation badge). */
+  structuredCitedSources?: any[];
   /** Original RAG settings so regeneration can replay the same retrieval config */
   ragSettings?: Record<string, any>;
 }
@@ -1725,6 +1727,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       model,
       isResend,
       structuredFollowUps,
+      structuredCitedSources,
       ragSettings,
     } = params;
 
@@ -1804,6 +1807,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           streaming: true,
           ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
           ...(qualityScore !== undefined && { qualityScore }),
+          ...(structuredCitedSources && structuredCitedSources.length > 0 && { citedSources: structuredCitedSources }),
           ...(ragSettings && Object.keys(ragSettings).length > 0 && { ragSettings }),
         };
 

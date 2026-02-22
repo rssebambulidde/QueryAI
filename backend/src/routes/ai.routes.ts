@@ -360,6 +360,7 @@ router.post(
           model: request.model,
           isResend,
           structuredFollowUps: structuredMeta?.followUpQuestions,
+          structuredCitedSources: structuredMeta?.citedSources,
           ragSettings: ragSettingsObj,
         });
 

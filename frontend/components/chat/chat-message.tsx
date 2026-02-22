@@ -234,12 +234,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
   };
 
   // Count unique citation references in the message
+  // Prefer structured citedSources from metadata when available (more accurate);
+  // fall back to regex for older messages without structured data.
   const citationCount = useMemo(() => {
     if (isUser) return 0;
+    const structured = (message as any).metadata?.citedSources;
+    if (Array.isArray(structured) && structured.length > 0) return structured.length;
     const matches = message.content.match(/\[(?:Web Source |Document |Source )?\d+\]/g);
     if (!matches) return 0;
     return new Set(matches).size;
-  }, [message.content, isUser]);
+  }, [message.content, isUser, (message as any).metadata?.citedSources]);
 
   // Memoize flagged citation URLs as a Set for O(1) lookup
   const flaggedCitationUrls = useMemo(

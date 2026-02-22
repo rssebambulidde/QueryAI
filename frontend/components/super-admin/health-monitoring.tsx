@@ -7,6 +7,7 @@ import { ErrorRateDisplay } from '@/components/health/error-rate-display';
 import { ThroughputMetrics } from '@/components/health/throughput-metrics';
 import { ComponentPerformance } from '@/components/health/component-performance';
 import { AlertSystem } from '@/components/health/alert-system';
+import { LLMProviderHealth } from '@/components/health/llm-provider-health';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { RefreshCw } from 'lucide-react';
@@ -44,6 +45,9 @@ export default function HealthMonitoring() {
       {systemHealth && (
         <SystemStatus systemHealth={systemHealth} />
       )}
+
+      {/* LLM Provider Health */}
+      <LLMProviderHealth loading={loading} />
 
       {/* Main Metrics Grid */}
       {healthMetrics && (
