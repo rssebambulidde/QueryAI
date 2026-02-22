@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
-import { ShieldCheck, Activity, Users, MessageSquare, Cpu } from 'lucide-react';
+import { ShieldCheck, Activity, Users, MessageSquare, Cpu, DollarSign, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 
@@ -13,8 +13,10 @@ const HealthMonitoring = dynamic(() => import('@/components/super-admin/health-m
 const UserManagement = dynamic(() => import('@/components/super-admin/user-management'), { ssr: false });
 const FeedbackDashboard = dynamic(() => import('@/components/super-admin/feedback-dashboard'), { ssr: false });
 const LLMSettings = dynamic(() => import('@/components/super-admin/llm-settings'), { ssr: false });
+const PricingConfig = dynamic(() => import('@/components/super-admin/pricing-config'), { ssr: false });
+const TierLimitsConfig = dynamic(() => import('@/components/super-admin/tier-limits-config'), { ssr: false });
 
-type TabId = 'health' | 'users' | 'feedback' | 'llm';
+type TabId = 'health' | 'users' | 'feedback' | 'llm' | 'pricing' | 'tier-limits';
 
 interface Tab {
   id: TabId;
@@ -25,6 +27,8 @@ interface Tab {
 const tabs: Tab[] = [
   { id: 'feedback', label: 'Feedback', icon: MessageSquare },
   { id: 'users', label: 'Users', icon: Users },
+  { id: 'pricing', label: 'Pricing', icon: DollarSign },
+  { id: 'tier-limits', label: 'Tier Limits', icon: SlidersHorizontal },
   { id: 'health', label: 'Health', icon: Activity },
   { id: 'llm', label: 'LLM', icon: Cpu },
 ];
@@ -66,6 +70,10 @@ export default function SuperAdminPage() {
         return <FeedbackDashboard />;
       case 'llm':
         return <LLMSettings />;
+      case 'pricing':
+        return <PricingConfig />;
+      case 'tier-limits':
+        return <TierLimitsConfig />;
       default:
         return <FeedbackDashboard />;
     }

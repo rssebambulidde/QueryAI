@@ -2228,21 +2228,6 @@ export const adminApi = {
     return response.data;
   },
 
-  /** Transfer a feature between tiers (superadmin). */
-  transferFeature: async (
-    feature: string,
-    fromTier: string,
-    toTier: string,
-    enable: boolean,
-  ): Promise<ApiResponse<AllTierLimitsResponse>> => {
-    const response = await apiClient.post('/api/admin/settings/tier-limits/transfer-feature', {
-      feature,
-      fromTier,
-      toTier,
-      enable,
-    });
-    return response.data;
-  },
 };
 
 // ── Config API (public, no auth) ─────────────────────────────────────────────
