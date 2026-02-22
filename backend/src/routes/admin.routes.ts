@@ -555,12 +555,21 @@ router.post(
       });
     } catch (err: any) {
       const latencyMs = Date.now() - startTime;
-      logger.error('Admin LLM connection test failed', { providerId, modelId, error: err.message });
+
+      // Extract a human-readable message from provider-specific error shapes.
+      // Anthropic SDK: err.error.error.message   OpenAI SDK: err.error.message
+      const detailMsg =
+        err.error?.error?.message ??   // Anthropic
+        err.error?.message ??          // OpenAI / generic
+        err.message ??
+        'Unknown error';
+
+      logger.error('Admin LLM connection test failed', { providerId, modelId, error: detailMsg });
 
       res.json({
         success: false,
         error: {
-          message: `Connection test failed: ${err.message}`,
+          message: `Connection test failed: ${detailMsg}`,
           latencyMs,
         },
       });
