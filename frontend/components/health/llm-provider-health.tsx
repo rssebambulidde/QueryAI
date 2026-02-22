@@ -89,7 +89,7 @@ export function LLMProviderHealth({ loading: parentLoading }: LLMProviderHealthP
           ),
         );
       } else {
-        const errMsg = result.error?.message || result.data?.error || 'Test failed';
+        const errMsg = result.error?.message || 'Test failed';
         setProviders((prev) =>
           prev.map((p) =>
             p.providerId === providerId ? { ...p, testing: false, error: errMsg } : p,
