@@ -68,17 +68,21 @@ export function LLMProviderHealth({ loading: parentLoading }: LLMProviderHealthP
       const provider = providers.find((p) => p.providerId === providerId);
       if (!provider) return;
 
-      // Get provider settings to find the best model to test with.
-      // Prefer the model actively configured for chat/research (known to work),
-      // then the provider's default model, then fall back to first available.
+      // Pick the best model for the health test:
+      // 1. The model actively configured for chat/research (known to work)
+      // 2. The cheapest model (most likely available on any API tier)
+      // 3. The provider's default model
       const settings = await adminApi.getLLMSettings();
       const data = settings.data;
       const providerInfo = data?.providers.find((p) => p.id === providerId);
       const activeModelId =
         (data?.chatConfig.providerId === providerId ? data.chatConfig.modelId : undefined) ??
         (data?.researchConfig.providerId === providerId ? data.researchConfig.modelId : undefined);
+      const cheapestModel = providerInfo?.models.length
+        ? [...providerInfo.models].sort((a, b) => a.inputCostPer1M - b.inputCostPer1M)[0].id
+        : undefined;
       const testModel =
-        activeModelId ?? providerInfo?.models.find((m) => m.isDefault)?.id ?? providerInfo?.models[0]?.id;
+        activeModelId ?? cheapestModel ?? providerInfo?.models.find((m) => m.isDefault)?.id;
       if (!testModel) {
         setProviders((prev) =>
           prev.map((p) =>
