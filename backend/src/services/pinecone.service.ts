@@ -4,7 +4,7 @@ import { AppError } from '../types/error';
 import { ChunkService } from './chunk.service';
 import { getEmbeddingDimensions, DEFAULT_EMBEDDING_MODEL } from '../config/embedding.config';
 import { CircuitBreakerService } from './circuit-breaker.service';
-import { PineconeConfig, CircuitBreakerDefaults, RetrievalConfig } from '../config/thresholds.config';
+import { CircuitBreakerDefaults, RetrievalConfig } from '../config/thresholds.config';
 
 export interface VectorMetadata {
   userId: string;
@@ -135,7 +135,7 @@ export class PineconeService {
           documentId,
           chunkId: chunk.id,
           chunkIndex: chunk.chunkIndex,
-          content: chunk.content.substring(0, PineconeConfig.maxMetadataContentLength), // Limit metadata size
+          content: chunk.content.substring(0, 1000), // Limit metadata size
           createdAt: new Date().toISOString(),
           embeddingDimensions: embedding.length,
         };
@@ -172,7 +172,7 @@ export class PineconeService {
       });
 
       // Upsert in batches of 100 (Pinecone limit)
-      const batchSize = PineconeConfig.upsertBatchSize;
+      const batchSize = 100;
       const vectorIds: string[] = [];
 
       for (let i = 0; i < vectors.length; i += batchSize) {

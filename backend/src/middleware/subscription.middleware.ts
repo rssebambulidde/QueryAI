@@ -84,106 +84,6 @@ export const enforceQueryLimit = async (
 };
 
 /**
- * Middleware to enforce document upload limits
- */
-export const enforceDocumentUploadLimit = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new ValidationError('User not authenticated');
-    }
-
-    const limitCheck = await SubscriptionService.checkDocumentUploadLimit(userId);
-
-    if (!limitCheck.allowed) {
-      logger.warn('Document upload limit exceeded', {
-        userId,
-        used: limitCheck.used,
-        limit: limitCheck.limit,
-      });
-
-      const isZeroLimit = limitCheck.limit === 0;
-      const message = isZeroLimit
-        ? 'Your limit does not allow document upload on this tier. Upgrade to upload documents.'
-        : `Document upload limit reached. You have uploaded ${limitCheck.used} of ${limitCheck.limit} documents this month. Upgrade for more.`;
-
-      res.status(403).json({
-        success: false,
-        error: {
-          message,
-          code: 'DOCUMENT_UPLOAD_LIMIT_EXCEEDED',
-          limit: limitCheck.limit,
-          used: limitCheck.used,
-          remaining: limitCheck.remaining,
-        },
-      });
-      return;
-    }
-
-    // Attach limit info to request
-    req.documentUploadLimitInfo = limitCheck;
-
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Middleware to enforce topic limits
- */
-export const enforceTopicLimit = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new ValidationError('User not authenticated');
-    }
-
-    const limitCheck = await SubscriptionService.checkTopicLimit(userId);
-
-    if (!limitCheck.allowed) {
-      logger.warn('Topic limit exceeded', {
-        userId,
-        used: limitCheck.used,
-        limit: limitCheck.limit,
-      });
-
-      const isZeroLimit = limitCheck.limit === 0;
-      const message = isZeroLimit
-        ? 'Sorry, your limit for topics on this tier is zero. Upgrade to create topics.'
-        : `Topic limit reached. You have created ${limitCheck.used} of ${limitCheck.limit} topics. Upgrade for more.`;
-
-      res.status(403).json({
-        success: false,
-        error: {
-          message,
-          code: 'TOPIC_LIMIT_EXCEEDED',
-          limit: limitCheck.limit,
-          used: limitCheck.used,
-          remaining: limitCheck.remaining,
-        },
-      });
-      return;
-    }
-
-    // Attach limit info to request
-    req.topicLimitInfo = limitCheck;
-
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
  * Middleware to gate features by subscription tier
  */
 export const requireFeature = (
@@ -211,7 +111,6 @@ export const requireFeature = (
         const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
         const currentTier = subscriptionData?.subscription.tier || 'free';
         const featureMessages: Record<string, string> = {
-          documentUpload: 'Your limit does not allow document upload on this tier. Upgrade to upload documents.',
           embedding: 'Document embedding is not available on your plan. Upgrade to use this feature.',
           analytics: 'Analytics is not available on your plan. Upgrade to view analytics.',
           apiAccess: 'API access is not available on your plan. Upgrade for API access.',
@@ -245,8 +144,8 @@ export const requireFeature = (
 function getRequiredTierForFeature(
   feature: keyof import('../services/subscription.service').TierLimits['features']
 ): 'premium' | 'pro' {
-  // Document upload and embedding are premium features
-  if (feature === 'documentUpload' || feature === 'embedding') {
+  // Embedding is a premium feature
+  if (feature === 'embedding') {
     return 'premium';
   }
   
@@ -275,22 +174,9 @@ declare global {
         limit: number | null;
         remaining: number | null;
       };
-      documentUploadLimitInfo?: {
-        allowed: boolean;
-        used: number;
-        limit: number | null;
-        remaining: number | null;
-      };
-      topicLimitInfo?: {
-        allowed: boolean;
-        used: number;
-        limit: number | null;
-        remaining: number | null;
-      };
       apiKey?: {
         id: string;
         user_id: string;
-        topic_id?: string;
       };
     }
   }

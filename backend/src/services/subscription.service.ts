@@ -9,11 +9,8 @@ import logger from '../config/logger';
  */
 export interface TierLimits {
   queriesPerMonth: number | null;
-  documentUploads: number | null;
-  maxTopics: number | null;
   tavilySearchesPerMonth: number | null;
   features: {
-    documentUpload: boolean;
     embedding: boolean;
     analytics: boolean;
     apiAccess: boolean;
@@ -29,11 +26,8 @@ export interface TierLimits {
 export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enterprise', TierLimits> = {
   free: {
     queriesPerMonth: 50,
-    documentUploads: 0, // No document upload
-    maxTopics: 0, // No topics
-    tavilySearchesPerMonth: 5, // 5 searches per month for free tier
+    tavilySearchesPerMonth: 5,
     features: {
-      documentUpload: false,
       embedding: false,
       analytics: false,
       apiAccess: false,
@@ -42,11 +36,8 @@ export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enter
   },
   starter: {
     queriesPerMonth: 100,
-    documentUploads: 3, // 3 documents for starter tier
-    maxTopics: 1,
-    tavilySearchesPerMonth: 10, // 10 searches per month for starter tier
+    tavilySearchesPerMonth: 10,
     features: {
-      documentUpload: true, // Enabled for starter tier
       embedding: false,
       analytics: false,
       apiAccess: false,
@@ -55,11 +46,8 @@ export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enter
   },
   premium: {
     queriesPerMonth: 500,
-    documentUploads: 10,
-    maxTopics: 3,
-    tavilySearchesPerMonth: 50, // 50 searches per month for premium tier
+    tavilySearchesPerMonth: 50,
     features: {
-      documentUpload: true,
       embedding: true,
       analytics: true,
       apiAccess: false,
@@ -68,11 +56,8 @@ export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enter
   },
   pro: {
     queriesPerMonth: null,
-    documentUploads: null,
-    maxTopics: null,
     tavilySearchesPerMonth: 200,
     features: {
-      documentUpload: true,
       embedding: true,
       analytics: true,
       apiAccess: true,
@@ -81,11 +66,8 @@ export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enter
   },
   enterprise: {
     queriesPerMonth: null,
-    documentUploads: null,
-    maxTopics: null,
     tavilySearchesPerMonth: null,
     features: {
-      documentUpload: true,
       embedding: true,
       analytics: true,
       apiAccess: true,
@@ -292,132 +274,6 @@ export class SubscriptionService {
       };
     } catch (error) {
       logger.error('Failed to check query limit:', error);
-      return {
-        allowed: false,
-        used: 0,
-        limit: 0,
-        remaining: 0,
-      };
-    }
-  }
-
-  /**
-   * Check if user has reached document upload limit
-   */
-  static async checkDocumentUploadLimit(userId: string): Promise<{
-    allowed: boolean;
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-  }> {
-    try {
-      const subscriptionData = await this.getUserSubscriptionWithLimits(userId);
-      
-      if (!subscriptionData) {
-        return {
-          allowed: false,
-          used: 0,
-          limit: 0,
-          remaining: 0,
-        };
-      }
-
-      const { limits } = subscriptionData;
-      
-      // Pro tier has unlimited document uploads
-      if (limits.documentUploads === null) {
-        return {
-          allowed: true,
-          used: 0,
-          limit: null,
-          remaining: null,
-        };
-      }
-
-      // Calculate current period (monthly)
-      const now = new Date();
-      const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      periodStart.setHours(0, 0, 0, 0);
-      const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      periodEnd.setHours(23, 59, 59, 999);
-
-      // Get usage count for current month
-      const used = await DatabaseService.getUserUsageCount(
-        userId,
-        'document_upload',
-        periodStart,
-        periodEnd
-      );
-
-      const remaining = limits.documentUploads - used;
-      const allowed = used < limits.documentUploads;
-
-      return {
-        allowed,
-        used,
-        limit: limits.documentUploads,
-        remaining: Math.max(0, remaining),
-      };
-    } catch (error) {
-      logger.error('Failed to check document upload limit:', error);
-      return {
-        allowed: false,
-        used: 0,
-        limit: 0,
-        remaining: 0,
-      };
-    }
-  }
-
-  /**
-   * Check if user has reached topic limit
-   */
-  static async checkTopicLimit(userId: string): Promise<{
-    allowed: boolean;
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-  }> {
-    try {
-      const subscriptionData = await this.getUserSubscriptionWithLimits(userId);
-      
-      if (!subscriptionData) {
-        return {
-          allowed: false,
-          used: 0,
-          limit: 0,
-          remaining: 0,
-        };
-      }
-
-      const { limits } = subscriptionData;
-      
-      // Pro tier has unlimited topics
-      if (limits.maxTopics === null) {
-        return {
-          allowed: true,
-          used: 0,
-          limit: null,
-          remaining: null,
-        };
-      }
-
-      // Get current topic count
-      const { TopicService } = await import('./topic.service');
-      const topics = await TopicService.getUserTopics(userId);
-      const used = topics.length;
-
-      const remaining = limits.maxTopics - used;
-      const allowed = used < limits.maxTopics;
-
-      return {
-        allowed,
-        used,
-        limit: limits.maxTopics,
-        remaining: Math.max(0, remaining),
-      };
-    } catch (error) {
-      logger.error('Failed to check topic limit:', error);
       return {
         allowed: false,
         used: 0,

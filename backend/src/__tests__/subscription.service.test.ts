@@ -42,15 +42,13 @@ describe('SubscriptionService', () => {
       expect(TIER_LIMITS.enterprise).toBeDefined();
     });
 
-    it('free tier has no document upload, no topics', () => {
-      expect(TIER_LIMITS.free.documentUploads).toBe(0);
-      expect(TIER_LIMITS.free.maxTopics).toBe(0);
-      expect(TIER_LIMITS.free.features.documentUpload).toBe(false);
+    it('free tier has restricted features', () => {
+      expect(TIER_LIMITS.free.features.embedding).toBe(false);
+      expect(TIER_LIMITS.free.features.analytics).toBe(false);
     });
 
-    it('pro tier has unlimited queries and document uploads', () => {
+    it('pro tier has unlimited queries', () => {
       expect(TIER_LIMITS.pro.queriesPerMonth).toBeNull();
-      expect(TIER_LIMITS.pro.documentUploads).toBeNull();
       expect(TIER_LIMITS.pro.features.apiAccess).toBe(true);
     });
 
@@ -86,7 +84,7 @@ describe('SubscriptionService', () => {
   describe('hasFeatureAccess', () => {
     it('returns false when user has no subscription', async () => {
       mockGetUserSubscription.mockResolvedValue(null);
-      const ok = await SubscriptionService.hasFeatureAccess('user-1', 'documentUpload');
+      const ok = await SubscriptionService.hasFeatureAccess('user-1', 'embedding');
       expect(ok).toBe(false);
     });
 
@@ -219,41 +217,6 @@ describe('SubscriptionService', () => {
       expect(r.used).toBe(2);
       expect(r.limit).toBe(5);
       expect(r.remaining).toBe(3);
-      expect(r.allowed).toBe(true);
-    });
-  });
-
-  describe('checkDocumentUploadLimit', () => {
-    it('returns allowed: false when no subscription', async () => {
-      mockGetUserSubscription.mockResolvedValue(null);
-      const r = await SubscriptionService.checkDocumentUploadLimit('user-1');
-      expect(r.allowed).toBe(false);
-    });
-
-    it('returns allowed: true, limit null for pro', async () => {
-      mockGetUserSubscription.mockResolvedValue({
-        id: 'sub-1',
-        user_id: 'user-1',
-        tier: 'pro',
-        status: 'active',
-      });
-      const r = await SubscriptionService.checkDocumentUploadLimit('user-1');
-      expect(r.allowed).toBe(true);
-      expect(r.limit).toBeNull();
-    });
-
-    it('returns used/remaining for starter', async () => {
-      mockGetUserSubscription.mockResolvedValue({
-        id: 'sub-1',
-        user_id: 'user-1',
-        tier: 'starter',
-        status: 'active',
-      });
-      mockGetUserUsageCount.mockResolvedValue(2);
-      const r = await SubscriptionService.checkDocumentUploadLimit('user-1');
-      expect(r.used).toBe(2);
-      expect(r.limit).toBe(3);
-      expect(r.remaining).toBe(1);
       expect(r.allowed).toBe(true);
     });
   });

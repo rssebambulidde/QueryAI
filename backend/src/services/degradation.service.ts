@@ -16,7 +16,6 @@ export enum DegradationLevel {
 export enum ServiceType {
   EMBEDDING = 'embedding',
   SEARCH = 'search',
-  PINECONE = 'pinecone',
   OPENAI = 'openai',
   TAVILY = 'tavily',
 }
@@ -79,7 +78,6 @@ export class DegradationService {
     const circuitMap: Record<ServiceType, string | null> = {
       [ServiceType.EMBEDDING]: 'openai-embeddings',
       [ServiceType.SEARCH]: 'tavily-search',
-      [ServiceType.PINECONE]: 'pinecone-query',
       [ServiceType.OPENAI]: null, // OpenAI chat doesn't have a dedicated circuit breaker yet
       [ServiceType.TAVILY]: 'tavily-search',
     };
@@ -156,11 +154,6 @@ export class DegradationService {
     if (affectedServices.includes(ServiceType.EMBEDDING) && 
         !affectedServices.includes(ServiceType.SEARCH)) {
       return true;
-    }
-
-    // If Pinecone is down but we have cached results, we can use those
-    if (affectedServices.includes(ServiceType.PINECONE)) {
-      return true; // Cached results might be available
     }
 
     // If OpenAI is down but we have cached responses, we can use those

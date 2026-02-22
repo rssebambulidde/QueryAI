@@ -506,7 +506,7 @@ export class RetrievalOrchestratorService {
           : undefined;
 
         const recoveryResult = await ErrorRecoveryService.attemptRecovery(
-          ServiceType.PINECONE,
+          ServiceType.EMBEDDING,
           searchError,
           async () => PineconeService.search(
             queryEmbedding,

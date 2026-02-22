@@ -202,16 +202,6 @@ export const RetryDefaults = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Pinecone-specific
-// ---------------------------------------------------------------------------
-export const PineconeConfig = {
-  /** Batch size for upsert operations (Pinecone limit) */
-  upsertBatchSize: 100,
-  /** Maximum metadata content length stored per vector */
-  maxMetadataContentLength: 1000,
-} as const;
-
-// ---------------------------------------------------------------------------
 // Search / Tavily
 // ---------------------------------------------------------------------------
 export const SearchConfig = {

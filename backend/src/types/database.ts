@@ -13,6 +13,7 @@ export namespace Database {
     updated_at: string;
   }
 
+  /** @deprecated v2: Topics retired — will be removed once RAG pipeline refs are cleaned. */
   export interface Topic {
     id: string;
     user_id: string;
@@ -30,7 +31,6 @@ export namespace Database {
   export interface Conversation {
     id: string;
     user_id: string;
-    topic_id?: string;
     title?: string;
     mode: ConversationMode;
     metadata?: Record<string, any>; // Stores filter settings and other conversation-specific data
@@ -89,6 +89,7 @@ export namespace Database {
     created_at: string;
   }
 
+  /** @deprecated v2: Documents retired — will be removed once RAG pipeline refs are cleaned. */
   export interface Document {
     id: string;
     user_id: string;
@@ -107,6 +108,7 @@ export namespace Database {
     updated_at: string;
   }
 
+  /** @deprecated v2: DocumentChunks retired — will be removed once RAG pipeline refs are cleaned. */
   export interface DocumentChunk {
     id: string;
     document_id: string;

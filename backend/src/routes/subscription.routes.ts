@@ -32,10 +32,8 @@ router.get(
     }
 
     // Get usage statistics
-    const [queryLimit, documentUploadLimit, topicLimit, tavilySearchLimit] = await Promise.all([
+    const [queryLimit, tavilySearchLimit] = await Promise.all([
       SubscriptionService.checkQueryLimit(userId),
-      SubscriptionService.checkDocumentUploadLimit(userId),
-      SubscriptionService.checkTopicLimit(userId),
       SubscriptionService.checkTavilySearchLimit(userId),
     ]);
 
@@ -46,8 +44,6 @@ router.get(
         limits: subscriptionData.limits,
         usage: {
           queries: queryLimit,
-          documentUploads: documentUploadLimit,
-          topics: topicLimit,
           tavilySearches: tavilySearchLimit,
         },
       },
