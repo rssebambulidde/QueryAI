@@ -17,7 +17,7 @@ import { RefreshCw, Activity } from 'lucide-react';
 export default function HealthPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading } = useAuthStore();
-  const { healthMetrics, systemHealth, loading, error, loadHealthMetrics } = useHealthMonitoring(true, 5000);
+  const { healthMetrics, systemHealth, loading, error, loadHealthMetrics } = useHealthMonitoring(true, 30000);
 
   // Check if user is super_admin only
   const { isSuperAdmin } = useUserRole();

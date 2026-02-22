@@ -116,8 +116,8 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Request logging
 app.use(requestLogger);
 
-// Rate limiting
-app.use('/api/', apiLimiter);
+// Rate limiting (exempt health-monitoring endpoints — admin dashboard polls frequently)
+app.use(/\/api\/(?!health)/, apiLimiter);
 
 // API Routes
 app.use('/api/test', testRoutes);

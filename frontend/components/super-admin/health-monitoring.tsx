@@ -13,7 +13,7 @@ import { Alert } from '@/components/ui/alert';
 import { RefreshCw } from 'lucide-react';
 
 export default function HealthMonitoring() {
-  const { healthMetrics, systemHealth, loading, error, loadHealthMetrics } = useHealthMonitoring(true, 5000);
+  const { healthMetrics, systemHealth, loading, error, loadHealthMetrics } = useHealthMonitoring(true, 30000);
 
   return (
     <div className="space-y-6">
