@@ -172,6 +172,8 @@ export interface ChatMessageListProps {
   onResumeStreaming: () => void;
   onCancelStreaming: () => void;
   onRetryStreaming: () => void;
+  /** Dismiss the error banner. */
+  onDismissError?: () => void;
 }
 
 export interface DocumentInfo {

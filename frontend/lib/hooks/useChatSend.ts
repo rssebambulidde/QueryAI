@@ -104,6 +104,10 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
   const responseTimeStartRef = useRef<number | null>(null);
   const previousResponseTimeRef = useRef<number | null>(null);
 
+  // Always-fresh ref for conversationMode so sendMessage never uses a stale closure value.
+  const conversationModeRef = useRef(conversationMode);
+  conversationModeRef.current = conversationMode;
+
   // ── rAF-batched chunk accumulator ────────────────────────────────────────
   // Instead of calling setMessages on every token, we accumulate chunks and
   // flush at most once per animation frame (~60 fps).
@@ -177,10 +181,12 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
 
       // Create conversation if needed
       let conversationId = currentConversationId;
+      // Read the LIVE mode from the ref, not the stale useCallback closure value.
+      const liveMode = conversationModeRef.current;
       if (!conversationId && !isResend) {
         try {
           const title = generateConversationTitle(content);
-          const newConversation = await createConversation(title, undefined, { autoSelect: false, mode: conversationMode });
+          const newConversation = await createConversation(title, undefined, { autoSelect: false, mode: liveMode });
           conversationId = newConversation.id;
           if (Object.keys(searchFilters).length > 0) {
             try {
@@ -266,9 +272,9 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           question: content,
           conversationHistory,
           conversationId: conversationId ?? undefined,
-          mode: conversationMode,
-          enableWebSearch: conversationMode === 'chat' ? false : ragSettings.enableWebSearch,
-          enableSearch: conversationMode === 'chat' ? false : ragSettings.enableWebSearch,
+          mode: liveMode,
+          enableWebSearch: liveMode === 'chat' ? false : ragSettings.enableWebSearch,
+          enableSearch: liveMode === 'chat' ? false : ragSettings.enableWebSearch,
           topic: activeFilters.keyword,
           timeRange: activeFilters.timeRange,
           startDate: activeFilters.startDate,
@@ -464,34 +470,37 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
         abortControllerRef.current = null;
 
         let errorMessage = 'Failed to get AI response';
-        let showUpgradeLink = false;
 
         if (err.response?.status === 429) {
           const ed = err.response?.data?.error;
           const tier = ed?.tier || 'free';
           const limit = ed?.limit || 0;
           const retryAfter = ed?.retryAfter;
-          errorMessage = `Rate limit exceeded. Your ${tier} tier allows ${limit} requests per 15 minutes.`;
-          if (retryAfter) errorMessage += ` Please try again in ${Math.ceil(retryAfter / 60)} minutes.`;
+          errorMessage = `You've hit the rate limit — your ${tier} plan allows ${limit} requests per 15 minutes.`;
+          if (retryAfter) errorMessage += ` Try again in ${Math.ceil(retryAfter / 60)} minute${Math.ceil(retryAfter / 60) === 1 ? '' : 's'}.`;
           if (tier === 'free') errorMessage += ' Upgrade to Pro for higher limits.';
-          showUpgradeLink = true;
         } else if (err.response?.status === 403) {
           const ed = err.response?.data?.error;
           const code = ed?.code || 'FORBIDDEN';
-          if (code === 'QUERY_LIMIT_EXCEEDED') { errorMessage = `You have reached your query limit. You've used ${ed?.used || 0} of ${ed?.limit || 0} queries this month.`; showUpgradeLink = true; }
-          else if (code === 'DOCUMENT_UPLOAD_LIMIT_EXCEEDED') { errorMessage = `Document upload limit reached.`; showUpgradeLink = true; }
-          else if (code === 'FEATURE_NOT_AVAILABLE') { errorMessage = `This feature requires a ${ed?.requiredTier || 'pro'} subscription. Your current tier is ${ed?.currentTier || 'free'}.`; showUpgradeLink = true; }
-          else { errorMessage = ed?.message || 'Access denied. This feature may require a Pro subscription.'; showUpgradeLink = true; }
+          if (code === 'QUERY_LIMIT_EXCEEDED') {
+            errorMessage = `You've reached your monthly query limit (${ed?.used || 0} of ${ed?.limit || 0} used). Upgrade your plan for more queries.`;
+          } else if (code === 'TAVILY_SEARCH_LIMIT_EXCEEDED') {
+            errorMessage = `You've used all your web searches this month (${ed?.used || 0} of ${ed?.limit || 0}). Upgrade your plan for more web searches.`;
+          } else if (code === 'RESEARCH_MODE_NOT_AVAILABLE') {
+            errorMessage = ed?.message || 'Deep Research mode is not available on your current plan. Upgrade to Pro to unlock it.';
+          } else if (code === 'DOCUMENT_UPLOAD_LIMIT_EXCEEDED') {
+            errorMessage = "You've reached your document upload limit for this month.";
+          } else if (code === 'FEATURE_NOT_AVAILABLE') {
+            errorMessage = `This feature requires a ${ed?.requiredTier || 'Pro'} plan. Your current plan is ${ed?.currentTier || 'Free'}.`;
+          } else {
+            errorMessage = ed?.message || 'Access denied. This feature may require a higher plan.';
+          }
         } else if (err.message) { errorMessage = err.message; }
         else if (err.response?.data?.error?.message) { errorMessage = err.response.data.error.message; }
 
         setError(errorMessage);
         toast.error(errorMessage);
         setMessages((prev) => prev.slice(0, -1));
-
-        if (showUpgradeLink && typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('navigateToSubscription'));
-        }
       }
     },
     [

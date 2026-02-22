@@ -30,7 +30,7 @@ export const checkTavilyLimit = async (
       res.status(403).json({
         success: false,
         error: {
-          message: `Tavily search limit exceeded. You have used ${limitCheck.used} of ${limitCheck.limit} Tavily searches this month.`,
+          message: `You've used all your web searches this month (${limitCheck.used} of ${limitCheck.limit}). Upgrade your plan for more web searches.`,
           code: 'TAVILY_SEARCH_LIMIT_EXCEEDED',
           limit: limitCheck.limit,
           used: limitCheck.used,

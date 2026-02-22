@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Download } from 'lucide-react';
 import type { Message, MessageVersionSummary } from './chat-message';
 import type { RAGSettings } from './rag-source-selector';
@@ -451,6 +451,18 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   // Research mode retired in v2
 
+  // ── Mode change with DB persistence ────────────────────────────────────
+
+  const handleModeChange = useCallback((newMode: 'research' | 'chat') => {
+    setConversationMode(newMode);
+    // Persist mode to DB for the active conversation so it survives reloads
+    if (currentConversationId) {
+      conversationApi.update(currentConversationId, { mode: newMode }).catch((err) => {
+        console.error('Failed to persist mode change:', err);
+      });
+    }
+  }, [currentConversationId]);
+
   // ── Delete message (optimistic) ──────────────────────────────────────────
 
   const handleDeleteMessage = async (messageId: string) => {
@@ -501,7 +513,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         <ChatInputArea
           variant="empty"
           mode={conversationMode}
-          onModeChange={setConversationMode}
+          onModeChange={handleModeChange}
           onSend={(msg) => handleUserInput(msg)}
           disabled={isLoading || isStreaming}
           selectedTopic={selectedTopic}
@@ -574,6 +586,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
                 onResumeStreaming={handleResumeStreaming}
                 onCancelStreaming={handleCancelStreaming}
                 onRetryStreaming={handleRetryStreaming}
+                onDismissError={() => setError(null)}
               />
             </ChatErrorBoundary>
 
@@ -586,7 +599,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           <ChatInputArea
             variant="conversation"
             mode={conversationMode || 'chat'}
-            onModeChange={setConversationMode}
+            onModeChange={handleModeChange}
             onSend={(msg) => handleUserInput(msg)}
             disabled={isLoading || isStreaming}
             selectedTopic={selectedTopic}

@@ -15,6 +15,7 @@ export interface UpdateConversationInput {
   title?: string;
   topicId?: string;
   metadata?: Record<string, any>;
+  mode?: 'research' | 'chat';
 }
 
 export interface ConversationWithMetadata extends Database.Conversation {
@@ -287,6 +288,10 @@ export class ConversationService {
         // Merge with existing metadata
         const currentMetadata = (conversation as any).metadata || {};
         updateData.metadata = { ...currentMetadata, ...updates.metadata };
+      }
+
+      if (updates.mode !== undefined) {
+        updateData.mode = updates.mode;
       }
 
       const { data, error } = await supabaseAdmin

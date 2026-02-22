@@ -9,7 +9,7 @@ import { RerankingControls } from '@/components/advanced/reranking-controls';
 import { ContextVisualization } from '@/components/advanced/context-visualization';
 import { TokenUsageDisplay } from '@/components/advanced/token-usage-display';
 import { CostEstimation } from '@/components/advanced/cost-estimation';
-import { ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessageListProps } from './chat-types';
 
@@ -68,6 +68,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   onResumeStreaming,
   onCancelStreaming,
   onRetryStreaming,
+  onDismissError,
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
@@ -296,21 +297,29 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         {/* Error banner */}
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex flex-col gap-2">
-              <p className="text-sm text-red-800">{error}</p>
-              {(error.includes('limit') ||
-                error.includes('subscription') ||
-                error.includes('tier') ||
-                error.includes('plan')) && (
+            <div className="flex items-start gap-3">
+              <div className="flex-1 flex flex-col gap-2">
+                <p className="text-sm text-red-800">{error}</p>
+                {(error.includes('limit') ||
+                  error.includes('Upgrade') ||
+                  error.includes('plan') ||
+                  error.includes('subscription') ||
+                  error.includes('tier')) && (
+                  <a
+                    href="/dashboard/settings/subscription"
+                    className="text-sm text-orange-600 hover:text-orange-800 underline font-medium self-start"
+                  >
+                    Upgrade your plan →
+                  </a>
+                )}
+              </div>
+              {onDismissError && (
                 <button
-                  onClick={() => {
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('navigateToSubscription'));
-                    }
-                  }}
-                  className="text-sm text-orange-600 hover:text-orange-800 underline font-medium self-start mt-1"
+                  onClick={onDismissError}
+                  className="flex-shrink-0 p-1 rounded-md text-red-400 hover:text-red-600 hover:bg-red-100 transition-colors"
+                  aria-label="Dismiss error"
                 >
-                  Upgrade your plan →
+                  <X className="w-4 h-4" />
                 </button>
               )}
             </div>

@@ -105,10 +105,15 @@ router.put(
   asyncHandler(async (req, res) => {
     const userId = req.user!.id;
     const conversationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const { title, topicId, metadata, filters } = req.body;
+    const { title, topicId, metadata, filters, mode } = req.body;
 
-    if (!title && topicId === undefined && metadata === undefined && filters === undefined) {
-      throw new AppError('At least one field (title, topicId, metadata, or filters) is required', 400, 'VALIDATION_ERROR');
+    if (!title && topicId === undefined && metadata === undefined && filters === undefined && mode === undefined) {
+      throw new AppError('At least one field (title, topicId, metadata, filters, or mode) is required', 400, 'VALIDATION_ERROR');
+    }
+
+    // Validate mode if provided
+    if (mode !== undefined && !['research', 'chat'].includes(mode)) {
+      throw new AppError("Invalid mode. Must be 'research' or 'chat'.", 400, 'VALIDATION_ERROR');
     }
 
     // If filters are provided, merge them into metadata
@@ -116,6 +121,7 @@ router.put(
     if (title !== undefined) updateData.title = title;
     if (topicId !== undefined) updateData.topicId = topicId;
     if (metadata !== undefined) updateData.metadata = metadata;
+    if (mode !== undefined) updateData.mode = mode;
     if (filters !== undefined) {
       // Store filters in metadata
       updateData.metadata = { filters };
