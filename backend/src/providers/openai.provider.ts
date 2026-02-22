@@ -163,6 +163,22 @@ const OPENAI_MODELS: ModelInfo[] = [
   },
 ];
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** o-series reasoning models don't support `temperature` and require `max_completion_tokens`. */
+const isReasoningModel = (model: string): boolean =>
+  /^o[1-4]/.test(model);
+
+/**
+ * Models that use `max_completion_tokens` instead of the deprecated `max_tokens`.
+ * All o-series, gpt-4o, gpt-4.1, and gpt-4.5 models require the new parameter.
+ */
+const usesMaxCompletionTokens = (model: string): boolean =>
+  isReasoningModel(model) ||
+  model.startsWith('gpt-4o') ||
+  model.startsWith('gpt-4.1') ||
+  model.startsWith('gpt-4.5');
+
 // ─── Provider implementation ─────────────────────────────────────────────────
 
 export class OpenAIProvider implements LLMProvider {
@@ -179,14 +195,21 @@ export class OpenAIProvider implements LLMProvider {
   async chatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResult> {
     const { model, messages, temperature, maxTokens, responseFormat, signal } = params;
 
+    const reasoning = isReasoningModel(model);
+    const newTokenParam = usesMaxCompletionTokens(model);
+
     const response = await OpenAIPool.executeRequest(
       (client) =>
         client.chat.completions.create(
           {
             model,
             messages: messages as OpenAI.ChatCompletionMessageParam[],
-            temperature: temperature ?? 0.7,
-            max_tokens: maxTokens,
+            // o-series reasoning models don't support temperature
+            ...(!reasoning && { temperature: temperature ?? 0.7 }),
+            // Modern models require max_completion_tokens; legacy uses max_tokens
+            ...(newTokenParam
+              ? { max_completion_tokens: maxTokens }
+              : { max_tokens: maxTokens }),
             ...(responseFormat === 'json' && {
               response_format: { type: 'json_object' as const },
             }),
@@ -217,12 +240,17 @@ export class OpenAIProvider implements LLMProvider {
   ): AsyncGenerator<string, ChatStreamMeta, unknown> {
     const { model, messages, temperature, maxTokens, responseFormat, signal } = params;
 
+    const reasoning = isReasoningModel(model);
+    const newTokenParam = usesMaxCompletionTokens(model);
+
     const stream = await this.client.chat.completions.create(
       {
         model,
         messages: messages as OpenAI.ChatCompletionMessageParam[],
-        temperature: temperature ?? 0.7,
-        max_tokens: maxTokens,
+        ...(!reasoning && { temperature: temperature ?? 0.7 }),
+        ...(newTokenParam
+          ? { max_completion_tokens: maxTokens }
+          : { max_tokens: maxTokens }),
         stream: true,
         stream_options: { include_usage: true },
         ...(responseFormat === 'json' && {
