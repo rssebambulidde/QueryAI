@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { usageApi, billingApi, UsageStats, UsageWarnings, OverageSummary } from '@/lib/api';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, Zap, FileText, Folder, ArrowUp, Search, CreditCard, DollarSign } from 'lucide-react';
+import { AlertCircle, Zap, ArrowUp, Search, CreditCard, DollarSign } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface UsageDisplayProps {
@@ -232,8 +232,6 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
               {warnings.warnings.map((w, i) => (
                 <span key={i}>
                   {w.type === 'queries' && 'Queries'}
-                  {w.type === 'documentUploads' && 'Document uploads'}
-                  {w.type === 'topics' && 'Topics'}
                   {w.type === 'tavilySearches' && 'Web searches'} ({w.percentage}% used)
                   {i < warnings.warnings.length - 1 && ', '}
                 </span>
@@ -316,34 +314,7 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
           }
         />
 
-        <UsageItem
-          label="Document Uploads"
-          icon={FileText}
-          used={usage.documentUploads.used}
-          limit={usage.documentUploads.limit}
-          remaining={usage.documentUploads.remaining}
-          percentage={usage.documentUploads.percentage}
-          onUpgrade={
-            usage.documentUploads.percentage >= 100
-              ? () => router.push('/dashboard?tab=subscription')
-              : undefined
-          }
-        />
-
-        <UsageItem
-          label="Topics"
-          icon={Folder}
-          used={usage.topics.used}
-          limit={usage.topics.limit}
-          remaining={usage.topics.remaining}
-          percentage={usage.topics.percentage}
-          onUpgrade={
-            usage.topics.percentage >= 100
-              ? () => router.push('/dashboard?tab=subscription')
-              : undefined
-          }
-        />
-
+        {usage.tavilySearches && (
         <UsageItem
           label="Web Searches"
           icon={Search}
@@ -357,6 +328,7 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
               : undefined
           }
         />
+        )}
       </div>
 
       {!compact && (

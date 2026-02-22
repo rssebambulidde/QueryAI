@@ -56,19 +56,8 @@ describe('Tavily Search Limits', () => {
 
       const limitCheck = await SubscriptionService.checkTavilySearchLimit(mockUserId);
 
-      expect(limitCheck.limit).toBe(5);
+      expect(limitCheck.limit).toBe(10);
       expect(limitCheck.allowed).toBe(true);
-    });
-
-    it('should return correct limits for premium tier', async () => {
-      (DatabaseService.getUserSubscription as jest.Mock).mockResolvedValue({
-        ...mockSubscription,
-        tier: 'premium',
-      });
-
-      const limitCheck = await SubscriptionService.checkTavilySearchLimit(mockUserId);
-
-      expect(limitCheck.limit).toBe(50);
     });
 
     it('should return correct limits for pro tier', async () => {
@@ -88,12 +77,12 @@ describe('Tavily Search Limits', () => {
         tier: 'free',
       });
 
-      jest.spyOn(SubscriptionService, 'getTavilyUsageCount').mockResolvedValue(6);
+      jest.spyOn(SubscriptionService, 'getTavilyUsageCount').mockResolvedValue(11);
 
       const limitCheck = await SubscriptionService.checkTavilySearchLimit(mockUserId);
 
       expect(limitCheck.allowed).toBe(false);
-      expect(limitCheck.used).toBe(6);
+      expect(limitCheck.used).toBe(11);
       expect(limitCheck.remaining).toBe(0);
     });
 
@@ -109,7 +98,7 @@ describe('Tavily Search Limits', () => {
 
       expect(limitCheck.allowed).toBe(true);
       expect(limitCheck.used).toBe(3);
-      expect(limitCheck.remaining).toBe(2);
+      expect(limitCheck.remaining).toBe(7);
     });
   });
 
@@ -168,8 +157,7 @@ describe('Tavily Search Limits', () => {
     it('should have correct Tavily limits in TIER_LIMITS', () => {
       const { TIER_LIMITS } = require('../services/subscription.service');
 
-      expect(TIER_LIMITS.free.tavilySearchesPerMonth).toBe(5);
-      expect(TIER_LIMITS.premium.tavilySearchesPerMonth).toBe(50);
+      expect(TIER_LIMITS.free.tavilySearchesPerMonth).toBe(10);
       expect(TIER_LIMITS.pro.tavilySearchesPerMonth).toBe(200);
     });
   });

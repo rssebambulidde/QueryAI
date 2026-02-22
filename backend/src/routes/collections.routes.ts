@@ -2,8 +2,9 @@ import { Router, Request, Response } from 'express';
 import { CollectionService, CreateCollectionInput, UpdateCollectionInput } from '../services/collection.service';
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
-import { AppError, ValidationError } from '../types/error';
+import { AppError, ValidationError, ForbiddenError } from '../types/error';
 import { validateUUIDParams } from '../validation/uuid';
+import { SubscriptionService } from '../services/subscription.service';
 
 const router = Router();
 
@@ -60,6 +61,14 @@ router.post(
 
     if (!name || typeof name !== 'string') {
       throw new ValidationError('Collection name is required');
+    }
+
+    // Enforce collection limit for user's tier
+    const limitCheck = await SubscriptionService.checkCollectionLimit(userId);
+    if (!limitCheck.allowed) {
+      throw new ForbiddenError(
+        `Collection limit reached. You have ${limitCheck.used} of ${limitCheck.limit} collections. Upgrade for more.`
+      );
     }
 
     const input: CreateCollectionInput = {

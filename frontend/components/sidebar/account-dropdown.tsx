@@ -105,8 +105,6 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
   const getUpgradeText = () => {
     switch (subscriptionTier) {
       case 'free': return 'Unlock premium features';
-      case 'starter': return 'Upgrade to Premium, Pro, or Enterprise';
-      case 'premium': return 'Upgrade to Pro or Enterprise';
       case 'pro': return 'Upgrade to Enterprise';
       default: return '';
     }

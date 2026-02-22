@@ -1326,15 +1326,17 @@ export interface Subscription {
 
 export interface TierLimits {
   queriesPerMonth: number | null;
-  documentUploads: number | null;
-  maxTopics: number | null;
+  tavilySearchesPerMonth: number | null;
+  maxCollections: number | null;
+  allowResearchMode: boolean;
   features: {
-    documentUpload: boolean;
     embedding: boolean;
     analytics: boolean;
     apiAccess: boolean;
     whiteLabel: boolean;
+    teamCollaboration?: boolean;
   };
+  maxTeamMembers?: number | null;
 }
 
 export interface UsageLimit {
@@ -1349,8 +1351,6 @@ export interface SubscriptionData {
   limits: TierLimits;
   usage: {
     queries: UsageLimit;
-    documentUploads: UsageLimit;
-    topics: UsageLimit;
     tavilySearches?: UsageLimit;
   };
 }
@@ -1368,18 +1368,6 @@ export interface UsageStats {
     remaining: number | null;
     percentage: number; // 0-100, or -1 for unlimited
   };
-  documentUploads: {
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-    percentage: number;
-  };
-  topics: {
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-    percentage: number;
-  };
   tavilySearches: {
     used: number;
     limit: number | null;
@@ -1394,7 +1382,7 @@ export interface UsageStats {
   };
   periodStart: string;
   periodEnd: string;
-  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+  tier: 'free' | 'pro' | 'enterprise';
 }
 
 export interface UsageHistory {
@@ -1406,11 +1394,11 @@ export interface UsageHistory {
 
 export interface UsageWarnings {
   approaching: boolean;
-  warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics' | 'tavilySearches'; percentage: number }>;
+  warnings: Array<{ type: 'queries' | 'tavilySearches'; percentage: number }>;
 }
 
 export interface OverageRecord {
-  metric_type: 'queries' | 'document_upload' | 'tavily_searches';
+  metric_type: 'queries' | 'tavily_searches';
   limit_value: number;
   usage_value: number;
   overage_units: number;
@@ -1535,14 +1523,13 @@ export const subscriptionApi = {
 
   getLimits: async (): Promise<ApiResponse<{
     queries: UsageLimit;
-    documentUploads: UsageLimit;
-    topics: UsageLimit;
+    tavilySearches: UsageLimit;
   }>> => {
     const response = await apiClient.get('/api/subscription/limits');
     return response.data;
   },
 
-  upgrade: async (tier: 'free' | 'starter' | 'premium' | 'pro'): Promise<ApiResponse<{ subscription: Subscription }>> => {
+  upgrade: async (tier: 'free' | 'pro'): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.put('/api/subscription/upgrade', { tier });
     return response.data;
   },
@@ -1552,7 +1539,7 @@ export const subscriptionApi = {
     return response.data;
   },
 
-  downgrade: async (tier: 'free' | 'starter' | 'premium' | 'pro', immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
+  downgrade: async (tier: 'free' | 'pro', immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.put('/api/subscription/downgrade', { tier, immediate });
     return response.data;
   },
@@ -1580,7 +1567,7 @@ export const subscriptionApi = {
   },
 
   getProratedPricing: async (
-    toTier: 'free' | 'starter' | 'premium' | 'pro',
+    toTier: 'free' | 'pro',
     currency: 'UGX' | 'USD' = 'UGX',
     toBillingPeriod?: 'monthly' | 'annual'
   ): Promise<ApiResponse<{ proratedPricing: any }>> => {
@@ -1590,7 +1577,7 @@ export const subscriptionApi = {
     return response.data;
   },
 
-  startTrial: async (tier: 'starter' | 'premium' | 'pro', trialDays: number = 7): Promise<ApiResponse<{ subscription: Subscription; trial_end: string }>> => {
+  startTrial: async (tier: 'pro', trialDays: number = 7): Promise<ApiResponse<{ subscription: Subscription; trial_end: string }>> => {
     const response = await apiClient.post('/api/subscription/start-trial', { tier, trialDays });
     return response.data;
   },
@@ -1628,7 +1615,7 @@ export interface Payment {
 }
 
 export interface PaymentInitiateRequest {
-  tier: 'starter' | 'premium' | 'pro' | 'enterprise';
+  tier: 'pro' | 'enterprise';
   currency: 'UGX' | 'USD';
   firstName: string;
   lastName: string;
@@ -1642,7 +1629,7 @@ export interface PaymentInitiateRequest {
 export interface PaymentInitiateResponse {
   payment: {
     id: string;
-    tier: 'starter' | 'premium' | 'pro' | 'enterprise';
+    tier: 'pro' | 'enterprise';
     amount: number;
     currency: string;
     status: string;

@@ -5,7 +5,7 @@ import { subscriptionApi, usageApi, paymentApi, SubscriptionData, UsageLimit, Pa
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
-import { Check, X, Zap, FileText, Folder, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
+import { Check, X, Zap, Folder, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
 import { getAnnualSavings, getPricing, formatPrice, isEnterpriseTier } from '@/lib/pricing';
@@ -25,7 +25,7 @@ export function SubscriptionManager() {
   const [error, setError] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [selectedTier, setSelectedTier] = useState<'starter' | 'premium' | 'pro' | 'enterprise' | null>(null);
+  const [selectedTier, setSelectedTier] = useState<'pro' | 'enterprise' | null>(null);
   const [paymentDialogInitialBilling, setPaymentDialogInitialBilling] = useState<BillingPeriod | undefined>();
   const [paymentDialogInitialRecurring, setPaymentDialogInitialRecurring] = useState(false);
   const [billingHistory, setBillingHistory] = useState<BillingHistory | null>(null);
@@ -35,7 +35,7 @@ export function SubscriptionManager() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelImmediate, setCancelImmediate] = useState(false);
   const [showDowngradeConfirm, setShowDowngradeConfirm] = useState(false);
-  const [downgradeTargetTier, setDowngradeTargetTier] = useState<'free' | 'starter' | 'premium' | 'pro' | null>(null);
+  const [downgradeTargetTier, setDowngradeTargetTier] = useState<'free' | 'pro' | null>(null);
   const [downgradeImmediate, setDowngradeImmediate] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [downgrading, setDowngrading] = useState(false);
@@ -271,7 +271,7 @@ export function SubscriptionManager() {
     }
   };
 
-  const handleUpgrade = (tier: 'starter' | 'premium' | 'pro' | 'enterprise') => {
+  const handleUpgrade = (tier: 'pro' | 'enterprise') => {
     setSelectedTier(tier);
     setPaymentDialogInitialBilling(undefined);
     setPaymentDialogInitialRecurring(false);
@@ -279,8 +279,8 @@ export function SubscriptionManager() {
   };
 
   const handleSwitchBillingPeriod = (targetPeriod: BillingPeriod) => {
-    if (tier === 'free' || !['starter', 'premium', 'pro', 'enterprise'].includes(tier)) return;
-    setSelectedTier(tier as 'starter' | 'premium' | 'pro' | 'enterprise');
+    if (tier === 'free' || !['pro', 'enterprise'].includes(tier)) return;
+    setSelectedTier(tier as 'pro' | 'enterprise');
     setPaymentDialogInitialBilling(targetPeriod);
     setPaymentDialogInitialRecurring(true);
     setShowPaymentDialog(true);
@@ -326,7 +326,7 @@ export function SubscriptionManager() {
     }
   };
 
-  const handleDowngradeClick = (targetTier: 'free' | 'starter' | 'premium' | 'pro', immediate: boolean = false) => {
+  const handleDowngradeClick = (targetTier: 'free' | 'pro', immediate: boolean = false) => {
     setDowngradeTargetTier(targetTier);
     setDowngradeImmediate(immediate);
     setShowDowngradeConfirm(true);
@@ -395,7 +395,7 @@ export function SubscriptionManager() {
     // For recurring subscriptions, this will allow updating the payment method
     if (subscriptionData?.subscription && subscriptionData.subscription.tier !== 'free') {
       const sub = subscriptionData.subscription;
-      setSelectedTier(sub.tier as 'starter' | 'premium' | 'pro' | 'enterprise');
+      setSelectedTier(sub.tier as 'pro' | 'enterprise');
       setPaymentDialogInitialBilling(sub.billing_period || 'monthly');
       setPaymentDialogInitialRecurring(!!sub.paypal_subscription_id);
       setShowPaymentDialog(true);
@@ -408,7 +408,7 @@ export function SubscriptionManager() {
     if (!payment || payment.status !== 'failed') return;
 
     // Pre-fill payment dialog with failed payment details
-    setSelectedTier(payment.tier as 'starter' | 'premium' | 'pro' | 'enterprise');
+    setSelectedTier(payment.tier as 'pro' | 'enterprise');
     setPaymentDialogInitialBilling(
       (payment.callback_data?.billing_period as BillingPeriod) || 'monthly'
     );
@@ -590,12 +590,12 @@ export function SubscriptionManager() {
                     .filter((p) => p.status === 'completed' && p.tier !== 'free')
                     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
                   
-                  const previousTier = lastPaidPayment?.tier || 'starter';
+                  const previousTier = lastPaidPayment?.tier || 'pro';
                   
                   return (
                     <Button
                       size="sm"
-                      onClick={() => handleUpgrade(previousTier as 'starter' | 'premium' | 'pro' | 'enterprise')}
+                      onClick={() => handleUpgrade(previousTier as 'pro' | 'enterprise')}
                       className="bg-red-600 hover:bg-red-700 text-white"
                     >
                       Reactivate {getTierName(previousTier)} Plan
@@ -713,47 +713,33 @@ export function SubscriptionManager() {
               <tr className="border-b">
                 <th className="text-left p-3 font-semibold">Feature</th>
                 <th className="text-center p-3 font-semibold">Free</th>
-                <th className="text-center p-3 font-semibold bg-blue-50">Starter</th>
-                <th className="text-center p-3 font-semibold">Premium</th>
-                <th className="text-center p-3 font-semibold">Pro</th>
+                <th className="text-center p-3 font-semibold bg-purple-50">Pro</th>
                 <th className="text-center p-3 font-semibold bg-indigo-50">Enterprise</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-b">
                 <td className="p-3">Queries per month</td>
-                <td className="p-3 text-center">50</td>
-                <td className="p-3 text-center bg-blue-50">100</td>
-                <td className="p-3 text-center">500</td>
-                <td className="p-3 text-center">Unlimited</td>
+                <td className="p-3 text-center">300</td>
+                <td className="p-3 text-center bg-purple-50">Unlimited</td>
                 <td className="p-3 text-center bg-indigo-50">Unlimited</td>
               </tr>
               <tr className="border-b">
-                <td className="p-3">Document uploads</td>
-                <td className="p-3 text-center">
-                  <X className="w-4 h-4 text-gray-400 mx-auto" />
-                </td>
-                <td className="p-3 text-center bg-blue-50">3</td>
-                <td className="p-3 text-center">10</td>
-                <td className="p-3 text-center">Unlimited</td>
-                <td className="p-3 text-center bg-indigo-50">Unlimited</td>
+                <td className="p-3">Chat modes</td>
+                <td className="p-3 text-center">Express Chat only</td>
+                <td className="p-3 text-center bg-purple-50">Both modes</td>
+                <td className="p-3 text-center bg-indigo-50">Both modes</td>
               </tr>
               <tr className="border-b">
-                <td className="p-3">Topics</td>
-                <td className="p-3 text-center">
-                  <X className="w-4 h-4 text-gray-400 mx-auto" />
-                </td>
-                <td className="p-3 text-center bg-blue-50">1</td>
+                <td className="p-3">Collections</td>
                 <td className="p-3 text-center">3</td>
-                <td className="p-3 text-center">Unlimited</td>
+                <td className="p-3 text-center bg-purple-50">Unlimited</td>
                 <td className="p-3 text-center bg-indigo-50">Unlimited</td>
               </tr>
               <tr className="border-b">
                 <td className="p-3">Web searches</td>
-                <td className="p-3 text-center">5</td>
-                <td className="p-3 text-center bg-blue-50">10</td>
-                <td className="p-3 text-center">50</td>
-                <td className="p-3 text-center">200</td>
+                <td className="p-3 text-center">10</td>
+                <td className="p-3 text-center bg-purple-50">200</td>
                 <td className="p-3 text-center bg-indigo-50">Unlimited</td>
               </tr>
               <tr className="border-b">
@@ -761,13 +747,7 @@ export function SubscriptionManager() {
                 <td className="p-3 text-center">
                   <X className="w-4 h-4 text-gray-400 mx-auto" />
                 </td>
-                <td className="p-3 text-center bg-blue-50">
-                  <X className="w-4 h-4 text-gray-400 mx-auto" />
-                </td>
-                <td className="p-3 text-center">
-                  <X className="w-4 h-4 text-gray-400 mx-auto" />
-                </td>
-                <td className="p-3 text-center">
+                <td className="p-3 text-center bg-purple-50">
                   <X className="w-4 h-4 text-gray-400 mx-auto" />
                 </td>
                 <td className="p-3 text-center bg-indigo-50">
@@ -777,17 +757,13 @@ export function SubscriptionManager() {
               <tr className="border-b">
                 <td className="p-3 font-semibold">Price (monthly)</td>
                 <td className="p-3 text-center font-semibold">Free</td>
-                <td className="p-3 text-center font-semibold bg-blue-50">{formatPrice(27000, 'UGX')}<br />{formatPrice(9, 'USD')}</td>
-                <td className="p-3 text-center font-semibold">{formatPrice(50000, 'UGX')}<br />{formatPrice(15, 'USD')}</td>
-                <td className="p-3 text-center font-semibold">{formatPrice(150000, 'UGX')}<br />{formatPrice(45, 'USD')}</td>
+                <td className="p-3 text-center font-semibold bg-purple-50">{formatPrice(getPricing('pro', 'UGX', 'monthly'), 'UGX')}<br />{formatPrice(getPricing('pro', 'USD', 'monthly'), 'USD')}</td>
                 <td className="p-3 text-center font-semibold bg-indigo-50">{formatPrice(getPricing('enterprise', 'UGX', 'monthly'), 'UGX')}<br />{formatPrice(getPricing('enterprise', 'USD', 'monthly'), 'USD')}</td>
               </tr>
               <tr>
                 <td className="p-3 font-semibold">Price (annual)</td>
                 <td className="p-3 text-center font-semibold">—</td>
-                <td className="p-3 text-center font-semibold bg-blue-50">{formatPrice(getPricing('starter', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('starter', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('starter', 'USD').savingsPercentage}%</span></td>
-                <td className="p-3 text-center font-semibold">{formatPrice(getPricing('premium', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('premium', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('premium', 'USD').savingsPercentage}%</span></td>
-                <td className="p-3 text-center font-semibold">{formatPrice(getPricing('pro', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('pro', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('pro', 'USD').savingsPercentage}%</span></td>
+                <td className="p-3 text-center font-semibold bg-purple-50">{formatPrice(getPricing('pro', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('pro', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('pro', 'USD').savingsPercentage}%</span></td>
                 <td className="p-3 text-center font-semibold bg-indigo-50">{formatPrice(getPricing('enterprise', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('enterprise', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('enterprise', 'USD').savingsPercentage}%</span></td>
               </tr>
             </tbody>
@@ -796,17 +772,10 @@ export function SubscriptionManager() {
         {tier === 'free' && (
           <div className="mt-4 flex flex-wrap gap-2">
             <Button
-              onClick={() => handleUpgrade('starter')}
-              variant="outline"
+              onClick={() => handleUpgrade('pro')}
               className="flex-1 min-w-[120px]"
             >
-              Start with Starter
-            </Button>
-            <Button
-              onClick={() => handleUpgrade('premium')}
-              className="flex-1 min-w-[120px]"
-            >
-              Go Premium
+              Upgrade to Pro
             </Button>
             <Button
               onClick={() => handleUpgrade('enterprise')}
@@ -817,7 +786,7 @@ export function SubscriptionManager() {
             </Button>
           </div>
         )}
-        {tier !== 'free' && !isEnterpriseTier(tier as 'free' | 'starter' | 'premium' | 'pro' | 'enterprise') && (
+        {tier === 'pro' && (
           <div className="mt-4">
             <Button
               onClick={() => handleUpgrade('enterprise')}
@@ -865,8 +834,7 @@ export function SubscriptionManager() {
                   <Button
                     size="sm"
                     onClick={() => {
-                      const upgradeTier = tier === 'free' ? 'starter' : tier === 'starter' ? 'premium' : 'premium';
-                      handleUpgrade(upgradeTier);
+                      handleUpgrade('pro');
                     }}
                     className="mt-2 w-full"
                   >
@@ -876,80 +844,6 @@ export function SubscriptionManager() {
                 </div>
               )}
             </div>
-
-            {/* Document Uploads */}
-            {limits.features.documentUpload && (
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-green-600" />
-                    <span className="font-medium">Document Uploads</span>
-                  </div>
-                  <span className="text-sm text-gray-600">{formatLimit(usage.documentUploads)}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full ${
-                      usage.documentUploads.remaining === 0 ? 'bg-red-500' : usage.documentUploads.remaining! < usage.documentUploads.limit! * 0.2 ? 'bg-yellow-500' : 'bg-green-500'
-                    }`}
-                    style={{ width: `${getProgressPercentage(usage.documentUploads)}%` }}
-                  />
-                </div>
-                {usage.documentUploads.remaining === 0 && (
-                  <div className="mt-2">
-                    <Alert variant="error" className="py-2">
-                      <AlertCircle className="h-4 w-4" />
-                      <span className="ml-2">Document upload limit reached. Upgrade for more uploads.</span>
-                    </Alert>
-                    <Button
-                      size="sm"
-                      onClick={() => handleUpgrade('premium')}
-                      className="mt-2 w-full"
-                    >
-                      <ArrowUp className="h-3 w-3 mr-1" />
-                      Upgrade Now
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Topics */}
-            {limits.features.documentUpload && (
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <div className="flex items-center gap-2">
-                    <Folder className="w-4 h-4 text-purple-600" />
-                    <span className="font-medium">Topics</span>
-                  </div>
-                  <span className="text-sm text-gray-600">{formatLimit(usage.topics)}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full ${
-                      usage.topics.remaining === 0 ? 'bg-red-500' : usage.topics.remaining! < usage.topics.limit! * 0.2 ? 'bg-yellow-500' : 'bg-purple-500'
-                    }`}
-                    style={{ width: `${getProgressPercentage(usage.topics)}%` }}
-                  />
-                </div>
-                {usage.topics.remaining === 0 && (
-                  <div className="mt-2">
-                    <Alert variant="error" className="py-2">
-                      <AlertCircle className="h-4 w-4" />
-                      <span className="ml-2">Topic limit reached. Upgrade to create more topics.</span>
-                    </Alert>
-                    <Button
-                      size="sm"
-                      onClick={() => handleUpgrade('premium')}
-                      className="mt-2 w-full"
-                    >
-                      <ArrowUp className="h-3 w-3 mr-1" />
-                      Upgrade Now
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Web Searches */}
             {usage.tavilySearches && (
@@ -977,7 +871,7 @@ export function SubscriptionManager() {
                     </Alert>
                     <Button
                       size="sm"
-                      onClick={() => handleUpgrade('premium')}
+                      onClick={() => handleUpgrade('pro')}
                       className="mt-2 w-full"
                     >
                       <ArrowUp className="h-3 w-3 mr-1" />
@@ -996,9 +890,9 @@ export function SubscriptionManager() {
         <h3 className="text-lg font-semibold mb-4">Features</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FeatureItem
-            icon={<FileText className="w-5 h-5" />}
-            name="Document Upload"
-            enabled={limits.features.documentUpload}
+            icon={<Zap className="w-5 h-5" />}
+            name="Research Mode"
+            enabled={limits.allowResearchMode}
           />
           <FeatureItem
             icon={<Search className="w-5 h-5" />}
@@ -1007,8 +901,8 @@ export function SubscriptionManager() {
           />
           <FeatureItem
             icon={<Folder className="w-5 h-5" />}
-            name="Topics"
-            enabled={limits.features.documentUpload}
+            name="Collections"
+            enabled={true}
           />
           <FeatureItem
             icon={<Download className="w-5 h-5" />}
@@ -1023,47 +917,13 @@ export function SubscriptionManager() {
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold mb-4">Upgrade Plan</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Free tier: Show Starter, Premium, Pro */}
+            {/* Free tier: Show Pro and Enterprise */}
             {tier === 'free' && (
               <>
-                <div className="border-2 border-blue-500 rounded-lg p-4">
-                  <h4 className="font-semibold text-lg mb-2">Starter</h4>
-                  <p className="text-gray-600 text-sm mb-4">
-                    100 queries/month, 3 documents, 1 topic, 10 web searches
-                  </p>
-                  <Button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleUpgrade('starter');
-                    }}
-                    disabled={upgrading}
-                    className="w-full"
-                  >
-                    Upgrade to Starter - UGX 27,000 / USD 9
-                  </Button>
-                </div>
-                <div className="border-2 border-orange-500 rounded-lg p-4">
-                  <h4 className="font-semibold text-lg mb-2">Premium</h4>
-                  <p className="text-gray-600 text-sm mb-4">
-                    500 queries/month, 10 documents, 3 topics, 50 web searches
-                  </p>
-                  <Button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleUpgrade('premium');
-                    }}
-                    disabled={upgrading}
-                    className="w-full"
-                  >
-                    Upgrade to Premium - UGX 50,000 / USD 15
-                  </Button>
-                </div>
                 <div className="border-2 border-purple-500 rounded-lg p-4">
                   <h4 className="font-semibold text-lg mb-2">Pro</h4>
                   <p className="text-gray-600 text-sm mb-4">
-                    Unlimited queries, unlimited documents, unlimited topics, 200 web searches
+                    Unlimited queries, both chat modes, unlimited collections, 200 web searches
                   </p>
                   <Button
                     onClick={(e) => {
@@ -1072,50 +932,9 @@ export function SubscriptionManager() {
                       handleUpgrade('pro');
                     }}
                     disabled={upgrading}
-                    variant="outline"
                     className="w-full"
                   >
-                    Upgrade to Pro - UGX 150,000 / USD 45
-                  </Button>
-                </div>
-              </>
-            )}
-            {/* Starter tier: Show Premium, Pro, Enterprise */}
-            {tier === 'starter' && (
-              <>
-                <div className="border-2 border-orange-500 rounded-lg p-4">
-                  <h4 className="font-semibold text-lg mb-2">Premium</h4>
-                  <p className="text-gray-600 text-sm mb-4">
-                    500 queries/month, 10 documents, 3 topics, 50 web searches
-                  </p>
-                  <Button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleUpgrade('premium');
-                    }}
-                    disabled={upgrading}
-                    className="w-full"
-                  >
-                    Upgrade to Premium - UGX 50,000 / USD 15
-                  </Button>
-                </div>
-                <div className="border-2 border-purple-500 rounded-lg p-4">
-                  <h4 className="font-semibold text-lg mb-2">Pro</h4>
-                  <p className="text-gray-600 text-sm mb-4">
-                    Unlimited queries, unlimited documents, unlimited topics, 200 web searches
-                  </p>
-                  <Button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleUpgrade('pro');
-                    }}
-                    disabled={upgrading}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Upgrade to Pro - UGX 150,000 / USD 45
+                    Upgrade to Pro - {formatPrice(getPricing('pro', 'USD', 'monthly'), 'USD')}/mo
                   </Button>
                 </div>
                 <div className="border-2 border-gray-500 rounded-lg p-4">
@@ -1133,58 +952,12 @@ export function SubscriptionManager() {
                     variant="outline"
                     className="w-full"
                   >
-                    Upgrade to Enterprise - UGX 300,000 / USD 99
+                    Upgrade to Enterprise - {formatPrice(getPricing('enterprise', 'USD', 'monthly'), 'USD')}/mo
                   </Button>
                 </div>
               </>
             )}
-            {/* Premium tier: Show Pro, Enterprise (only 2 higher tiers, add placeholder or show 3 with Pro highlighted) */}
-            {tier === 'premium' && (
-              <>
-                <div className="border-2 border-purple-500 rounded-lg p-4">
-                  <h4 className="font-semibold text-lg mb-2">Pro</h4>
-                  <p className="text-gray-600 text-sm mb-4">
-                    Unlimited queries, unlimited documents, unlimited topics, 200 web searches
-                  </p>
-                  <Button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleUpgrade('pro');
-                    }}
-                    disabled={upgrading}
-                    className="w-full"
-                  >
-                    Upgrade to Pro - UGX 150,000 / USD 45
-                  </Button>
-                </div>
-                <div className="border-2 border-gray-500 rounded-lg p-4">
-                  <h4 className="font-semibold text-lg mb-2">Enterprise</h4>
-                  <p className="text-gray-600 text-sm mb-4">
-                    Unlimited everything, team collaboration, priority support
-                  </p>
-                  <Button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleUpgrade('enterprise');
-                    }}
-                    disabled={upgrading}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Upgrade to Enterprise - UGX 300,000 / USD 99
-                  </Button>
-                </div>
-                {/* Empty placeholder to maintain 3-column grid */}
-                <div className="border-2 border-transparent rounded-lg p-4 opacity-0 pointer-events-none">
-                  <h4 className="font-semibold text-lg mb-2">Placeholder</h4>
-                  <p className="text-gray-600 text-sm mb-4">Placeholder</p>
-                  <Button disabled className="w-full">Placeholder</Button>
-                </div>
-              </>
-            )}
-            {/* Pro tier: Show Enterprise only (add 2 placeholders to maintain 3-column grid) */}
+            {/* Pro tier: Show Enterprise only */}
             {tier === 'pro' && (
               <>
                 <div className="border-2 border-gray-500 rounded-lg p-4">
@@ -1201,19 +974,8 @@ export function SubscriptionManager() {
                     disabled={upgrading}
                     className="w-full"
                   >
-                    Upgrade to Enterprise - UGX 300,000 / USD 99
+                    Upgrade to Enterprise - {formatPrice(getPricing('enterprise', 'USD', 'monthly'), 'USD')}/mo
                   </Button>
-                </div>
-                {/* Empty placeholders to maintain 3-column grid */}
-                <div className="border-2 border-transparent rounded-lg p-4 opacity-0 pointer-events-none">
-                  <h4 className="font-semibold text-lg mb-2">Placeholder</h4>
-                  <p className="text-gray-600 text-sm mb-4">Placeholder</p>
-                  <Button disabled className="w-full">Placeholder</Button>
-                </div>
-                <div className="border-2 border-transparent rounded-lg p-4 opacity-0 pointer-events-none">
-                  <h4 className="font-semibold text-lg mb-2">Placeholder</h4>
-                  <p className="text-gray-600 text-sm mb-4">Placeholder</p>
-                  <Button disabled className="w-full">Placeholder</Button>
                 </div>
               </>
             )}
@@ -1238,13 +1000,6 @@ export function SubscriptionManager() {
               {tier === 'enterprise' && (
                 <>
                   <Button
-                    onClick={() => handleUpgrade('pro')}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Change to Pro
-                  </Button>
-                  <Button
                     onClick={() => handleDowngradeClick('pro', false)}
                     variant="outline"
                     className="w-full"
@@ -1252,18 +1007,11 @@ export function SubscriptionManager() {
                     Downgrade to Pro (at period end)
                   </Button>
                   <Button
-                    onClick={() => handleDowngradeClick('premium', false)}
+                    onClick={() => handleDowngradeClick('pro', true)}
                     variant="outline"
-                    className="w-full"
+                    className="w-full border-orange-500 text-orange-600"
                   >
-                    Downgrade to Premium (at period end)
-                  </Button>
-                  <Button
-                    onClick={() => handleDowngradeClick('starter', false)}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Downgrade to Starter (at period end)
+                    Downgrade to Pro (immediate)
                   </Button>
                 </>
               )}
@@ -1276,94 +1024,9 @@ export function SubscriptionManager() {
                   >
                     Upgrade to Enterprise
                   </Button>
-                  <Button
-                    onClick={() => handleDowngradeClick('premium', false)}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Downgrade to Premium (at period end)
-                  </Button>
-                  <Button
-                    onClick={() => handleDowngradeClick('premium', true)}
-                    variant="outline"
-                    className="w-full border-orange-500 text-orange-600"
-                  >
-                    Downgrade to Premium (immediate)
-                  </Button>
-                  <Button
-                    onClick={() => handleDowngradeClick('starter', false)}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Downgrade to Starter (at period end)
-                  </Button>
-                  <Button
-                    onClick={() => handleDowngradeClick('starter', true)}
-                    variant="outline"
-                    className="w-full border-blue-500 text-blue-600"
-                  >
-                    Downgrade to Starter (immediate)
-                  </Button>
                 </>
               )}
-              {tier === 'premium' && (
-                <>
-                  <Button
-                    onClick={() => handleUpgrade('pro')}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Upgrade to Pro
-                  </Button>
-                  <Button
-                    onClick={() => handleUpgrade('enterprise')}
-                    variant="outline"
-                    className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                  >
-                    Upgrade to Enterprise
-                  </Button>
-                  <Button
-                    onClick={() => handleDowngradeClick('starter', false)}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Downgrade to Starter (at period end)
-                  </Button>
-                  <Button
-                    onClick={() => handleDowngradeClick('starter', true)}
-                    variant="outline"
-                    className="w-full border-blue-500 text-blue-600"
-                  >
-                    Downgrade to Starter (immediate)
-                  </Button>
-                </>
-              )}
-              {tier === 'starter' && (
-                <>
-                  <Button
-                    onClick={() => handleUpgrade('premium')}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Upgrade to Premium
-                  </Button>
-                  <Button
-                    onClick={() => handleUpgrade('pro')}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    Upgrade to Pro
-                  </Button>
-                  <Button
-                    onClick={() => handleUpgrade('enterprise')}
-                    variant="outline"
-                    className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                  >
-                    Upgrade to Enterprise
-                  </Button>
-                </>
-              )}
-              {(tier === 'pro' || tier === 'premium' || tier === 'starter' || tier === 'enterprise') && (
+              {(tier === 'pro' || tier === 'enterprise') && (
                 <>
                   <div className="border-t my-3"></div>
                   <Button

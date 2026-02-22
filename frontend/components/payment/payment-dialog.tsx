@@ -13,7 +13,7 @@ import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 interface PaymentDialogProps {
-  tier: 'starter' | 'premium' | 'pro' | 'enterprise';
+  tier: 'pro' | 'enterprise';
   onClose: () => void;
   onSuccess?: () => void;
   /** When opening for "switch billing period", preselect monthly or annual. */
@@ -87,7 +87,7 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <h2 className="text-lg sm:text-xl font-bold mb-2">
-                Upgrade to {tier === 'starter' ? 'Starter' : tier === 'premium' ? 'Premium' : tier === 'pro' ? 'Pro' : 'Enterprise'}
+                Upgrade to {tier === 'pro' ? 'Pro' : 'Enterprise'}
               </h2>
               <p className="text-gray-600 text-xs sm:text-sm">
                 Pay with Debit or Credit Card (processed via PayPal) —{' '}

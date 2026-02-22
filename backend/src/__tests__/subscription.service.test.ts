@@ -69,14 +69,14 @@ describe('SubscriptionService', () => {
       mockGetUserSubscription.mockResolvedValue({
         id: 'sub-1',
         user_id: 'user-1',
-        tier: 'premium',
+        tier: 'pro',
         status: 'active',
-        paypal_subscription_id: 'I-PREM',
+        paypal_subscription_id: 'I-PRO',
       });
       const result = await SubscriptionService.getUserSubscriptionWithLimits('user-1');
       expect(result).not.toBeNull();
-      expect(result!.subscription.tier).toBe('premium');
-      expect(result!.limits.queriesPerMonth).toBe(500);
+      expect(result!.subscription.tier).toBe('pro');
+      expect(result!.limits.queriesPerMonth).toBeNull(); // unlimited
       expect(result!.limits.features.analytics).toBe(true);
     });
   });
@@ -138,14 +138,14 @@ describe('SubscriptionService', () => {
       mockGetUserSubscription.mockResolvedValue({
         id: 'sub-1',
         user_id: 'user-1',
-        tier: 'starter',
+        tier: 'free',
         status: 'active',
       });
       mockGetUserUsageCount.mockResolvedValue(40);
       const r = await SubscriptionService.checkQueryLimit('user-1');
       expect(r.used).toBe(40);
-      expect(r.limit).toBe(100);
-      expect(r.remaining).toBe(60);
+      expect(r.limit).toBe(300);
+      expect(r.remaining).toBe(260);
       expect(r.allowed).toBe(true);
     });
 
@@ -153,10 +153,10 @@ describe('SubscriptionService', () => {
       mockGetUserSubscription.mockResolvedValue({
         id: 'sub-1',
         user_id: 'user-1',
-        tier: 'starter',
+        tier: 'free',
         status: 'active',
       });
-      mockGetUserUsageCount.mockResolvedValue(100);
+      mockGetUserUsageCount.mockResolvedValue(300);
       const r = await SubscriptionService.checkQueryLimit('user-1');
       expect(r.allowed).toBe(false);
       expect(r.remaining).toBe(0);
@@ -215,8 +215,8 @@ describe('SubscriptionService', () => {
       });
       const r = await SubscriptionService.checkTavilySearchLimit('user-1');
       expect(r.used).toBe(2);
-      expect(r.limit).toBe(5);
-      expect(r.remaining).toBe(3);
+      expect(r.limit).toBe(10);
+      expect(r.remaining).toBe(8);
       expect(r.allowed).toBe(true);
     });
   });

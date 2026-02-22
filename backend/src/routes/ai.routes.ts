@@ -5,7 +5,7 @@ import { RequestQueueService, QueuePriority } from '../services/request-queue.se
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
 import { apiLimiter } from '../middleware/rateLimiter';
-import { enforceQueryLimit } from '../middleware/subscription.middleware';
+import { enforceQueryLimit, enforceResearchMode } from '../middleware/subscription.middleware';
 import { logQueryUsage } from '../middleware/usageCounter.middleware';
 import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
 import { validateRequest } from '../middleware/validate';
@@ -28,6 +28,7 @@ router.post(
   validateRequest(QuestionRequestSchema),
   authenticate,
   tierRateLimiter,
+  enforceResearchMode,
   enforceQueryLimit,
   apiLimiter,
   logQueryUsage,
@@ -147,6 +148,7 @@ router.post(
   validateRequest(QuestionRequestSchema),
   authenticate,
   tierRateLimiter,
+  enforceResearchMode,
   enforceQueryLimit,
   apiLimiter,
   logQueryUsage,
@@ -622,6 +624,7 @@ router.post(
   '/ask/queue',
   authenticate,
   tierRateLimiter,
+  enforceResearchMode,
   enforceQueryLimit,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
@@ -904,6 +907,7 @@ router.post(
   validateRequest(RegenerateRequestSchema),
   authenticate,
   tierRateLimiter,
+  enforceResearchMode,
   enforceQueryLimit,
   apiLimiter,
   logQueryUsage,

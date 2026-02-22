@@ -902,10 +902,9 @@ function LLMUsageMonitor() {
 // ── Subscription pricing (must match backend constants/pricing.ts) ───────────
 
 const SUBSCRIPTION_PRICING: Record<string, { label: string; monthlyUSD: number; queryLimit: number | null }> = {
-  free:    { label: 'Free',    monthlyUSD: 0,  queryLimit: 50 },
-  starter: { label: 'Starter', monthlyUSD: 9,  queryLimit: 100 },
-  premium: { label: 'Premium', monthlyUSD: 15, queryLimit: 500 },
+  free:    { label: 'Free',    monthlyUSD: 0,  queryLimit: 300 },
   pro:     { label: 'Pro',     monthlyUSD: 45, queryLimit: null }, // unlimited
+  enterprise: { label: 'Enterprise', monthlyUSD: 99, queryLimit: null }, // unlimited
 };
 
 // ── Cost & Profit Estimator ──────────────────────────────────────────────────

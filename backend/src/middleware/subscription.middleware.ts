@@ -84,6 +84,57 @@ export const enforceQueryLimit = async (
 };
 
 /**
+ * Middleware to enforce research-mode access.
+ * If the request specifies mode='research' but the user's tier disallows it,
+ * return 403 with RESEARCH_MODE_NOT_AVAILABLE.
+ */
+export const enforceResearchMode = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const requestedMode: string | undefined = req.body?.mode;
+    // Only gate research mode; chat / undefined always allowed
+    if (!requestedMode || requestedMode !== 'research') {
+      return next();
+    }
+
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
+    if (!subscriptionData) {
+      throw new ForbiddenError('Subscription not found');
+    }
+
+    if (!subscriptionData.limits.allowResearchMode) {
+      logger.warn('Research mode access denied', {
+        userId,
+        tier: subscriptionData.subscription.tier,
+      });
+
+      res.status(403).json({
+        success: false,
+        error: {
+          message: 'Deep Research mode is not available on the Free plan. Upgrade to Pro to unlock both modes.',
+          code: 'RESEARCH_MODE_NOT_AVAILABLE',
+          currentTier: subscriptionData.subscription.tier,
+          requiredTier: 'pro',
+        },
+      });
+      return;
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Middleware to gate features by subscription tier
  */
 export const requireFeature = (
@@ -143,23 +194,12 @@ export const requireFeature = (
  */
 function getRequiredTierForFeature(
   feature: keyof import('../services/subscription.service').TierLimits['features']
-): 'premium' | 'pro' {
-  // Embedding is a premium feature
-  if (feature === 'embedding') {
-    return 'premium';
+): 'pro' | 'enterprise' {
+  if (feature === 'teamCollaboration') {
+    return 'enterprise';
   }
-  
-  // Analytics is premium
-  if (feature === 'analytics') {
-    return 'premium';
-  }
-  
-  // API access and white label are pro features
-  if (feature === 'apiAccess' || feature === 'whiteLabel') {
-    return 'pro';
-  }
-  
-  return 'premium'; // Default to premium
+  // All gated features require pro now (embedding, analytics, apiAccess, whiteLabel)
+  return 'pro';
 }
 
 // Extend Express Request type to include subscription data

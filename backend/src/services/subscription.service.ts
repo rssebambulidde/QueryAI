@@ -5,11 +5,13 @@ import logger from '../config/logger';
 
 /**
  * Subscription tier limits configuration
- * Based on PROJECT_SPECIFICATION.md pricing tiers
+ * Simplified to 3 tiers: free / pro / enterprise
  */
 export interface TierLimits {
-  queriesPerMonth: number | null;
-  tavilySearchesPerMonth: number | null;
+  queriesPerMonth: number | null;       // null = unlimited
+  tavilySearchesPerMonth: number | null; // null = unlimited
+  maxCollections: number | null;         // null = unlimited
+  allowResearchMode: boolean;
   features: {
     embedding: boolean;
     analytics: boolean;
@@ -22,11 +24,15 @@ export interface TierLimits {
 
 /**
  * Subscription tier limits map
+ * Starter/premium kept as aliases mapping to free/pro for backward-compatible
+ * lookups (existing DB rows may still reference those tiers).
  */
 export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enterprise', TierLimits> = {
   free: {
-    queriesPerMonth: 50,
-    tavilySearchesPerMonth: 5,
+    queriesPerMonth: 300,
+    tavilySearchesPerMonth: 10,
+    maxCollections: 3,
+    allowResearchMode: false,           // Express Chat only
     features: {
       embedding: false,
       analytics: false,
@@ -34,9 +40,12 @@ export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enter
       whiteLabel: false,
     },
   },
+  // ── Legacy aliases — map old tiers into the simplified model ──────────
   starter: {
-    queriesPerMonth: 100,
+    queriesPerMonth: 300,
     tavilySearchesPerMonth: 10,
+    maxCollections: 3,
+    allowResearchMode: false,
     features: {
       embedding: false,
       analytics: false,
@@ -45,8 +54,10 @@ export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enter
     },
   },
   premium: {
-    queriesPerMonth: 500,
-    tavilySearchesPerMonth: 50,
+    queriesPerMonth: null,
+    tavilySearchesPerMonth: 200,
+    maxCollections: null,
+    allowResearchMode: true,
     features: {
       embedding: true,
       analytics: true,
@@ -57,6 +68,8 @@ export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enter
   pro: {
     queriesPerMonth: null,
     tavilySearchesPerMonth: 200,
+    maxCollections: null,
+    allowResearchMode: true,            // Express + Deep Research
     features: {
       embedding: true,
       analytics: true,
@@ -67,6 +80,8 @@ export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enter
   enterprise: {
     queriesPerMonth: null,
     tavilySearchesPerMonth: null,
+    maxCollections: null,
+    allowResearchMode: true,
     features: {
       embedding: true,
       analytics: true,
@@ -280,6 +295,55 @@ export class SubscriptionService {
         limit: 0,
         remaining: 0,
       };
+    }
+  }
+
+  /**
+   * Check if user has reached the collections limit
+   */
+  static async checkCollectionLimit(userId: string): Promise<{
+    allowed: boolean;
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+  }> {
+    try {
+      const subscriptionData = await this.getUserSubscriptionWithLimits(userId);
+
+      if (!subscriptionData) {
+        return { allowed: false, used: 0, limit: 0, remaining: 0 };
+      }
+
+      const { limits } = subscriptionData;
+
+      // Unlimited collections
+      if (limits.maxCollections === null) {
+        return { allowed: true, used: 0, limit: null, remaining: null };
+      }
+
+      const { supabaseAdmin } = await import('../config/database');
+      const { count, error } = await supabaseAdmin
+        .from('collections')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      if (error) {
+        logger.error('Error counting user collections:', error);
+        return { allowed: false, used: 0, limit: limits.maxCollections, remaining: 0 };
+      }
+
+      const used = count ?? 0;
+      const remaining = Math.max(0, limits.maxCollections - used);
+
+      return {
+        allowed: used < limits.maxCollections,
+        used,
+        limit: limits.maxCollections,
+        remaining,
+      };
+    } catch (error) {
+      logger.error('Failed to check collection limit:', error);
+      return { allowed: false, used: 0, limit: 0, remaining: 0 };
     }
   }
 
