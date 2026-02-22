@@ -75,7 +75,7 @@ export const isOwner = isSuperAdmin;
  * Helper function to check if user has required subscription tier
  * Admins and super_admins bypass subscription tier checks
  * @param userId - User ID to check
- * @param requiredTiers - Array of allowed subscription tiers (e.g., ['premium', 'pro'])
+ * @param requiredTiers - Array of allowed subscription tiers (e.g., ['pro', 'enterprise'])
  * @returns Object with { hasAccess: boolean, reason?: string }
  */
 export const checkSubscriptionTierWithAdminBypass = async (

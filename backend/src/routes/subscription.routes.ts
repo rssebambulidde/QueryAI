@@ -67,8 +67,8 @@ router.put(
 
     const { tier } = req.body;
     
-    if (!tier || !['free', 'starter', 'premium', 'pro', 'enterprise'].includes(tier)) {
-      throw new ValidationError('Invalid tier. Must be: free, starter, premium, pro, or enterprise');
+    if (!tier || !['free', 'pro', 'enterprise'].includes(tier)) {
+      throw new ValidationError('Invalid tier. Must be: free, pro, or enterprise');
     }
 
     const subscriptionBefore = await DatabaseService.getUserSubscription(userId);
@@ -87,7 +87,7 @@ router.put(
       const { EmailService } = await import('../services/email.service');
       const { getTierOrder } = await import('../constants/pricing');
       const userProfile = await DatabaseService.getUserProfile(userId);
-      if (userProfile && subscriptionBefore && getTierOrder(tier as 'free' | 'starter' | 'premium' | 'pro') > getTierOrder(subscriptionBefore.tier as 'free' | 'starter' | 'premium' | 'pro')) {
+      if (userProfile && subscriptionBefore && getTierOrder(tier as 'free' | 'pro') > getTierOrder(subscriptionBefore.tier as 'free' | 'pro')) {
         const periodStart = updated.current_period_start ? new Date(updated.current_period_start) : new Date();
         const periodEnd = updated.current_period_end ? new Date(updated.current_period_end) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         await EmailService.sendUpgradeConfirmationEmail(
@@ -128,8 +128,8 @@ router.put(
 
     const { tier, immediate = false } = req.body;
     
-    if (!tier || !['free', 'starter', 'premium', 'pro'].includes(tier)) {
-      throw new ValidationError('Invalid tier. Must be: free, starter, premium, or pro');
+    if (!tier || !['free', 'pro'].includes(tier)) {
+      throw new ValidationError('Invalid tier. Must be: free or pro');
     }
 
     const subscription = await DatabaseService.getUserSubscription(userId);
@@ -138,9 +138,9 @@ router.put(
     }
 
     // Validate downgrade (can't downgrade to same or higher tier)
-    const tierOrder: Record<'free' | 'starter' | 'premium' | 'pro', number> = { free: 0, starter: 1, premium: 2, pro: 3 };
-    const currentTier = subscription.tier as 'free' | 'starter' | 'premium' | 'pro';
-    const targetTier = tier as 'free' | 'starter' | 'premium' | 'pro';
+    const tierOrder: Record<'free' | 'pro', number> = { free: 0, pro: 1 };
+    const currentTier = subscription.tier as 'free' | 'pro';
+    const targetTier = tier as 'free' | 'pro';
     if (tierOrder[targetTier] >= tierOrder[currentTier]) {
       throw new ValidationError('Cannot downgrade to same or higher tier');
     }
@@ -411,7 +411,7 @@ router.get(
     const currency = 'USD';
     const toBillingPeriod = req.query.toBillingPeriod;
 
-    const validTiers = ['free', 'starter', 'premium', 'pro', 'enterprise'];
+    const validTiers = ['free', 'pro', 'enterprise'];
     if (!toTier || !validTiers.includes(toTier)) {
       throw new ValidationError('Invalid target tier');
     }
@@ -426,7 +426,7 @@ router.get(
     const { ProratingService } = await import('../services/prorating.service');
     const proratedPricing = ProratingService.getProratedPricing(
       subscription.tier,
-      toTier as 'free' | 'starter' | 'premium' | 'pro' | 'enterprise',
+      toTier as 'free' | 'pro' | 'enterprise',
       subscription,
       bp
     );
@@ -455,8 +455,8 @@ router.post(
 
     const { tier, trialDays = 7 } = req.body;
 
-    if (!tier || !['premium', 'pro'].includes(tier)) {
-      throw new ValidationError('Invalid tier. Must be "premium" or "pro"');
+    if (!tier || !['pro'].includes(tier)) {
+      throw new ValidationError('Invalid tier. Must be "pro"');
     }
 
     const subscription = await DatabaseService.getUserSubscription(userId);
@@ -474,7 +474,7 @@ router.post(
     trialEnd.setDate(trialEnd.getDate() + (trialDays as number));
 
     const updated = await DatabaseService.updateSubscription(userId, {
-      tier: tier as 'premium' | 'pro',
+      tier: tier as 'pro',
       status: 'active',
       trial_end: trialEnd.toISOString(),
       current_period_start: now.toISOString(),

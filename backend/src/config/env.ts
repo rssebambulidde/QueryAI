@@ -54,13 +54,9 @@ interface EnvConfig {
   PAYPAL_MODE?: 'sandbox' | 'live';
   PAYPAL_WEBHOOK_ID?: string;
   /** Optional plan IDs for subscriptions (monthly). Create in PayPal dashboard or via API. */
-  PAYPAL_PLAN_ID_STARTER?: string;
-  PAYPAL_PLAN_ID_PREMIUM?: string;
   PAYPAL_PLAN_ID_PRO?: string;
   PAYPAL_PLAN_ID_ENTERPRISE?: string;
   /** Optional plan IDs for annual subscriptions. When set, annual billing uses these. */
-  PAYPAL_PLAN_ID_STARTER_ANNUAL?: string;
-  PAYPAL_PLAN_ID_PREMIUM_ANNUAL?: string;
   PAYPAL_PLAN_ID_PRO_ANNUAL?: string;
   PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL?: string;
 
@@ -107,12 +103,8 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
     'PAYPAL_CLIENT_SECRET',
     'PAYPAL_MODE',
     'PAYPAL_WEBHOOK_ID',
-    'PAYPAL_PLAN_ID_STARTER',
-    'PAYPAL_PLAN_ID_PREMIUM',
     'PAYPAL_PLAN_ID_PRO',
     'PAYPAL_PLAN_ID_ENTERPRISE',
-    'PAYPAL_PLAN_ID_STARTER_ANNUAL',
-    'PAYPAL_PLAN_ID_PREMIUM_ANNUAL',
     'PAYPAL_PLAN_ID_PRO_ANNUAL',
     'PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL',
     'FRONTEND_URL',
@@ -202,12 +194,8 @@ const config: EnvConfig = {
   PAYPAL_CLIENT_SECRET: getEnvVar('PAYPAL_CLIENT_SECRET') || undefined,
   PAYPAL_MODE: (getEnvVar('PAYPAL_MODE', 'sandbox') as 'sandbox' | 'live') || 'sandbox',
   PAYPAL_WEBHOOK_ID: getEnvVar('PAYPAL_WEBHOOK_ID') || undefined,
-  PAYPAL_PLAN_ID_STARTER: getEnvVar('PAYPAL_PLAN_ID_STARTER') || undefined,
-  PAYPAL_PLAN_ID_PREMIUM: getEnvVar('PAYPAL_PLAN_ID_PREMIUM') || undefined,
   PAYPAL_PLAN_ID_PRO: getEnvVar('PAYPAL_PLAN_ID_PRO') || undefined,
   PAYPAL_PLAN_ID_ENTERPRISE: getEnvVar('PAYPAL_PLAN_ID_ENTERPRISE') || undefined,
-  PAYPAL_PLAN_ID_STARTER_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_STARTER_ANNUAL') || undefined,
-  PAYPAL_PLAN_ID_PREMIUM_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_PREMIUM_ANNUAL') || undefined,
   PAYPAL_PLAN_ID_PRO_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_PRO_ANNUAL') || undefined,
   PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL: getEnvVar('PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL') || undefined,
 

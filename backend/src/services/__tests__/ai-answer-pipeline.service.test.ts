@@ -194,14 +194,14 @@ describe('AIAnswerPipelineService', () => {
       expect(result.reason).toContain('tier-free');
     });
 
-    it('should return GPT-3.5 for premium tier', async () => {
+    it('should return GPT-3.5 for pro tier', async () => {
       (SubscriptionService.getUserSubscriptionWithLimits as jest.Mock).mockResolvedValue({
-        subscription: { tier: 'premium' },
+        subscription: { tier: 'pro' },
       });
 
       const result = await AIAnswerPipelineService.selectModel('user-1', 'question');
       expect(result.model).toBe('gpt-3.5-turbo');
-      expect(result.reason).toContain('tier-premium');
+      expect(result.reason).toContain('tier-pro');
     });
 
     it('should return GPT-3.5 on subscription error', async () => {

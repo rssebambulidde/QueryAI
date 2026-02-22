@@ -920,7 +920,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
   const [chatRatio, setChatRatio] = useState(70); // % of queries that are chat vs research
 
   // User distribution across tiers (percentage)
-  const [tierDist, setTierDist] = useState({ free: 60, starter: 20, premium: 15, pro: 5 });
+  const [tierDist, setTierDist] = useState({ free: 60, pro: 30, enterprise: 10 });
 
   const totalQueries = totalUsers * avgQueriesPerUser;
   const chatQueries = Math.round(totalQueries * (chatRatio / 100));

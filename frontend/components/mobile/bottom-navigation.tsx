@@ -49,18 +49,14 @@ function getTierName(tier: string): string {
   switch (tier) {
     case 'enterprise': return 'Enterprise';
     case 'pro': return 'Pro';
-    case 'premium': return 'Premium';
-    case 'starter': return 'Starter';
     default: return 'Free';
   }
 }
 
-/** Next tier for upgrade: free->Starter, starter->Premium, premium->Pro, pro->Enterprise. */
+/** Next tier for upgrade: free->Pro, pro->Enterprise. */
 function getNextTier(current: string): { tier: string; label: string } | null {
   switch (current) {
-    case 'free': return { tier: 'starter', label: 'Starter' };
-    case 'starter': return { tier: 'premium', label: 'Premium' };
-    case 'premium': return { tier: 'pro', label: 'Pro' };
+    case 'free': return { tier: 'pro', label: 'Pro' };
     case 'pro': return { tier: 'enterprise', label: 'Enterprise' };
     default: return null;
   }

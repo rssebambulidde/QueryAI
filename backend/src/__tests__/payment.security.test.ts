@@ -109,7 +109,7 @@ describe('Payment security – authentication', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        tier: 'starter',
+        tier: 'pro',
         currency: 'USD',
         firstName: 'Jane',
         lastName: 'Doe',
@@ -126,7 +126,7 @@ describe('Payment security – authentication', () => {
       method: 'POST',
       headers: { Authorization: 'Bearer invalid-token', 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        tier: 'starter',
+        tier: 'pro',
         currency: 'USD',
         firstName: 'Jane',
         lastName: 'Doe',

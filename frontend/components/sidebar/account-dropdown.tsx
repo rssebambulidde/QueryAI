@@ -17,7 +17,7 @@ import {
 interface AccountDropdownProps {
   isOpen: boolean;
   onClose: () => void;
-  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+  subscriptionTier?: 'free' | 'pro' | 'enterprise';
   anchorRef?: React.RefObject<HTMLElement | HTMLButtonElement | null>;
 }
 
@@ -96,15 +96,13 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
     switch (tier) {
       case 'enterprise': return 'Enterprise';
       case 'pro': return 'Pro';
-      case 'premium': return 'Premium';
-      case 'starter': return 'Starter';
       default: return 'Free';
     }
   };
 
   const getUpgradeText = () => {
     switch (subscriptionTier) {
-      case 'free': return 'Unlock premium features';
+      case 'free': return 'Upgrade to Pro or Enterprise';
       case 'pro': return 'Upgrade to Enterprise';
       default: return '';
     }

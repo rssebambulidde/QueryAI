@@ -40,19 +40,17 @@ describe('SubscriptionService', () => {
       expect(TIER_LIMITS.enterprise).toBeDefined();
     });
 
-    it('free tier has restricted features', () => {
-      expect(TIER_LIMITS.free.features.embedding).toBe(false);
-      expect(TIER_LIMITS.free.features.analytics).toBe(false);
+    it('free tier has restricted research mode', () => {
+      expect(TIER_LIMITS.free.allowResearchMode).toBe(false);
     });
 
     it('pro tier has unlimited queries', () => {
       expect(TIER_LIMITS.pro.queriesPerMonth).toBeNull();
-      expect(TIER_LIMITS.pro.features.apiAccess).toBe(true);
+      expect(TIER_LIMITS.pro.allowResearchMode).toBe(true);
     });
 
-    it('enterprise has teamCollaboration and maxTeamMembers', () => {
-      expect(TIER_LIMITS.enterprise.features.teamCollaboration).toBe(true);
-      expect(TIER_LIMITS.enterprise.maxTeamMembers).toBe(50);
+    it('enterprise has unlimited queries', () => {
+      expect(TIER_LIMITS.enterprise.queriesPerMonth).toBeNull();
     });
   });
 
@@ -75,37 +73,7 @@ describe('SubscriptionService', () => {
       expect(result).not.toBeNull();
       expect(result!.subscription.tier).toBe('pro');
       expect(result!.limits.queriesPerMonth).toBeNull(); // unlimited
-      expect(result!.limits.features.analytics).toBe(true);
-    });
-  });
-
-  describe('hasFeatureAccess', () => {
-    it('returns false when user has no subscription', async () => {
-      mockGetUserSubscription.mockResolvedValue(null);
-      const ok = await SubscriptionService.hasFeatureAccess('user-1', 'embedding');
-      expect(ok).toBe(false);
-    });
-
-    it('returns true for feature enabled on tier', async () => {
-      mockGetUserSubscription.mockResolvedValue({
-        id: 'sub-1',
-        user_id: 'user-1',
-        tier: 'pro',
-        status: 'active',
-      });
-      const ok = await SubscriptionService.hasFeatureAccess('user-1', 'analytics');
-      expect(ok).toBe(true);
-    });
-
-    it('returns false for feature disabled on tier', async () => {
-      mockGetUserSubscription.mockResolvedValue({
-        id: 'sub-1',
-        user_id: 'user-1',
-        tier: 'free',
-        status: 'active',
-      });
-      const ok = await SubscriptionService.hasFeatureAccess('user-1', 'analytics');
-      expect(ok).toBe(false);
+      expect(result!.limits.allowResearchMode).toBe(true);
     });
   });
 

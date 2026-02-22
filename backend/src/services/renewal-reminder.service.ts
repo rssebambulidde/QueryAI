@@ -43,7 +43,7 @@ export async function runRenewalReminderScheduler(): Promise<void> {
           if (!user) continue;
 
           const currency = 'USD' as const;
-          const amount = getPricing(sub.tier as 'starter' | 'premium' | 'pro', 'monthly');
+          const amount = getPricing(sub.tier as 'pro', 'monthly');
           const payments = await DatabaseService.getUserPayments(sub.user_id, 5);
           const lastForTier = payments.find(
             (p) => p.tier === sub.tier && p.status === 'completed'

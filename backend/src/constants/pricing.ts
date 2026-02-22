@@ -18,7 +18,7 @@
 import { PricingConfigService } from '../services/pricing-config.service';
 import type { PricingConfig } from '../services/pricing-config.service';
 
-export type Tier = 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+export type Tier = 'free' | 'pro' | 'enterprise';
 export type BillingPeriod = 'monthly' | 'annual';
 
 // ── Price accessors (DB-driven via cache) ────────────────────────────────────
@@ -36,8 +36,6 @@ export function getMonthlyPricing(): Record<Tier, number> {
   const c = cfg();
   return {
     free: c.tiers.free.monthly,
-    starter: c.tiers.starter.monthly,
-    premium: c.tiers.premium.monthly,
     pro: c.tiers.pro.monthly,
     enterprise: c.tiers.enterprise.monthly,
   };
@@ -50,8 +48,6 @@ export function getAnnualPricing(): Record<Tier, number> {
   const c = cfg();
   return {
     free: c.tiers.free.annual,
-    starter: c.tiers.starter.annual,
-    premium: c.tiers.premium.annual,
     pro: c.tiers.pro.annual,
     enterprise: c.tiers.enterprise.annual,
   };
@@ -151,8 +147,6 @@ export function getOverageUnitPrice(metric: OverageMetricType): number {
 export function getTierDisplayName(tier: Tier): string {
   const names: Record<Tier, string> = {
     free: 'Free',
-    starter: 'Starter',
-    premium: 'Premium',
     pro: 'Pro',
     enterprise: 'Enterprise',
   };
@@ -165,8 +159,6 @@ export function getTierDisplayName(tier: Tier): string {
 export function getTierDescription(tier: Tier): string {
   const descriptions: Record<Tier, string> = {
     free: 'Basic AI responses with limited queries',
-    starter: 'Perfect for getting started with AI-powered queries',
-    premium: 'Enhanced features with document uploads and topics',
     pro: 'Unlimited access with advanced features and priority support',
     enterprise: 'Teams, SSO, custom limits, and dedicated support',
   };
@@ -186,10 +178,8 @@ export function isPaidTier(tier: Tier): boolean {
 export function getTierOrder(tier: Tier): number {
   const order: Record<Tier, number> = {
     free: 0,
-    starter: 1,
-    premium: 2,
-    pro: 3,
-    enterprise: 4,
+    pro: 1,
+    enterprise: 2,
   };
   return order[tier];
 }
@@ -212,7 +202,7 @@ export function isLowerTier(tier1: Tier, tier2: Tier): boolean {
  * Get upgrade options for a tier
  */
 export function getUpgradeOptions(currentTier: Tier): Tier[] {
-  const allTiers: Tier[] = ['free', 'starter', 'premium', 'pro', 'enterprise'];
+  const allTiers: Tier[] = ['free', 'pro', 'enterprise'];
   const currentOrder = getTierOrder(currentTier);
   return allTiers.filter((tier) => getTierOrder(tier) > currentOrder);
 }
@@ -221,7 +211,7 @@ export function getUpgradeOptions(currentTier: Tier): Tier[] {
  * Get downgrade options for a tier
  */
 export function getDowngradeOptions(currentTier: Tier): Tier[] {
-  const allTiers: Tier[] = ['free', 'starter', 'premium', 'pro', 'enterprise'];
+  const allTiers: Tier[] = ['free', 'pro', 'enterprise'];
   const currentOrder = getTierOrder(currentTier);
   return allTiers.filter((tier) => getTierOrder(tier) < currentOrder);
 }

@@ -21,7 +21,7 @@ export interface AuthResponse {
     email: string;
     full_name?: string;
     role?: 'user' | 'super_admin';
-    subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+    subscriptionTier?: 'free' | 'pro' | 'enterprise';
   };
   session: {
     accessToken: string;

@@ -1,7 +1,7 @@
 /**
  * Tier Config Service
  *
- * Reads / writes per-tier quota limits and feature flags from the
+ * Reads / writes per-tier quota limits from the
  * `system_settings` table (key = `tier_limits`).
  *
  * Uses an in-memory TTL cache (60 s) so hot-path callers like
@@ -17,21 +17,11 @@ import logger from '../config/logger';
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
 
-const FeaturesSchema = z.object({
-  embedding: z.boolean(),
-  analytics: z.boolean(),
-  apiAccess: z.boolean(),
-  whiteLabel: z.boolean(),
-  teamCollaboration: z.boolean().optional(),
-});
-
 const SingleTierLimitsSchema = z.object({
   queriesPerMonth: z.number().int().min(0).nullable(),
   tavilySearchesPerMonth: z.number().int().min(0).nullable(),
   maxCollections: z.number().int().min(0).nullable(),
   allowResearchMode: z.boolean(),
-  features: FeaturesSchema,
-  maxTeamMembers: z.number().int().min(0).nullable().optional(),
 });
 
 export const TIER_NAMES = ['free', 'pro', 'enterprise'] as const;
@@ -54,22 +44,18 @@ const FALLBACK_LIMITS: AllTierLimits = {
     tavilySearchesPerMonth: 10,
     maxCollections: 3,
     allowResearchMode: false,
-    features: { embedding: false, analytics: false, apiAccess: false, whiteLabel: false },
   },
   pro: {
     queriesPerMonth: null,
     tavilySearchesPerMonth: 200,
     maxCollections: null,
     allowResearchMode: true,
-    features: { embedding: true, analytics: true, apiAccess: true, whiteLabel: true },
   },
   enterprise: {
     queriesPerMonth: null,
     tavilySearchesPerMonth: null,
     maxCollections: null,
     allowResearchMode: true,
-    features: { embedding: true, analytics: true, apiAccess: true, whiteLabel: true, teamCollaboration: true },
-    maxTeamMembers: 50,
   },
 };
 
@@ -175,58 +161,6 @@ export class TierConfigService {
     cacheExpiresAt = Date.now() + CACHE_TTL_MS;
     logger.info('Tier limits updated', { tier, updatedBy });
     return merged;
-  }
-
-  /**
-   * Atomically enable/disable a feature on one tier (and optionally
-   * the inverse on another tier).
-   *
-   * Example: move `apiAccess` from enterprise → pro:
-   *   transferFeature('apiAccess', 'enterprise', 'pro', true, userId)
-   */
-  static async transferFeature(
-    feature: string,
-    fromTier: TierName,
-    toTier: TierName,
-    enable: boolean,
-    updatedBy: string,
-  ): Promise<AllTierLimits> {
-    const current = await TierConfigService.getAllLimits();
-
-    // Validate the feature key exists on the schema
-    const validFeatures = Object.keys(FALLBACK_LIMITS.free.features);
-    // Also accept top-level boolean fields like allowResearchMode
-    const topLevelBooleans = ['allowResearchMode'] as const;
-
-    const isTopLevel = (topLevelBooleans as readonly string[]).includes(feature);
-    const isFeatureFlag = validFeatures.includes(feature);
-
-    if (!isTopLevel && !isFeatureFlag) {
-      throw new Error(
-        `Unknown feature "${feature}". Valid: ${[...topLevelBooleans, ...validFeatures].join(', ')}`,
-      );
-    }
-
-    const updated = structuredClone(current);
-
-    if (isTopLevel) {
-      (updated[toTier] as Record<string, unknown>)[feature] = enable;
-      (updated[fromTier] as Record<string, unknown>)[feature] = !enable;
-    } else {
-      (updated[toTier].features as Record<string, unknown>)[feature] = enable;
-      (updated[fromTier].features as Record<string, unknown>)[feature] = !enable;
-    }
-
-    // Validate the full map after mutation
-    AllTierLimitsSchema.parse(updated);
-
-    const { SystemSettingsService } = await import('./system-settings.service');
-    await SystemSettingsService.set(SETTINGS_KEY, updated, updatedBy);
-
-    cachedLimits = updated;
-    cacheExpiresAt = Date.now() + CACHE_TTL_MS;
-    logger.info('Feature transferred', { feature, fromTier, toTier, enable, updatedBy });
-    return updated;
   }
 
   /**

@@ -97,7 +97,7 @@ describe('Email template system', () => {
         userName: 'Test',
         amount: 10,
         currency: 'USD',
-        tier: 'starter',
+        tier: 'pro',
       });
       expect(out.subject).toContain('Payment Successful');
       expect(out.html).toContain('Test');

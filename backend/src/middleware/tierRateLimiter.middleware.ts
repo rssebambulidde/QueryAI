@@ -16,18 +16,10 @@ interface TierRateLimit {
 /**
  * Rate limits per tier (requests per window)
  */
-const TIER_RATE_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enterprise', TierRateLimit> = {
+const TIER_RATE_LIMITS: Record<'free' | 'pro' | 'enterprise', TierRateLimit> = {
   free: {
     windowMs: 15 * 60 * 1000,
     max: 100,
-  },
-  starter: {
-    windowMs: 15 * 60 * 1000,
-    max: 200,
-  },
-  premium: {
-    windowMs: 15 * 60 * 1000,
-    max: 500,
   },
   pro: {
     windowMs: 15 * 60 * 1000,
@@ -95,7 +87,7 @@ export const tierRateLimiter = async (
       logger.warn('No subscription found for user, applying free tier rate limits', { userId });
     }
 
-    const tier: 'free' | 'starter' | 'premium' | 'pro' = (subscriptionData?.subscription.tier || 'free') as 'free' | 'starter' | 'premium' | 'pro';
+    const tier: 'free' | 'pro' | 'enterprise' = (subscriptionData?.subscription.tier || 'free') as 'free' | 'pro' | 'enterprise';
     const limits = TIER_RATE_LIMITS[tier];
     const key = getRateLimitKey(userId, tier, req.path);
 
@@ -123,7 +115,7 @@ export const tierRateLimiter = async (
       });
 
       const rateLimitError = new RateLimitError(
-        `Rate limit exceeded. ${tier === 'free' ? 'Upgrade to premium for higher limits.' : 'Please try again later.'}`
+        `Rate limit exceeded. ${tier === 'free' ? 'Upgrade to Pro for higher limits.' : 'Please try again later.'}`
       );
       
       const retryAfter = Math.ceil((entry.resetTime - now) / 1000); // seconds

@@ -9,7 +9,7 @@ const ENTERPRISE_TIER: TierName = 'enterprise';
 
 /**
  * Enterprise Service
- * Team collaboration and enterprise features. Enterprise tier has teamCollaboration and higher limits.
+ * Team collaboration and enterprise features. Enterprise tier has higher limits.
  */
 export class EnterpriseService {
   static getEnterpriseLimits(): SingleTierLimits {
@@ -17,8 +17,7 @@ export class EnterpriseService {
   }
 
   static hasTeamCollaboration(tier: string): boolean {
-    const limits = TierConfigService.getCachedTier(tier as TierName);
-    return !!limits?.features?.teamCollaboration;
+    return tier === 'enterprise';
   }
 
   static async ensureUserHasEnterpriseAccess(userId: string): Promise<boolean> {

@@ -27,7 +27,7 @@ export function AnalyticsDashboard() {
       }
     } catch (err: any) {
       if (err.response?.status === 403) {
-        setError('Analytics dashboard is only available for Premium and Pro subscribers');
+        setError('Analytics dashboard is only available for Pro and Enterprise subscribers');
       } else {
         setError(err.response?.data?.error?.message || 'Failed to load analytics');
       }

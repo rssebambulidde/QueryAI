@@ -29,22 +29,18 @@ const VALID_LIMITS: AllTierLimits = {
     tavilySearchesPerMonth: 10,
     maxCollections: 3,
     allowResearchMode: false,
-    features: { embedding: false, analytics: false, apiAccess: false, whiteLabel: false },
   },
   pro: {
     queriesPerMonth: null,
     tavilySearchesPerMonth: 200,
     maxCollections: null,
     allowResearchMode: true,
-    features: { embedding: true, analytics: true, apiAccess: true, whiteLabel: true },
   },
   enterprise: {
     queriesPerMonth: null,
     tavilySearchesPerMonth: null,
     maxCollections: null,
     allowResearchMode: true,
-    features: { embedding: true, analytics: true, apiAccess: true, whiteLabel: true, teamCollaboration: true },
-    maxTeamMembers: 50,
   },
 };
 
@@ -116,7 +112,7 @@ describe('TierConfigService', () => {
 
       const result = await TierConfigService.getLimits('pro');
       expect(result.queriesPerMonth).toBeNull();
-      expect(result.features.apiAccess).toBe(true);
+      expect(result.allowResearchMode).toBe(true);
     });
 
     it('returns free tier limits', async () => {
@@ -124,7 +120,7 @@ describe('TierConfigService', () => {
 
       const result = await TierConfigService.getLimits('free');
       expect(result.queriesPerMonth).toBe(300);
-      expect(result.features.embedding).toBe(false);
+      expect(result.allowResearchMode).toBe(false);
     });
   });
 
@@ -187,72 +183,6 @@ describe('TierConfigService', () => {
       await TierConfigService.updateLimits('free', newFree, 'user-1');
 
       expect(TierConfigService.getCachedTier('free').queriesPerMonth).toBe(100);
-    });
-  });
-
-  // ── transferFeature ──────────────────────────────────────────────────────
-
-  describe('transferFeature', () => {
-    it('enables a feature on toTier and disables on fromTier', async () => {
-      getMock.mockResolvedValue(VALID_LIMITS);
-      setMock.mockResolvedValue(undefined);
-
-      // apiAccess: enterprise=true, free=false → transfer to free
-      const result = await TierConfigService.transferFeature(
-        'apiAccess',
-        'enterprise',
-        'free',
-        true,
-        'user-1',
-      );
-
-      expect(result.free.features.apiAccess).toBe(true);
-      expect(result.enterprise.features.apiAccess).toBe(false);
-    });
-
-    it('handles top-level boolean fields (allowResearchMode)', async () => {
-      getMock.mockResolvedValue(VALID_LIMITS);
-      setMock.mockResolvedValue(undefined);
-
-      // allowResearchMode: pro=true, free=false → disable on pro, enable on free
-      const result = await TierConfigService.transferFeature(
-        'allowResearchMode',
-        'pro',
-        'free',
-        true,
-        'user-1',
-      );
-
-      expect(result.free.allowResearchMode).toBe(true);
-      expect(result.pro.allowResearchMode).toBe(false);
-    });
-
-    it('throws for unknown feature', async () => {
-      getMock.mockResolvedValue(VALID_LIMITS);
-
-      await expect(
-        TierConfigService.transferFeature('nonexistent', 'pro', 'free', true, 'user-1'),
-      ).rejects.toThrow(/Unknown feature/);
-    });
-
-    it('persists the merged result', async () => {
-      getMock.mockResolvedValue(VALID_LIMITS);
-      setMock.mockResolvedValue(undefined);
-
-      await TierConfigService.transferFeature('analytics', 'pro', 'free', true, 'user-1');
-
-      expect(setMock).toHaveBeenCalledWith(
-        'tier_limits',
-        expect.objectContaining({
-          free: expect.objectContaining({
-            features: expect.objectContaining({ analytics: true }),
-          }),
-          pro: expect.objectContaining({
-            features: expect.objectContaining({ analytics: false }),
-          }),
-        }),
-        'user-1',
-      );
     });
   });
 

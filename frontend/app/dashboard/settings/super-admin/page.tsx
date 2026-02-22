@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
-import { ShieldCheck, Key, BarChart3, Activity, CheckSquare, TestTube, Users, DollarSign, TrendingUp, Palette, MessageSquare, Cpu } from 'lucide-react';
+import { ShieldCheck, Key, BarChart3, Activity, CheckSquare, TestTube, Users, DollarSign, TrendingUp, MessageSquare, Cpu, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 
@@ -17,7 +17,7 @@ const ABTesting = dynamic(() => import('@/components/super-admin/ab-testing'), {
 const UserManagement = dynamic(() => import('@/components/super-admin/user-management'), { ssr: false });
 const UsageAnalytics = dynamic(() => import('@/components/super-admin/usage-analytics'), { ssr: false });
 const CostAnalytics = dynamic(() => import('@/components/super-admin/cost-analytics'), { ssr: false });
-const WhiteLabel = dynamic(() => import('@/components/super-admin/white-label'), { ssr: false });
+const WhiteLabel = dynamic(() => import('@/components/super-admin/white-label'), { ssr: false }); // Retained but no longer feature-gated
 const FeedbackDashboard = dynamic(() => import('@/components/super-admin/feedback-dashboard'), { ssr: false });
 const LLMSettings = dynamic(() => import('@/components/super-admin/llm-settings'), { ssr: false });
 

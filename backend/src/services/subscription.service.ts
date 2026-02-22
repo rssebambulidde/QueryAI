@@ -145,27 +145,6 @@ export class SubscriptionService {
   }
 
   /**
-   * Check if user has access to a feature
-   */
-  static async hasFeatureAccess(
-    userId: string,
-    feature: keyof TierLimits['features']
-  ): Promise<boolean> {
-    try {
-      const subscriptionData = await this.getUserSubscriptionWithLimits(userId);
-      
-      if (!subscriptionData) {
-        return false;
-      }
-
-      return subscriptionData.limits.features[feature] ?? false;
-    } catch (error) {
-      logger.error('Failed to check feature access:', error);
-      return false;
-    }
-  }
-
-  /**
    * Check if user has reached query limit
    */
   static async checkQueryLimit(userId: string): Promise<{
@@ -543,7 +522,7 @@ export class SubscriptionService {
    * User must complete approval via approvalUrl; then sync in payment callback.
    */
   static async createPayPalSubscription(
-    tier: 'starter' | 'premium' | 'pro',
+    tier: 'pro',
     returnUrl: string,
     cancelUrl: string,
     customId?: string,
@@ -649,7 +628,7 @@ export class SubscriptionService {
         const user = await DatabaseService.getUserProfile(subscription.user_id);
         if (user) {
           const amt = amount ? parseFloat(amount) : getPricing(
-            subscription.tier as 'starter' | 'premium' | 'pro',
+            subscription.tier as 'pro',
             billingPeriod as 'monthly' | 'annual'
           );
           await EmailService.sendRenewalConfirmationEmail(
@@ -785,7 +764,7 @@ export class SubscriptionService {
    */
   static async downgradeSubscription(
     userId: string,
-    targetTier: 'free' | 'starter' | 'premium' | 'pro',
+    targetTier: 'free' | 'pro',
     immediate: boolean = false
   ): Promise<Database.Subscription | null> {
     try {
@@ -869,7 +848,7 @@ export class SubscriptionService {
 
           const currency = 'USD' as const;
           const bp = (sub as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
-          const amount = getPricing(sub.tier as 'starter' | 'premium' | 'pro', bp as 'monthly' | 'annual');
+          const amount = getPricing(sub.tier as 'pro', bp as 'monthly' | 'annual');
           const payments = await DatabaseService.getUserPayments(sub.user_id, 5);
           const lastForTier = payments.find(
             (p) => p.tier === sub.tier && p.status === 'completed'
@@ -991,7 +970,7 @@ export class SubscriptionService {
               if (user) {
                 const currency = 'USD';
                 const amount = getPricing(
-                  subscription.tier as 'starter' | 'premium' | 'pro',
+                  subscription.tier as 'pro',
                   bp as 'monthly' | 'annual'
                 );
                 await EmailService.sendRenewalConfirmationEmail(

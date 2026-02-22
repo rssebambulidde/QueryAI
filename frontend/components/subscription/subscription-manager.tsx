@@ -502,10 +502,6 @@ export function SubscriptionManager() {
         return 'from-indigo-600 to-slate-700';
       case 'pro':
         return 'from-purple-500 to-pink-500';
-      case 'premium':
-        return 'from-orange-500 to-orange-600';
-      case 'starter':
-        return 'from-blue-500 to-blue-600';
       default:
         return 'from-gray-400 to-gray-600';
     }
@@ -517,10 +513,6 @@ export function SubscriptionManager() {
         return 'Enterprise';
       case 'pro':
         return 'Pro';
-      case 'premium':
-        return 'Premium';
-      case 'starter':
-        return 'Starter';
       default:
         return 'Free';
     }
@@ -584,7 +576,7 @@ export function SubscriptionManager() {
               </div>
               <p className="text-sm text-red-800 mb-3">
                 Your subscription has expired and you've been downgraded to the free tier. 
-                Reactivate your subscription to regain access to premium features.
+                Reactivate your subscription to regain access to Pro features.
               </p>
               <div className="flex gap-2 flex-wrap">
                 {(() => {
@@ -1460,7 +1452,7 @@ export function SubscriptionManager() {
         title="Cancel Subscription"
         message={
           cancelImmediate
-            ? 'Are you sure you want to cancel your subscription immediately? You will lose access to premium features right away and be downgraded to the free tier.'
+            ? 'Are you sure you want to cancel your subscription immediately? You will lose access to Pro features right away and be downgraded to the free tier.'
             : 'Are you sure you want to cancel your subscription? It will remain active until the end of the current period, and then you will be downgraded to the free tier.'
         }
         confirmText={cancelImmediate ? 'Cancel Immediately' : 'Cancel at Period End'}

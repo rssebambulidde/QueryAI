@@ -15,6 +15,4 @@ process.env.PAYPAL_CLIENT_ID = 'test-client-id';
 process.env.PAYPAL_CLIENT_SECRET = 'test-secret';
 process.env.PAYPAL_MODE = 'sandbox';
 process.env.PAYPAL_WEBHOOK_ID = 'test-webhook-id';
-process.env.PAYPAL_PLAN_ID_STARTER = 'P-STARTER';
-process.env.PAYPAL_PLAN_ID_PREMIUM = 'P-PREMIUM';
 process.env.PAYPAL_PLAN_ID_PRO = 'P-PRO';

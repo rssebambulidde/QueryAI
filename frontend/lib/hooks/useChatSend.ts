@@ -473,15 +473,15 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           const retryAfter = ed?.retryAfter;
           errorMessage = `Rate limit exceeded. Your ${tier} tier allows ${limit} requests per 15 minutes.`;
           if (retryAfter) errorMessage += ` Please try again in ${Math.ceil(retryAfter / 60)} minutes.`;
-          if (tier === 'free') errorMessage += ' Upgrade to premium for higher limits.';
+          if (tier === 'free') errorMessage += ' Upgrade to Pro for higher limits.';
           showUpgradeLink = true;
         } else if (err.response?.status === 403) {
           const ed = err.response?.data?.error;
           const code = ed?.code || 'FORBIDDEN';
           if (code === 'QUERY_LIMIT_EXCEEDED') { errorMessage = `You have reached your query limit. You've used ${ed?.used || 0} of ${ed?.limit || 0} queries this month.`; showUpgradeLink = true; }
           else if (code === 'DOCUMENT_UPLOAD_LIMIT_EXCEEDED') { errorMessage = `Document upload limit reached.`; showUpgradeLink = true; }
-          else if (code === 'FEATURE_NOT_AVAILABLE') { errorMessage = `This feature requires a ${ed?.requiredTier || 'premium'} subscription. Your current tier is ${ed?.currentTier || 'free'}.`; showUpgradeLink = true; }
-          else { errorMessage = ed?.message || 'Access denied. This feature may require a premium subscription.'; showUpgradeLink = true; }
+          else if (code === 'FEATURE_NOT_AVAILABLE') { errorMessage = `This feature requires a ${ed?.requiredTier || 'pro'} subscription. Your current tier is ${ed?.currentTier || 'free'}.`; showUpgradeLink = true; }
+          else { errorMessage = ed?.message || 'Access denied. This feature may require a Pro subscription.'; showUpgradeLink = true; }
         } else if (err.message) { errorMessage = err.message; }
         else if (err.response?.data?.error?.message) { errorMessage = err.response.data.error.message; }
 

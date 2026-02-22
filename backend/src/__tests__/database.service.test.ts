@@ -166,7 +166,7 @@ describe('DatabaseService', () => {
       const mockData = {
         id: 'sub-1',
         user_id: 'user-1',
-        tier: 'premium',
+        tier: 'pro',
         status: 'active',
       };
 

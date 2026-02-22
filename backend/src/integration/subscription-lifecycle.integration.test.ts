@@ -129,7 +129,7 @@ describe('Integration: Subscription lifecycle', () => {
       method: 'POST',
       headers: authHeaders,
       body: JSON.stringify({
-        tier: 'starter',
+        tier: 'pro',
         currency: 'USD',
         firstName: 'Jane',
         lastName: 'Doe',
@@ -145,7 +145,7 @@ describe('Integration: Subscription lifecycle', () => {
     expect(mockCreatePayment).toHaveBeenCalledWith(
       expect.objectContaining({
         user_id: 'user-1',
-        tier: 'starter',
+        tier: 'pro',
         paypal_subscription_id: 'SUB-123',
         status: 'pending',
       })

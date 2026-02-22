@@ -87,8 +87,8 @@ router.post(
       return_url: return_url ? 'provided' : 'missing',
     });
 
-    if (!tier || !['starter', 'premium', 'pro', 'enterprise'].includes(tier)) {
-      throw new ValidationError('Invalid tier. Must be "starter", "premium", "pro", or "enterprise"');
+    if (!tier || !['pro', 'enterprise'].includes(tier)) {
+      throw new ValidationError('Invalid tier. Must be "pro" or "enterprise"');
     }
 
     if (!firstName || !lastName || !email) {
@@ -109,7 +109,7 @@ router.post(
 
     const { getPricing } = await import('../constants/pricing');
     const amount = getPricing(
-      tier as 'starter' | 'premium' | 'pro' | 'enterprise',
+      tier as 'pro' | 'enterprise',
       billingPeriod
     );
     
@@ -149,7 +149,7 @@ router.post(
       let subscriptionResponse;
       try {
         subscriptionResponse = await PayPalService.createSubscription({
-          tier: tier as 'starter' | 'premium' | 'pro' | 'enterprise',
+          tier: tier as 'pro' | 'enterprise',
           returnUrl,
           cancelUrl,
           customId: userId,
@@ -403,7 +403,7 @@ router.get(
           const currency = 'USD';
           const { getAnnualDiscountPercent } = await import('../constants/pricing');
           const annualDiscount = billingPeriod === 'annual'
-            ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro')
+            ? getAnnualDiscountPercent(payment.tier as 'pro')
             : 0;
 
           await DatabaseService.updatePayment(payment.id, {
@@ -605,8 +605,8 @@ router.get(
                 newTier
               );
             } else if (
-              getTierOrder(newTier as 'free' | 'starter' | 'premium' | 'pro') >
-              getTierOrder(oldTier as 'free' | 'starter' | 'premium' | 'pro')
+              getTierOrder(newTier as 'free' | 'pro') >
+              getTierOrder(oldTier as 'free' | 'pro')
             ) {
               const periodStart = subscriptionAfter?.current_period_start
                 ? new Date(subscriptionAfter.current_period_start)
@@ -789,7 +789,7 @@ router.post(
         const currency = 'USD';
         const { getAnnualDiscountPercent } = await import('../constants/pricing');
         const annualDiscount = billingPeriod === 'annual'
-          ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro')
+          ? getAnnualDiscountPercent(payment.tier as 'pro')
           : 0;
 
         await DatabaseService.updateSubscription(payment.user_id, {
@@ -1043,7 +1043,7 @@ router.post(
               const currency = 'USD';
               const { getAnnualDiscountPercent } = await import('../constants/pricing');
               const annualDiscount = billingPeriod === 'annual'
-                ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro')
+                ? getAnnualDiscountPercent(payment.tier as 'pro')
                 : 0;
 
               await DatabaseService.updateSubscription(payment.user_id, {
@@ -1148,7 +1148,7 @@ router.post(
             const billingPeriod = (subscription as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
             const { getPricing } = await import('../constants/pricing');
             amountValue = getPricing(
-              subscription.tier as 'starter' | 'premium' | 'pro' | 'enterprise',
+              subscription.tier as 'pro' | 'enterprise',
               billingPeriod as 'monthly' | 'annual'
             );
           }

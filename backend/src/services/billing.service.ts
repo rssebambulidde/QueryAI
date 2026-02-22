@@ -80,7 +80,7 @@ export class BillingService {
       user_id: userId,
       subscription_id: sub.id,
       payment_provider: 'paypal',
-      tier: sub.tier as 'free' | 'starter' | 'premium' | 'pro',
+      tier: sub.tier as 'free' | 'pro',
       amount: summary.totalCharged,
       currency: summary.currency,
       status: 'pending',

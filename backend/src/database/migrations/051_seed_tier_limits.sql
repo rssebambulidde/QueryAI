@@ -9,39 +9,19 @@ INSERT INTO system_settings (key, value) VALUES
       "queriesPerMonth": 300,
       "tavilySearchesPerMonth": 10,
       "maxCollections": 3,
-      "allowResearchMode": false,
-      "features": {
-        "embedding": false,
-        "analytics": false,
-        "apiAccess": false,
-        "whiteLabel": false
-      }
+      "allowResearchMode": false
     },
     "pro": {
       "queriesPerMonth": null,
       "tavilySearchesPerMonth": 200,
       "maxCollections": null,
-      "allowResearchMode": true,
-      "features": {
-        "embedding": true,
-        "analytics": true,
-        "apiAccess": true,
-        "whiteLabel": true
-      }
+      "allowResearchMode": true
     },
     "enterprise": {
       "queriesPerMonth": null,
       "tavilySearchesPerMonth": null,
       "maxCollections": null,
-      "allowResearchMode": true,
-      "features": {
-        "embedding": true,
-        "analytics": true,
-        "apiAccess": true,
-        "whiteLabel": true,
-        "teamCollaboration": true
-      },
-      "maxTeamMembers": 50
+      "allowResearchMode": true
     }
   }'::jsonb)
 ON CONFLICT (key) DO NOTHING;

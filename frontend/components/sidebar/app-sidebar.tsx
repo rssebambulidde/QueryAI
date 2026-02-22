@@ -28,7 +28,7 @@ type TabType = 'chat' | 'collections' | 'sources';
 interface AppSidebarProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
-  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+  subscriptionTier?: 'free' | 'pro' | 'enterprise';
 }
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({
@@ -114,22 +114,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     switch (tier) {
       case 'enterprise': return 'Enterprise';
       case 'pro': return 'Pro';
-      case 'premium': return 'Premium';
-      case 'starter': return 'Starter';
       default: return 'Free';
     }
   };
 
-  // Tier hierarchy: free < starter < premium < pro < enterprise
-  const TIER_RANK: Record<string, number> = { free: 0, starter: 1, premium: 2, pro: 3, enterprise: 4 };
+  // Tier hierarchy: free < pro < enterprise
+  const TIER_RANK: Record<string, number> = { free: 0, pro: 1, enterprise: 2 };
   const currentRank = TIER_RANK[subscriptionTier] ?? 0;
-  const hasHigherTier = currentRank < 4; // anything below enterprise can upgrade
+  const hasHigherTier = currentRank < 2; // anything below enterprise can upgrade
 
   const getUpgradeText = () => {
     switch (subscriptionTier) {
-      case 'free': return 'Unlock premium features';
-      case 'starter': return 'Upgrade to Premium, Pro, or Enterprise';
-      case 'premium': return 'Upgrade to Pro or Enterprise';
+      case 'free': return 'Upgrade to Pro or Enterprise';
       case 'pro': return 'Upgrade to Enterprise';
       default: return '';
     }

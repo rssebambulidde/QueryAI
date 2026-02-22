@@ -59,7 +59,7 @@ export default function SettingsLayout({
   const { user } = useAuthStore();
   const { isSuperAdmin } = useUserRole();
   const { isMobile } = useMobile();
-  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'starter' | 'premium' | 'pro' | 'enterprise'>('free');
+  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'pro' | 'enterprise'>('free');
   const [sectionsOpen, setSectionsOpen] = useState(false);
 
   useEffect(() => {

@@ -13,7 +13,7 @@ export interface UserProfile {
   email: string;
   fullName?: string;
   role?: 'user' | 'super_admin';
-  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+  subscriptionTier?: 'free' | 'pro' | 'enterprise';
   createdAt: Date;
   updatedAt: Date;
 }

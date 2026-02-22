@@ -94,7 +94,7 @@ describe('Integration: Webhook processing', () => {
       user_id: 'user-1',
       paypal_order_id: 'ORDER-1',
       status: 'pending',
-      tier: 'starter',
+      tier: 'pro',
       amount: 5,
       currency: 'USD',
     });

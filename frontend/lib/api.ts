@@ -152,7 +152,7 @@ export interface User {
   full_name?: string;
   avatar_url?: string;
   role?: 'user' | 'super_admin';
-  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+  subscriptionTier?: 'free' | 'pro' | 'enterprise';
 }
 
 export interface Session {
@@ -1311,7 +1311,7 @@ export interface TopicCitedSource {
 export interface Subscription {
   id: string;
   user_id: string;
-  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+  tier: 'free' | 'pro' | 'enterprise';
   status: 'active' | 'cancelled' | 'expired';
   current_period_start?: string;
   current_period_end?: string;
@@ -1329,14 +1329,6 @@ export interface TierLimits {
   tavilySearchesPerMonth: number | null;
   maxCollections: number | null;
   allowResearchMode: boolean;
-  features: {
-    embedding: boolean;
-    analytics: boolean;
-    apiAccess: boolean;
-    whiteLabel: boolean;
-    teamCollaboration?: boolean;
-  };
-  maxTeamMembers?: number | null;
 }
 
 export interface UsageLimit {
@@ -1600,7 +1592,7 @@ export interface Payment {
   paypal_payment_id?: string;
   paypal_subscription_id?: string;
   payment_provider?: 'paypal';
-  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+  tier: 'free' | 'pro' | 'enterprise';
   amount: number;
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'cancelled';
@@ -2294,14 +2286,6 @@ export interface SingleTierLimitsResponse {
   tavilySearchesPerMonth: number | null;
   maxCollections: number | null;
   allowResearchMode: boolean;
-  features: {
-    embedding: boolean;
-    analytics: boolean;
-    apiAccess: boolean;
-    whiteLabel: boolean;
-    teamCollaboration?: boolean;
-  };
-  maxTeamMembers?: number | null;
 }
 
 export interface AllTierLimitsResponse {

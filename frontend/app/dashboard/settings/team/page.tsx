@@ -12,7 +12,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 export default function TeamCollaborationPage() {
   const { user } = useAuthStore();
   const { toast } = useToast();
-  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'starter' | 'premium' | 'pro' | 'enterprise'>('free');
+  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'pro' | 'enterprise'>('free');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);

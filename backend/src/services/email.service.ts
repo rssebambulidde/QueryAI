@@ -800,10 +800,9 @@ export class EmailService {
    */
   private static getTierFeatureBullets(tier: string): string[] {
     const map: Record<string, string[]> = {
-      free: ['50 queries/month', '5 Tavily searches/month', 'Basic AI responses'],
-      starter: ['100 queries/month', '3 document uploads', '1 topic', '10 Tavily searches/month'],
-      premium: ['500 queries/month', '10 document uploads', '3 topics', '50 Tavily searches/month', 'Document embedding', 'Analytics'],
-      pro: ['Unlimited queries', 'Unlimited documents & topics', '200 Tavily searches/month', 'Embedding', 'Analytics', 'API access', 'White-label'],
+      free: ['300 queries/month', '10 Tavily searches/month', 'Basic AI responses'],
+      pro: ['Unlimited queries', 'Unlimited documents & topics', '200 Tavily searches/month', 'Research mode'],
+      enterprise: ['Unlimited everything', 'Team collaboration', 'Custom limits', 'Dedicated support'],
     };
     return map[tier] || [];
   }
@@ -1044,7 +1043,7 @@ export class EmailService {
   ): Promise<boolean> {
     try {
       const { getTierDescription } = await import('../constants/pricing');
-      const desc = getTierDescription(tier as 'free' | 'starter' | 'premium' | 'pro');
+      const desc = getTierDescription(tier as 'free' | 'pro');
       const bullets = this.getTierFeatureBullets(tier).map((f) => `<li>${f}</li>`).join('');
       const subject = `Welcome to QueryAI ${tier} - Get Started`;
       const htmlContent = `

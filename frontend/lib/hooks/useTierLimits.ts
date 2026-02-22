@@ -1,7 +1,7 @@
 /**
  * useTierLimits Hook
  *
- * Fetches per-tier quota limits & feature flags from the backend
+ * Fetches per-tier quota limits from the backend
  * (`GET /api/config/tier-limits`) and exposes helpers for the
  * subscription-manager, usage-display, and feature-gate components.
  *
@@ -24,22 +24,18 @@ const FALLBACK: AllTierLimitsResponse = {
     tavilySearchesPerMonth: 10,
     maxCollections: 3,
     allowResearchMode: false,
-    features: { embedding: false, analytics: false, apiAccess: false, whiteLabel: false },
   },
   pro: {
     queriesPerMonth: null,
     tavilySearchesPerMonth: 200,
     maxCollections: null,
     allowResearchMode: true,
-    features: { embedding: true, analytics: true, apiAccess: true, whiteLabel: true },
   },
   enterprise: {
     queriesPerMonth: null,
     tavilySearchesPerMonth: null,
     maxCollections: null,
     allowResearchMode: true,
-    features: { embedding: true, analytics: true, apiAccess: true, whiteLabel: true, teamCollaboration: true },
-    maxTeamMembers: 50,
   },
 };
 
@@ -78,7 +74,7 @@ export interface UseTierLimitsReturn {
   loading: boolean;
   /** Get limits for a single tier. */
   getLimits: (tier: TierName) => SingleTierLimitsResponse;
-  /** Check if a tier has a specific feature. */
+  /** Check if a tier has a specific boolean capability (e.g. allowResearchMode). */
   hasFeature: (tier: TierName, feature: string) => boolean;
   /** Force re-fetch from backend. */
   refresh: () => Promise<void>;
@@ -111,7 +107,7 @@ export function useTierLimits(): UseTierLimitsReturn {
   const hasFeature = (tier: TierName, feature: string): boolean => {
     const limits = allLimits[tier];
     if (feature === 'allowResearchMode') return limits.allowResearchMode;
-    return !!(limits.features as Record<string, boolean | undefined>)[feature];
+    return false;
   };
 
   const refresh = async () => {

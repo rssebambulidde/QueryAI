@@ -56,7 +56,7 @@ export namespace Database {
   /** Billing period: monthly or annual. */
   export type BillingPeriod = 'monthly' | 'annual';
 
-  export type SubscriptionTier = 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+  export type SubscriptionTier = 'free' | 'pro' | 'enterprise';
 
   export interface Subscription {
     id: string;
@@ -234,7 +234,7 @@ export namespace Database {
     limit_value: number;
     usage_value: number;
     overage_units: number;
-    tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+    tier: 'free' | 'pro' | 'enterprise';
     currency: string;
     unit_price: number;
     amount_charged: number;

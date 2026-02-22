@@ -140,7 +140,7 @@ afterEach(() => {
 
 const authHeaders = { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' };
 const validInitiateBody = {
-  tier: 'starter',
+  tier: 'pro',
   currency: 'USD',
   firstName: 'Jane',
   lastName: 'Doe',
@@ -190,7 +190,7 @@ describe('Payment routes – one-time payment', () => {
     const res = await fetch(`${baseUrl}/api/payment/initiate`, {
       method: 'POST',
       headers: authHeaders,
-      body: JSON.stringify({ tier: 'starter', currency: 'USD' }),
+      body: JSON.stringify({ tier: 'pro', currency: 'USD' }),
     });
     expect(res.status).toBe(400);
   });
@@ -301,7 +301,7 @@ describe('Payment routes – status and history', () => {
       user_id: 'user-1',
       paypal_order_id: 'ORDER-123',
       status: 'pending',
-      tier: 'starter',
+      tier: 'pro',
       amount: 9,
       currency: 'USD',
     });
@@ -335,7 +335,7 @@ describe('Payment routes – status and history', () => {
   it('GET /api/payment/history returns payments array', async () => {
     const { DatabaseService } = await import('../services/database.service');
     (DatabaseService.getUserPayments as jest.Mock).mockResolvedValueOnce([
-      { id: 'pay-1', tier: 'starter', amount: 9, currency: 'USD', status: 'completed' },
+      { id: 'pay-1', tier: 'pro', amount: 9, currency: 'USD', status: 'completed' },
     ]);
     const res = await fetch(`${baseUrl}/api/payment/history`, { headers: authHeaders });
     expect(res.status).toBe(200);

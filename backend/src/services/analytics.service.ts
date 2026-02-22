@@ -56,7 +56,7 @@ export interface AnalyticsOverview {
 
 /**
  * Analytics Service
- * Provides analytics and usage statistics for Premium/Pro users
+ * Provides analytics and usage statistics for Pro/Enterprise users
  */
 export class AnalyticsService {
   /**

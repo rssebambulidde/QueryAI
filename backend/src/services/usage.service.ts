@@ -29,7 +29,7 @@ export interface UsageStats {
   };
   periodStart: string;
   periodEnd: string;
-  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+  tier: 'free' | 'pro' | 'enterprise';
 }
 
 export interface UsageHistory {
