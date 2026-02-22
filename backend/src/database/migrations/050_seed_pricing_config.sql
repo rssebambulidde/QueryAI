@@ -7,8 +7,6 @@ INSERT INTO system_settings (key, value) VALUES
   ('pricing_config', '{
     "tiers": {
       "free":       { "monthly": 0,   "annual": 0   },
-      "starter":    { "monthly": 9,   "annual": 90  },
-      "premium":    { "monthly": 15,  "annual": 150 },
       "pro":        { "monthly": 45,  "annual": 450 },
       "enterprise": { "monthly": 99,  "annual": 0   }
     },

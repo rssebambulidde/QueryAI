@@ -1,23 +1,23 @@
 import { supabaseAdmin } from '../config/database';
 import { DatabaseService } from './database.service';
-import { TIER_LIMITS } from './subscription.service';
+import { TierConfigService } from './tier-config.service';
+import type { SingleTierLimits, TierName } from './tier-config.service';
 import type { Database } from '../types/database';
-import type { TierLimits } from './subscription.service';
 import logger from '../config/logger';
 
-const ENTERPRISE_TIER = 'enterprise' as const;
+const ENTERPRISE_TIER: TierName = 'enterprise';
 
 /**
  * Enterprise Service
  * Team collaboration and enterprise features. Enterprise tier has teamCollaboration and higher limits.
  */
 export class EnterpriseService {
-  static getEnterpriseLimits(): TierLimits {
-    return TIER_LIMITS[ENTERPRISE_TIER];
+  static getEnterpriseLimits(): SingleTierLimits {
+    return TierConfigService.getCachedTier(ENTERPRISE_TIER);
   }
 
   static hasTeamCollaboration(tier: string): boolean {
-    const limits = TIER_LIMITS[tier as keyof typeof TIER_LIMITS];
+    const limits = TierConfigService.getCachedTier(tier as TierName);
     return !!limits?.features?.teamCollaboration;
   }
 

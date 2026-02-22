@@ -25,8 +25,6 @@ const TierPricingSchema = z.object({
 const PricingConfigSchema = z.object({
   tiers: z.object({
     free: TierPricingSchema,
-    starter: TierPricingSchema,
-    premium: TierPricingSchema,
     pro: TierPricingSchema,
     enterprise: TierPricingSchema,
   }),
@@ -45,8 +43,6 @@ export type TierPricing = z.infer<typeof TierPricingSchema>;
 const FALLBACK_CONFIG: PricingConfig = {
   tiers: {
     free: { monthly: 0, annual: 0 },
-    starter: { monthly: 9, annual: 90 },
-    premium: { monthly: 15, annual: 150 },
     pro: { monthly: 45, annual: 450 },
     enterprise: { monthly: 99, annual: 0 },
   },

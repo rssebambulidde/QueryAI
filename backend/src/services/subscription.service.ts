@@ -2,96 +2,31 @@ import { DatabaseService } from './database.service';
 import * as PayPalService from './paypal.service';
 import { Database } from '../types/database';
 import logger from '../config/logger';
+import { TierConfigService } from './tier-config.service';
+import type { SingleTierLimits, TierName } from './tier-config.service';
 
 /**
- * Subscription tier limits configuration
- * Simplified to 3 tiers: free / pro / enterprise
+ * Re-export the TierLimits type from TierConfigService for backward
+ * compatibility — existing consumers import it from here.
  */
-export interface TierLimits {
-  queriesPerMonth: number | null;       // null = unlimited
-  tavilySearchesPerMonth: number | null; // null = unlimited
-  maxCollections: number | null;         // null = unlimited
-  allowResearchMode: boolean;
-  features: {
-    embedding: boolean;
-    analytics: boolean;
-    apiAccess: boolean;
-    whiteLabel: boolean;
-    teamCollaboration?: boolean;
-  };
-  maxTeamMembers?: number | null;
+export type TierLimits = SingleTierLimits;
+
+/**
+ * Backward-compatible TIER_LIMITS constant.
+ *
+ * Returns a snapshot from the TierConfigService cache (DB-driven).
+ * Callers that need always-fresh values should use
+ * `TierConfigService.getCachedTier(tier)` directly.
+ */
+export function getTierLimits(): Record<TierName, TierLimits> {
+  return TierConfigService.getCached();
 }
 
-/**
- * Subscription tier limits map
- * Starter/premium kept as aliases mapping to free/pro for backward-compatible
- * lookups (existing DB rows may still reference those tiers).
- */
-export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enterprise', TierLimits> = {
-  free: {
-    queriesPerMonth: 300,
-    tavilySearchesPerMonth: 10,
-    maxCollections: 3,
-    allowResearchMode: false,           // Express Chat only
-    features: {
-      embedding: false,
-      analytics: false,
-      apiAccess: false,
-      whiteLabel: false,
-    },
-  },
-  // ── Legacy aliases — map old tiers into the simplified model ──────────
-  starter: {
-    queriesPerMonth: 300,
-    tavilySearchesPerMonth: 10,
-    maxCollections: 3,
-    allowResearchMode: false,
-    features: {
-      embedding: false,
-      analytics: false,
-      apiAccess: false,
-      whiteLabel: false,
-    },
-  },
-  premium: {
-    queriesPerMonth: null,
-    tavilySearchesPerMonth: 200,
-    maxCollections: null,
-    allowResearchMode: true,
-    features: {
-      embedding: true,
-      analytics: true,
-      apiAccess: false,
-      whiteLabel: false,
-    },
-  },
-  pro: {
-    queriesPerMonth: null,
-    tavilySearchesPerMonth: 200,
-    maxCollections: null,
-    allowResearchMode: true,            // Express + Deep Research
-    features: {
-      embedding: true,
-      analytics: true,
-      apiAccess: true,
-      whiteLabel: true,
-    },
-  },
-  enterprise: {
-    queriesPerMonth: null,
-    tavilySearchesPerMonth: null,
-    maxCollections: null,
-    allowResearchMode: true,
-    features: {
-      embedding: true,
-      analytics: true,
-      apiAccess: true,
-      whiteLabel: true,
-      teamCollaboration: true,
-    },
-    maxTeamMembers: 50,
-  },
-};
+/** @deprecated Use TierConfigService.getCachedTier(tier) or getTierLimits() */
+export const TIER_LIMITS: Record<TierName, TierLimits> = new Proxy(
+  {} as Record<TierName, TierLimits>,
+  { get: (_target, prop: string) => TierConfigService.getCachedTier(prop as TierName) },
+);
 
 /**
  * Subscription Service

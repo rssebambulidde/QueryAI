@@ -30,4 +30,24 @@ router.get(
   })
 );
 
+/**
+ * GET /api/config/tier-limits
+ * Returns per-tier quotas & feature flags for display
+ * (e.g. pricing-page feature matrix).
+ * Public — no authentication required.
+ */
+router.get(
+  '/tier-limits',
+  apiLimiter,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const { TierConfigService } = await import('../services/tier-config.service');
+    const limits = await TierConfigService.getAllLimits();
+
+    res.json({
+      success: true,
+      data: limits,
+    });
+  })
+);
+
 export default router;

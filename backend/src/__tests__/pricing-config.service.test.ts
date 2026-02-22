@@ -26,8 +26,6 @@ jest.mock('../config/logger', () => ({
 const VALID_CONFIG = {
   tiers: {
     free: { monthly: 0, annual: 0 },
-    starter: { monthly: 9, annual: 90 },
-    premium: { monthly: 15, annual: 150 },
     pro: { monthly: 45, annual: 450 },
     enterprise: { monthly: 99, annual: 0 },
   },
@@ -154,12 +152,12 @@ describe('PricingConfigService', () => {
 
       const updated = {
         ...VALID_CONFIG,
-        tiers: { ...VALID_CONFIG.tiers, starter: { monthly: 12, annual: 120 } },
+        tiers: { ...VALID_CONFIG.tiers, pro: { monthly: 55, annual: 550 } },
       };
 
       await PricingConfigService.update(updated, 'user-123');
       const cached = PricingConfigService.getCached();
-      expect(cached.tiers.starter.monthly).toBe(12);
+      expect(cached.tiers.pro.monthly).toBe(55);
     });
   });
 

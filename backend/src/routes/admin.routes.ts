@@ -702,4 +702,123 @@ router.put(
   })
 );
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Tier Limits Settings
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/admin/settings/tier-limits
+ * Returns the current DB-driven tier limits for all tiers.
+ */
+router.get(
+  '/settings/tier-limits',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const { TierConfigService } = await import('../services/tier-config.service');
+    const limits = await TierConfigService.getAllLimits();
+
+    res.json({
+      success: true,
+      data: limits,
+    });
+  })
+);
+
+/**
+ * PUT /api/admin/settings/tier-limits/:tier
+ * Update limits for a specific tier. Body must match SingleTierLimits Zod schema.
+ */
+router.put(
+  '/settings/tier-limits/:tier',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { TierConfigService, TIER_NAMES } = await import('../services/tier-config.service');
+    const { ZodError } = await import('zod');
+    const tier = req.params.tier;
+
+    if (!TIER_NAMES.includes(tier as any)) {
+      throw new ValidationError(
+        `Invalid tier "${tier}". Valid: ${TIER_NAMES.join(', ')}`,
+      );
+    }
+
+    try {
+      const updated = await TierConfigService.updateLimits(
+        tier as any,
+        req.body,
+        req.user!.id,
+      );
+
+      res.json({
+        success: true,
+        data: updated,
+      });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        throw new ValidationError(
+          `Invalid tier limits: ${err.issues.map((i) => i.message).join(', ')}`,
+        );
+      }
+      throw err;
+    }
+  })
+);
+
+/**
+ * POST /api/admin/settings/tier-limits/transfer-feature
+ * Atomically enable a feature on one tier and disable it on another.
+ * Body: { feature: string, fromTier: string, toTier: string, enable: boolean }
+ */
+router.post(
+  '/settings/tier-limits/transfer-feature',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { TierConfigService, TIER_NAMES } = await import('../services/tier-config.service');
+    const { feature, fromTier, toTier, enable } = req.body;
+
+    if (!feature || typeof feature !== 'string') {
+      throw new ValidationError('feature is required (string)');
+    }
+    if (!fromTier || !TIER_NAMES.includes(fromTier as any)) {
+      throw new ValidationError(
+        `Invalid fromTier "${fromTier}". Valid: ${TIER_NAMES.join(', ')}`,
+      );
+    }
+    if (!toTier || !TIER_NAMES.includes(toTier as any)) {
+      throw new ValidationError(
+        `Invalid toTier "${toTier}". Valid: ${TIER_NAMES.join(', ')}`,
+      );
+    }
+    if (typeof enable !== 'boolean') {
+      throw new ValidationError('enable must be a boolean');
+    }
+
+    try {
+      const updated = await TierConfigService.transferFeature(
+        feature,
+        fromTier as any,
+        toTier as any,
+        enable,
+        req.user!.id,
+      );
+
+      res.json({
+        success: true,
+        data: updated,
+      });
+    } catch (err: any) {
+      if (err.message?.startsWith('Unknown feature')) {
+        throw new ValidationError(err.message);
+      }
+      throw err;
+    }
+  })
+);
+
 export default router;

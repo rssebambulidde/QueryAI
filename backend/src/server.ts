@@ -338,6 +338,13 @@ import('./services/pricing-config.service').then(({ PricingConfigService }) =>
   logger.error('Pricing config initialization error:', error);
 });
 
+// Pre-warm tier limits cache from DB
+import('./services/tier-config.service').then(({ TierConfigService }) =>
+  TierConfigService.initialize(),
+).catch((error) => {
+  logger.error('Tier config initialization error:', error);
+});
+
 // Check if running as Railway cron job
 if (process.env.RAILWAY_CRON === 'true') {
   logger.info('Running as Railway cron job...');

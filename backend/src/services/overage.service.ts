@@ -1,6 +1,8 @@
 import { supabaseAdmin } from '../config/database';
 import { DatabaseService } from './database.service';
-import { SubscriptionService, TIER_LIMITS } from './subscription.service';
+import { SubscriptionService } from './subscription.service';
+import { TierConfigService } from './tier-config.service';
+import type { TierName } from './tier-config.service';
 import { getOverageUnitPrice } from '../constants/pricing';
 import type { Database } from '../types/database';
 import logger from '../config/logger';
@@ -35,7 +37,7 @@ export class OverageService {
     }
 
     const tier = subscription.tier;
-    const limits = TIER_LIMITS[tier];
+    const limits = TierConfigService.getCachedTier(tier as TierName);
 
     const [queriesUsed, tavilyUsed] = await Promise.all([
       DatabaseService.getUserUsageCount(userId, 'query', periodStart, periodEnd),

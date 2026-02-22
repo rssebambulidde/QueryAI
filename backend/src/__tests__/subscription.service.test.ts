@@ -34,10 +34,8 @@ describe('SubscriptionService', () => {
   });
 
   describe('TIER_LIMITS', () => {
-    it('defines limits for free, starter, premium, pro, enterprise', () => {
+    it('defines limits for free, pro, enterprise', () => {
       expect(TIER_LIMITS.free).toBeDefined();
-      expect(TIER_LIMITS.starter).toBeDefined();
-      expect(TIER_LIMITS.premium).toBeDefined();
       expect(TIER_LIMITS.pro).toBeDefined();
       expect(TIER_LIMITS.enterprise).toBeDefined();
     });
@@ -92,7 +90,7 @@ describe('SubscriptionService', () => {
       mockGetUserSubscription.mockResolvedValue({
         id: 'sub-1',
         user_id: 'user-1',
-        tier: 'premium',
+        tier: 'pro',
         status: 'active',
       });
       const ok = await SubscriptionService.hasFeatureAccess('user-1', 'analytics');
@@ -103,7 +101,7 @@ describe('SubscriptionService', () => {
       mockGetUserSubscription.mockResolvedValue({
         id: 'sub-1',
         user_id: 'user-1',
-        tier: 'starter',
+        tier: 'free',
         status: 'active',
       });
       const ok = await SubscriptionService.hasFeatureAccess('user-1', 'analytics');

@@ -2220,6 +2220,37 @@ export const adminApi = {
     const response = await apiClient.put('/api/admin/settings/pricing', config);
     return response.data;
   },
+
+  /** Get the current tier limits (superadmin). */
+  getTierLimits: async (): Promise<ApiResponse<AllTierLimitsResponse>> => {
+    const response = await apiClient.get('/api/admin/settings/tier-limits');
+    return response.data;
+  },
+
+  /** Update limits for a specific tier (superadmin). */
+  updateTierLimits: async (
+    tier: string,
+    limits: SingleTierLimitsResponse,
+  ): Promise<ApiResponse<AllTierLimitsResponse>> => {
+    const response = await apiClient.put(`/api/admin/settings/tier-limits/${tier}`, limits);
+    return response.data;
+  },
+
+  /** Transfer a feature between tiers (superadmin). */
+  transferFeature: async (
+    feature: string,
+    fromTier: string,
+    toTier: string,
+    enable: boolean,
+  ): Promise<ApiResponse<AllTierLimitsResponse>> => {
+    const response = await apiClient.post('/api/admin/settings/tier-limits/transfer-feature', {
+      feature,
+      fromTier,
+      toTier,
+      enable,
+    });
+    return response.data;
+  },
 };
 
 // ── Config API (public, no auth) ─────────────────────────────────────────────
@@ -2232,8 +2263,6 @@ export interface TierPricing {
 export interface PricingConfigResponse {
   tiers: {
     free: TierPricing;
-    starter: TierPricing;
-    premium: TierPricing;
     pro: TierPricing;
     enterprise: TierPricing;
   };
@@ -2250,7 +2279,36 @@ export const configApi = {
     const response = await apiClient.get('/api/config/pricing');
     return response.data;
   },
+
+  /** Fetch per-tier quotas & feature flags (public, no auth required). */
+  getTierLimits: async (): Promise<ApiResponse<AllTierLimitsResponse>> => {
+    const response = await apiClient.get('/api/config/tier-limits');
+    return response.data;
+  },
 };
+
+// ── Tier Limits types ────────────────────────────────────────────────────────
+
+export interface SingleTierLimitsResponse {
+  queriesPerMonth: number | null;
+  tavilySearchesPerMonth: number | null;
+  maxCollections: number | null;
+  allowResearchMode: boolean;
+  features: {
+    embedding: boolean;
+    analytics: boolean;
+    apiAccess: boolean;
+    whiteLabel: boolean;
+    teamCollaboration?: boolean;
+  };
+  maxTeamMembers?: number | null;
+}
+
+export interface AllTierLimitsResponse {
+  free: SingleTierLimitsResponse;
+  pro: SingleTierLimitsResponse;
+  enterprise: SingleTierLimitsResponse;
+}
 
 export interface LLMUsageStats {
   period: { start: string; end: string };

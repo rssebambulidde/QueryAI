@@ -9,7 +9,8 @@ import { Check, X, Zap, Folder, Download, ChevronDown, ChevronUp, AlertCircle, A
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
 import { usePricing } from '@/lib/hooks/use-pricing';
-import type { BillingPeriod } from '@/lib/pricing';
+import { useTierLimits } from '@/lib/hooks/useTierLimits';
+import type { BillingPeriod, Tier } from '@/lib/pricing';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
 import { getPaymentErrorMessage } from '@/lib/utils';
@@ -20,6 +21,7 @@ export function SubscriptionManager() {
   const { toast } = useToast();
   const { isMobile } = useMobile();
   const { getPricing, getAnnualSavings, formatPrice, isEnterpriseTier } = usePricing();
+  const { getLimits: getDynamicLimits } = useTierLimits();
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncingBilling, setSyncingBilling] = useState(false);
@@ -478,7 +480,7 @@ export function SubscriptionManager() {
   }
 
   const { subscription, limits, usage } = subscriptionData;
-  const tier = subscription.tier;
+  const tier = subscription.tier as Tier;
   const billingPeriod = (subscription.billing_period ?? 'monthly') as BillingPeriod;
   const annualSavings = tier !== 'free' ? getAnnualSavings(tier) : null;
 
@@ -893,7 +895,7 @@ export function SubscriptionManager() {
           <FeatureItem
             icon={<Zap className="w-5 h-5" />}
             name="Research Mode"
-            enabled={limits.allowResearchMode}
+            enabled={getDynamicLimits(tier as any).allowResearchMode}
           />
           <FeatureItem
             icon={<Search className="w-5 h-5" />}
