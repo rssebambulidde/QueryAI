@@ -276,7 +276,6 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
                     {overage!.records.map((r, i) => (
                       <li key={i}>
                         {r.metric_type === 'queries' && 'Queries'}
-                        {r.metric_type === 'document_upload' && 'Document uploads'}
                         {r.metric_type === 'tavily_searches' && 'Web searches'}: {r.overage_units} over × {formatOverageAmount(r.unit_price, overage!.currency)} = {formatOverageAmount(r.amount_charged, overage!.currency)}
                       </li>
                     ))}
