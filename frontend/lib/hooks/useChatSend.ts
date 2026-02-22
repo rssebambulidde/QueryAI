@@ -495,7 +495,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
       }
     },
     [
-      messages, currentConversationId, unifiedFilters, ragSettings,
+      messages, currentConversationId, unifiedFilters, ragSettings, conversationMode,
       queryExpansionEnabled, queryExpansionSettings, rerankingEnabled, rerankingSettings,
       setMessages, setIsLoading, setIsStreaming, setStreamingState, setError,
       setUnifiedFilters, setLastResponseData, setPreviousTokenUsage, setPreviousCost,
