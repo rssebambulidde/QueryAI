@@ -13,6 +13,8 @@ import {
   ChevronDown,
   Loader2,
   AlertTriangle,
+  ExternalLink,
+  KeyRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +29,30 @@ import {
 import { cn } from '@/lib/utils';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+// Provider setup info: env var name + link to get an API key
+const PROVIDER_INFO: Record<string, { envVar: string; keyUrl: string; keyLabel: string }> = {
+  openai: {
+    envVar: 'OPENAI_API_KEY',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    keyLabel: 'OpenAI Dashboard',
+  },
+  anthropic: {
+    envVar: 'ANTHROPIC_API_KEY',
+    keyUrl: 'https://console.anthropic.com/settings/keys',
+    keyLabel: 'Anthropic Console',
+  },
+  google: {
+    envVar: 'GOOGLE_AI_API_KEY',
+    keyUrl: 'https://aistudio.google.com/apikey',
+    keyLabel: 'Google AI Studio',
+  },
+  groq: {
+    envVar: 'GROQ_API_KEY',
+    keyUrl: 'https://console.groq.com/keys',
+    keyLabel: 'Groq Console',
+  },
+};
 
 function formatCost(perMillion: number): string {
   if (perMillion < 0.1) return `$${perMillion.toFixed(4)}`;
@@ -168,6 +194,7 @@ export default function LLMSettings() {
             <ProviderCard
               key={provider.id}
               provider={provider}
+              info={PROVIDER_INFO[provider.id]}
               testing={testingProvider === provider.id}
               onTest={() => {
                 const defaultModel = provider.models.find((m) => m.isDefault) || provider.models[0];
@@ -175,6 +202,50 @@ export default function LLMSettings() {
               }}
             />
           ))}
+        </div>
+
+        {/* API Key Setup Guide */}
+        <div className="mt-6 rounded-lg border border-blue-100 bg-blue-50/50 p-4">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-blue-900 mb-3">
+            <KeyRound className="w-4 h-4" />
+            API Key Setup
+          </h4>
+          <p className="text-xs text-blue-800 mb-3">
+            Add each provider&apos;s API key as an environment variable in your Railway service settings
+            (Service &rarr; Variables tab). The backend detects keys on startup.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-blue-700">
+                  <th className="pb-2 pr-4 font-medium">Provider</th>
+                  <th className="pb-2 pr-4 font-medium">Variable Name</th>
+                  <th className="pb-2 font-medium">Get API Key</th>
+                </tr>
+              </thead>
+              <tbody className="text-blue-900">
+                {Object.entries(PROVIDER_INFO).map(([id, info]) => (
+                  <tr key={id} className="border-t border-blue-100">
+                    <td className="py-2 pr-4 font-medium">{settings.providers.find(p => p.id === id)?.displayName ?? id}</td>
+                    <td className="py-2 pr-4">
+                      <code className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] font-mono">{info.envVar}</code>
+                    </td>
+                    <td className="py-2">
+                      <a
+                        href={info.keyUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 underline"
+                      >
+                        {info.keyLabel}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </Section>
 
@@ -285,10 +356,12 @@ function Section({
 
 function ProviderCard({
   provider,
+  info,
   testing,
   onTest,
 }: {
   provider: LLMProviderInfo;
+  info?: { envVar: string; keyUrl: string; keyLabel: string };
   testing: boolean;
   onTest: () => void;
 }) {
@@ -307,10 +380,27 @@ function ProviderCard({
           <XCircle className="w-4 h-4 text-gray-400" />
         )}
       </div>
-      <p className="text-xs text-gray-500 mb-3">
+      <p className="text-xs text-gray-500 mb-1">
         {provider.models.length} model{provider.models.length !== 1 ? 's' : ''} &middot;{' '}
         {provider.configured ? 'API key configured' : 'No API key'}
       </p>
+      {info && (
+        <p className="text-[11px] text-gray-400 mb-3 font-mono">
+          {info.envVar}
+          {!provider.configured && (
+            <> &middot;{' '}
+              <a
+                href={info.keyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-orange-500 hover:text-orange-700 underline inline-flex items-center gap-0.5"
+              >
+                Get key <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </>
+          )}
+        </p>
+      )}
       {provider.configured && (
         <Button
           size="sm"
