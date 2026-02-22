@@ -19,6 +19,11 @@ import {
   ChevronUp,
   ArrowUpDown,
   Star,
+  DollarSign,
+  Users,
+  Calculator,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -286,6 +291,11 @@ export default function LLMSettings() {
       {/* ── Model Comparison ────────────────────────────────────────────── */}
       {settings.providers.length > 0 && (
         <ModelComparisonTable providers={settings.providers} />
+      )}
+
+      {/* ── Cost & Profit Estimator ─────────────────────────────────────── */}
+      {settings.providers.length > 0 && (
+        <CostProfitEstimator providers={settings.providers} />
       )}
 
       {/* ── Default Parameters ──────────────────────────────────────────── */}
@@ -696,6 +706,296 @@ function ModelComparisonTable({ providers }: { providers: LLMProviderInfo[] }) {
             </span>
             <span>Dimmed rows = provider not configured</span>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Subscription pricing (must match backend constants/pricing.ts) ───────────
+
+const SUBSCRIPTION_PRICING: Record<string, { label: string; monthlyUSD: number; queryLimit: number | null }> = {
+  free:    { label: 'Free',    monthlyUSD: 0,  queryLimit: 50 },
+  starter: { label: 'Starter', monthlyUSD: 9,  queryLimit: 100 },
+  premium: { label: 'Premium', monthlyUSD: 15, queryLimit: 500 },
+  pro:     { label: 'Pro',     monthlyUSD: 45, queryLimit: null }, // unlimited
+};
+
+// ── Cost & Profit Estimator ──────────────────────────────────────────────────
+
+function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
+  const [expanded, setExpanded] = useState(true);
+
+  // Usage knobs
+  const [totalUsers, setTotalUsers] = useState(100);
+  const [avgQueriesPerUser, setAvgQueriesPerUser] = useState(30);
+  const [avgInputTokens, setAvgInputTokens] = useState(1500);
+  const [avgOutputTokens, setAvgOutputTokens] = useState(800);
+  const [chatRatio, setChatRatio] = useState(70); // % of queries that are chat vs research
+
+  // User distribution across tiers (percentage)
+  const [tierDist, setTierDist] = useState({ free: 60, starter: 20, premium: 15, pro: 5 });
+
+  const totalQueries = totalUsers * avgQueriesPerUser;
+  const chatQueries = Math.round(totalQueries * (chatRatio / 100));
+  const researchQueries = totalQueries - chatQueries;
+
+  // Monthly subscription revenue
+  const monthlyRevenue = React.useMemo(() => {
+    let rev = 0;
+    for (const [tier, dist] of Object.entries(tierDist)) {
+      const users = Math.round(totalUsers * (dist / 100));
+      rev += users * (SUBSCRIPTION_PRICING[tier]?.monthlyUSD ?? 0);
+    }
+    return rev;
+  }, [totalUsers, tierDist]);
+
+  // Flatten all models
+  const allModels = React.useMemo(() => {
+    return providers.flatMap((p) =>
+      p.models.map((m) => ({
+        ...m,
+        providerId: p.id,
+        providerName: p.displayName,
+        configured: p.configured,
+        modeFit: getModeFit(m),
+      })),
+    );
+  }, [providers]);
+
+  // Calculate cost for each model
+  const estimates = React.useMemo(() => {
+    return allModels.map((m) => {
+      // Use the model for the mode it best fits; for 'both' split proportionally
+      let queriesForModel: number;
+      if (m.modeFit === 'chat') queriesForModel = chatQueries;
+      else if (m.modeFit === 'research') queriesForModel = researchQueries;
+      else queriesForModel = totalQueries; // 'both' — assume all queries use this model
+
+      const inputCost = (queriesForModel * avgInputTokens / 1_000_000) * m.inputCostPer1M;
+      const outputCost = (queriesForModel * avgOutputTokens / 1_000_000) * m.outputCostPer1M;
+      const totalCost = inputCost + outputCost;
+      const profit = monthlyRevenue - totalCost;
+      const margin = monthlyRevenue > 0 ? (profit / monthlyRevenue) * 100 : -100;
+
+      return { ...m, queriesForModel, inputCost, outputCost, totalCost, profit, margin };
+    });
+  }, [allModels, chatQueries, researchQueries, totalQueries, avgInputTokens, avgOutputTokens, monthlyRevenue]);
+
+  // Sort by profit descending
+  const sorted = React.useMemo(() => {
+    return [...estimates].sort((a, b) => b.profit - a.profit);
+  }, [estimates]);
+
+  const updateTierDist = (tier: string, value: number) => {
+    setTierDist((prev) => {
+      const updated = { ...prev, [tier]: value };
+      // Normalise others proportionally so total = 100
+      const others = Object.keys(updated).filter((k) => k !== tier);
+      const remaining = 100 - value;
+      const otherSum = others.reduce((s, k) => s + (prev as any)[k], 0);
+      if (otherSum > 0) {
+        for (const k of others) {
+          (updated as any)[k] = Math.round(((prev as any)[k] / otherSum) * remaining);
+        }
+      }
+      // Fix rounding
+      const total = Object.values(updated).reduce((s, v) => s + v, 0);
+      if (total !== 100 && others.length > 0) {
+        (updated as any)[others[0]] += 100 - total;
+      }
+      return updated;
+    });
+  };
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200">
+      <button
+        className="w-full flex items-center justify-between p-6 text-left"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+          <Calculator className="w-5 h-5 text-orange-500" />
+          Cost &amp; Profit Estimator
+        </h3>
+        <ChevronUp className={cn('w-5 h-5 text-gray-400 transition-transform', !expanded && 'rotate-180')} />
+      </button>
+
+      {expanded && (
+        <div className="px-6 pb-6 space-y-6">
+          {/* ── Usage Parameters ──────────────────────────────────────── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                <Users className="inline w-3.5 h-3.5 mr-1" />
+                Total Users: {totalUsers.toLocaleString()}
+              </label>
+              <input type="range" min={10} max={10_000} step={10} value={totalUsers}
+                onChange={(e) => setTotalUsers(Number(e.target.value))}
+                className="w-full accent-orange-500" />
+              <div className="flex justify-between text-[10px] text-gray-400"><span>10</span><span>10,000</span></div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Avg Queries/User/Month: {avgQueriesPerUser}
+              </label>
+              <input type="range" min={1} max={200} step={1} value={avgQueriesPerUser}
+                onChange={(e) => setAvgQueriesPerUser(Number(e.target.value))}
+                className="w-full accent-orange-500" />
+              <div className="flex justify-between text-[10px] text-gray-400"><span>1</span><span>200</span></div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Chat / Research Split: {chatRatio}% / {100 - chatRatio}%
+              </label>
+              <input type="range" min={0} max={100} step={5} value={chatRatio}
+                onChange={(e) => setChatRatio(Number(e.target.value))}
+                className="w-full accent-orange-500" />
+              <div className="flex justify-between text-[10px] text-gray-400"><span>All Research</span><span>All Chat</span></div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Avg Input Tokens/Query: {avgInputTokens.toLocaleString()}
+              </label>
+              <input type="range" min={100} max={10_000} step={100} value={avgInputTokens}
+                onChange={(e) => setAvgInputTokens(Number(e.target.value))}
+                className="w-full accent-orange-500" />
+              <div className="flex justify-between text-[10px] text-gray-400"><span>100</span><span>10,000</span></div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Avg Output Tokens/Query: {avgOutputTokens.toLocaleString()}
+              </label>
+              <input type="range" min={50} max={8_000} step={50} value={avgOutputTokens}
+                onChange={(e) => setAvgOutputTokens(Number(e.target.value))}
+                className="w-full accent-orange-500" />
+              <div className="flex justify-between text-[10px] text-gray-400"><span>50</span><span>8,000</span></div>
+            </div>
+          </div>
+
+          {/* ── Tier Distribution ─────────────────────────────────────── */}
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-2">User Tier Distribution</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {Object.entries(SUBSCRIPTION_PRICING).map(([tier, info]) => (
+                <div key={tier} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-gray-700">{info.label}</span>
+                    <span className="text-[10px] text-gray-400">${info.monthlyUSD}/mo</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="range" min={0} max={100} step={1}
+                      value={(tierDist as any)[tier]}
+                      onChange={(e) => updateTierDist(tier, Number(e.target.value))}
+                      className="flex-1 accent-orange-500" />
+                    <span className="text-xs font-mono w-8 text-right">{(tierDist as any)[tier]}%</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    {Math.round(totalUsers * ((tierDist as any)[tier] / 100))} users
+                    {info.queryLimit ? ` · ${info.queryLimit} q/mo` : ' · Unlimited'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Summary Cards ─────────────────────────────────────────── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+              <p className="text-[10px] font-medium text-blue-600 uppercase">Total Queries/Mo</p>
+              <p className="text-lg font-bold text-blue-900">{totalQueries.toLocaleString()}</p>
+              <p className="text-[10px] text-blue-500">{chatQueries.toLocaleString()} chat · {researchQueries.toLocaleString()} research</p>
+            </div>
+            <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+              <p className="text-[10px] font-medium text-green-600 uppercase">Subscription Revenue</p>
+              <p className="text-lg font-bold text-green-900">${monthlyRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/mo</p>
+              <p className="text-[10px] text-green-500">${(monthlyRevenue * 12).toLocaleString()}/yr</p>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+              <p className="text-[10px] font-medium text-orange-600 uppercase">Cheapest LLM Cost</p>
+              <p className="text-lg font-bold text-orange-900">
+                ${sorted.length > 0 ? sorted[sorted.length - 1].totalCost.toFixed(2) : '—'}/mo
+              </p>
+              <p className="text-[10px] text-orange-500">{sorted.length > 0 ? sorted[sorted.length - 1].displayName : ''}</p>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+              <p className="text-[10px] font-medium text-purple-600 uppercase">Best Profit Margin</p>
+              <p className="text-lg font-bold text-purple-900">
+                {sorted.length > 0 && sorted[0].margin > 0 ? `${sorted[0].margin.toFixed(1)}%` : '—'}
+              </p>
+              <p className="text-[10px] text-purple-500">{sorted.length > 0 ? sorted[0].displayName : ''}</p>
+            </div>
+          </div>
+
+          {/* ── Per-Model Estimates Table ──────────────────────────────── */}
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Provider</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Model</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap">Best For</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 whitespace-nowrap">Queries</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 whitespace-nowrap">LLM Cost/Mo</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 whitespace-nowrap">Revenue/Mo</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 whitespace-nowrap">Profit/Mo</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600 whitespace-nowrap">Margin</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {sorted.map((m) => {
+                  const isProfit = m.profit >= 0;
+                  return (
+                    <tr key={`est-${m.providerId}-${m.id}`} className={cn('hover:bg-gray-50', !m.configured && 'opacity-50')}>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={cn(
+                          'inline-block px-2 py-0.5 rounded-full text-[11px] font-medium',
+                          m.providerId === 'openai' ? 'bg-green-100 text-green-800' :
+                          m.providerId === 'anthropic' ? 'bg-amber-100 text-amber-800' :
+                          m.providerId === 'google' ? 'bg-blue-100 text-blue-800' :
+                          'bg-purple-100 text-purple-800',
+                        )}>{m.providerName}</span>
+                      </td>
+                      <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{m.displayName}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={cn(
+                          'inline-block px-2 py-0.5 rounded-full text-[11px] font-medium',
+                          m.modeFit === 'chat' ? 'bg-sky-100 text-sky-700' :
+                          m.modeFit === 'research' ? 'bg-indigo-100 text-indigo-700' :
+                          'bg-gray-100 text-gray-700',
+                        )}>{m.modeFit === 'chat' ? 'Chat' : m.modeFit === 'research' ? 'Research' : 'Both'}</span>
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">{m.queriesForModel.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-red-600">${m.totalCost.toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-green-600">${monthlyRevenue.toFixed(0)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs whitespace-nowrap">
+                        <span className={cn('inline-flex items-center gap-0.5', isProfit ? 'text-green-600' : 'text-red-600')}>
+                          {isProfit ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          {isProfit ? '' : '-'}${Math.abs(m.profit).toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-xs">
+                        <span className={cn(
+                          'font-semibold',
+                          m.margin >= 80 ? 'text-green-600' :
+                          m.margin >= 50 ? 'text-green-500' :
+                          m.margin >= 0 ? 'text-yellow-600' :
+                          'text-red-600',
+                        )}>{m.margin.toFixed(1)}%</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footnote */}
+          <p className="text-[11px] text-gray-400">
+            Estimates assume each query uses one model. "Both" models show cost for all {totalQueries.toLocaleString()} queries.
+            Chat-only models use {chatQueries.toLocaleString()} queries; Research-only models use {researchQueries.toLocaleString()} queries.
+            Actual costs vary with prompt length, caching, and real token counts.
+          </p>
         </div>
       )}
     </div>
