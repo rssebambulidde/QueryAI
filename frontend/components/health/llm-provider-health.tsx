@@ -71,7 +71,7 @@ export function LLMProviderHealth({ loading: parentLoading }: LLMProviderHealthP
       // Get provider settings to find a model
       const settings = await adminApi.getLLMSettings();
       const providerInfo = settings.data?.providers.find((p) => p.id === providerId);
-      const testModel = providerInfo?.models[0]?.id;
+      const testModel = providerInfo?.models.find((m) => m.isDefault)?.id ?? providerInfo?.models[0]?.id;
       if (!testModel) {
         setProviders((prev) =>
           prev.map((p) =>
@@ -89,9 +89,10 @@ export function LLMProviderHealth({ loading: parentLoading }: LLMProviderHealthP
           ),
         );
       } else {
+        const errMsg = result.error?.message || result.data?.error || 'Test failed';
         setProviders((prev) =>
           prev.map((p) =>
-            p.providerId === providerId ? { ...p, testing: false, error: 'Test failed' } : p,
+            p.providerId === providerId ? { ...p, testing: false, error: errMsg } : p,
           ),
         );
       }
