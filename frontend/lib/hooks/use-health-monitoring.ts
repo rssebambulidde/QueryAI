@@ -33,14 +33,10 @@ export function useHealthMonitoring(autoRefresh: boolean = true, refreshInterval
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to load health metrics';
       setError(errorMessage);
-      // Don't show toast on auto-refresh errors to avoid spam
-      if (!autoRefresh) {
-        toast.error(errorMessage);
-      }
     } finally {
       setLoading(false);
     }
-  }, [autoRefresh, toast]);
+  }, []);
 
   // Auto-refresh health metrics
   useEffect(() => {
@@ -73,13 +69,14 @@ export function useResponseTimeMetrics(options?: {
   const [metrics, setMetrics] = useState<ResponseTimeMetric[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
+  const optionsKey = JSON.stringify(options ?? {});
 
   const loadMetrics = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await healthApi.getResponseTimeMetrics(options);
+      const opts = JSON.parse(optionsKey);
+      const response = await healthApi.getResponseTimeMetrics(opts);
       if (response.success && response.data) {
         setMetrics(response.data.metrics);
       } else {
@@ -88,11 +85,11 @@ export function useResponseTimeMetrics(options?: {
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to load response time metrics';
       setError(errorMessage);
-      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [options, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionsKey]);
 
   useEffect(() => {
     loadMetrics();
@@ -114,13 +111,14 @@ export function useErrorRateMetrics(options?: {
   const [metrics, setMetrics] = useState<ErrorRateMetric[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
+  const optionsKey = JSON.stringify(options ?? {});
 
   const loadMetrics = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await healthApi.getErrorRateMetrics(options);
+      const opts = JSON.parse(optionsKey);
+      const response = await healthApi.getErrorRateMetrics(opts);
       if (response.success && response.data) {
         setMetrics(response.data.metrics);
       } else {
@@ -129,11 +127,11 @@ export function useErrorRateMetrics(options?: {
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to load error rate metrics';
       setError(errorMessage);
-      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [options, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionsKey]);
 
   useEffect(() => {
     loadMetrics();
@@ -155,13 +153,14 @@ export function useThroughputMetrics(options?: {
   const [metrics, setMetrics] = useState<ThroughputMetric[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
+  const optionsKey = JSON.stringify(options ?? {});
 
   const loadMetrics = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await healthApi.getThroughputMetrics(options);
+      const opts = JSON.parse(optionsKey);
+      const response = await healthApi.getThroughputMetrics(opts);
       if (response.success && response.data) {
         setMetrics(response.data.metrics);
       } else {
@@ -170,11 +169,11 @@ export function useThroughputMetrics(options?: {
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to load throughput metrics';
       setError(errorMessage);
-      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [options, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionsKey]);
 
   useEffect(() => {
     loadMetrics();
@@ -196,13 +195,14 @@ export function useComponentPerformance(options?: {
   const [performance, setPerformance] = useState<ComponentPerformance[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
+  const optionsKey = JSON.stringify(options ?? {});
 
   const loadPerformance = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await healthApi.getComponentPerformance(options);
+      const opts = JSON.parse(optionsKey);
+      const response = await healthApi.getComponentPerformance(opts);
       if (response.success && response.data) {
         setPerformance(response.data.performance);
       } else {
@@ -211,11 +211,11 @@ export function useComponentPerformance(options?: {
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to load component performance';
       setError(errorMessage);
-      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [options, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionsKey]);
 
   useEffect(() => {
     loadPerformance();
@@ -239,12 +239,15 @@ export function useAlerts(options?: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  // Stable key so useCallback doesn't re-create on every render
+  const optionsKey = JSON.stringify(options ?? {});
 
   const loadAlerts = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await healthApi.getAlerts(options);
+      const opts = JSON.parse(optionsKey);
+      const response = await healthApi.getAlerts(opts);
       if (response.success && response.data) {
         setAlerts(response.data.alerts);
       } else {
@@ -253,11 +256,11 @@ export function useAlerts(options?: {
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to load alerts';
       setError(errorMessage);
-      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [options, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [optionsKey]);
 
   const acknowledgeAlert = useCallback(
     async (alertId: string): Promise<boolean> => {
@@ -275,7 +278,8 @@ export function useAlerts(options?: {
         return false;
       }
     },
-    [toast, loadAlerts]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loadAlerts]
   );
 
   const resolveAlert = useCallback(
@@ -294,7 +298,8 @@ export function useAlerts(options?: {
         return false;
       }
     },
-    [toast, loadAlerts]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loadAlerts]
   );
 
   useEffect(() => {
@@ -330,11 +335,10 @@ export function useAlertConfigurations() {
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to load alert configurations';
       setError(errorMessage);
-      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   const updateConfiguration = useCallback(
     async (id: string, config: Partial<AlertConfiguration>): Promise<boolean> => {
@@ -352,7 +356,8 @@ export function useAlertConfigurations() {
         return false;
       }
     },
-    [toast, loadConfigurations]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loadConfigurations]
   );
 
   useEffect(() => {
