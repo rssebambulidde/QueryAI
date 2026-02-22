@@ -9,7 +9,7 @@ import type { BillingPeriod, Tier } from '../constants/pricing';
 export class ProratingService {
   /**
    * Calculate prorated amount for upgrade/downgrade or period change.
-   * Uses getPricing(tier, currency, period) when periods are provided.
+   * Uses getPricing(tier, period) for USD pricing.
    */
   static calculateProratedAmount(
     currentTier: Tier,
@@ -17,7 +17,6 @@ export class ProratingService {
     periodStart: Date,
     periodEnd: Date,
     currentDate: Date = new Date(),
-    currency: 'UGX' | 'USD' = 'UGX',
     currentBillingPeriod: BillingPeriod = 'monthly',
     newBillingPeriod: BillingPeriod = 'monthly'
   ): {
@@ -31,8 +30,8 @@ export class ProratingService {
     const daysUsed = Math.ceil((currentDate.getTime() - periodStart.getTime()) / (24 * 60 * 60 * 1000));
     const daysRemaining = Math.max(0, totalDays - daysUsed);
 
-    const currentPrice = getPricing(currentTier, currency, currentBillingPeriod);
-    const newPrice = getPricing(newTier, currency, newBillingPeriod);
+    const currentPrice = getPricing(currentTier, currentBillingPeriod);
+    const newPrice = getPricing(newTier, newBillingPeriod);
 
     const currentDailyRate = totalDays > 0 ? currentPrice / totalDays : 0;
     const newDailyRate = totalDays > 0 ? newPrice / totalDays : 0;
@@ -72,7 +71,6 @@ export class ProratingService {
     fromTier: Tier,
     toTier: Tier,
     subscription: Database.Subscription,
-    currency: 'UGX' | 'USD' = 'UGX',
     toBillingPeriod?: BillingPeriod
   ): {
     currentTierPrice: number;
@@ -86,8 +84,8 @@ export class ProratingService {
     const currentPeriod: BillingPeriod = sub.billing_period ?? 'monthly';
     const newPeriod: BillingPeriod = toBillingPeriod ?? currentPeriod;
 
-    const currentPrice = getPricing(fromTier, currency, currentPeriod);
-    const newPrice = getPricing(toTier, currency, newPeriod);
+    const currentPrice = getPricing(fromTier, currentPeriod);
+    const newPrice = getPricing(toTier, newPeriod);
 
     if (!subscription.current_period_start || !subscription.current_period_end) {
       return {
@@ -110,7 +108,6 @@ export class ProratingService {
       periodStart,
       periodEnd,
       now,
-      currency,
       currentPeriod,
       newPeriod
     );

@@ -3,39 +3,36 @@
  */
 
 export type Tier = 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
-export type Currency = 'UGX' | 'USD';
 export type BillingPeriod = 'monthly' | 'annual';
 
-const MONTHLY: Record<Tier, Record<Currency, number>> = {
-  free: { UGX: 0, USD: 0 },
-  starter: { UGX: 27000, USD: 9 },
-  premium: { UGX: 50000, USD: 15 },
-  pro: { UGX: 150000, USD: 45 },
-  enterprise: { UGX: 300000, USD: 99 },
+const MONTHLY: Record<Tier, number> = {
+  free: 0,
+  starter: 9,
+  premium: 15,
+  pro: 45,
+  enterprise: 99,
 };
 
-const ANNUAL: Record<Tier, Record<Currency, number>> = {
-  free: { UGX: 0, USD: 0 },
-  starter: { UGX: 270000, USD: 90 },
-  premium: { UGX: 500000, USD: 150 },
-  pro: { UGX: 1500000, USD: 450 },
-  enterprise: { UGX: 3000000, USD: 999 },
+const ANNUAL: Record<Tier, number> = {
+  free: 0,
+  starter: 90,
+  premium: 150,
+  pro: 450,
+  enterprise: 999,
 };
 
 export function getPricing(
   tier: Tier,
-  currency: Currency,
   period: BillingPeriod = 'monthly'
 ): number {
-  return period === 'annual' ? ANNUAL[tier][currency] : MONTHLY[tier][currency];
+  return period === 'annual' ? ANNUAL[tier] : MONTHLY[tier];
 }
 
 export function getAnnualSavings(
-  tier: Tier,
-  currency: Currency
+  tier: Tier
 ): { monthlyTotal: number; annualPrice: number; savings: number; savingsPercentage: number } {
-  const monthlyTotal = MONTHLY[tier][currency] * 12;
-  const annualPrice = ANNUAL[tier][currency];
+  const monthlyTotal = MONTHLY[tier] * 12;
+  const annualPrice = ANNUAL[tier];
   const savings = monthlyTotal - annualPrice;
   const savingsPercentage = monthlyTotal > 0 ? (savings / monthlyTotal) * 100 : 0;
   return {
@@ -50,7 +47,6 @@ export function isEnterpriseTier(tier: Tier): boolean {
   return tier === 'enterprise';
 }
 
-export function formatPrice(amount: number, currency: Currency): string {
-  if (currency === 'USD') return `$${amount.toFixed(2)}`;
-  return `${amount.toLocaleString('en-US')} UGX`;
+export function formatPrice(amount: number): string {
+  return `$${amount.toFixed(2)}`;
 }

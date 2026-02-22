@@ -2,7 +2,6 @@ import { supabaseAdmin } from '../config/database';
 import { DatabaseService } from './database.service';
 import { SubscriptionService, TIER_LIMITS } from './subscription.service';
 import { getOverageUnitPrice } from '../constants/pricing';
-import type { Currency } from '../constants/pricing';
 import type { Database } from '../types/database';
 import logger from '../config/logger';
 
@@ -27,9 +26,9 @@ export class OverageService {
     userId: string,
     periodStart: Date,
     periodEnd: Date,
-    options: { currency?: Currency; subscriptionId?: string } = {}
+    options: { currency?: string; subscriptionId?: string } = {}
   ): Promise<OverageSummary> {
-    const currency = (options.currency ?? 'USD') as Currency;
+    const currency = 'USD';
     const subscription = await DatabaseService.getUserSubscription(userId);
     if (!subscription) {
       return { records: [], totalCharged: 0, currency, periodStart: periodStart.toISOString(), periodEnd: periodEnd.toISOString() };
@@ -54,7 +53,7 @@ export class OverageService {
     const qLimit = limits.queriesPerMonth;
     if (qLimit != null && queriesUsed > qLimit) {
       const overageUnits = queriesUsed - qLimit;
-      const unitPrice = getOverageUnitPrice('queries', currency);
+      const unitPrice = getOverageUnitPrice('queries');
       const amount = Math.round(overageUnits * unitPrice * 100) / 100;
       const row = await this.upsertOverageRecord({
         user_id: userId,
@@ -78,7 +77,7 @@ export class OverageService {
     const tLimit = limits.tavilySearchesPerMonth;
     if (tLimit != null && tavilyUsed > tLimit) {
       const overageUnits = tavilyUsed - tLimit;
-      const unitPrice = getOverageUnitPrice('tavily_searches', currency);
+      const unitPrice = getOverageUnitPrice('tavily_searches');
       const amount = Math.round(overageUnits * unitPrice * 100) / 100;
       const row = await this.upsertOverageRecord({
         user_id: userId,

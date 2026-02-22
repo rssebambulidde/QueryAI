@@ -1,7 +1,6 @@
 import { DatabaseService } from './database.service';
 import { OverageService } from './overage.service';
 import type { Database } from '../types/database';
-import type { Currency } from '../constants/pricing';
 import logger from '../config/logger';
 
 export interface InvoiceLineItem {
@@ -31,7 +30,7 @@ export class BillingService {
     userId: string,
     periodStart: Date,
     periodEnd: Date,
-    currency: Currency = 'USD'
+    currency: string = 'USD'
   ): Promise<{ totalCharged: number; currency: string; recordCount: number }> {
     const sub = await DatabaseService.getUserSubscription(userId);
     const summary = await OverageService.computeOverageForPeriod(userId, periodStart, periodEnd, {
@@ -53,7 +52,7 @@ export class BillingService {
     userId: string,
     periodStart: Date,
     periodEnd: Date,
-    currency: Currency = 'USD'
+    currency: string = 'USD'
   ): Promise<Database.Payment | null> {
     const sub = await DatabaseService.getUserSubscription(userId);
     if (!sub) {

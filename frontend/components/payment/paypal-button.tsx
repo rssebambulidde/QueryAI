@@ -11,7 +11,6 @@ const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || '';
 
 export interface PayPalButtonProps {
   tier: 'pro' | 'enterprise';
-  currency: 'UGX' | 'USD';
   firstName: string;
   lastName: string;
   email: string;
@@ -30,7 +29,6 @@ export interface PayPalButtonProps {
  */
 export function PayPalButton({
   tier,
-  currency,
   firstName,
   lastName,
   email,
@@ -63,7 +61,7 @@ export function PayPalButton({
       
       const request: PaymentInitiateRequest & { recurring?: boolean } = {
         tier,
-        currency,
+        currency: 'USD',
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
@@ -101,7 +99,7 @@ export function PayPalButton({
     } finally {
       setLoading(false);
     }
-  }, [tier, currency, firstName, lastName, email, phoneNumber, recurring, billingPeriod, showError, onRedirect]);
+  }, [tier, firstName, lastName, email, phoneNumber, recurring, billingPeriod, showError, onRedirect]);
 
   // One-time: Use redirect flow for better international address support
   // PayPal's embedded card form validates ZIP/phone before country selection
@@ -112,7 +110,7 @@ export function PayPalButton({
     try {
       const request: PaymentInitiateRequest = {
         tier,
-        currency,
+        currency: 'USD',
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
@@ -147,7 +145,7 @@ export function PayPalButton({
     } finally {
       setLoading(false);
     }
-  }, [tier, currency, firstName, lastName, email, phoneNumber, billingPeriod, showError, onRedirect]);
+  }, [tier, firstName, lastName, email, phoneNumber, billingPeriod, showError, onRedirect]);
 
   // Recurring or no client ID: redirect flow (no SDK approval popup)
   // For better international support, we use redirect flow which allows proper country selection

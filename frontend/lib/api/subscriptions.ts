@@ -38,8 +38,8 @@ export const subscriptionApi = {
     const response = await apiClient.get('/api/subscription/history');
     return response.data;
   },
-  getProratedPricing: async (toTier: 'free' | 'pro', currency: 'UGX' | 'USD' = 'UGX', toBillingPeriod?: 'monthly' | 'annual'): Promise<ApiResponse<{ proratedPricing: any }>> => {
-    const params: { toTier: string; currency: string; toBillingPeriod?: string } = { toTier, currency };
+  getProratedPricing: async (toTier: 'free' | 'pro', toBillingPeriod?: 'monthly' | 'annual'): Promise<ApiResponse<{ proratedPricing: any }>> => {
+    const params: { toTier: string; currency: string; toBillingPeriod?: string } = { toTier, currency: 'USD' };
     if (toBillingPeriod) params.toBillingPeriod = toBillingPeriod;
     const response = await apiClient.get('/api/subscription/prorated-pricing', { params });
     return response.data;

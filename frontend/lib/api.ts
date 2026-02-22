@@ -1439,7 +1439,7 @@ export const billingApi = {
   getOverage: async (params?: {
     periodStart?: string;
     periodEnd?: string;
-    currency?: 'USD' | 'UGX';
+    currency?: 'USD';
   }): Promise<ApiResponse<OverageSummary>> => {
     const response = await apiClient.get('/api/billing/overage', { params: params ?? {} });
     return response.data;
@@ -1448,7 +1448,7 @@ export const billingApi = {
   initiateOveragePayment: async (params: {
     periodStart: string;
     periodEnd: string;
-    currency?: 'USD' | 'UGX';
+    currency?: 'USD';
   }): Promise<
     ApiResponse<
       | { noOverage: true; message: string }
@@ -1568,10 +1568,9 @@ export const subscriptionApi = {
 
   getProratedPricing: async (
     toTier: 'free' | 'pro',
-    currency: 'UGX' | 'USD' = 'UGX',
     toBillingPeriod?: 'monthly' | 'annual'
   ): Promise<ApiResponse<{ proratedPricing: any }>> => {
-    const params: { toTier: string; currency: string; toBillingPeriod?: string } = { toTier, currency };
+    const params: { toTier: string; currency: string; toBillingPeriod?: string } = { toTier, currency: 'USD' };
     if (toBillingPeriod) params.toBillingPeriod = toBillingPeriod;
     const response = await apiClient.get('/api/subscription/prorated-pricing', { params });
     return response.data;
@@ -1616,7 +1615,7 @@ export interface Payment {
 
 export interface PaymentInitiateRequest {
   tier: 'pro' | 'enterprise';
-  currency: 'UGX' | 'USD';
+  currency?: 'USD';
   firstName: string;
   lastName: string;
   email: string;

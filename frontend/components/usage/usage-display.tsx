@@ -10,11 +10,9 @@ import { useRouter } from 'next/navigation';
 interface UsageDisplayProps {
   compact?: boolean;
   showWarnings?: boolean;
-  /** Currency for overage display (default USD). */
-  overageCurrency?: 'USD' | 'UGX';
 }
 
-export function UsageDisplay({ compact = false, showWarnings = true, overageCurrency = 'USD' }: UsageDisplayProps) {
+export function UsageDisplay({ compact = false, showWarnings = true }: UsageDisplayProps) {
   const router = useRouter();
   const [usage, setUsage] = useState<UsageStats | null>(null);
   const [warnings, setWarnings] = useState<UsageWarnings | null>(null);
@@ -56,7 +54,7 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
       const res = await billingApi.getOverage({
         periodStart,
         periodEnd,
-        currency: overageCurrency,
+        currency: 'USD',
       });
       if (res.success && res.data) setOverage(res.data);
       else setOverage(null);
@@ -65,7 +63,7 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
     } finally {
       setOverageLoading(false);
     }
-  }, [overageCurrency]);
+  }, []);
 
   useEffect(() => {
     loadUsage();
@@ -104,8 +102,8 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
     return limit.toLocaleString();
   };
 
-  const formatOverageAmount = (amount: number, currency: string): string => {
-    return currency === 'USD' ? `$${amount.toFixed(2)}` : `${amount.toLocaleString('en-US')} ${currency}`;
+  const formatOverageAmount = (amount: number): string => {
+    return `$${amount.toFixed(2)}`;
   };
 
   const getProgressColor = (percentage: number): string => {
@@ -122,7 +120,7 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
       const res = await billingApi.initiateOveragePayment({
         periodStart: usage.periodStart,
         periodEnd: usage.periodEnd,
-        currency: overageCurrency,
+        currency: 'USD',
       });
       if (!res.success || !res.data) return;
       if ('noOverage' in res.data && res.data.noOverage) return;
@@ -270,13 +268,13 @@ export function UsageDisplay({ compact = false, showWarnings = true, overageCurr
           ) : (
             <>
               <div className="text-sm text-amber-800">
-                <span className="font-semibold">{formatOverageAmount(overage!.totalCharged, overage!.currency)}</span>
+                <span className="font-semibold">{formatOverageAmount(overage!.totalCharged)}</span>
                 {overage!.records.length > 0 && (
                   <ul className="mt-2 space-y-1 list-disc list-inside">
                     {overage!.records.map((r, i) => (
                       <li key={i}>
                         {r.metric_type === 'queries' && 'Queries'}
-                        {r.metric_type === 'tavily_searches' && 'Web searches'}: {r.overage_units} over × {formatOverageAmount(r.unit_price, overage!.currency)} = {formatOverageAmount(r.amount_charged, overage!.currency)}
+                        {r.metric_type === 'tavily_searches' && 'Web searches'}: {r.overage_units} over × {formatOverageAmount(r.unit_price)} = {formatOverageAmount(r.amount_charged)}
                       </li>
                     ))}
                   </ul>

@@ -692,7 +692,7 @@ export class SubscriptionService {
         paypal_payment_id: saleId,
         tier: subscription.tier,
         amount: amount ? parseFloat(amount) : 0,
-        currency: currency as 'UGX' | 'USD',
+        currency: 'USD',
         status: 'completed',
         payment_description: `QueryAI ${subscription.tier} subscription renewal (${billingPeriod})`,
         callback_data: saleResource,
@@ -715,7 +715,6 @@ export class SubscriptionService {
         if (user) {
           const amt = amount ? parseFloat(amount) : getPricing(
             subscription.tier as 'starter' | 'premium' | 'pro',
-            currency as 'UGX' | 'USD',
             billingPeriod as 'monthly' | 'annual'
           );
           await EmailService.sendRenewalConfirmationEmail(
@@ -725,7 +724,7 @@ export class SubscriptionService {
             now,
             periodEnd,
             amt,
-            currency as 'UGX' | 'USD'
+            'USD'
           );
         }
       } catch (emailError) {
@@ -933,17 +932,13 @@ export class SubscriptionService {
           const user = await DatabaseService.getUserProfile(sub.user_id);
           if (!user) continue;
 
-          let currency: 'UGX' | 'USD' = 'UGX';
-          const payments = await DatabaseService.getUserPayments(sub.user_id, 20);
-          const lastForTier = payments.find(
-            (p) => p.tier === sub.tier && p.status === 'completed' && (p.currency === 'UGX' || p.currency === 'USD')
-          );
-          if (lastForTier?.currency === 'USD' || lastForTier?.currency === 'UGX') {
-            currency = lastForTier.currency;
-          }
-
+          const currency = 'USD' as const;
           const bp = (sub as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
-          const amount = getPricing(sub.tier as 'starter' | 'premium' | 'pro', currency, bp as 'monthly' | 'annual');
+          const amount = getPricing(sub.tier as 'starter' | 'premium' | 'pro', bp as 'monthly' | 'annual');
+          const payments = await DatabaseService.getUserPayments(sub.user_id, 5);
+          const lastForTier = payments.find(
+            (p) => p.tier === sub.tier && p.status === 'completed'
+          );
           const paymentMethod = lastForTier?.payment_method?.trim() || undefined;
           await EmailService.sendRenewalReminderEmail(
             user.email,
@@ -1059,20 +1054,9 @@ export class SubscriptionService {
               const { EmailService } = await import('./email.service');
               const user = await DatabaseService.getUserProfile(subscription.user_id);
               if (user) {
-                let currency: 'UGX' | 'USD' = 'UGX';
-                const payments = await DatabaseService.getUserPayments(subscription.user_id, 20);
-                const lastForTier = payments.find(
-                  (p: Database.Payment) =>
-                    p.tier === subscription.tier &&
-                    p.status === 'completed' &&
-                    (p.currency === 'UGX' || p.currency === 'USD')
-                );
-                if (lastForTier?.currency === 'USD' || lastForTier?.currency === 'UGX') {
-                  currency = lastForTier.currency as 'UGX' | 'USD';
-                }
+                const currency = 'USD';
                 const amount = getPricing(
                   subscription.tier as 'starter' | 'premium' | 'pro',
-                  currency,
                   bp as 'monthly' | 'annual'
                 );
                 await EmailService.sendRenewalConfirmationEmail(

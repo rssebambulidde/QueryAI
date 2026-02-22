@@ -28,14 +28,14 @@ function getBaseUrl(): string {
 /**
  * GET /api/billing/overage
  * Get overage summary for a period. Defaults to current calendar month.
- * Query: periodStart, periodEnd (ISO), currency (USD|UGX).
+ * Query: periodStart, periodEnd (ISO).
  */
 router.get(
   '/overage',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { periodStart: ps, periodEnd: pe, currency } = req.query;
+    const { periodStart: ps, periodEnd: pe } = req.query;
 
     let periodStart: Date;
     let periodEnd: Date;
@@ -53,7 +53,7 @@ router.get(
       periodEnd.setHours(23, 59, 59, 999);
     }
 
-    const curr = (currency === 'UGX' ? 'UGX' : 'USD') as 'UGX' | 'USD';
+    const curr = 'USD' as const;
     const summary = await OverageService.computeOverageForPeriod(userId, periodStart, periodEnd, {
       currency: curr,
     });
@@ -81,14 +81,14 @@ router.get(
 /**
  * POST /api/billing/overage/initiate
  * Create overage payment, create PayPal order, return redirect URL to complete payment.
- * Body: periodStart, periodEnd (ISO), currency (USD|UGX).
+ * Body: periodStart, periodEnd (ISO).
  */
 router.post(
   '/overage/initiate',
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { periodStart: ps, periodEnd: pe, currency } = req.body;
+    const { periodStart: ps, periodEnd: pe } = req.body;
 
     if (!ps || !pe || typeof ps !== 'string' || typeof pe !== 'string') {
       throw new ValidationError('periodStart and periodEnd (ISO) required');
@@ -99,7 +99,7 @@ router.post(
       throw new ValidationError('Invalid periodStart or periodEnd');
     }
 
-    const curr = (currency === 'UGX' ? 'UGX' : 'USD') as 'UGX' | 'USD';
+    const curr = 'USD' as const;
     const payment = await BillingService.createOveragePayment(userId, periodStart, periodEnd, curr);
     if (!payment) {
       return res.status(200).json({

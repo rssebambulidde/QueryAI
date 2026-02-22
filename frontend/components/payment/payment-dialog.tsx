@@ -27,7 +27,6 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
   const { isMobile } = useMobile();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currency, setCurrency] = useState<'UGX' | 'USD'>('USD');
   // Default to one-time payment (false) unless explicitly set to recurring
   // This reduces friction - users can pay with card without PayPal account
   const [recurring, setRecurring] = useState(!!initialRecurring);
@@ -60,8 +59,8 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
     if (initialRecurring) setRecurring(true);
   }, [initialRecurring]);
 
-  const amount = getPricing(tier, currency, billingPeriod);
-  const annualSavings = getAnnualSavings(tier, currency);
+  const amount = getPricing(tier, billingPeriod);
+  const annualSavings = getAnnualSavings(tier);
 
   const handlePayPalError = (message: string) => {
     // Use enhanced error message parser
@@ -91,7 +90,7 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               </h2>
               <p className="text-gray-600 text-xs sm:text-sm">
                 Pay with Debit or Credit Card (processed via PayPal) —{' '}
-                <span className="font-semibold text-orange-600">{formatPrice(amount, currency)}</span>
+                <span className="font-semibold text-orange-600">{formatPrice(amount)}</span>
                 {billingPeriod === 'annual' && ' /year'}
                 {recurring && ' (recurring)'}
               </p>
@@ -116,41 +115,8 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
 
         {/* Scrollable Content - Includes PayPal buttons */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 min-h-0 pb-4 sm:pb-8">
-          {/* Currency Selection */}
+          {/* Billing period selector */}
           <div className="mb-4 space-y-3">
-            <label className="block text-sm font-medium text-gray-700">
-              Select Currency <span className="text-red-500">*</span>
-            </label>
-            <div className="flex gap-2 sm:gap-3">
-              <button
-                type="button"
-                onClick={() => setCurrency('UGX')}
-                className={cn(
-                  "flex-1 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg border-2 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base font-medium",
-                  currency === 'UGX'
-                    ? 'border-orange-500 bg-orange-50 text-orange-700'
-                    : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
-                )}
-                disabled={loading}
-              >
-                UGX
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrency('USD')}
-                className={cn(
-                  "flex-1 px-3 sm:px-4 py-2.5 sm:py-2 rounded-lg border-2 transition-colors touch-manipulation min-h-[44px] text-sm sm:text-base font-medium",
-                  currency === 'USD'
-                    ? 'border-orange-500 bg-orange-50 text-orange-700'
-                    : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
-                )}
-                disabled={loading}
-              >
-                USD
-              </button>
-            </div>
-
-            {/* Billing period selector */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">Billing period</label>
               <div className="flex gap-2 sm:gap-3">
@@ -327,7 +293,7 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               value={formData.phoneNumber}
               onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
               disabled={loading}
-              placeholder={currency === 'UGX' ? '+256712345678' : '+12125551234'}
+              placeholder="+12125551234"
               className="min-h-[44px] text-base sm:text-sm"
             />
           </div>
@@ -340,7 +306,6 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
             <div className="w-full">
               <PayPalButton
                 tier={tier}
-                currency={currency}
                 firstName={formData.firstName}
                 lastName={formData.lastName}
                 email={formData.email}

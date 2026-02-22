@@ -4,41 +4,39 @@
  */
 
 export type Tier = 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
-export type Currency = 'UGX' | 'USD';
 export type BillingPeriod = 'monthly' | 'annual';
 
 /**
- * Monthly pricing for each tier in different currencies.
+ * Monthly pricing for each tier in USD.
  */
-export const MONTHLY_PRICING: Record<Tier, Record<Currency, number>> = {
-  free: { UGX: 0, USD: 0 },
-  starter: { UGX: 27000, USD: 9 },
-  premium: { UGX: 50000, USD: 15 },
-  pro: { UGX: 150000, USD: 45 },
-  enterprise: { UGX: 300000, USD: 99 }, // Fixed pricing for self-enrollment
+export const MONTHLY_PRICING: Record<Tier, number> = {
+  free: 0,
+  starter: 9,
+  premium: 15,
+  pro: 45,
+  enterprise: 99, // Fixed pricing for self-enrollment
 };
 
 /**
- * Annual pricing for each tier in different currencies.
+ * Annual pricing for each tier in USD.
  * Enterprise is contact-for-pricing (0).
  */
-export const ANNUAL_PRICING: Record<Tier, Record<Currency, number>> = {
-  free: { UGX: 0, USD: 0 },
-  starter: { UGX: 270000, USD: 90 },
-  premium: { UGX: 500000, USD: 150 },
-  pro: { UGX: 1500000, USD: 450 },
-  enterprise: { UGX: 0, USD: 0 }, // Contact for pricing
+export const ANNUAL_PRICING: Record<Tier, number> = {
+  free: 0,
+  starter: 90,
+  premium: 150,
+  pro: 450,
+  enterprise: 0, // Contact for pricing
 };
 
 /**
- * Get pricing for a specific tier, currency, and billing period
+ * Get pricing for a specific tier and billing period (USD only)
  */
 export function getPricing(
   tier: Tier,
-  currency: Currency = 'UGX',
   period: BillingPeriod = 'monthly'
 ): number {
-  return period === 'annual' ? ANNUAL_PRICING[tier][currency] : MONTHLY_PRICING[tier][currency];
+  return period === 'annual' ? ANNUAL_PRICING[tier] : MONTHLY_PRICING[tier];
 }
 
 /** Enterprise tier uses contact-for-pricing; not available via standard checkout. */
@@ -47,11 +45,11 @@ export function isEnterpriseTier(tier: Tier): boolean {
 }
 
 /**
- * Get all pricing for a tier (both currencies and periods)
+ * Get all pricing for a tier (both periods)
  */
 export function getAllPricing(tier: Tier): {
-  monthly: Record<Currency, number>;
-  annual: Record<Currency, number>;
+  monthly: number;
+  annual: number;
 } {
   return {
     monthly: MONTHLY_PRICING[tier],
@@ -60,19 +58,18 @@ export function getAllPricing(tier: Tier): {
 }
 
 /**
- * Calculate annual savings compared to monthly pricing
+ * Calculate annual savings compared to monthly pricing (USD)
  */
 export function getAnnualSavings(
-  tier: Tier,
-  currency: Currency = 'UGX'
+  tier: Tier
 ): {
   monthlyTotal: number;
   annualPrice: number;
   savings: number;
   savingsPercentage: number;
 } {
-  const monthlyTotal = MONTHLY_PRICING[tier][currency] * 12;
-  const annualPrice = ANNUAL_PRICING[tier][currency];
+  const monthlyTotal = MONTHLY_PRICING[tier] * 12;
+  const annualPrice = ANNUAL_PRICING[tier];
   const savings = monthlyTotal - annualPrice;
   const savingsPercentage = monthlyTotal > 0 ? (savings / monthlyTotal) * 100 : 0;
 
@@ -87,22 +84,15 @@ export function getAnnualSavings(
 /**
  * Annual discount percentage (vs 12× monthly). Use for subscription.annual_discount.
  */
-export function getAnnualDiscountPercent(tier: Tier, currency: Currency = 'UGX'): number {
-  return getAnnualSavings(tier, currency).savingsPercentage;
+export function getAnnualDiscountPercent(tier: Tier): number {
+  return getAnnualSavings(tier).savingsPercentage;
 }
 
 /**
- * Format price for display
+ * Format price for display (USD)
  */
-export function formatPrice(
-  amount: number,
-  currency: Currency = 'UGX'
-): string {
-  if (currency === 'USD') {
-    return `$${amount.toFixed(2)}`;
-  }
-  // UGX formatting (no decimals)
-  return `${amount.toLocaleString('en-US')} UGX`;
+export function formatPrice(amount: number): string {
+  return `$${amount.toFixed(2)}`;
 }
 
 /**
@@ -111,14 +101,14 @@ export function formatPrice(
  */
 export type OverageMetricType = 'queries' | 'document_upload' | 'tavily_searches';
 
-export const OVERAGE_UNIT_PRICING: Record<OverageMetricType, Record<Currency, number>> = {
-  queries: { UGX: 100, USD: 0.05 },
-  document_upload: { UGX: 2000, USD: 0.50 },
-  tavily_searches: { UGX: 500, USD: 0.10 },
+export const OVERAGE_UNIT_PRICING: Record<OverageMetricType, number> = {
+  queries: 0.05,
+  document_upload: 0.50,
+  tavily_searches: 0.10,
 };
 
-export function getOverageUnitPrice(metric: OverageMetricType, currency: Currency = 'USD'): number {
-  return OVERAGE_UNIT_PRICING[metric][currency];
+export function getOverageUnitPrice(metric: OverageMetricType): number {
+  return OVERAGE_UNIT_PRICING[metric];
 }
 
 /**

@@ -42,14 +42,12 @@ export async function runRenewalReminderScheduler(): Promise<void> {
           const user = await DatabaseService.getUserProfile(sub.user_id);
           if (!user) continue;
 
-          let currency: 'UGX' | 'USD' = 'UGX';
-          const payments = await DatabaseService.getUserPayments(sub.user_id, 20);
+          const currency = 'USD' as const;
+          const amount = getPricing(sub.tier as 'starter' | 'premium' | 'pro', 'monthly');
+          const payments = await DatabaseService.getUserPayments(sub.user_id, 5);
           const lastForTier = payments.find(
-            (p) => p.tier === sub.tier && p.status === 'completed' && (p.currency === 'UGX' || p.currency === 'USD')
+            (p) => p.tier === sub.tier && p.status === 'completed'
           );
-          if (lastForTier?.currency === 'USD' || lastForTier?.currency === 'UGX') currency = lastForTier.currency;
-
-          const amount = getPricing(sub.tier as 'starter' | 'premium' | 'pro', currency, 'monthly');
           const paymentMethod = lastForTier?.payment_method?.trim() || undefined;
           await EmailService.sendRenewalReminderEmail(
             user.email,

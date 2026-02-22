@@ -105,17 +105,11 @@ router.post(
       throw new ValidationError('User profile not found');
     }
 
-    const currency = (req.body.currency || 'USD') as string;
-    if (!['USD', 'UGX'].includes(currency.toUpperCase())) {
-      throw new ValidationError('Invalid currency. Must be "USD" or "UGX"');
-    }
-    
-    const normalizedCurrency = currency.toUpperCase() as 'UGX' | 'USD';
+    const normalizedCurrency = 'USD' as const;
 
     const { getPricing } = await import('../constants/pricing');
     const amount = getPricing(
       tier as 'starter' | 'premium' | 'pro' | 'enterprise',
-      normalizedCurrency,
       billingPeriod
     );
     
@@ -406,10 +400,10 @@ router.get(
 
           const storedBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
           const billingPeriod = storedBillingPeriod === 'annual' ? 'annual' : 'monthly';
-          const currency = (payment.currency || 'USD') as 'UGX' | 'USD';
+          const currency = 'USD';
           const { getAnnualDiscountPercent } = await import('../constants/pricing');
           const annualDiscount = billingPeriod === 'annual'
-            ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro', currency)
+            ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro')
             : 0;
 
           await DatabaseService.updatePayment(payment.id, {
@@ -792,10 +786,10 @@ router.post(
           : new Date(periodStart.getTime() + 30 * 24 * 60 * 60 * 1000);
         const storedBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
         const billingPeriod = storedBillingPeriod === 'annual' ? 'annual' : 'monthly';
-        const currency = (payment.currency || 'USD') as 'UGX' | 'USD';
+        const currency = 'USD';
         const { getAnnualDiscountPercent } = await import('../constants/pricing');
         const annualDiscount = billingPeriod === 'annual'
-          ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro', currency)
+          ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro')
           : 0;
 
         await DatabaseService.updateSubscription(payment.user_id, {
@@ -1046,10 +1040,10 @@ router.post(
 
               const storedBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
               const billingPeriod = storedBillingPeriod === 'annual' ? 'annual' : 'monthly';
-              const currency = (payment.currency || 'USD') as 'UGX' | 'USD';
+              const currency = 'USD';
               const { getAnnualDiscountPercent } = await import('../constants/pricing');
               const annualDiscount = billingPeriod === 'annual'
-                ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro', currency)
+                ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro')
                 : 0;
 
               await DatabaseService.updateSubscription(payment.user_id, {
@@ -1147,7 +1141,7 @@ router.post(
                                 'Payment method declined or insufficient funds';
           const resourceAmount = (resource as { amount?: { value?: string; currency_code?: string } }).amount;
           let amountValue = resourceAmount?.value ? parseFloat(resourceAmount.value) : undefined;
-          const currency = (resourceAmount?.currency_code || 'USD') as 'UGX' | 'USD';
+          const currency = 'USD';
 
           // If amount not in resource, calculate from subscription tier and billing period
           if (!amountValue) {
@@ -1155,7 +1149,6 @@ router.post(
             const { getPricing } = await import('../constants/pricing');
             amountValue = getPricing(
               subscription.tier as 'starter' | 'premium' | 'pro' | 'enterprise',
-              currency,
               billingPeriod as 'monthly' | 'annual'
             );
           }

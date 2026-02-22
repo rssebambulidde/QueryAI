@@ -757,14 +757,14 @@ export function SubscriptionManager() {
               <tr className="border-b">
                 <td className="p-3 font-semibold">Price (monthly)</td>
                 <td className="p-3 text-center font-semibold">Free</td>
-                <td className="p-3 text-center font-semibold bg-purple-50">{formatPrice(getPricing('pro', 'UGX', 'monthly'), 'UGX')}<br />{formatPrice(getPricing('pro', 'USD', 'monthly'), 'USD')}</td>
-                <td className="p-3 text-center font-semibold bg-indigo-50">{formatPrice(getPricing('enterprise', 'UGX', 'monthly'), 'UGX')}<br />{formatPrice(getPricing('enterprise', 'USD', 'monthly'), 'USD')}</td>
+                <td className="p-3 text-center font-semibold bg-purple-50">{formatPrice(getPricing('pro', 'monthly'))}</td>
+                <td className="p-3 text-center font-semibold bg-indigo-50">{formatPrice(getPricing('enterprise', 'monthly'))}</td>
               </tr>
               <tr>
                 <td className="p-3 font-semibold">Price (annual)</td>
                 <td className="p-3 text-center font-semibold">—</td>
-                <td className="p-3 text-center font-semibold bg-purple-50">{formatPrice(getPricing('pro', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('pro', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('pro', 'USD').savingsPercentage}%</span></td>
-                <td className="p-3 text-center font-semibold bg-indigo-50">{formatPrice(getPricing('enterprise', 'UGX', 'annual'), 'UGX')}<br />{formatPrice(getPricing('enterprise', 'USD', 'annual'), 'USD')}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('enterprise', 'USD').savingsPercentage}%</span></td>
+                <td className="p-3 text-center font-semibold bg-purple-50">{formatPrice(getPricing('pro', 'annual'))}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('pro').savingsPercentage}%</span></td>
+                <td className="p-3 text-center font-semibold bg-indigo-50">{formatPrice(getPricing('enterprise', 'annual'))}<br /><span className="text-green-600 text-xs font-normal">Save {getAnnualSavings('enterprise').savingsPercentage}%</span></td>
               </tr>
             </tbody>
           </table>

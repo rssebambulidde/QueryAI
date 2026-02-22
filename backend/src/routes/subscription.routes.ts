@@ -408,7 +408,7 @@ router.get(
     const toTierRaw = Array.isArray(req.query.toTier) ? req.query.toTier[0] : req.query.toTier;
     const toTier = typeof toTierRaw === 'string' ? toTierRaw : undefined;
     const currencyRaw = Array.isArray(req.query.currency) ? req.query.currency[0] : req.query.currency;
-    const currency = (typeof currencyRaw === 'string' ? currencyRaw : 'UGX') as 'UGX' | 'USD';
+    const currency = 'USD';
     const toBillingPeriod = req.query.toBillingPeriod;
 
     const validTiers = ['free', 'starter', 'premium', 'pro', 'enterprise'];
@@ -428,7 +428,6 @@ router.get(
       subscription.tier,
       toTier as 'free' | 'starter' | 'premium' | 'pro' | 'enterprise',
       subscription,
-      currency,
       bp
     );
 
