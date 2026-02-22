@@ -13,7 +13,6 @@ import { CollectionConversationsList } from './collection-conversations-list';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { isEnterpriseTier } from '@/lib/pricing';
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { ConversationSkeleton, CollectionSkeleton } from './skeleton-loader';

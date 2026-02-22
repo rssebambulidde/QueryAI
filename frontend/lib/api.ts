@@ -2206,6 +2206,50 @@ export const adminApi = {
     const response = await apiClient.get('/api/admin/settings/llm/usage', { params: { days } });
     return response.data;
   },
+
+  /** Get the current pricing config (superadmin). */
+  getPricingConfig: async (): Promise<ApiResponse<PricingConfigResponse>> => {
+    const response = await apiClient.get('/api/admin/settings/pricing');
+    return response.data;
+  },
+
+  /** Update the pricing config (superadmin). */
+  updatePricingConfig: async (
+    config: PricingConfigResponse,
+  ): Promise<ApiResponse<PricingConfigResponse>> => {
+    const response = await apiClient.put('/api/admin/settings/pricing', config);
+    return response.data;
+  },
+};
+
+// ── Config API (public, no auth) ─────────────────────────────────────────────
+
+export interface TierPricing {
+  monthly: number;
+  annual: number;
+}
+
+export interface PricingConfigResponse {
+  tiers: {
+    free: TierPricing;
+    starter: TierPricing;
+    premium: TierPricing;
+    pro: TierPricing;
+    enterprise: TierPricing;
+  };
+  overage: {
+    queries: number;
+    document_upload: number;
+    tavily_searches: number;
+  };
+}
+
+export const configApi = {
+  /** Fetch the current pricing config (public, no auth required). */
+  getPricing: async (): Promise<ApiResponse<PricingConfigResponse>> => {
+    const response = await apiClient.get('/api/config/pricing');
+    return response.data;
+  },
 };
 
 export interface LLMUsageStats {

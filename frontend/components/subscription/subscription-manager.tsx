@@ -8,7 +8,7 @@ import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { Check, X, Zap, Folder, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
-import { getAnnualSavings, getPricing, formatPrice, isEnterpriseTier } from '@/lib/pricing';
+import { usePricing } from '@/lib/hooks/use-pricing';
 import type { BillingPeriod } from '@/lib/pricing';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 export function SubscriptionManager() {
   const { toast } = useToast();
   const { isMobile } = useMobile();
+  const { getPricing, getAnnualSavings, formatPrice, isEnterpriseTier } = usePricing();
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncingBilling, setSyncingBilling] = useState(false);

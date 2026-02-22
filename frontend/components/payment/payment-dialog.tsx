@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { PayPalButton } from '@/components/payment/paypal-button';
-import { getPricing, getAnnualSavings, formatPrice } from '@/lib/pricing';
+import { usePricing } from '@/lib/hooks/use-pricing';
 import type { BillingPeriod } from '@/lib/pricing';
 import { getPaymentErrorMessage } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
@@ -25,6 +25,7 @@ interface PaymentDialogProps {
 export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, initialRecurring }: PaymentDialogProps) {
   const { user } = useAuthStore();
   const { isMobile } = useMobile();
+  const { getPricing, getAnnualSavings, formatPrice } = usePricing();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Default to one-time payment (false) unless explicitly set to recurring

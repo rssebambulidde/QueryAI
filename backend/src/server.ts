@@ -30,6 +30,7 @@ import metricsRoutes from './routes/metrics.routes';
 import adminRoutes from './routes/admin.routes';
 import feedbackRoutes from './routes/feedback.routes';
 import healthRoutes from './routes/health.routes';
+import configRoutes from './routes/config.routes';
 // import workspaceRoutes from './routes/workspace.routes'; // v2: disabled
 
 const app: Express = express();
@@ -141,6 +142,7 @@ app.use('/api/metrics', metricsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/health', healthRoutes);
+app.use('/api/config', configRoutes);
 // app.use('/api/workspace', workspaceRoutes); // v2: disabled
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api/debug', debugRoutes);
@@ -327,6 +329,13 @@ import('./providers/provider-registry').then(({ ProviderRegistry }) =>
   ProviderRegistry.initialize(),
 ).catch((error) => {
   logger.error('Provider registry initialization error:', error);
+});
+
+// Pre-warm pricing config cache from DB
+import('./services/pricing-config.service').then(({ PricingConfigService }) =>
+  PricingConfigService.initialize(),
+).catch((error) => {
+  logger.error('Pricing config initialization error:', error);
 });
 
 // Check if running as Railway cron job

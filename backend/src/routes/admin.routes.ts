@@ -646,4 +646,60 @@ router.put(
   })
 );
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Pricing Settings
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/admin/settings/pricing
+ * Returns the current DB-driven pricing config.
+ */
+router.get(
+  '/settings/pricing',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const { PricingConfigService } = await import('../services/pricing-config.service');
+    const config = await PricingConfigService.getAll();
+
+    res.json({
+      success: true,
+      data: config,
+    });
+  })
+);
+
+/**
+ * PUT /api/admin/settings/pricing
+ * Update tier pricing and/or overage pricing.
+ * Body must conform to the PricingConfig Zod schema.
+ */
+router.put(
+  '/settings/pricing',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { PricingConfigService } = await import('../services/pricing-config.service');
+    const { ZodError } = await import('zod');
+
+    try {
+      const updated = await PricingConfigService.update(req.body, req.user!.id);
+
+      res.json({
+        success: true,
+        data: updated,
+      });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        throw new ValidationError(
+          `Invalid pricing config: ${err.issues.map((i) => i.message).join(', ')}`
+        );
+      }
+      throw err;
+    }
+  })
+);
+
 export default router;
