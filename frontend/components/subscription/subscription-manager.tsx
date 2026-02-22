@@ -479,7 +479,7 @@ export function SubscriptionManager() {
   const { subscription, limits, usage } = subscriptionData;
   const tier = subscription.tier;
   const billingPeriod = (subscription.billing_period ?? 'monthly') as BillingPeriod;
-  const annualSavings = tier !== 'free' ? getAnnualSavings(tier, 'USD') : null;
+  const annualSavings = tier !== 'free' ? getAnnualSavings(tier) : null;
 
   const formatLimit = (limit: UsageLimit) => {
     if (limit.limit === null) {
@@ -934,7 +934,7 @@ export function SubscriptionManager() {
                     disabled={upgrading}
                     className="w-full"
                   >
-                    Upgrade to Pro - {formatPrice(getPricing('pro', 'USD', 'monthly'), 'USD')}/mo
+                    Upgrade to Pro - {formatPrice(getPricing('pro', 'monthly'))}/mo
                   </Button>
                 </div>
                 <div className="border-2 border-gray-500 rounded-lg p-4">
@@ -952,7 +952,7 @@ export function SubscriptionManager() {
                     variant="outline"
                     className="w-full"
                   >
-                    Upgrade to Enterprise - {formatPrice(getPricing('enterprise', 'USD', 'monthly'), 'USD')}/mo
+                    Upgrade to Enterprise - {formatPrice(getPricing('enterprise', 'monthly'))}/mo
                   </Button>
                 </div>
               </>
@@ -974,7 +974,7 @@ export function SubscriptionManager() {
                     disabled={upgrading}
                     className="w-full"
                   >
-                    Upgrade to Enterprise - {formatPrice(getPricing('enterprise', 'USD', 'monthly'), 'USD')}/mo
+                    Upgrade to Enterprise - {formatPrice(getPricing('enterprise', 'monthly'))}/mo
                   </Button>
                 </div>
               </>
