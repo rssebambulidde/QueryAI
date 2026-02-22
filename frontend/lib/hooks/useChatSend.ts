@@ -562,7 +562,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
     [messages, setMessages, sendMessage],
   );
 
-  // ── Regenerate assistant message with optional overrides ─────────────────
+  // ── Regenerate assistant message with optional overrides (streaming) ──────
 
   const regenerateMessage = useCallback(
     async (messageId: string, options?: RegenerateOptions) => {
@@ -572,51 +572,156 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
       }
 
       setIsLoading(true);
+      setIsStreaming(true);
+      setStreamingState('streaming');
       setError(null);
 
+      // Mark the target message as streaming with empty content
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m;
+          return { ...m, content: '', isStreaming: true };
+        }),
+      );
+
+      const abortCtrl = new AbortController();
+      abortControllerRef.current = abortCtrl;
+      let accumulatedContent = '';
+      let streamSources: Source[] | undefined;
+      let followUpQuestions: string[] | undefined;
+      let qualityScore: number | undefined;
+      let versionData: { version: number; messageId: string; versions: Array<{ id: string; version: number; content: string; sources?: Source[]; metadata?: Record<string, any>; created_at: string }> } | undefined;
+
+      // rAF-batched chunk accumulator for regeneration
+      const pendingRegenChunks: string[] = [];
+      let regenRaf: number | null = null;
+
+      const flushRegenChunks = () => {
+        if (regenRaf !== null) {
+          cancelAnimationFrame(regenRaf);
+          regenRaf = null;
+        }
+        const pending = pendingRegenChunks.splice(0);
+        if (pending.length === 0) return;
+        const joined = pending.join('');
+        accumulatedContent += joined;
+        const snap = accumulatedContent;
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== messageId) return m;
+            return { ...m, content: snap, isStreaming: true };
+          }),
+        );
+      };
+
+      const scheduleRegenFlush = () => {
+        if (regenRaf === null) {
+          regenRaf = requestAnimationFrame(() => {
+            regenRaf = null;
+            flushRegenChunks();
+          });
+        }
+      };
+
       try {
-        const response = await aiApi.regenerate(messageId, currentConversationId, options);
+        for await (const chunk of aiApi.regenerateStream(messageId, currentConversationId, options, abortCtrl.signal)) {
+          if (typeof chunk === 'string') {
+            pendingRegenChunks.push(chunk);
+            scheduleRegenFlush();
+            continue;
+          }
 
-        if (response.success && response.data) {
-          const { answer, sources, followUpQuestions, responseVersion, versions } = response.data;
+          // Flush pending text before processing metadata events
+          flushRegenChunks();
 
-          // Build version summaries from the versions array
-          const versionSummaries = (versions || []).map((v) => ({
-            id: v.id,
-            version: v.version,
-            content: v.content,
-            sources: v.sources as Source[] | undefined,
-            metadata: v.metadata ?? undefined,
-            created_at: v.created_at,
-          }));
+          if ('sources' in chunk && chunk.sources) {
+            streamSources = chunk.sources;
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id !== messageId) return m;
+                return { ...m, sources: streamSources };
+              }),
+            );
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('sourcesUpdated'));
+            }
+          }
+          if ('followUpQuestions' in chunk) {
+            followUpQuestions = chunk.followUpQuestions;
+          }
+          if ('qualityScore' in chunk) {
+            qualityScore = chunk.qualityScore;
+          }
+          if ('version' in chunk && chunk.version) {
+            versionData = chunk.version;
+          }
+        }
 
+        // Flush remaining chunks
+        flushRegenChunks();
+
+        // Build final version summaries
+        const versionSummaries = versionData?.versions?.map((v) => ({
+          id: v.id,
+          version: v.version,
+          content: v.content,
+          sources: v.sources as Source[] | undefined,
+          metadata: v.metadata ?? undefined,
+          created_at: v.created_at,
+        }));
+
+        // Final update: set streaming=false, apply all metadata
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== messageId) return m;
+            return {
+              ...m,
+              content: accumulatedContent,
+              isStreaming: false,
+              sources: streamSources ?? m.sources,
+              followUpQuestions: followUpQuestions ?? m.followUpQuestions,
+              qualityScore,
+              version: versionData?.version ?? m.version,
+              versions: versionSummaries ?? m.versions,
+            };
+          }),
+        );
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sourcesUpdated'));
+        }
+
+        toast.success(`Response regenerated${versionData ? ` (v${versionData.version})` : ''}`);
+      } catch (err: any) {
+        if (err.name === 'AbortError' || abortCtrl.signal.aborted) {
+          // Cancelled — stop streaming indicator, keep whatever we have
           setMessages((prev) =>
             prev.map((m) => {
               if (m.id !== messageId) return m;
-              return {
-                ...m,
-                content: answer,
-                sources: sources ?? m.sources,
-                followUpQuestions: followUpQuestions ?? m.followUpQuestions,
-                version: responseVersion,
-                versions: versionSummaries,
-              };
-            })
+              return { ...m, isStreaming: false };
+            }),
           );
-
-          toast.success(`Response regenerated (v${responseVersion})`);
         } else {
-          toast.error(response.message || 'Failed to regenerate response');
+          const msg = err?.message || 'Failed to regenerate';
+          toast.error(msg);
+          setError(msg);
+          // Restore original message (mark not streaming)
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== messageId) return m;
+              return { ...m, isStreaming: false };
+            }),
+          );
         }
-      } catch (err: any) {
-        const msg = err?.response?.data?.error?.message || err.message || 'Failed to regenerate';
-        toast.error(msg);
-        setError(msg);
       } finally {
+        if (regenRaf !== null) cancelAnimationFrame(regenRaf);
         setIsLoading(false);
+        setIsStreaming(false);
+        setStreamingState('completed');
+        abortControllerRef.current = null;
       }
     },
-    [currentConversationId, setMessages, setIsLoading, setError, toast],
+    [currentConversationId, setMessages, setIsLoading, setIsStreaming, setStreamingState, setError, toast],
   );
 
   return {

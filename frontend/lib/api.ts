@@ -763,6 +763,104 @@ export const aiApi = {
     return response.data;
   },
 
+  /**
+   * Streaming regeneration — same SSE protocol as askStream with an additional
+   * `version` event emitted at the end containing the new version info.
+   */
+  regenerateStream: async function* (
+    messageId: string,
+    conversationId: string,
+    options?: {
+      model?: string;
+      maxDocumentChunks?: number;
+      maxSearchResults?: number;
+      enableWebSearch?: boolean;
+      enableDocumentSearch?: boolean;
+      temperature?: number;
+      maxTokens?: number;
+    },
+    signal?: AbortSignal,
+  ): AsyncGenerator<
+    string | { sources?: Source[]; followUpQuestions?: string[]; qualityScore?: number; version?: { version: number; messageId: string; versions: Array<{ id: string; version: number; content: string; sources?: Source[]; metadata?: Record<string, any>; created_at: string }> } },
+    void,
+    unknown
+  > {
+    const response = await fetch(`${API_URL}/api/ai/regenerate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: typeof window !== 'undefined' ? `Bearer ${localStorage.getItem('accessToken') || ''}` : '',
+      },
+      body: JSON.stringify({ messageId, conversationId, options }),
+      signal,
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const parsed = JSON.parse(errorBody);
+        if (parsed?.error?.message) errorMessage = parsed.error.message;
+      } catch { /* use default */ }
+      throw new Error(errorMessage);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No reader available');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        if (signal?.aborted) { reader.cancel(); return; }
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        let currentEvent = '';
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) { currentEvent = line.slice(7).trim(); continue; }
+          if (line.startsWith('data: ')) {
+            const payload = line.slice(6);
+
+            switch (currentEvent) {
+              case 'chunk':
+                yield payload;
+                break;
+              case 'sources':
+                try { yield { sources: JSON.parse(payload) as Source[] }; } catch { /* skip */ }
+                break;
+              case 'followUpQuestions':
+                try { const fup = JSON.parse(payload); yield { followUpQuestions: fup.questions }; } catch { /* skip */ }
+                break;
+              case 'qualityScore':
+                try { const qs = JSON.parse(payload); yield { qualityScore: qs.score }; } catch { /* skip */ }
+                break;
+              case 'version':
+                try { yield { version: JSON.parse(payload) }; } catch { /* skip */ }
+                break;
+              case 'done':
+                return;
+              case 'error':
+                try { const err = JSON.parse(payload); throw new Error(err.message || 'Regeneration stream error'); } catch (e) { if (e instanceof Error && e.message !== 'Regeneration stream error') throw e; }
+                break;
+              default:
+                break;
+            }
+            currentEvent = '';
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
+
   getMessageVersions: async (
     messageId: string,
   ): Promise<ApiResponse<{ versions: Message[] }>> => {

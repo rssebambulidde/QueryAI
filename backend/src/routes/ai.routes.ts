@@ -896,6 +896,7 @@ router.get(
  * POST /api/ai/regenerate
  * Re-run the AI pipeline for an existing assistant message with optional parameter overrides.
  * Creates a NEW version row linked via parent_message_id (version history).
+ * Uses SSE streaming — same protocol as /ask/stream with an additional `version` event at the end.
  */
 router.post(
   '/regenerate',
@@ -963,7 +964,7 @@ router.post(
       ...(conversationHistory.length > 0 && { conversationHistory }),
     };
 
-    logger.info('Regenerating response (new version)', {
+    logger.info('Regenerating response (streaming, new version)', {
       userId,
       conversationId,
       messageId,
@@ -971,48 +972,212 @@ router.post(
       overrides: options,
     });
 
-    // 4. Re-run pipeline (non-streaming), skip internal save
-    const result = await AIAnswerPipelineService.answerQuestionInternal(mergedRequest, userId, { skipSave: true });
+    // ── SSE headers ────────────────────────────────────────────────
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.flushHeaders();
 
-    // 5. Create a new message version linked to the original
-    const newVersionMsg = await MessageService.createMessageVersion(messageId, {
-      content: result.answer,
-      sources: result.sources as any,
-      metadata: {
-        model: result.model,
-        ...(result.followUpQuestions?.length && { followUpQuestions: result.followUpQuestions }),
-        ...(result.usage && { usage: result.usage }),
+    const abortController = new AbortController();
+
+    req.on('close', () => {
+      abortController.abort();
+      logger.info('Client disconnected from regenerate streaming endpoint', { userId });
+      if (!res.writableEnded) res.end();
+    });
+
+    try {
+      // ── RAG retrieval (research mode) ────────────────────────────
+      let sources: any[] | undefined = undefined;
+      let ragContext: any = null;
+      let formattedRagContext: string | undefined = undefined;
+
+      if (mergedRequest.mode !== 'chat') {
+        try {
+          const { RAGService } = await import('../services/rag.service');
+          const ragOptions: any = {
+            userId,
+            enableDocumentSearch: false,
+            enableWebSearch: mergedRequest.enableWebSearch !== false,
+            maxDocumentChunks: mergedRequest.maxDocumentChunks ?? 5,
+            maxWebResults: mergedRequest.maxSearchResults ?? 5,
+            minScore: mergedRequest.minScore,
+            topic: mergedRequest.topic,
+            timeRange: mergedRequest.timeRange,
+            startDate: mergedRequest.startDate,
+            endDate: mergedRequest.endDate,
+            country: mergedRequest.country,
+          };
+
+          if (mergedRequest.enableSearch === false) {
+            ragOptions.enableWebSearch = false;
+          }
+
+          ragContext = await RAGService.retrieveContext(mergedRequest.question, ragOptions);
+          sources = RAGService.extractSources(ragContext);
+
+          formattedRagContext = await RAGService.formatContextForPrompt(ragContext, {
+            enableRelevanceOrdering: true,
+            contextReductionStrategy: 'summarize' as const,
+            enableSourcePrioritization: true,
+            enableTokenBudgeting: true,
+            tokenBudgetOptions: { model: mergedRequest.model || 'gpt-3.5-turbo' },
+            query: mergedRequest.question,
+            model: mergedRequest.model || 'gpt-3.5-turbo',
+            userId,
+          });
+        } catch (ragError: any) {
+          logger.warn('Failed to retrieve RAG context for regeneration streaming', {
+            error: ragError.message,
+          });
+        }
+      }
+
+      // Send sources early
+      if (sources && sources.length > 0) {
+        res.write(StreamingService.formatSSEMessage('sources', sources));
+      }
+
+      // ── Stream the response ──────────────────────────────────────
+      // Inject pre-retrieved context so the pipeline doesn't re-fetch
+      if (formattedRagContext) {
+        (mergedRequest as any)._preRetrievedRagContext = formattedRagContext;
+      }
+
+      const stream = AIService.answerQuestionStream(mergedRequest, userId, { signal: abortController.signal });
+      let fullAnswer = '';
+      let structuredMeta: { followUpQuestions?: string[]; citedSources?: any[] } | null = null;
+
+      for await (const chunk of stream) {
+        if (typeof chunk === 'string' && chunk.startsWith('{"__structured":true')) {
+          try {
+            structuredMeta = JSON.parse(chunk);
+          } catch {
+            fullAnswer += chunk;
+            res.write(StreamingService.formatSSEMessage('chunk', chunk));
+          }
+        } else {
+          fullAnswer += chunk;
+          res.write(StreamingService.formatSSEMessage('chunk', chunk));
+        }
+      }
+
+      // ── Post-stream: follow-ups & quality ────────────────────────
+      const ragSettingsObj: Record<string, any> = {
+        enableWebSearch: mergedRequest.enableWebSearch,
+        enableDocumentSearch: false,
+        maxSearchResults: mergedRequest.maxSearchResults,
         ...(options && { regenerateOptions: options }),
-      },
-    });
+      };
+      Object.keys(ragSettingsObj).forEach((k) => ragSettingsObj[k] === undefined && delete ragSettingsObj[k]);
 
-    await ConversationService.updateConversationTimestamp(conversationId);
+      // We use postProcessStream but with skipSave=true semantics:
+      // only extract follow-ups + quality; we'll save the version ourselves.
+      let followUpQuestions: string[] | undefined;
+      let qualityScore: number | undefined;
+      let cleanedAnswer = fullAnswer;
 
-    // 6. Fetch all versions to return to the client
-    const allVersions = await MessageService.getMessageVersions(messageId, userId);
+      if (structuredMeta?.followUpQuestions && structuredMeta.followUpQuestions.length > 0) {
+        followUpQuestions = structuredMeta.followUpQuestions;
+      } else {
+        try {
+          const { ResponseProcessorService } = await import('../services/response-processor.service');
+          const followUpResult = await ResponseProcessorService.processFollowUpQuestions(
+            fullAnswer,
+            mergedRequest.question,
+          );
+          followUpQuestions = followUpResult.questions.length > 0 ? followUpResult.questions : undefined;
+          cleanedAnswer = followUpResult.answer;
+        } catch (err: any) {
+          logger.warn('Follow-up processing failed in regeneration stream', { error: err?.message });
+        }
+      }
 
-    logger.info('Response regenerated (new version)', {
-      userId,
-      conversationId,
-      originalMessageId: messageId,
-      newMessageId: newVersionMsg.id,
-      newVersion: newVersionMsg.version,
-      model: result.model,
-    });
+      try {
+        const { ResponseProcessorService } = await import('../services/response-processor.service');
+        qualityScore = ResponseProcessorService.calculateAnswerQualityScore(
+          cleanedAnswer,
+          sources || [],
+          followUpQuestions || [],
+        );
+      } catch (err: any) {
+        logger.warn('Quality score calculation failed in regeneration', { error: err?.message });
+      }
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        newMessage: newVersionMsg,
-        versions: allVersions,
-        answer: result.answer,
-        model: result.model,
-        sources: result.sources,
-        followUpQuestions: result.followUpQuestions,
-        usage: result.usage,
-        responseVersion: newVersionMsg.version,
-      },
-    });
+      if (followUpQuestions && followUpQuestions.length > 0) {
+        res.write(StreamingService.formatSSEMessage('followUpQuestions', { questions: followUpQuestions }));
+      }
+      if (qualityScore !== undefined) {
+        res.write(StreamingService.formatSSEMessage('qualityScore', { score: qualityScore }));
+      }
+
+      // ── Create new version ───────────────────────────────────────
+      const newVersionMsg = await MessageService.createMessageVersion(messageId, {
+        content: cleanedAnswer,
+        sources: sources as any,
+        metadata: {
+          model: mergedRequest.model || 'gpt-4o-mini',
+          streaming: true,
+          ...(followUpQuestions?.length && { followUpQuestions }),
+          ...(qualityScore !== undefined && { qualityScore }),
+          ...(options && { regenerateOptions: options }),
+          ragSettings: ragSettingsObj,
+        },
+      });
+
+      await ConversationService.updateConversationTimestamp(conversationId);
+
+      // Fetch all versions for the version pills UI
+      const allVersions = await MessageService.getMessageVersions(messageId, userId);
+
+      // ── Send version event ───────────────────────────────────────
+      const versionPayload = {
+        version: newVersionMsg.version,
+        messageId: newVersionMsg.id,
+        versions: allVersions.map((v) => ({
+          id: v.id,
+          version: v.version,
+          content: v.content,
+          sources: v.sources,
+          metadata: v.metadata,
+          created_at: v.created_at,
+        })),
+      };
+      res.write(StreamingService.formatSSEMessage('version', versionPayload));
+
+      logger.info('Response regenerated (streaming, new version)', {
+        userId,
+        conversationId,
+        originalMessageId: messageId,
+        newMessageId: newVersionMsg.id,
+        newVersion: newVersionMsg.version,
+      });
+
+      // ── Done ─────────────────────────────────────────────────────
+      if (!abortController.signal.aborted && !res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('done', {}));
+        res.end();
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.code === 'ABORT_ERR' || abortController.signal.aborted) {
+        logger.info('Regeneration stream cancelled by client', { userId });
+        if (!res.writableEnded) res.end();
+        return;
+      }
+
+      logger.error('Error in regeneration streaming endpoint:', error);
+
+      if (!res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('error', {
+          message: error.message || 'Failed to regenerate response',
+          code: error.code || 'REGENERATE_STREAM_ERROR',
+        }));
+        res.end();
+      }
+    }
   })
 );
 
