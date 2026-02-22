@@ -14,7 +14,7 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   }
 }
 
-// Create axios instance (exported for use by api-health, api-validation, api-ab-testing)
+// Create axios instance (exported for use by api-health)
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
@@ -2309,30 +2309,6 @@ export interface LLMUsageStats {
   }>;
   dailyTrend: Array<{ date: string; cost: number; queries: number }>;
 }
-
-// Export A/B Testing API
-export { abTestingApi } from './api-ab-testing';
-export type {
-  ABTest,
-  ABTestMetrics,
-  CreateABTestInput,
-  UpdateABTestInput,
-  VariantConfig,
-  StatisticalSignificance,
-} from './api-ab-testing';
-
-// Export Validation API
-export { validationApi } from './api-validation';
-export type {
-  ValidationTestSuite,
-  ValidationTestCase,
-  ValidationTestResult,
-  ValidationRun,
-  ValidationReport,
-  CreateTestSuiteInput,
-  UpdateTestSuiteInput,
-  RunTestSuiteInput,
-} from './api-validation';
 
 // Export Health Monitoring API
 export { healthApi } from './api-health';

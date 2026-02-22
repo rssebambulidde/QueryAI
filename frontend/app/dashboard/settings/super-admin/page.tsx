@@ -4,21 +4,17 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
-import { ShieldCheck, Activity, CheckSquare, TestTube, Users, DollarSign, TrendingUp, MessageSquare, Cpu } from 'lucide-react';
+import { ShieldCheck, Activity, Users, MessageSquare, Cpu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 
 // Lazy load components for better performance
 const HealthMonitoring = dynamic(() => import('@/components/super-admin/health-monitoring'), { ssr: false });
-const ValidationReports = dynamic(() => import('@/components/super-admin/validation-reports'), { ssr: false });
-const ABTesting = dynamic(() => import('@/components/super-admin/ab-testing'), { ssr: false });
 const UserManagement = dynamic(() => import('@/components/super-admin/user-management'), { ssr: false });
-const UsageAnalytics = dynamic(() => import('@/components/super-admin/usage-analytics'), { ssr: false });
-const CostAnalytics = dynamic(() => import('@/components/super-admin/cost-analytics'), { ssr: false });
 const FeedbackDashboard = dynamic(() => import('@/components/super-admin/feedback-dashboard'), { ssr: false });
 const LLMSettings = dynamic(() => import('@/components/super-admin/llm-settings'), { ssr: false });
 
-type TabId = 'health' | 'validation' | 'ab-testing' | 'users' | 'usage' | 'cost' | 'feedback' | 'llm';
+type TabId = 'health' | 'users' | 'feedback' | 'llm';
 
 interface Tab {
   id: TabId;
@@ -30,10 +26,6 @@ const tabs: Tab[] = [
   { id: 'feedback', label: 'Feedback', icon: MessageSquare },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'health', label: 'Health', icon: Activity },
-  { id: 'validation', label: 'Validation', icon: CheckSquare },
-  { id: 'ab-testing', label: 'A/B Testing', icon: TestTube },
-  { id: 'usage', label: 'Usage', icon: TrendingUp },
-  { id: 'cost', label: 'Cost', icon: DollarSign },
   { id: 'llm', label: 'LLM', icon: Cpu },
 ];
 
@@ -68,16 +60,8 @@ export default function SuperAdminPage() {
     switch (activeTab) {
       case 'health':
         return <HealthMonitoring />;
-      case 'validation':
-        return <ValidationReports />;
-      case 'ab-testing':
-        return <ABTesting />;
       case 'users':
         return <UserManagement />;
-      case 'usage':
-        return <UsageAnalytics />;
-      case 'cost':
-        return <CostAnalytics />;
       case 'feedback':
         return <FeedbackDashboard />;
       case 'llm':
