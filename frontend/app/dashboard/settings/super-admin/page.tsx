@@ -4,24 +4,21 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
-import { ShieldCheck, Key, BarChart3, Activity, CheckSquare, TestTube, Users, DollarSign, TrendingUp, MessageSquare, Cpu, Palette } from 'lucide-react';
+import { ShieldCheck, Activity, CheckSquare, TestTube, Users, DollarSign, TrendingUp, MessageSquare, Cpu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 
 // Lazy load components for better performance
-const ApiSettings = dynamic(() => import('@/components/super-admin/api-settings'), { ssr: false });
-const AnalyticsDashboard = dynamic(() => import('@/components/super-admin/analytics-dashboard'), { ssr: false });
 const HealthMonitoring = dynamic(() => import('@/components/super-admin/health-monitoring'), { ssr: false });
 const ValidationReports = dynamic(() => import('@/components/super-admin/validation-reports'), { ssr: false });
 const ABTesting = dynamic(() => import('@/components/super-admin/ab-testing'), { ssr: false });
 const UserManagement = dynamic(() => import('@/components/super-admin/user-management'), { ssr: false });
 const UsageAnalytics = dynamic(() => import('@/components/super-admin/usage-analytics'), { ssr: false });
 const CostAnalytics = dynamic(() => import('@/components/super-admin/cost-analytics'), { ssr: false });
-const WhiteLabel = dynamic(() => import('@/components/super-admin/white-label'), { ssr: false }); // Retained but no longer feature-gated
 const FeedbackDashboard = dynamic(() => import('@/components/super-admin/feedback-dashboard'), { ssr: false });
 const LLMSettings = dynamic(() => import('@/components/super-admin/llm-settings'), { ssr: false });
 
-type TabId = 'api' | 'analytics' | 'health' | 'validation' | 'ab-testing' | 'users' | 'usage' | 'cost' | 'white-label' | 'feedback' | 'llm';
+type TabId = 'health' | 'validation' | 'ab-testing' | 'users' | 'usage' | 'cost' | 'feedback' | 'llm';
 
 interface Tab {
   id: TabId;
@@ -30,8 +27,6 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { id: 'api', label: 'API', icon: Key },
-  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'feedback', label: 'Feedback', icon: MessageSquare },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'health', label: 'Health', icon: Activity },
@@ -39,7 +34,6 @@ const tabs: Tab[] = [
   { id: 'ab-testing', label: 'A/B Testing', icon: TestTube },
   { id: 'usage', label: 'Usage', icon: TrendingUp },
   { id: 'cost', label: 'Cost', icon: DollarSign },
-  { id: 'white-label', label: 'White Label', icon: Palette },
   { id: 'llm', label: 'LLM', icon: Cpu },
 ];
 
@@ -47,7 +41,7 @@ export default function SuperAdminPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading } = useAuthStore();
   const { isSuperAdmin } = useUserRole();
-  const [activeTab, setActiveTab] = useState<TabId>('api');
+  const [activeTab, setActiveTab] = useState<TabId>('feedback');
 
   // Redirect if not super admin
   if (!isLoading && (!isAuthenticated || !isSuperAdmin)) {
@@ -72,10 +66,6 @@ export default function SuperAdminPage() {
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'api':
-        return <ApiSettings />;
-      case 'analytics':
-        return <AnalyticsDashboard />;
       case 'health':
         return <HealthMonitoring />;
       case 'validation':
@@ -88,14 +78,12 @@ export default function SuperAdminPage() {
         return <UsageAnalytics />;
       case 'cost':
         return <CostAnalytics />;
-      case 'white-label':
-        return <WhiteLabel />;
       case 'feedback':
         return <FeedbackDashboard />;
       case 'llm':
         return <LLMSettings />;
       default:
-        return <ApiSettings />;
+        return <FeedbackDashboard />;
     }
   };
 
