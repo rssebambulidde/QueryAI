@@ -10,6 +10,7 @@ import {
   type AllTierLimitsResponse,
   type SingleTierLimitsResponse,
 } from '@/lib/api';
+import { invalidateTierLimitsCache } from '@/lib/hooks/useTierLimits';
 
 type TierName = 'free' | 'pro' | 'enterprise';
 type NumericField = 'queriesPerMonth' | 'tavilySearchesPerMonth' | 'maxCollections';
@@ -122,6 +123,7 @@ export default function TierLimitsConfig() {
       if (res.success && res.data) {
         setConfig(res.data);
         setDraft(structuredClone(res.data));
+        invalidateTierLimitsCache();
         success(
           `${TIER_LABELS[tier]} limits updated`,
           'Changes saved successfully',

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
 import { adminApi, type PricingConfigResponse } from '@/lib/api';
+import { invalidatePricingCache } from '@/lib/hooks/use-pricing';
 
 const TIER_LABELS: Record<string, string> = {
   free: 'Free',
@@ -93,6 +94,7 @@ export default function PricingConfig() {
       if (res.success && res.data) {
         setConfig(res.data);
         setDraft(structuredClone(res.data));
+        invalidatePricingCache();
         success('Pricing updated', 'Changes saved successfully');
       }
     } catch (err: unknown) {

@@ -715,39 +715,27 @@ export function SubscriptionManager() {
             <tbody>
               <tr className="border-b">
                 <td className="p-3">Queries per month</td>
-                <td className="p-3 text-center">300</td>
-                <td className="p-3 text-center bg-purple-50">Unlimited</td>
-                <td className="p-3 text-center bg-indigo-50">Unlimited</td>
+                <td className="p-3 text-center">{getDynamicLimits('free').queriesPerMonth === null ? 'Unlimited' : getDynamicLimits('free').queriesPerMonth?.toLocaleString()}</td>
+                <td className="p-3 text-center bg-purple-50">{getDynamicLimits('pro').queriesPerMonth === null ? 'Unlimited' : getDynamicLimits('pro').queriesPerMonth?.toLocaleString()}</td>
+                <td className="p-3 text-center bg-indigo-50">{getDynamicLimits('enterprise').queriesPerMonth === null ? 'Unlimited' : getDynamicLimits('enterprise').queriesPerMonth?.toLocaleString()}</td>
               </tr>
               <tr className="border-b">
                 <td className="p-3">Chat modes</td>
-                <td className="p-3 text-center">Express Chat only</td>
-                <td className="p-3 text-center bg-purple-50">Both modes</td>
-                <td className="p-3 text-center bg-indigo-50">Both modes</td>
+                <td className="p-3 text-center">{getDynamicLimits('free').allowResearchMode ? 'Both modes' : 'Express Chat only'}</td>
+                <td className="p-3 text-center bg-purple-50">{getDynamicLimits('pro').allowResearchMode ? 'Both modes' : 'Express Chat only'}</td>
+                <td className="p-3 text-center bg-indigo-50">{getDynamicLimits('enterprise').allowResearchMode ? 'Both modes' : 'Express Chat only'}</td>
               </tr>
               <tr className="border-b">
                 <td className="p-3">Collections</td>
-                <td className="p-3 text-center">3</td>
-                <td className="p-3 text-center bg-purple-50">Unlimited</td>
-                <td className="p-3 text-center bg-indigo-50">Unlimited</td>
+                <td className="p-3 text-center">{getDynamicLimits('free').maxCollections === null ? 'Unlimited' : getDynamicLimits('free').maxCollections}</td>
+                <td className="p-3 text-center bg-purple-50">{getDynamicLimits('pro').maxCollections === null ? 'Unlimited' : getDynamicLimits('pro').maxCollections}</td>
+                <td className="p-3 text-center bg-indigo-50">{getDynamicLimits('enterprise').maxCollections === null ? 'Unlimited' : getDynamicLimits('enterprise').maxCollections}</td>
               </tr>
               <tr className="border-b">
                 <td className="p-3">Web searches</td>
-                <td className="p-3 text-center">10</td>
-                <td className="p-3 text-center bg-purple-50">200</td>
-                <td className="p-3 text-center bg-indigo-50">Unlimited</td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3">Team collaboration</td>
-                <td className="p-3 text-center">
-                  <X className="w-4 h-4 text-gray-400 mx-auto" />
-                </td>
-                <td className="p-3 text-center bg-purple-50">
-                  <X className="w-4 h-4 text-gray-400 mx-auto" />
-                </td>
-                <td className="p-3 text-center bg-indigo-50">
-                  <Check className="w-4 h-4 text-green-600 mx-auto" />
-                </td>
+                <td className="p-3 text-center">{getDynamicLimits('free').tavilySearchesPerMonth === null ? 'Unlimited' : getDynamicLimits('free').tavilySearchesPerMonth?.toLocaleString()}</td>
+                <td className="p-3 text-center bg-purple-50">{getDynamicLimits('pro').tavilySearchesPerMonth === null ? 'Unlimited' : getDynamicLimits('pro').tavilySearchesPerMonth?.toLocaleString()}</td>
+                <td className="p-3 text-center bg-indigo-50">{getDynamicLimits('enterprise').tavilySearchesPerMonth === null ? 'Unlimited' : getDynamicLimits('enterprise').tavilySearchesPerMonth?.toLocaleString()}</td>
               </tr>
               <tr className="border-b">
                 <td className="p-3 font-semibold">Price (monthly)</td>

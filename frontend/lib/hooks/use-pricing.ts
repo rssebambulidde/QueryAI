@@ -35,9 +35,11 @@ const FALLBACK: PricingConfigResponse = {
 
 let cachedConfig: PricingConfigResponse | null = null;
 let fetchPromise: Promise<PricingConfigResponse> | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 async function fetchConfig(): Promise<PricingConfigResponse> {
-  if (cachedConfig) return cachedConfig;
+  if (cachedConfig && Date.now() - cacheTimestamp < CACHE_TTL_MS) return cachedConfig;
   if (fetchPromise) return fetchPromise;
 
   fetchPromise = configApi
@@ -45,6 +47,7 @@ async function fetchConfig(): Promise<PricingConfigResponse> {
     .then((res) => {
       if (res.success && res.data) {
         cachedConfig = res.data;
+        cacheTimestamp = Date.now();
         return res.data;
       }
       return FALLBACK;
@@ -55,6 +58,12 @@ async function fetchConfig(): Promise<PricingConfigResponse> {
     });
 
   return fetchPromise;
+}
+
+/** Invalidate the module-level cache so the next consumer gets fresh data. */
+export function invalidatePricingCache(): void {
+  cachedConfig = null;
+  cacheTimestamp = 0;
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
@@ -135,6 +144,7 @@ export function usePricing(): UsePricingReturn {
 
   const refresh = async () => {
     cachedConfig = null;
+    cacheTimestamp = 0;
     const c = await fetchConfig();
     setConfig(c);
   };

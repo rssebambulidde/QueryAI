@@ -43,9 +43,11 @@ const FALLBACK: AllTierLimitsResponse = {
 
 let cachedLimits: AllTierLimitsResponse | null = null;
 let fetchPromise: Promise<AllTierLimitsResponse> | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 async function fetchLimits(): Promise<AllTierLimitsResponse> {
-  if (cachedLimits) return cachedLimits;
+  if (cachedLimits && Date.now() - cacheTimestamp < CACHE_TTL_MS) return cachedLimits;
   if (fetchPromise) return fetchPromise;
 
   fetchPromise = configApi
@@ -53,6 +55,7 @@ async function fetchLimits(): Promise<AllTierLimitsResponse> {
     .then((res) => {
       if (res.success && res.data) {
         cachedLimits = res.data;
+        cacheTimestamp = Date.now();
         return res.data;
       }
       return FALLBACK;
@@ -63,6 +66,12 @@ async function fetchLimits(): Promise<AllTierLimitsResponse> {
     });
 
   return fetchPromise;
+}
+
+/** Invalidate the module-level cache so the next consumer gets fresh data. */
+export function invalidateTierLimitsCache(): void {
+  cachedLimits = null;
+  cacheTimestamp = 0;
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
@@ -112,6 +121,7 @@ export function useTierLimits(): UseTierLimitsReturn {
 
   const refresh = async () => {
     cachedLimits = null;
+    cacheTimestamp = 0;
     const data = await fetchLimits();
     setAllLimits(data);
   };
