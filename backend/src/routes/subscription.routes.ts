@@ -571,10 +571,8 @@ router.get(
       throw new ValidationError('User not authenticated');
     }
 
-    const [queryLimit, documentUploadLimit, topicLimit, tavilySearchLimit] = await Promise.all([
+    const [queryLimit, tavilySearchLimit] = await Promise.all([
       SubscriptionService.checkQueryLimit(userId),
-      SubscriptionService.checkDocumentUploadLimit(userId),
-      SubscriptionService.checkTopicLimit(userId),
       SubscriptionService.checkTavilySearchLimit(userId),
     ]);
 
@@ -582,8 +580,6 @@ router.get(
       success: true,
       data: {
         queries: queryLimit,
-        documentUploads: documentUploadLimit,
-        topics: topicLimit,
         tavilySearches: tavilySearchLimit,
       },
     });

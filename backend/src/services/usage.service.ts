@@ -15,18 +15,6 @@ export interface UsageStats {
     remaining: number | null;
     percentage: number; // 0-100, or -1 for unlimited
   };
-  documentUploads: {
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-    percentage: number;
-  };
-  topics: {
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-    percentage: number;
-  };
   tavilySearches: {
     used: number;
     limit: number | null;
@@ -76,17 +64,11 @@ export class UsageService {
       periodEnd.setHours(23, 59, 59, 999);
 
       // Get usage counts for current month
-      const [queriesUsed, documentUploadsUsed, apiCallsUsed, tavilySearchesUsed] = await Promise.all([
+      const [queriesUsed, apiCallsUsed, tavilySearchesUsed] = await Promise.all([
         DatabaseService.getUserUsageCount(userId, 'query', periodStart, periodEnd),
-        DatabaseService.getUserUsageCount(userId, 'document_upload', periodStart, periodEnd),
         DatabaseService.getUserUsageCount(userId, 'api_call', periodStart, periodEnd),
         SubscriptionService.getTavilyUsageCount(userId, periodStart, periodEnd),
       ]);
-
-      // Get topic count
-      const { TopicService } = await import('./topic.service');
-      const topics = await TopicService.getUserTopics(userId);
-      const topicsUsed = topics?.length || 0;
 
       // Calculate percentages and remaining
       const calculateUsage = (
@@ -113,8 +95,6 @@ export class UsageService {
 
       return {
         queries: calculateUsage(queriesUsed, limits.queriesPerMonth),
-        documentUploads: calculateUsage(documentUploadsUsed, limits.documentUploads),
-        topics: calculateUsage(topicsUsed, limits.maxTopics),
         tavilySearches: calculateUsage(tavilySearchesUsed, limits.tavilySearchesPerMonth),
         apiCalls: calculateUsage(apiCallsUsed, null), // API calls are unlimited for now
         periodStart: periodStart.toISOString(),
@@ -199,18 +179,10 @@ export class UsageService {
         return { approaching: false, warnings: [] };
       }
 
-      const warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics' | 'tavilySearches'; percentage: number }> = [];
+      const warnings: Array<{ type: 'queries' | 'tavilySearches'; percentage: number }> = [];
 
       if (usage.queries.percentage >= 80 && usage.queries.percentage !== -1) {
         warnings.push({ type: 'queries', percentage: usage.queries.percentage });
-      }
-
-      if (usage.documentUploads.percentage >= 80 && usage.documentUploads.percentage !== -1) {
-        warnings.push({ type: 'documentUploads', percentage: usage.documentUploads.percentage });
-      }
-
-      if (usage.topics.percentage >= 80 && usage.topics.percentage !== -1) {
-        warnings.push({ type: 'topics', percentage: usage.topics.percentage });
       }
 
       if (usage.tavilySearches.percentage >= 80 && usage.tavilySearches.percentage !== -1) {

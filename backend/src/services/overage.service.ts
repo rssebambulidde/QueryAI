@@ -38,9 +38,8 @@ export class OverageService {
     const tier = subscription.tier;
     const limits = TIER_LIMITS[tier];
 
-    const [queriesUsed, documentUploadsUsed, tavilyUsed] = await Promise.all([
+    const [queriesUsed, tavilyUsed] = await Promise.all([
       DatabaseService.getUserUsageCount(userId, 'query', periodStart, periodEnd),
-      DatabaseService.getUserUsageCount(userId, 'document_upload', periodStart, periodEnd),
       SubscriptionService.getTavilyUsageCount(userId, periodStart, periodEnd),
     ]);
 
@@ -65,30 +64,6 @@ export class OverageService {
         metric_type: 'queries',
         limit_value: qLimit,
         usage_value: queriesUsed,
-        overage_units: overageUnits,
-        tier,
-        currency,
-        unit_price: unitPrice,
-        amount_charged: amount,
-      });
-      if (row) records.push(row);
-      totalCharged += amount;
-    }
-
-    // Document upload overage
-    const dLimit = limits.documentUploads;
-    if (dLimit != null && documentUploadsUsed > dLimit) {
-      const overageUnits = documentUploadsUsed - dLimit;
-      const unitPrice = getOverageUnitPrice('document_upload', currency);
-      const amount = Math.round(overageUnits * unitPrice * 100) / 100;
-      const row = await this.upsertOverageRecord({
-        user_id: userId,
-        subscription_id: subId,
-        period_start: ps,
-        period_end: pe,
-        metric_type: 'document_upload',
-        limit_value: dLimit,
-        usage_value: documentUploadsUsed,
         overage_units: overageUnits,
         tier,
         currency,
