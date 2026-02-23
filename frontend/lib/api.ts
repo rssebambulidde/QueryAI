@@ -2300,13 +2300,13 @@ export interface UserNotification {
 
 export const notificationApi = {
   /** Get notifications for the current user. */
-  getAll: async (params?: { unreadOnly?: boolean; limit?: number }): Promise<ApiResponse<UserNotification[]>> => {
+  getAll: async (params?: { unreadOnly?: boolean; limit?: number }): Promise<ApiResponse<{ notifications: UserNotification[]; unreadCount: number }>> => {
     const response = await apiClient.get('/api/notifications', { params });
     return response.data;
   },
 
   /** Get count of unread notifications. */
-  getUnreadCount: async (): Promise<ApiResponse<{ count: number }>> => {
+  getUnreadCount: async (): Promise<ApiResponse<{ unreadCount: number }>> => {
     const response = await apiClient.get('/api/notifications/unread-count');
     return response.data;
   },

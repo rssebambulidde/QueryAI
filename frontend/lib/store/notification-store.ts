@@ -28,7 +28,10 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
     try {
       const res = await notificationApi.getAll({ limit: 30 });
       if (res.success && res.data) {
-        set({ notifications: res.data });
+        set({
+          notifications: res.data.notifications,
+          unreadCount: res.data.unreadCount,
+        });
       }
     } catch {
       // silently ignore — bell will just show stale data
@@ -41,7 +44,7 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
     try {
       const res = await notificationApi.getUnreadCount();
       if (res.success && res.data) {
-        set({ unreadCount: res.data.count });
+        set({ unreadCount: res.data.unreadCount });
       }
     } catch {
       // ignore
