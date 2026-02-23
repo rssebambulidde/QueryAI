@@ -13,6 +13,7 @@ import { BottomNavigation } from '@/components/mobile/bottom-navigation';
 import { MobileSidebar, HamburgerMenu } from '@/components/mobile/mobile-sidebar';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { useToast } from '@/lib/hooks/use-toast';
+import { UsageWarningBanner } from '@/components/notifications/usage-warning-banner';
 // import { RoleDebug } from '@/components/debug/role-debug'; // Uncomment to debug role issues
 
 type TabType = 'chat' | 'collections' | 'sources';
@@ -226,6 +227,9 @@ function DashboardContent() {
 
         {/* Main Content Area — chat tab always shows conversation thread (messages + input), not sources */}
         <div className="flex-1 flex flex-col overflow-hidden" style={isMobile ? { paddingBottom: '64px' } : undefined}>
+          {/* Usage warning banner */}
+          <UsageWarningBanner />
+
           {activeTab === 'chat' ? (
             <div className="flex-1 overflow-hidden">
               <ChatInterface ragSettings={ragSettings} />

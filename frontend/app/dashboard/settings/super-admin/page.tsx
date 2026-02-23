@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
-import { ShieldCheck, Activity, Users, MessageSquare, Cpu, DollarSign, SlidersHorizontal, History, Ticket, BarChart3 } from 'lucide-react';
+import { ShieldCheck, Activity, Users, MessageSquare, Cpu, DollarSign, SlidersHorizontal, History, Ticket, BarChart3, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 
@@ -18,8 +18,9 @@ const TierLimitsConfig = dynamic(() => import('@/components/super-admin/tier-lim
 const ConfigAuditLog = dynamic(() => import('@/components/super-admin/config-audit-log'), { ssr: false });
 const PromoCodeManager = dynamic(() => import('@/components/super-admin/promo-code-manager'), { ssr: false });
 const PaymentAnalyticsDashboard = dynamic(() => import('@/components/super-admin/payment-analytics-dashboard'), { ssr: false });
+const UsageAlertsConfig = dynamic(() => import('@/components/super-admin/usage-alerts-config'), { ssr: false });
 
-type TabId = 'health' | 'users' | 'feedback' | 'llm' | 'pricing' | 'tier-limits' | 'audit-log' | 'promo-codes' | 'payment-analytics';
+type TabId = 'health' | 'users' | 'feedback' | 'llm' | 'pricing' | 'tier-limits' | 'audit-log' | 'promo-codes' | 'payment-analytics' | 'usage-alerts';
 
 interface Tab {
   id: TabId;
@@ -37,6 +38,7 @@ const tabs: Tab[] = [
   { id: 'audit-log', label: 'Audit Log', icon: History },
   { id: 'promo-codes', label: 'Promo Codes', icon: Ticket },
   { id: 'payment-analytics', label: 'Revenue', icon: BarChart3 },
+  { id: 'usage-alerts', label: 'Usage Alerts', icon: Bell },
 ];
 
 export default function SuperAdminPage() {
@@ -86,6 +88,8 @@ export default function SuperAdminPage() {
         return <PromoCodeManager />;
       case 'payment-analytics':
         return <PaymentAnalyticsDashboard />;
+      case 'usage-alerts':
+        return <UsageAlertsConfig />;
       default:
         return <FeedbackDashboard />;
     }

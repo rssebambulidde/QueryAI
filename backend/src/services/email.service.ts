@@ -1168,6 +1168,279 @@ export class EmailService {
   }
 
   /**
+   * Send trial ending reminder email (e.g. 3 days before trial expires).
+   * 9.6.5 — Subscription lifecycle email.
+   */
+  static async sendTrialEndingEmail(
+    userEmail: string,
+    userName: string,
+    subscription: Database.Subscription,
+    daysRemaining: number
+  ): Promise<boolean> {
+    try {
+      const trialEndDate = subscription.trial_end
+        ? new Date(subscription.trial_end).toLocaleDateString()
+        : 'soon';
+      const subject = `Your QueryAI Trial Ends in ${daysRemaining} Day${daysRemaining > 1 ? 's' : ''}`;
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #ff6b35; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background-color: #f9f9f9; }
+            .button { display: inline-block; padding: 12px 24px; background-color: #ff6b35; color: white; text-decoration: none; border-radius: 4px; margin-top: 20px; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Trial Ending Soon</h1>
+            </div>
+            <div class="content">
+              <p>Hello ${userName},</p>
+              <p>Your <strong>${subscription.tier}</strong> trial is ending on <strong>${trialEndDate}</strong> — that's just <strong>${daysRemaining} day${daysRemaining > 1 ? 's' : ''}</strong> away.</p>
+              <p>To keep enjoying all the features of the ${subscription.tier} plan, please subscribe before your trial ends.</p>
+              <p>If you don't subscribe, your account will be downgraded to the Free plan and you'll lose access to premium features.</p>
+              <a href="${this.getSubscriptionUrl()}" class="button">Subscribe Now</a>
+              <p>Best regards,<br>The QueryAI Team</p>
+            </div>
+            <div class="footer">
+              <p>This is an automated message from QueryAI. Please do not reply to this email.</p>
+              <p>&copy; ${new Date().getFullYear()} QueryAI. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      return await this.sendEmail(userEmail, userName, subject, htmlContent);
+    } catch (error) {
+      logger.error('Failed to send trial ending email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send annual discount upsell email for monthly subscribers.
+   * 9.6.5 — Subscription lifecycle email.
+   */
+  static async sendAnnualUpsellEmail(
+    userEmail: string,
+    userName: string,
+    subscription: Database.Subscription,
+    options: { monthlyPrice: number; annualPrice: number; currency?: string }
+  ): Promise<boolean> {
+    try {
+      const currency = options.currency ?? 'USD';
+      const monthlyTotal = options.monthlyPrice * 12;
+      const savings = monthlyTotal - options.annualPrice;
+      const savingsPercent = monthlyTotal > 0 ? Math.round((savings / monthlyTotal) * 100) : 0;
+      const currencySymbol = currency === 'USD' ? '$' : currency;
+      const subject = `Save ${savingsPercent}% with Annual Billing — QueryAI`;
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #ff6b35; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background-color: #f9f9f9; }
+            .savings-box { background-color: #fff3e0; border-left: 4px solid #ff6b35; padding: 15px; margin: 20px 0; border-radius: 4px; }
+            .button { display: inline-block; padding: 12px 24px; background-color: #ff6b35; color: white; text-decoration: none; border-radius: 4px; margin-top: 20px; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Switch to Annual &amp; Save</h1>
+            </div>
+            <div class="content">
+              <p>Hello ${userName},</p>
+              <p>You're currently on the <strong>${subscription.tier}</strong> monthly plan at <strong>${currencySymbol}${options.monthlyPrice.toFixed(2)}/month</strong>.</p>
+              <div class="savings-box">
+                <strong>Switch to annual billing and save ${savingsPercent}%!</strong>
+                <p>Monthly: ${currencySymbol}${options.monthlyPrice.toFixed(2)} × 12 = ${currencySymbol}${monthlyTotal.toFixed(2)}/year</p>
+                <p>Annual: <strong>${currencySymbol}${options.annualPrice.toFixed(2)}/year</strong></p>
+                <p>You save: <strong>${currencySymbol}${savings.toFixed(2)} per year</strong></p>
+              </div>
+              <p>Switch today and start saving immediately.</p>
+              <a href="${this.getSubscriptionUrl()}" class="button">Switch to Annual</a>
+              <p>Best regards,<br>The QueryAI Team</p>
+            </div>
+            <div class="footer">
+              <p>This is an automated message from QueryAI. Please do not reply to this email.</p>
+              <p>&copy; ${new Date().getFullYear()} QueryAI. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      return await this.sendEmail(userEmail, userName, subject, htmlContent);
+    } catch (error) {
+      logger.error('Failed to send annual upsell email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send win-back email for churned users (cancelled 14-30 days ago).
+   * 9.6.5 — Subscription lifecycle email.
+   */
+  static async sendWinBackEmail(
+    userEmail: string,
+    userName: string,
+    previousTier: string
+  ): Promise<boolean> {
+    try {
+      const subject = 'We Miss You — Come Back to QueryAI!';
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #ff6b35; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background-color: #f9f9f9; }
+            .features-box { background-color: #fff; border: 1px solid #ddd; padding: 15px; margin: 20px 0; border-radius: 4px; }
+            .button { display: inline-block; padding: 12px 24px; background-color: #ff6b35; color: white; text-decoration: none; border-radius: 4px; margin-top: 20px; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>We'd Love to Have You Back</h1>
+            </div>
+            <div class="content">
+              <p>Hello ${userName},</p>
+              <p>We noticed you recently cancelled your <strong>${previousTier}</strong> plan. We're sorry to see you go!</p>
+              <div class="features-box">
+                <strong>Here's what you're missing:</strong>
+                <ul>
+                  <li>Unlimited AI-powered queries</li>
+                  <li>Advanced document analysis with RAG</li>
+                  <li>Priority support and faster responses</li>
+                  <li>Web search integration via Tavily</li>
+                </ul>
+              </div>
+              <p>Ready to come back? Reactivate your subscription in just a few clicks.</p>
+              <a href="${this.getSubscriptionUrl()}" class="button">Reactivate Subscription</a>
+              <p>If you have any feedback on how we can improve, we'd love to hear it.</p>
+              <p>Best regards,<br>The QueryAI Team</p>
+            </div>
+            <div class="footer">
+              <p>This is an automated message from QueryAI. Please do not reply to this email.</p>
+              <p>&copy; ${new Date().getFullYear()} QueryAI. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      return await this.sendEmail(userEmail, userName, subject, htmlContent);
+    } catch (error) {
+      logger.error('Failed to send win-back email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send usage alert email (80% warning or 100% limit reached).
+   * 9.6.9 — triggered by the daily usage-alert processor.
+   */
+  static async sendUsageAlertEmail(
+    userEmail: string,
+    userName: string,
+    alert: {
+      metric: string;
+      used: number;
+      limit: number;
+      percentage: number;
+      isLimit: boolean;
+      tier: string;
+    }
+  ): Promise<boolean> {
+    try {
+      const headerColor = alert.isLimit ? '#dc3545' : '#ff6b35';
+      const headerText = alert.isLimit ? `${alert.metric} Limit Reached` : `${alert.metric} Usage Alert`;
+      const subject = alert.isLimit
+        ? `You've reached your ${alert.metric.toLowerCase()} limit — QueryAI`
+        : `${alert.percentage}% of your ${alert.metric.toLowerCase()} used — QueryAI`;
+
+      const upgradeBlock = alert.tier === 'free' || alert.tier === 'pro'
+        ? `<a href="${this.getSubscriptionUrl()}" class="button">Upgrade Plan</a>`
+        : '';
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: ${headerColor}; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background-color: #f9f9f9; }
+            .usage-bar { background: #e9ecef; border-radius: 8px; height: 24px; margin: 16px 0; overflow: hidden; }
+            .usage-fill { height: 100%; border-radius: 8px; background: ${alert.isLimit ? '#dc3545' : '#ff6b35'}; transition: width 0.3s; }
+            .button { display: inline-block; padding: 12px 24px; background-color: #ff6b35; color: white; text-decoration: none; border-radius: 4px; margin-top: 20px; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+            .stats { background: white; padding: 12px 16px; border-radius: 4px; margin: 12px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>${headerText}</h1>
+            </div>
+            <div class="content">
+              <p>Hello ${userName},</p>
+              <p>${alert.isLimit
+                ? `You've reached your <strong>${alert.metric.toLowerCase()}</strong> limit for this billing period.`
+                : `You've used <strong>${alert.percentage}%</strong> of your monthly <strong>${alert.metric.toLowerCase()}</strong> allowance.`
+              }</p>
+              <div class="stats">
+                <strong>Used:</strong> ${alert.used.toLocaleString()} / ${alert.limit.toLocaleString()}<br>
+                <strong>Plan:</strong> ${alert.tier.charAt(0).toUpperCase() + alert.tier.slice(1)}
+              </div>
+              <div class="usage-bar">
+                <div class="usage-fill" style="width: ${Math.min(alert.percentage, 100)}%"></div>
+              </div>
+              ${alert.isLimit
+                ? '<p>Further requests may be limited until your next billing period or until you upgrade your plan.</p>'
+                : '<p>Consider upgrading your plan if you expect to need more capacity.</p>'
+              }
+              ${upgradeBlock}
+              <p>Best regards,<br>The QueryAI Team</p>
+            </div>
+            <div class="footer">
+              <p>This is an automated message from QueryAI. Please do not reply to this email.</p>
+              <p>&copy; ${new Date().getFullYear()} QueryAI. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      return await this.sendEmail(userEmail, userName, subject, htmlContent);
+    } catch (error) {
+      logger.error('Failed to send usage alert email:', error);
+      return false;
+    }
+  }
+
+  /**
    * Send Pesapal → PayPal migration announcement.
    * See PAYPAL_ONLY_MIGRATION_PLAN.md and send-migration-emails.ts.
    */

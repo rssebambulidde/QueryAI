@@ -150,6 +150,30 @@ export class PricingConfigService {
       updatedBy,
     );
 
+    // 9.6.6 — Auto-create new PayPal plans when pricing changes (fire-and-forget).
+    // Existing subscribers stay on their old plan; new subscriptions use the new plan IDs.
+    try {
+      const pricesChanged =
+        oldValue.tiers.pro.monthly !== parsed.tiers.pro.monthly ||
+        oldValue.tiers.pro.annual !== parsed.tiers.pro.annual ||
+        oldValue.tiers.enterprise.monthly !== parsed.tiers.enterprise.monthly ||
+        oldValue.tiers.enterprise.annual !== parsed.tiers.enterprise.annual;
+
+      if (pricesChanged) {
+        const { createPlansForPricing, refreshDynamicPlanIdCache } = await import('./paypal.service');
+        createPlansForPricing(parsed.tiers, updatedBy)
+          .then(() => refreshDynamicPlanIdCache())
+          .then(() => logger.info('Dynamic PayPal plans created after pricing update'))
+          .catch((err: Error) =>
+            logger.error('Failed to create dynamic PayPal plans', { error: err.message }),
+          );
+      }
+    } catch (err) {
+      logger.error('Failed to trigger dynamic PayPal plan creation', {
+        error: (err as Error).message,
+      });
+    }
+
     logger.info('Pricing config updated', { updatedBy });
     return parsed;
   }

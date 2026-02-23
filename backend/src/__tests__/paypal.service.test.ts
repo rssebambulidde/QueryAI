@@ -222,7 +222,12 @@ describe('PayPalService class', () => {
     expect(typeof PayPalService.cancelSubscription).toBe('function');
     expect(typeof PayPalService.updateSubscription).toBe('function');
     expect(typeof PayPalService.verifyWebhookSignature).toBe('function');
-    expect(typeof PayPalService.processWebhook).toBe('function');
+    // 9.6.6 Dynamic plan management
+    expect(typeof PayPalService.createProduct).toBe('function');
+    expect(typeof PayPalService.createPlan).toBe('function');
+    expect(typeof PayPalService.createPlansForPricing).toBe('function');
+    expect(typeof PayPalService.getDynamicPlanIds).toBe('function');
+    expect(typeof PayPalService.refreshDynamicPlanIdCache).toBe('function');
   });
 });
 

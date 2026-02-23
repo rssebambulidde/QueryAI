@@ -318,4 +318,17 @@ export namespace Database {
     discount_amount: number;
     created_at: string;
   }
+
+  /** In-app notification (usage alerts, system messages). */
+  export interface UserNotification {
+    id: string;
+    user_id: string;
+    type: string;          // 'usage_warning' | 'usage_limit' | 'system'
+    title: string;
+    message: string;
+    metadata?: Record<string, any>;
+    is_read: boolean;
+    created_at: string;
+    read_at?: string | null;
+  }
 }

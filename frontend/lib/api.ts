@@ -2261,6 +2261,67 @@ export const adminApi = {
     return response.data;
   },
 
+  /** Get usage-alert threshold configuration (superadmin). */
+  getUsageAlertThresholds: async (): Promise<ApiResponse<UsageAlertThresholdConfig>> => {
+    const response = await apiClient.get('/api/admin/settings/usage-alert-thresholds');
+    return response.data;
+  },
+
+  /** Update usage-alert threshold configuration (superadmin). */
+  updateUsageAlertThresholds: async (
+    config: UsageAlertThresholdConfig,
+  ): Promise<ApiResponse<UsageAlertThresholdConfig>> => {
+    const response = await apiClient.put('/api/admin/settings/usage-alert-thresholds', config);
+    return response.data;
+  },
+
+};
+
+// ── Usage Alert Threshold types ──────────────────────────────────────────────
+
+export interface UsageAlertThresholdConfig {
+  thresholds: number[];
+  enabled: boolean;
+  metrics: ('queries' | 'tavilySearches' | 'collections')[];
+}
+
+// ── Notification types ───────────────────────────────────────────────────────
+
+export interface UserNotification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  metadata: Record<string, unknown> | null;
+  read: boolean;
+  created_at: string;
+}
+
+export const notificationApi = {
+  /** Get notifications for the current user. */
+  getAll: async (params?: { unreadOnly?: boolean; limit?: number }): Promise<ApiResponse<UserNotification[]>> => {
+    const response = await apiClient.get('/api/notifications', { params });
+    return response.data;
+  },
+
+  /** Get count of unread notifications. */
+  getUnreadCount: async (): Promise<ApiResponse<{ count: number }>> => {
+    const response = await apiClient.get('/api/notifications/unread-count');
+    return response.data;
+  },
+
+  /** Mark a single notification as read. */
+  markRead: async (id: string): Promise<ApiResponse<{ success: boolean }>> => {
+    const response = await apiClient.patch(`/api/notifications/${id}/read`);
+    return response.data;
+  },
+
+  /** Mark all notifications as read. */
+  markAllRead: async (): Promise<ApiResponse<{ success: boolean }>> => {
+    const response = await apiClient.post('/api/notifications/read-all');
+    return response.data;
+  },
 };
 
 // ── Config API (public, no auth) ─────────────────────────────────────────────

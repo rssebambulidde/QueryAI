@@ -17,6 +17,7 @@ import { useDebounce } from '@/lib/hooks/use-debounce';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { ConversationSkeleton, CollectionSkeleton } from './skeleton-loader';
 import { AccountDropdown } from './account-dropdown';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 import { CitedSourcesPanel } from '@/components/research/cited-sources-panel';
 import { SourceExplorerModal } from '@/components/research/source-explorer-modal';
 // Topic filters retired in Phase 2 (v2 migration)
@@ -328,6 +329,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               <ShieldCheck className="w-5 h-5" />
             </button>
           )}
+          {/* Notification Bell (collapsed) */}
+          <NotificationBell />
         </nav>
 
         {/* Collapsed Bottom — Account */}
@@ -693,11 +696,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         )}
       </div>
 
-      {/* ── Bottom section: Upgrade, Account ── */}
+      {/* ── Bottom section: Notifications, Upgrade, Account ── */}
       <div
         className="border-t border-gray-100 flex-shrink-0 relative"
         style={isMobile ? { paddingBottom: 'max(0px, env(safe-area-inset-bottom))' } : undefined}
       >
+        {/* Notification Bell (expanded) */}
+        <div className="px-2 py-1">
+          <NotificationBell />
+        </div>
+
         {/* Upgrade CTA — show when any higher tier exists */}
         {hasHigherTier && (
           <button

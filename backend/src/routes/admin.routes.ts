@@ -867,6 +867,51 @@ router.delete(
   })
 );
 
+// ── Usage Alert Thresholds ─────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/settings/usage-alert-thresholds
+ * Returns the current usage alert threshold config.
+ */
+router.get(
+  '/settings/usage-alert-thresholds',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const { UsageAlertsService } = await import('../services/usage-alerts.service');
+    const data = await UsageAlertsService.getThresholds();
+    res.json({ success: true, data });
+  })
+);
+
+/**
+ * PUT /api/admin/settings/usage-alert-thresholds
+ * Update usage alert thresholds, enabled flag, and monitored metrics.
+ */
+router.put(
+  '/settings/usage-alert-thresholds',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { UsageAlertsService } = await import('../services/usage-alerts.service');
+    const { ZodError } = await import('zod');
+
+    try {
+      const updated = await UsageAlertsService.updateThresholds(req.body, req.user!.id);
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        throw new ValidationError(
+          `Invalid threshold config: ${err.issues.map((i) => i.message).join(', ')}`,
+        );
+      }
+      throw err;
+    }
+  })
+);
+
 // ── Payment Analytics ──────────────────────────────────────────
 
 /**

@@ -8,6 +8,8 @@ import logger from '../config/logger';
 import { runPaymentReminderScheduler } from '../services/payment-reminder.service';
 import { runRenewalReminderScheduler } from '../services/renewal-reminder.service';
 import { runExpirationWarningScheduler } from '../services/expiration-warning.service';
+import { runSubscriptionLifecycleScheduler } from '../services/subscription-lifecycle.service';
+import { runUsageAlertProcessor } from '../services/usage-alerts.service';
 import { processEmailQueue } from '../services/email-queue.service';
 
 export async function runEmailScheduler(): Promise<void> {
@@ -16,6 +18,8 @@ export async function runEmailScheduler(): Promise<void> {
     await runPaymentReminderScheduler();
     await runRenewalReminderScheduler();
     await runExpirationWarningScheduler();
+    await runSubscriptionLifecycleScheduler();
+    await runUsageAlertProcessor();
     const q = await processEmailQueue(100);
     logger.info('Email scheduler: queue processed', { processed: q.processed, sent: q.sent, failed: q.failed });
     logger.info('Email scheduler: done');

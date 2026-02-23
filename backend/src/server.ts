@@ -31,6 +31,7 @@ import adminRoutes from './routes/admin.routes';
 import feedbackRoutes from './routes/feedback.routes';
 import healthRoutes from './routes/health.routes';
 import configRoutes from './routes/config.routes';
+import notificationRoutes from './routes/notification.routes';
 // import workspaceRoutes from './routes/workspace.routes'; // v2: disabled
 
 const app: Express = express();
@@ -141,6 +142,7 @@ app.use('/api/connections', connectionsRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/config', configRoutes);
 // app.use('/api/workspace', workspaceRoutes); // v2: disabled
@@ -336,6 +338,13 @@ import('./services/pricing-config.service').then(({ PricingConfigService }) =>
   PricingConfigService.initialize(),
 ).catch((error) => {
   logger.error('Pricing config initialization error:', error);
+});
+
+// Pre-warm dynamic PayPal plan ID cache from system_settings (9.6.6)
+import('./services/paypal.service').then(({ refreshDynamicPlanIdCache }) =>
+  refreshDynamicPlanIdCache(),
+).catch((error) => {
+  logger.error('Dynamic PayPal plan ID cache warm-up error:', error);
 });
 
 // Pre-warm tier limits cache from DB
