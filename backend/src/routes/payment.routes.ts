@@ -3,10 +3,14 @@ import * as PayPalService from '../services/paypal.service';
 import { DatabaseService } from '../services/database.service';
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
+import { validateRequest } from '../middleware/validate';
 import { ValidationError } from '../types/error';
+import { PaymentInitiateSchema, PaymentRefundSchema } from '../schemas/payment.schema';
+import { webhookLimiter } from '../middleware/rateLimiter';
 import logger from '../config/logger';
 import config from '../config/env';
 import type { Database } from '../types/database';
+import type { Tier } from '../constants/pricing';
 
 const router = Router();
 
@@ -54,6 +58,7 @@ function mapPayPalOrderStatusToPaymentStatus(
  */
 router.post(
   '/initiate',
+  validateRequest(PaymentInitiateSchema),
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     // Log incoming request for debugging
@@ -73,7 +78,7 @@ router.post(
       throw new ValidationError('User not authenticated');
     }
 
-    const { tier, firstName, lastName, email, recurring = false, billing_period: bp, return_url, prefer_card } = req.body;
+    const { tier, firstName, lastName, email, recurring, billing_period: bp, return_url, prefer_card } = req.body;
     
     logger.info('Payment initiate: Parsed request body', {
       userId,
@@ -86,14 +91,6 @@ router.post(
       currency: req.body.currency,
       return_url: return_url ? 'provided' : 'missing',
     });
-
-    if (!tier || !['pro', 'enterprise'].includes(tier)) {
-      throw new ValidationError('Invalid tier. Must be "pro" or "enterprise"');
-    }
-
-    if (!firstName || !lastName || !email) {
-      throw new ValidationError('Missing required fields: firstName, lastName, email');
-    }
 
     const billingPeriod = (bp === 'annual' ? 'annual' : 'monthly') as 'monthly' | 'annual';
 
@@ -109,7 +106,7 @@ router.post(
 
     const { getPricing } = await import('../constants/pricing');
     const amount = getPricing(
-      tier as 'pro' | 'enterprise',
+      tier as Tier,
       billingPeriod
     );
     
@@ -117,6 +114,17 @@ router.post(
     if (amount <= 0) {
       logger.error('Invalid payment amount', { tier, currency: normalizedCurrency, billingPeriod, amount });
       throw new ValidationError(`Invalid payment amount for tier "${tier}". Please contact support.`);
+    }
+
+    // Duplicate payment prevention — reject if user has a pending payment for the same tier
+    const recentPayments = await DatabaseService.getUserPayments(userId, 20);
+    const hasPending = recentPayments.some(
+      (p) => p.status === 'pending' && p.tier === tier
+    );
+    if (hasPending) {
+      throw new ValidationError(
+        'You already have a pending payment for this tier. Please complete or cancel it before starting a new one.'
+      );
     }
     
     logger.info('Payment initiation request', {
@@ -389,7 +397,7 @@ router.get(
       try {
         const subDetails = await PayPalService.getSubscription(subscriptionLookupId);
         const status = (subDetails.status || '').toUpperCase();
-        if (['ACTIVE', 'APPROVAL_PENDING', 'APPROVED'].includes(status)) {
+        if (status === 'ACTIVE') {
           paymentStatus = 'completed';
           const periodStart = subDetails.start_time
             ? new Date(subDetails.start_time)
@@ -403,7 +411,7 @@ router.get(
           const currency = 'USD';
           const { getAnnualDiscountPercent } = await import('../constants/pricing');
           const annualDiscount = billingPeriod === 'annual'
-            ? getAnnualDiscountPercent(payment.tier as 'pro')
+            ? getAnnualDiscountPercent(payment.tier as Tier)
             : 0;
 
           await DatabaseService.updatePayment(payment.id, {
@@ -605,8 +613,8 @@ router.get(
                 newTier
               );
             } else if (
-              getTierOrder(newTier as 'free' | 'pro') >
-              getTierOrder(oldTier as 'free' | 'pro')
+              getTierOrder(newTier as Tier) >
+              getTierOrder(oldTier as Tier)
             ) {
               const periodStart = subscriptionAfter?.current_period_start
                 ? new Date(subscriptionAfter.current_period_start)
@@ -765,7 +773,7 @@ router.post(
       try {
         const subDetails = await PayPalService.getSubscription(subId);
         const status = (subDetails.status || '').toUpperCase();
-        if (!['ACTIVE', 'APPROVAL_PENDING', 'APPROVED'].includes(status)) continue;
+        if (status !== 'ACTIVE') continue;
 
         // Update payment to completed
         await DatabaseService.updatePayment(payment.id, {
@@ -789,7 +797,7 @@ router.post(
         const currency = 'USD';
         const { getAnnualDiscountPercent } = await import('../constants/pricing');
         const annualDiscount = billingPeriod === 'annual'
-          ? getAnnualDiscountPercent(payment.tier as 'pro')
+          ? getAnnualDiscountPercent(payment.tier as Tier)
           : 0;
 
         await DatabaseService.updateSubscription(payment.user_id, {
@@ -847,6 +855,7 @@ router.get(
  */
 router.post(
   '/webhook',
+  webhookLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const webhookEvent = req.body as Record<string, unknown>;
     const eventType = webhookEvent.event_type as string | undefined;
@@ -1295,10 +1304,7 @@ router.post(
       }
     }
 
-    const result = PayPalService.processWebhook(eventType || '', resource || {});
-    if (!result.handled) {
-      logger.debug('PayPal webhook event not handled', { event_type: eventType });
-    }
+    logger.info('PayPal webhook processed', { event_type: eventType });
 
     return res.status(200).json({ success: true, message: 'Webhook received' });
   })
@@ -1395,6 +1401,7 @@ router.get(
  */
 router.post(
   '/refund',
+  validateRequest(PaymentRefundSchema),
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
@@ -1403,9 +1410,6 @@ router.post(
     }
 
     const { paymentId, amount, reason } = req.body;
-    if (!paymentId) {
-      throw new ValidationError('Payment ID is required');
-    }
 
     const payment = await DatabaseService.getPaymentById(paymentId);
     if (!payment) {
@@ -1419,6 +1423,27 @@ router.post(
     }
     if (!payment.paypal_payment_id) {
       throw new ValidationError('Payment capture ID not found (PayPal)');
+    }
+
+    // Refund cooldown: disallow refund if payment completed > 30 days ago
+    const completedAt = payment.completed_at ? new Date(payment.completed_at) : null;
+    if (completedAt) {
+      const daysSinceCompleted = (Date.now() - completedAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceCompleted > 30) {
+        throw new ValidationError(
+          'Refund window has expired. Payments can only be refunded within 30 days of completion.'
+        );
+      }
+    }
+
+    // Refund cooldown: disallow multiple refunds on the same payment within 24 hours
+    if (payment.refunded_at) {
+      const hoursSinceLastRefund = (Date.now() - new Date(payment.refunded_at).getTime()) / (1000 * 60 * 60);
+      if (hoursSinceLastRefund < 24) {
+        throw new ValidationError(
+          'A refund was already processed for this payment recently. Please wait 24 hours before requesting another partial refund.'
+        );
+      }
     }
 
     const refundAmount = amount ?? payment.amount;

@@ -800,45 +800,13 @@ export async function verifyWebhookSignature(
 export type WebhookEventType =
   | 'PAYMENT.SALE.COMPLETED'
   | 'BILLING.SUBSCRIPTION.CREATED'
+  | 'BILLING.SUBSCRIPTION.ACTIVATED'
   | 'BILLING.SUBSCRIPTION.UPDATED'
   | 'BILLING.SUBSCRIPTION.CANCELLED'
+  | 'BILLING.SUBSCRIPTION.EXPIRED'
   | 'BILLING.SUBSCRIPTION.PAYMENT.FAILED'
-  | 'PAYMENT.CAPTURE.REFUNDED';
-
-export interface ProcessWebhookResult {
-  handled: boolean;
-  error?: string;
-}
-
-/**
- * Process webhook event. Parses event type and payload; does not update DB.
- * Route layer should verify signature first, then call this and persist state.
- */
-export function processWebhook(
-  eventType: string,
-  payload: Record<string, unknown>
-): ProcessWebhookResult {
-  const type = eventType as WebhookEventType;
-  logger.info('PayPal webhook received', { event_type: type, id: payload.id });
-
-  switch (type) {
-    case 'PAYMENT.SALE.COMPLETED':
-      return { handled: true };
-    case 'BILLING.SUBSCRIPTION.CREATED':
-      return { handled: true };
-    case 'BILLING.SUBSCRIPTION.UPDATED':
-      return { handled: true };
-    case 'BILLING.SUBSCRIPTION.CANCELLED':
-      return { handled: true };
-    case 'BILLING.SUBSCRIPTION.PAYMENT.FAILED':
-      return { handled: true };
-    case 'PAYMENT.CAPTURE.REFUNDED':
-      return { handled: true };
-    default:
-      logger.warn('PayPal webhook unhandled event type', { event_type: type });
-      return { handled: false };
-  }
-}
+  | 'PAYMENT.CAPTURE.REFUNDED'
+  | 'PAYMENT.CAPTURE.COMPLETED';
 
 /**
  * PayPalService class – static API matching spec.
@@ -853,5 +821,4 @@ export class PayPalService {
   static cancelSubscription = cancelSubscription;
   static updateSubscription = updateSubscription;
   static verifyWebhookSignature = verifyWebhookSignature;
-  static processWebhook = processWebhook;
 }

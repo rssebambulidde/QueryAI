@@ -625,10 +625,11 @@ export class SubscriptionService {
       try {
         const { EmailService } = await import('./email.service');
         const { getPricing } = await import('../constants/pricing');
+        type Tier = import('../constants/pricing').Tier;
         const user = await DatabaseService.getUserProfile(subscription.user_id);
         if (user) {
           const amt = amount ? parseFloat(amount) : getPricing(
-            subscription.tier as 'pro',
+            subscription.tier as Tier,
             billingPeriod as 'monthly' | 'annual'
           );
           await EmailService.sendRenewalConfirmationEmail(
@@ -848,7 +849,8 @@ export class SubscriptionService {
 
           const currency = 'USD' as const;
           const bp = (sub as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
-          const amount = getPricing(sub.tier as 'pro', bp as 'monthly' | 'annual');
+          type Tier = import('../constants/pricing').Tier;
+          const amount = getPricing(sub.tier as Tier, bp as 'monthly' | 'annual');
           const payments = await DatabaseService.getUserPayments(sub.user_id, 5);
           const lastForTier = payments.find(
             (p) => p.tier === sub.tier && p.status === 'completed'
@@ -969,8 +971,9 @@ export class SubscriptionService {
               const user = await DatabaseService.getUserProfile(subscription.user_id);
               if (user) {
                 const currency = 'USD';
+                type Tier = import('../constants/pricing').Tier;
                 const amount = getPricing(
-                  subscription.tier as 'pro',
+                  subscription.tier as Tier,
                   bp as 'monthly' | 'annual'
                 );
                 await EmailService.sendRenewalConfirmationEmail(

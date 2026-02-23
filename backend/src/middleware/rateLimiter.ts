@@ -99,3 +99,26 @@ export const inviteGuestLimiter = rateLimit({
     });
   },
 });
+
+// Rate limiter for PayPal webhook endpoint — prevent replay/flood attacks
+export const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // 60 requests per IP per minute
+  message: 'Too many webhook requests.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: {
+    trustProxy: true,
+  },
+  handler: (req: Request, res: Response) => {
+    logger.warn(`Webhook rate limit exceeded for IP: ${req.ip}`, { path: req.path });
+    const error = new RateLimitError('Too many webhook requests. Please slow down.');
+    res.status(error.statusCode).json({
+      success: false,
+      error: {
+        message: error.message,
+        code: error.code,
+      },
+    });
+  },
+});
