@@ -21,7 +21,6 @@ router.post(
     const {
       messageId,
       conversationId,
-      topicId,
       rating,
       comment,
       flaggedCitations,
@@ -42,7 +41,6 @@ router.post(
       userId: req.user!.id,
       messageId,
       conversationId,
-      topicId,
       rating,
       comment: comment ? String(comment).substring(0, 2000) : undefined,
       flaggedCitations: Array.isArray(flaggedCitations) ? flaggedCitations : undefined,
