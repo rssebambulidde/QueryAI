@@ -22,8 +22,8 @@ export function BarChart({ data, dataKeys, xAxisKey = 'name', height = 300, clas
   const mobileHeight = isMobile ? Math.max(height * 0.8, 250) : height;
   
   return (
-    <div className={cn("w-full overflow-x-auto", className)} style={{ height: mobileHeight }}>
-      <ResponsiveContainer width="100%" height="100%">
+    <div className={cn("w-full overflow-x-auto", className)}>
+      <ResponsiveContainer width="100%" height={mobileHeight}>
         <RechartsBarChart 
           data={data} 
           margin={isMobile 
