@@ -30,6 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_message_feedback_model     ON message_feedback (m
 -- RLS: users can only manage their own feedback
 ALTER TABLE message_feedback ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS message_feedback_user_policy ON message_feedback;
 CREATE POLICY message_feedback_user_policy ON message_feedback
   FOR ALL USING (auth.uid() = user_id);
 
