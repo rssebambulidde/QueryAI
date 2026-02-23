@@ -952,7 +952,7 @@ router.post(
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    const { paymentId } = req.params;
+    const paymentId = req.params.paymentId as string;
 
     const payment = await DatabaseService.getPaymentById(paymentId);
     if (!payment) {
