@@ -159,6 +159,16 @@ export class TierConfigService {
 
     cachedLimits = merged;
     cacheExpiresAt = Date.now() + CACHE_TTL_MS;
+
+    // Audit trail (fire-and-forget)
+    const { ConfigAuditService } = await import('./config-audit.service');
+    ConfigAuditService.logChange(
+      'tier_limits',
+      current as unknown as Record<string, unknown>,
+      merged as unknown as Record<string, unknown>,
+      updatedBy,
+    );
+
     logger.info('Tier limits updated', { tier, updatedBy });
     return merged;
   }

@@ -131,12 +131,24 @@ export class PricingConfigService {
   static async update(config: unknown, updatedBy: string): Promise<PricingConfig> {
     const parsed = PricingConfigSchema.parse(config); // throws ZodError on bad input
 
+    // Capture old value for audit trail
+    const oldValue = await PricingConfigService.getAll();
+
     const { SystemSettingsService } = await import('./system-settings.service');
     await SystemSettingsService.set(SETTINGS_KEY, parsed, updatedBy);
 
     // Refresh local cache immediately
     cachedConfig = parsed;
     cacheExpiresAt = Date.now() + CACHE_TTL_MS;
+
+    // Audit trail (fire-and-forget)
+    const { ConfigAuditService } = await import('./config-audit.service');
+    ConfigAuditService.logChange(
+      'pricing_config',
+      oldValue as unknown as Record<string, unknown>,
+      parsed as unknown as Record<string, unknown>,
+      updatedBy,
+    );
 
     logger.info('Pricing config updated', { updatedBy });
     return parsed;

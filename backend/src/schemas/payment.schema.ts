@@ -30,6 +30,11 @@ export const PaymentInitiateSchema = z.object({
     .default('monthly'),
   return_url: z.string().url().optional(),
   prefer_card: z.boolean().optional().default(false),
+  promo_code: z
+    .string()
+    .min(1)
+    .max(50)
+    .optional(),
 });
 
 export type PaymentInitiateInput = z.infer<typeof PaymentInitiateSchema>;

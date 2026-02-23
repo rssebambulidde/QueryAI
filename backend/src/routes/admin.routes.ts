@@ -768,4 +768,145 @@ router.put(
   })
 );
 
+// ─── Config Audit Log ────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/config-audit-log
+ * Paginated audit trail of pricing / tier-limit changes.
+ * Query params: ?config_type=pricing_config|tier_limits&page=1&limit=25
+ */
+router.get(
+  '/config-audit-log',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { ConfigAuditService } = await import('../services/config-audit.service');
+    const configType = req.query.config_type as string | undefined;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = parseInt(req.query.limit as string, 10) || 25;
+
+    if (configType && !['pricing_config', 'tier_limits'].includes(configType)) {
+      throw new ValidationError('config_type must be "pricing_config" or "tier_limits"');
+    }
+
+    const result = await ConfigAuditService.getAuditLog({
+      config_type: configType as 'pricing_config' | 'tier_limits' | undefined,
+      page,
+      limit,
+    });
+
+    res.json({ success: true, data: result });
+  })
+);
+
+// ─── Promo Codes (CRUD) ─────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/promo-codes
+ * List all promo codes (paginated). Query: ?is_active=true&page=1&limit=25
+ */
+router.get(
+  '/promo-codes',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { PromoCodeService } = await import('../services/promo-code.service');
+    const isActive = req.query.is_active === 'true' ? true : req.query.is_active === 'false' ? false : undefined;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = parseInt(req.query.limit as string, 10) || 25;
+
+    const result = await PromoCodeService.list({ is_active: isActive, page, limit });
+    res.json({ success: true, data: result });
+  })
+);
+
+/**
+ * GET /api/admin/promo-codes/:id
+ * Get a single promo code by ID.
+ */
+router.get(
+  '/promo-codes/:id',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { PromoCodeService } = await import('../services/promo-code.service');
+    const promo = await PromoCodeService.getById(req.params.id);
+    res.json({ success: true, data: promo });
+  })
+);
+
+/**
+ * POST /api/admin/promo-codes
+ * Create a new promo code.
+ */
+router.post(
+  '/promo-codes',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ValidationError('User not authenticated');
+    const { PromoCodeService } = await import('../services/promo-code.service');
+    const promo = await PromoCodeService.create(req.body, userId);
+    res.status(201).json({ success: true, data: promo });
+  })
+);
+
+/**
+ * PUT /api/admin/promo-codes/:id
+ * Update an existing promo code.
+ */
+router.put(
+  '/promo-codes/:id',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { PromoCodeService } = await import('../services/promo-code.service');
+    const promo = await PromoCodeService.update(req.params.id, req.body);
+    res.json({ success: true, data: promo });
+  })
+);
+
+/**
+ * DELETE /api/admin/promo-codes/:id
+ * Deactivate (soft-delete) a promo code.
+ */
+router.delete(
+  '/promo-codes/:id',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { PromoCodeService } = await import('../services/promo-code.service');
+    await PromoCodeService.deactivate(req.params.id);
+    res.json({ success: true, data: { message: 'Promo code deactivated' } });
+  })
+);
+
+// ── Payment Analytics ──────────────────────────────────────────
+
+/**
+ * GET /api/admin/payment-analytics
+ * Full payment analytics dashboard: MRR, churn, ARPU, revenue by tier,
+ * conversion funnel, failed payment trends, revenue trend.
+ * Query: ?days=30 (default 30)
+ */
+router.get(
+  '/payment-analytics',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const days = Math.min(Math.max(parseInt(req.query.days as string, 10) || 30, 1), 365);
+    const { PaymentAnalyticsService } = await import('../services/payment-analytics.service');
+    const data = await PaymentAnalyticsService.getDashboard(days);
+    res.json({ success: true, data });
+  })
+);
+
 export default router;

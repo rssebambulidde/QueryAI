@@ -21,6 +21,12 @@ jest.mock('../config/logger', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 
+jest.mock('../services/config-audit.service', () => ({
+  ConfigAuditService: {
+    logChange: jest.fn(),
+  },
+}));
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const VALID_CONFIG = {

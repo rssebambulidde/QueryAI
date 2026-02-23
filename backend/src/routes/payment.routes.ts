@@ -53,6 +53,27 @@ function mapPayPalOrderStatusToPaymentStatus(
 }
 
 /**
+ * Extract locked-price + promo data from payment callback_data.
+ * Returns undefined when no lock data is present (backward-compatible).
+ */
+function extractPriceLock(callbackData: unknown): {
+  locked_price_monthly?: number;
+  locked_price_annual?: number;
+  promo_code_id?: string;
+  promo_discount_percent?: number;
+} | undefined {
+  if (!callbackData || typeof callbackData !== 'object') return undefined;
+  const d = callbackData as Record<string, unknown>;
+  if (d.locked_price_monthly == null && d.locked_price_annual == null) return undefined;
+  return {
+    locked_price_monthly: typeof d.locked_price_monthly === 'number' ? d.locked_price_monthly : undefined,
+    locked_price_annual: typeof d.locked_price_annual === 'number' ? d.locked_price_annual : undefined,
+    promo_code_id: typeof d.promo_code_id === 'string' ? d.promo_code_id : undefined,
+    promo_discount_percent: typeof d.promo_discount_percent === 'number' ? d.promo_discount_percent : undefined,
+  };
+}
+
+/**
  * POST /api/payment/initiate
  * Initiate a PayPal payment for subscription upgrade (account or card via PayPal)
  */
@@ -78,7 +99,7 @@ router.post(
       throw new ValidationError('User not authenticated');
     }
 
-    const { tier, firstName, lastName, email, recurring, billing_period: bp, return_url, prefer_card } = req.body;
+    const { tier, firstName, lastName, email, recurring, billing_period: bp, return_url, prefer_card, promo_code } = req.body;
     
     logger.info('Payment initiate: Parsed request body', {
       userId,
@@ -90,6 +111,7 @@ router.post(
       billing_period: bp,
       currency: req.body.currency,
       return_url: return_url ? 'provided' : 'missing',
+      promo_code: promo_code ? 'provided' : 'none',
     });
 
     const billingPeriod = (bp === 'annual' ? 'annual' : 'monthly') as 'monthly' | 'annual';
@@ -104,11 +126,51 @@ router.post(
 
     const normalizedCurrency = 'USD' as const;
 
-    const { getPricing } = await import('../constants/pricing');
-    const amount = getPricing(
+    const { getPricing, getAllPricing } = await import('../constants/pricing');
+    const catalogAmount = getPricing(
       tier as Tier,
       billingPeriod
     );
+
+    // Lock both prices at purchase time (9.6.2 — grace period)
+    const allPrices = getAllPricing(tier as Tier);
+    const lockedPriceMonthly = allPrices.monthly;
+    const lockedPriceAnnual = allPrices.annual;
+
+    // Apply promo code if provided (9.6.3)
+    let amount = catalogAmount;
+    let promoCodeId: string | null = null;
+    let promoDiscountPercent: number | null = null;
+    let promoDiscountAmount = 0;
+
+    if (promo_code) {
+      const { PromoCodeService } = await import('../services/promo-code.service');
+      const validation = await PromoCodeService.validate(
+        promo_code,
+        userId,
+        tier,
+        billingPeriod,
+        catalogAmount,
+      );
+
+      if (!validation.valid) {
+        throw new ValidationError(validation.reason);
+      }
+
+      amount = validation.discountedAmount;
+      promoCodeId = validation.promo.id;
+      promoDiscountPercent = validation.discountPercent;
+      promoDiscountAmount = catalogAmount - amount;
+
+      logger.info('Promo code applied', {
+        userId,
+        promoCode: promo_code,
+        promoCodeId,
+        discountPercent: promoDiscountPercent,
+        originalAmount: catalogAmount,
+        discountedAmount: amount,
+      });
+    }
     
     // Validate amount is greater than 0
     if (amount <= 0) {
@@ -133,11 +195,25 @@ router.post(
       currency: normalizedCurrency,
       billingPeriod,
       amount,
+      catalogAmount,
+      promoCodeId,
       recurring,
       firstName: firstName ? 'provided' : 'missing',
       lastName: lastName ? 'provided' : 'missing',
       email: email ? 'provided' : 'missing',
     });
+
+    // Build callback_data with locked prices + promo info for activation
+    const priceLockData = {
+      locked_price_monthly: lockedPriceMonthly,
+      locked_price_annual: lockedPriceAnnual,
+      ...(promoCodeId && {
+        promo_code_id: promoCodeId,
+        promo_discount_percent: promoDiscountPercent,
+        promo_discount_amount: promoDiscountAmount,
+        catalog_amount: catalogAmount,
+      }),
+    };
 
     const baseUrl = getBaseUrl();
     const returnUrl = `${baseUrl}/api/payment/callback`;
@@ -191,7 +267,8 @@ router.post(
         payment_description: `QueryAI ${tier} subscription (${billingPeriod}, recurring)`,
         callback_data: { 
           billing_period: billingPeriod,
-          return_url: return_url || undefined, // Store return URL for redirect after payment
+          return_url: return_url || undefined,
+          ...priceLockData,
         },
       });
 
@@ -282,8 +359,9 @@ router.post(
       status: 'pending',
       payment_description: `QueryAI ${tier} subscription (${billingPeriod})`,
       callback_data: {
-        return_url: return_url || undefined, // Store return URL for redirect after payment
-        billing_period: billingPeriod, // Store billing period for one-time payments (needed for subscription period_end calculation)
+        return_url: return_url || undefined,
+        billing_period: billingPeriod,
+        ...priceLockData,
       },
     });
 
@@ -435,7 +513,7 @@ router.get(
           });
 
           const { SubscriptionService } = await import('../services/subscription.service');
-          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, billingPeriod);
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, billingPeriod, extractPriceLock(payment.callback_data));
           tierAlreadyUpdated = true; // Mark as already updated to avoid duplicate call
 
           logger.info('PayPal subscription activated', {
@@ -582,7 +660,17 @@ router.get(
       if (!tierAlreadyUpdated) {
         // Extract billing_period from payment callback_data if available (for one-time payments)
         const paymentBillingPeriod = (updatedPayment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
-        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod);
+        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod, extractPriceLock(updatedPayment.callback_data));
+      }
+
+      // Record promo code usage if a promo was applied (9.6.3)
+      if (!isAlreadyCompleted) {
+        const promoId = (updatedPayment.callback_data as Record<string, unknown> | null)?.promo_code_id as string | undefined;
+        const promoDiscount = (updatedPayment.callback_data as Record<string, unknown> | null)?.promo_discount_amount as number | undefined;
+        if (promoId) {
+          const { PromoCodeService } = await import('../services/promo-code.service');
+          PromoCodeService.recordUsage(promoId, payment.user_id, payment.id, promoDiscount ?? 0);
+        }
       }
       
       const subscriptionAfter = await DatabaseService.getUserSubscription(payment.user_id);
@@ -812,7 +900,7 @@ router.post(
         });
 
         const { SubscriptionService } = await import('../services/subscription.service');
-        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, undefined, undefined, extractPriceLock(payment.callback_data));
 
         logger.info('Subscription synced via sync-subscription endpoint', {
           paymentId: payment.id,
@@ -1005,7 +1093,7 @@ router.post(
           const { SubscriptionService } = await import('../services/subscription.service');
           // Extract billing_period from payment callback_data if available (for one-time payments)
           const paymentBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
-          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod);
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod, extractPriceLock(payment.callback_data));
           logger.info('Payment completed via webhook', { paymentId: payment.id, captureId });
         } else if (!payment) {
           logger.warn('PayPal webhook: Payment not found for capture', {
@@ -1067,7 +1155,7 @@ router.post(
               });
 
               const { SubscriptionService } = await import('../services/subscription.service');
-              await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+              await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, undefined, undefined, extractPriceLock(payment.callback_data));
 
               logger.info('PayPal subscription activated via webhook', {
                 paymentId: payment.id,
@@ -1354,7 +1442,7 @@ router.get(
           // Extract billing_period from payment callback_data if available (for one-time payments)
           const updatedPayment = await DatabaseService.getPaymentById(payment.id);
           const paymentBillingPeriod = updatedPayment ? (updatedPayment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined : undefined;
-          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod);
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod, extractPriceLock(updatedPayment?.callback_data));
         }
       }
 
@@ -1507,6 +1595,58 @@ router.post(
       data: {
         refund,
         refund_status: refundResult.status,
+      },
+    });
+  })
+);
+
+// ─── Promo Code Validation (public, auth-required) ──────────────────────────
+
+/**
+ * POST /api/payment/validate-promo
+ * Validate a promo code for a given tier + billing period.
+ * Returns discount info or error.
+ */
+router.post(
+  '/validate-promo',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ValidationError('User not authenticated');
+
+    const { promo_code, tier, billing_period } = req.body;
+    if (!promo_code || !tier) {
+      throw new ValidationError('promo_code and tier are required');
+    }
+
+    const billingPeriod = billing_period === 'annual' ? 'annual' : 'monthly';
+
+    const { getPricing } = await import('../constants/pricing');
+    const originalAmount = getPricing(tier as Tier, billingPeriod);
+
+    const { PromoCodeService } = await import('../services/promo-code.service');
+    const result = await PromoCodeService.validate(
+      promo_code,
+      userId,
+      tier,
+      billingPeriod,
+      originalAmount,
+    );
+
+    if (!result.valid) {
+      return res.status(400).json({
+        success: false,
+        error: { message: result.reason },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        discount_percent: result.discountPercent,
+        original_amount: result.originalAmount,
+        discounted_amount: result.discountedAmount,
+        savings: result.originalAmount - result.discountedAmount,
       },
     });
   })

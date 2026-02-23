@@ -399,12 +399,19 @@ export class SubscriptionService {
   /**
    * Update subscription tier with optional prorating
    * @param billingPeriod - Optional billing period from payment (for one-time payments where subscription may lack it)
+   * @param priceLock - Optional locked prices + promo data from payment callback_data (9.6.2 / 9.6.3)
    */
   static async updateSubscriptionTier(
     userId: string,
     tier: Database.SubscriptionTier,
     shouldProrate: boolean = false,
-    billingPeriod?: 'monthly' | 'annual'
+    billingPeriod?: 'monthly' | 'annual',
+    priceLock?: {
+      locked_price_monthly?: number;
+      locked_price_annual?: number;
+      promo_code_id?: string;
+      promo_discount_percent?: number;
+    },
   ): Promise<Database.Subscription | null> {
     try {
       const subscription = await DatabaseService.getUserSubscription(userId);
@@ -435,14 +442,30 @@ export class SubscriptionService {
         periodEnd.setDate(periodEnd.getDate() + days);
       }
 
-      const updated = await DatabaseService.updateSubscription(userId, {
+      const updateData: Record<string, unknown> = {
         tier,
         status: 'active',
         current_period_start: periodStart.toISOString(),
         current_period_end: periodEnd.toISOString(),
         cancel_at_period_end: false,
         pending_tier: undefined, // Clear any pending tier
-      });
+      };
+
+      // Write locked prices if provided (9.6.2)
+      if (priceLock?.locked_price_monthly !== undefined) {
+        updateData.locked_price_monthly = priceLock.locked_price_monthly;
+      }
+      if (priceLock?.locked_price_annual !== undefined) {
+        updateData.locked_price_annual = priceLock.locked_price_annual;
+      }
+
+      // Write promo code info if provided (9.6.3)
+      if (priceLock?.promo_code_id) {
+        updateData.promo_code_id = priceLock.promo_code_id;
+        updateData.promo_discount_percent = priceLock.promo_discount_percent ?? null;
+      }
+
+      const updated = await DatabaseService.updateSubscription(userId, updateData);
 
       // Log subscription history
       if (updated && oldTier !== tier) {
@@ -628,9 +651,15 @@ export class SubscriptionService {
         type Tier = import('../constants/pricing').Tier;
         const user = await DatabaseService.getUserProfile(subscription.user_id);
         if (user) {
-          const amt = amount ? parseFloat(amount) : getPricing(
-            subscription.tier as Tier,
-            billingPeriod as 'monthly' | 'annual'
+          // Use locked price if available (9.6.2), fall back to catalog price
+          const lockedPrice = billingPeriod === 'annual'
+            ? (subscription as Database.Subscription).locked_price_annual
+            : (subscription as Database.Subscription).locked_price_monthly;
+          const amt = amount ? parseFloat(amount) : (
+            lockedPrice ?? getPricing(
+              subscription.tier as Tier,
+              billingPeriod as 'monthly' | 'annual'
+            )
           );
           await EmailService.sendRenewalConfirmationEmail(
             user.email,
@@ -972,7 +1001,11 @@ export class SubscriptionService {
               if (user) {
                 const currency = 'USD';
                 type Tier = import('../constants/pricing').Tier;
-                const amount = getPricing(
+                // Use locked price if available (9.6.2), fall back to catalog price
+                const lockedPrice = bp === 'annual'
+                  ? (subscription as Database.Subscription).locked_price_annual
+                  : (subscription as Database.Subscription).locked_price_monthly;
+                const amount = lockedPrice ?? getPricing(
                   subscription.tier as Tier,
                   bp as 'monthly' | 'annual'
                 );

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
-import { ShieldCheck, Activity, Users, MessageSquare, Cpu, DollarSign, SlidersHorizontal } from 'lucide-react';
+import { ShieldCheck, Activity, Users, MessageSquare, Cpu, DollarSign, SlidersHorizontal, History, Ticket, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 
@@ -15,8 +15,11 @@ const FeedbackDashboard = dynamic(() => import('@/components/super-admin/feedbac
 const LLMSettings = dynamic(() => import('@/components/super-admin/llm-settings'), { ssr: false });
 const PricingConfig = dynamic(() => import('@/components/super-admin/pricing-config'), { ssr: false });
 const TierLimitsConfig = dynamic(() => import('@/components/super-admin/tier-limits-config'), { ssr: false });
+const ConfigAuditLog = dynamic(() => import('@/components/super-admin/config-audit-log'), { ssr: false });
+const PromoCodeManager = dynamic(() => import('@/components/super-admin/promo-code-manager'), { ssr: false });
+const PaymentAnalyticsDashboard = dynamic(() => import('@/components/super-admin/payment-analytics-dashboard'), { ssr: false });
 
-type TabId = 'health' | 'users' | 'feedback' | 'llm' | 'pricing' | 'tier-limits';
+type TabId = 'health' | 'users' | 'feedback' | 'llm' | 'pricing' | 'tier-limits' | 'audit-log' | 'promo-codes' | 'payment-analytics';
 
 interface Tab {
   id: TabId;
@@ -31,6 +34,9 @@ const tabs: Tab[] = [
   { id: 'tier-limits', label: 'Tier Limits', icon: SlidersHorizontal },
   { id: 'health', label: 'Health', icon: Activity },
   { id: 'llm', label: 'LLM', icon: Cpu },
+  { id: 'audit-log', label: 'Audit Log', icon: History },
+  { id: 'promo-codes', label: 'Promo Codes', icon: Ticket },
+  { id: 'payment-analytics', label: 'Revenue', icon: BarChart3 },
 ];
 
 export default function SuperAdminPage() {
@@ -74,6 +80,12 @@ export default function SuperAdminPage() {
         return <PricingConfig />;
       case 'tier-limits':
         return <TierLimitsConfig />;
+      case 'audit-log':
+        return <ConfigAuditLog />;
+      case 'promo-codes':
+        return <PromoCodeManager />;
+      case 'payment-analytics':
+        return <PaymentAnalyticsDashboard />;
       default:
         return <FeedbackDashboard />;
     }

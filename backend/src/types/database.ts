@@ -77,6 +77,14 @@ export namespace Database {
     billing_period?: BillingPeriod;
     /** Discount percentage when billing_period is annual (0–100). */
     annual_discount?: number;
+    /** Price (USD) locked at payment time for monthly billing. NULL = catalog price. */
+    locked_price_monthly?: number | null;
+    /** Price (USD) locked at payment time for annual billing. NULL = catalog price. */
+    locked_price_annual?: number | null;
+    /** Promo code applied to this subscription. */
+    promo_code_id?: string | null;
+    /** Discount % from promo code (0–100). */
+    promo_discount_percent?: number | null;
     created_at: string;
     updated_at: string;
   }
@@ -281,6 +289,33 @@ export namespace Database {
     email: string;
     company?: string;
     message?: string;
+    created_at: string;
+  }
+
+  export interface PromoCode {
+    id: string;
+    code: string;
+    description?: string;
+    discount_percent: number;
+    applicable_tiers: string[];
+    applicable_periods: string[];
+    valid_from: string;
+    valid_until?: string | null;
+    max_uses?: number | null;
+    current_uses: number;
+    max_uses_per_user: number;
+    is_active: boolean;
+    created_by: string;
+    created_at: string;
+    updated_at: string;
+  }
+
+  export interface PromoCodeUsage {
+    id: string;
+    promo_code_id: string;
+    user_id: string;
+    payment_id?: string | null;
+    discount_amount: number;
     created_at: string;
   }
 }
