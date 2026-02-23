@@ -9,19 +9,18 @@ import { z } from 'zod';
  */
 export const PaymentInitiateSchema = z.object({
   tier: z.enum(['pro', 'enterprise'], {
-    required_error: 'Tier is required',
-    invalid_type_error: 'Tier must be "pro" or "enterprise"',
+    message: 'Tier must be "pro" or "enterprise"',
   }),
   firstName: z
-    .string({ required_error: 'First name is required' })
+    .string({ message: 'First name is required' })
     .min(1, 'First name is required')
     .max(100, 'First name must not exceed 100 characters'),
   lastName: z
-    .string({ required_error: 'Last name is required' })
+    .string({ message: 'Last name is required' })
     .min(1, 'Last name is required')
     .max(100, 'Last name must not exceed 100 characters'),
   email: z
-    .string({ required_error: 'Email is required' })
+    .string({ message: 'Email is required' })
     .email('Invalid email address'),
   recurring: z.boolean().optional().default(false),
   billing_period: z
@@ -44,7 +43,7 @@ export type PaymentInitiateInput = z.infer<typeof PaymentInitiateSchema>;
  */
 export const PaymentRefundSchema = z.object({
   paymentId: z
-    .string({ required_error: 'Payment ID is required' })
+    .string({ message: 'Payment ID is required' })
     .uuid('Invalid payment ID format'),
   amount: z.number().positive('Refund amount must be positive').optional(),
   reason: z.string().max(500, 'Reason must not exceed 500 characters').optional(),

@@ -833,7 +833,7 @@ router.get(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { PromoCodeService } = await import('../services/promo-code.service');
-    const promo = await PromoCodeService.getById(req.params.id);
+    const promo = await PromoCodeService.getById(req.params.id as string);
     res.json({ success: true, data: promo });
   })
 );
@@ -867,7 +867,7 @@ router.put(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { PromoCodeService } = await import('../services/promo-code.service');
-    const promo = await PromoCodeService.update(req.params.id, req.body);
+    const promo = await PromoCodeService.update(req.params.id as string, req.body);
     res.json({ success: true, data: promo });
   })
 );
@@ -883,7 +883,7 @@ router.delete(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { PromoCodeService } = await import('../services/promo-code.service');
-    await PromoCodeService.deactivate(req.params.id);
+    await PromoCodeService.deactivate(req.params.id as string);
     res.json({ success: true, data: { message: 'Promo code deactivated' } });
   })
 );

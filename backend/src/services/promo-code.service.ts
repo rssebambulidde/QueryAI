@@ -187,22 +187,16 @@ export class PromoCodeService {
         return;
       }
 
-      // Increment current_uses counter
-      const { error: updateError } = await supabaseAdmin.rpc(
-        'increment_counter',
-        { row_id: promoCodeId, table_name: 'promo_codes', column_name: 'current_uses' },
-      ).then(() => ({ error: null })).catch(async () => {
-        // Fallback: manual increment if RPC doesn't exist
-        const { data: code } = await supabaseAdmin
-          .from('promo_codes')
-          .select('current_uses')
-          .eq('id', promoCodeId)
-          .single();
-        return supabaseAdmin
-          .from('promo_codes')
-          .update({ current_uses: (code?.current_uses ?? 0) + 1 })
-          .eq('id', promoCodeId);
-      });
+      // Increment current_uses counter via manual read-then-update
+      const { data: code } = await supabaseAdmin
+        .from('promo_codes')
+        .select('current_uses')
+        .eq('id', promoCodeId)
+        .single();
+      const { error: updateError } = await supabaseAdmin
+        .from('promo_codes')
+        .update({ current_uses: (code?.current_uses ?? 0) + 1 })
+        .eq('id', promoCodeId);
 
       if (updateError) {
         logger.error('PromoCodeService.recordUsage increment failed', {
