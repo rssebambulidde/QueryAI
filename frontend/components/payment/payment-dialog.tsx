@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { PayPalButton } from '@/components/payment/paypal-button';
+import { paymentApi } from '@/lib/api';
 import { usePricing } from '@/lib/hooks/use-pricing';
 import type { BillingPeriod } from '@/lib/pricing';
 import { getPaymentErrorMessage } from '@/lib/utils';
@@ -39,6 +40,17 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
     phoneNumber: '',
   });
 
+  // Promo code state
+  const [promoCode, setPromoCode] = useState('');
+  const [promoValidating, setPromoValidating] = useState(false);
+  const [promoResult, setPromoResult] = useState<{
+    discount_percent: number;
+    original_amount: number;
+    discounted_amount: number;
+    savings: number;
+  } | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
   // Pre-populate form with user data
   useEffect(() => {
     if (user) {
@@ -60,7 +72,45 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
     if (initialRecurring) setRecurring(true);
   }, [initialRecurring]);
 
+  // Reset promo when tier or billing period changes
+  useEffect(() => {
+    setPromoResult(null);
+    setPromoError(null);
+  }, [tier, billingPeriod]);
+
+  const validatePromoCode = useCallback(async () => {
+    const code = promoCode.trim();
+    if (!code) {
+      setPromoResult(null);
+      setPromoError(null);
+      return;
+    }
+    setPromoValidating(true);
+    setPromoError(null);
+    setPromoResult(null);
+    try {
+      const res = await paymentApi.validatePromo({
+        promo_code: code,
+        tier,
+        billing_period: billingPeriod,
+      });
+      if (res.success && res.data) {
+        setPromoResult(res.data);
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data
+          ?.error?.message ||
+        (err instanceof Error ? err.message : 'Invalid promo code');
+      setPromoError(msg);
+      setPromoResult(null);
+    } finally {
+      setPromoValidating(false);
+    }
+  }, [promoCode, tier, billingPeriod]);
+
   const amount = getPricing(tier, billingPeriod);
+  const displayAmount = promoResult ? promoResult.discounted_amount : amount;
   const annualSavings = getAnnualSavings(tier);
 
   const handlePayPalError = (message: string) => {
@@ -91,7 +141,14 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
               </h2>
               <p className="text-gray-600 text-xs sm:text-sm">
                 Pay with Debit or Credit Card (processed via PayPal) —{' '}
-                <span className="font-semibold text-orange-600">{formatPrice(amount)}</span>
+                {promoResult ? (
+                  <>
+                    <span className="line-through text-gray-400">{formatPrice(amount)}</span>{' '}
+                    <span className="font-semibold text-orange-600">{formatPrice(displayAmount)}</span>
+                  </>
+                ) : (
+                  <span className="font-semibold text-orange-600">{formatPrice(amount)}</span>
+                )}
                 {billingPeriod === 'annual' && ' /year'}
                 {recurring && ' (recurring)'}
               </p>
@@ -299,6 +356,52 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
             />
           </div>
 
+          {/* Promo Code */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Promo Code (optional)
+            </label>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                value={promoCode}
+                onChange={(e) => {
+                  setPromoCode(e.target.value.toUpperCase());
+                  if (promoResult || promoError) {
+                    setPromoResult(null);
+                    setPromoError(null);
+                  }
+                }}
+                disabled={loading || promoValidating}
+                placeholder="SUMMER25"
+                className="min-h-[44px] text-base sm:text-sm flex-1 font-mono"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={validatePromoCode}
+                disabled={loading || promoValidating || !promoCode.trim()}
+                className="min-h-[44px] px-4 whitespace-nowrap"
+              >
+                {promoValidating ? 'Checking…' : 'Apply'}
+              </Button>
+            </div>
+            {promoResult && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-2.5 py-1.5">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>
+                  <strong>{promoResult.discount_percent}% off</strong> applied — you save{' '}
+                  {formatPrice(promoResult.savings)}
+                </span>
+              </div>
+            )}
+            {promoError && (
+              <p className="mt-1 text-xs text-red-600">{promoError}</p>
+            )}
+          </div>
+
           </form>
 
           {/* Payment Section - Inside scrollable area */}
@@ -311,6 +414,7 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
                 lastName={formData.lastName}
                 email={formData.email}
                 phoneNumber={formData.phoneNumber || undefined}
+                promoCode={promoCode.trim() || undefined}
                 recurring={recurring}
                 billingPeriod={billingPeriod}
                 disabled={loading}

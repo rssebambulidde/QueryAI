@@ -1637,6 +1637,7 @@ export interface PaymentInitiateRequest {
   billing_period?: 'monthly' | 'annual';
   return_url?: string; // URL to redirect to after payment completion
   prefer_card?: boolean; // If true, PayPal checkout will prefer card payment form
+  promo_code?: string; // Optional promo/coupon code for discount
 }
 
 export interface PaymentInitiateResponse {
@@ -1696,6 +1697,16 @@ export const paymentApi = {
 
   refund: async (data: RefundRequest): Promise<ApiResponse<RefundResponse>> => {
     const response = await apiClient.post('/api/payment/refund', data);
+    return response.data;
+  },
+
+  validatePromo: async (data: { promo_code: string; tier: string; billing_period: string }): Promise<ApiResponse<{
+    discount_percent: number;
+    original_amount: number;
+    discounted_amount: number;
+    savings: number;
+  }>> => {
+    const response = await apiClient.post('/api/payment/validate-promo', data);
     return response.data;
   },
 

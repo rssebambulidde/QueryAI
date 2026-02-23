@@ -15,6 +15,7 @@ export interface PayPalButtonProps {
   lastName: string;
   email: string;
   phoneNumber?: string;
+  promoCode?: string;
   recurring?: boolean;
   billingPeriod?: 'monthly' | 'annual';
   disabled?: boolean;
@@ -33,6 +34,7 @@ export function PayPalButton({
   lastName,
   email,
   phoneNumber,
+  promoCode,
   recurring = false,
   billingPeriod = 'monthly',
   disabled = false,
@@ -69,6 +71,7 @@ export function PayPalButton({
         billing_period: billingPeriod,
         return_url: returnUrl, // Store where user came from
         prefer_card: preferCard, // Pass card preference to backend
+        promo_code: promoCode?.trim() || undefined,
       };
       if (recurring) request.recurring = true;
 
@@ -99,7 +102,7 @@ export function PayPalButton({
     } finally {
       setLoading(false);
     }
-  }, [tier, firstName, lastName, email, phoneNumber, recurring, billingPeriod, showError, onRedirect]);
+  }, [tier, firstName, lastName, email, phoneNumber, promoCode, recurring, billingPeriod, showError, onRedirect]);
 
   // One-time: Use redirect flow for better international address support
   // PayPal's embedded card form validates ZIP/phone before country selection
@@ -117,6 +120,7 @@ export function PayPalButton({
         phoneNumber: phoneNumber?.trim() || undefined,
         billing_period: billingPeriod,
         prefer_card: preferCard, // Pass card preference to backend
+        promo_code: promoCode?.trim() || undefined,
       };
       const response = await paymentApi.initiate(request);
 
@@ -145,7 +149,7 @@ export function PayPalButton({
     } finally {
       setLoading(false);
     }
-  }, [tier, firstName, lastName, email, phoneNumber, billingPeriod, showError, onRedirect]);
+  }, [tier, firstName, lastName, email, phoneNumber, promoCode, billingPeriod, showError, onRedirect]);
 
   // Recurring or no client ID: redirect flow (no SDK approval popup)
   // For better international support, we use redirect flow which allows proper country selection
