@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiClient } from '@/lib/api';
 import {
   DollarSign,
@@ -193,30 +193,48 @@ export default function PaymentAnalyticsDashboard() {
 
   if (!data) return null;
 
-  // ── Derived chart data ─────────────────────────────────────
+  // ── Derived chart data (memoized to prevent re-render flicker) ──
 
-  const revenueTrendChart = data.revenueTrend.map((p) => ({
+  const revenueTrendChart = useMemo(() => data.revenueTrend.map((p) => ({
     name: shortDate(p.date),
     Revenue: p.revenue,
     Payments: p.count,
-  }));
+  })), [data.revenueTrend]);
 
-  const failedTrendChart = data.failedPaymentTrends.map((p) => ({
+  const failedTrendChart = useMemo(() => data.failedPaymentTrends.map((p) => ({
     name: shortDate(p.date),
     Failed: p.failed,
     Completed: p.completed,
-  }));
+  })), [data.failedPaymentTrends]);
 
-  const revenueByTierChart = data.revenueByTier.map((r) => ({
+  const revenueByTierChart = useMemo(() => data.revenueByTier.map((r) => ({
     name: tierLabel(r.tier),
     Revenue: r.revenue,
-  }));
+  })), [data.revenueByTier]);
 
-  const funnelChart = [
+  const funnelChart = useMemo(() => [
     { name: 'Free', Users: data.conversionFunnel.freeUsers },
     { name: 'Pro', Users: data.conversionFunnel.proUsers },
     { name: 'Enterprise', Users: data.conversionFunnel.enterpriseUsers },
-  ];
+  ], [data.conversionFunnel]);
+
+  // Stable dataKeys references (constant, so memoize with empty deps)
+  const revenueTrendKeys = useMemo(() => [
+    { key: 'Revenue', color: '#16a34a', name: 'Revenue ($)' },
+  ], []);
+
+  const revenueByTierKeys = useMemo(() => [
+    { key: 'Revenue', color: '#f97316', name: 'Revenue ($)' },
+  ], []);
+
+  const failedTrendKeys = useMemo(() => [
+    { key: 'Completed', color: '#16a34a', name: 'Completed' },
+    { key: 'Failed', color: '#ef4444', name: 'Failed' },
+  ], []);
+
+  const funnelKeys = useMemo(() => [
+    { key: 'Users', color: '#6366f1', name: 'Users' },
+  ], []);
 
   // ── Render ─────────────────────────────────────────────────
 
@@ -304,9 +322,7 @@ export default function PaymentAnalyticsDashboard() {
             {revenueTrendChart.length > 0 ? (
               <LineChart
                 data={revenueTrendChart}
-                dataKeys={[
-                  { key: 'Revenue', color: '#16a34a', name: 'Revenue ($)' },
-                ]}
+                dataKeys={revenueTrendKeys}
                 height={280}
               />
             ) : (
@@ -319,7 +335,7 @@ export default function PaymentAnalyticsDashboard() {
           {revenueByTierChart.length > 0 ? (
             <BarChart
               data={revenueByTierChart}
-              dataKeys={[{ key: 'Revenue', color: '#f97316', name: 'Revenue ($)' }]}
+              dataKeys={revenueByTierKeys}
               height={280}
             />
           ) : (
@@ -334,10 +350,7 @@ export default function PaymentAnalyticsDashboard() {
           {failedTrendChart.length > 0 ? (
             <BarChart
               data={failedTrendChart}
-              dataKeys={[
-                { key: 'Completed', color: '#16a34a', name: 'Completed' },
-                { key: 'Failed', color: '#ef4444', name: 'Failed' },
-              ]}
+              dataKeys={failedTrendKeys}
               height={260}
             />
           ) : (
@@ -348,7 +361,7 @@ export default function PaymentAnalyticsDashboard() {
         <Section title="Conversion Funnel">
           <BarChart
             data={funnelChart}
-            dataKeys={[{ key: 'Users', color: '#6366f1', name: 'Users' }]}
+            dataKeys={funnelKeys}
             height={260}
           />
           {/* Summary below chart */}

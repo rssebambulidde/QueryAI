@@ -51,7 +51,7 @@ export function BarChart({ data, dataKeys, xAxisKey = 'name', height = 300, clas
           />
           {!isMobile && <Legend />}
           {dataKeys.map(({ key, color, name }) => (
-            <Bar key={key} dataKey={key} fill={color} name={name || key} />
+            <Bar key={key} dataKey={key} fill={color} name={name || key} isAnimationActive={false} />
           ))}
         </RechartsBarChart>
       </ResponsiveContainer>

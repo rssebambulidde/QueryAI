@@ -59,6 +59,7 @@ export function LineChart({ data, dataKeys, xAxisKey = 'name', height = 300, cla
               name={name || key}
               strokeWidth={isMobile ? 2.5 : 2}
               dot={isMobile ? { r: 3 } : { r: 4 }}
+              isAnimationActive={false}
             />
           ))}
         </RechartsLineChart>
