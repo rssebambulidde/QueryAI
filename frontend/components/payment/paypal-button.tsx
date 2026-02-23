@@ -19,7 +19,7 @@ export interface PayPalButtonProps {
   recurring?: boolean;
   billingPeriod?: 'monthly' | 'annual';
   disabled?: boolean;
-  onError?: (message: string) => void;
+  onError?: (message: string, meta?: { pendingPaymentId?: string }) => void;
   onRedirect?: () => void;
 }
 
@@ -46,9 +46,9 @@ export function PayPalButton({
   const [loading, setLoading] = useState(false);
 
   const showError = useCallback(
-    (message: string) => {
+    (message: string, meta?: { pendingPaymentId?: string }) => {
       setError(message);
-      onError?.(message);
+      onError?.(message, meta);
     },
     [onError]
   );
@@ -92,13 +92,9 @@ export function PayPalButton({
       onRedirect?.();
       window.location.href = redirectUrl;
     } catch (err: unknown) {
-      const message =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
-          : err instanceof Error
-            ? err.message
-            : 'Failed to initiate payment';
-      showError(message ?? 'Failed to initiate payment');
+      const errResp = (err as { response?: { data?: { error?: { message?: string; pendingPaymentId?: string } } } })?.response?.data?.error;
+      const message = errResp?.message || (err instanceof Error ? err.message : 'Failed to initiate payment');
+      showError(message, errResp?.pendingPaymentId ? { pendingPaymentId: errResp.pendingPaymentId } : undefined);
     } finally {
       setLoading(false);
     }
@@ -139,13 +135,9 @@ export function PayPalButton({
       onRedirect?.();
       window.location.href = redirectUrl;
     } catch (err: unknown) {
-      const message =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message
-          : err instanceof Error
-            ? err.message
-            : 'Failed to initiate payment';
-      showError(message ?? 'Failed to initiate payment');
+      const errResp = (err as { response?: { data?: { error?: { message?: string; pendingPaymentId?: string } } } })?.response?.data?.error;
+      const message = errResp?.message || (err instanceof Error ? err.message : 'Failed to initiate payment');
+      showError(message, errResp?.pendingPaymentId ? { pendingPaymentId: errResp.pendingPaymentId } : undefined);
     } finally {
       setLoading(false);
     }

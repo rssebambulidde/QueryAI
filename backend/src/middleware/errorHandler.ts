@@ -70,6 +70,9 @@ export const errorHandler = (
     error: {
       message,
       ...(err instanceof AppError && err.code ? { code: err.code } : {}),
+      ...((err as unknown as Record<string, unknown>).pendingPaymentId
+        ? { pendingPaymentId: (err as unknown as Record<string, unknown>).pendingPaymentId }
+        : {}),
       ...(config.NODE_ENV !== 'production' ? { stack: err.stack } : {}),
     },
   };

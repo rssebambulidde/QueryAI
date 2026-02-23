@@ -112,12 +112,31 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
   const amount = getPricing(tier, billingPeriod);
   const displayAmount = promoResult ? promoResult.discounted_amount : amount;
   const annualSavings = getAnnualSavings(tier);
+  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
+  const [cancellingPending, setCancellingPending] = useState(false);
 
-  const handlePayPalError = (message: string) => {
+  const handlePayPalError = (message: string, meta?: { pendingPaymentId?: string }) => {
     // Use enhanced error message parser
     const enhancedMessage = getPaymentErrorMessage(message);
     setError(enhancedMessage);
+    if (meta?.pendingPaymentId) {
+      setPendingPaymentId(meta.pendingPaymentId);
+    }
     setLoading(false);
+  };
+
+  const handleCancelPendingAndRetry = async () => {
+    if (!pendingPaymentId) return;
+    setCancellingPending(true);
+    try {
+      await paymentApi.cancelPendingPayment(pendingPaymentId);
+      setPendingPaymentId(null);
+      setError(null);
+    } catch {
+      setError('Failed to cancel pending payment. Please try again.');
+    } finally {
+      setCancellingPending(false);
+    }
   };
 
   return (
@@ -282,19 +301,33 @@ export function PaymentDialog({ tier, onClose, onSuccess, initialBillingPeriod, 
             <Alert variant="error" className="mb-4">
               <div className="text-sm">
                 {error}
-                <div className="mt-2 text-xs text-gray-600">
-                  {(() => {
-                    const errorLower = error.toLowerCase();
-                    if (errorLower.includes('insufficient')) return 'Error code: INSUFFICIENT_FUNDS';
-                    if (errorLower.includes('expired')) return 'Error code: EXPIRED_CARD';
-                    if (errorLower.includes('declined')) return 'Error code: DECLINED';
-                    if (errorLower.includes('invalid card')) return 'Error code: INVALID_CARD';
-                    if (errorLower.includes('cvv') || errorLower.includes('security code')) return 'Error code: INVALID_CVV';
-                    if (errorLower.includes('zip') || errorLower.includes('billing address')) return 'Error code: INVALID_BILLING_ADDRESS';
-                    if (errorLower.includes('network') || errorLower.includes('timeout')) return 'Error code: NETWORK_ERROR';
-                    return 'Error code: PAYMENT_ERROR';
-                  })()}
-                </div>
+                {pendingPaymentId ? (
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleCancelPendingAndRetry}
+                      disabled={cancellingPending}
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      {cancellingPending ? 'Cancelling...' : 'Cancel pending payment & try again'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-2 text-xs text-gray-600">
+                    {(() => {
+                      const errorLower = error.toLowerCase();
+                      if (errorLower.includes('insufficient')) return 'Error code: INSUFFICIENT_FUNDS';
+                      if (errorLower.includes('expired')) return 'Error code: EXPIRED_CARD';
+                      if (errorLower.includes('declined')) return 'Error code: DECLINED';
+                      if (errorLower.includes('invalid card')) return 'Error code: INVALID_CARD';
+                      if (errorLower.includes('cvv') || errorLower.includes('security code')) return 'Error code: INVALID_CVV';
+                      if (errorLower.includes('zip') || errorLower.includes('billing address')) return 'Error code: INVALID_BILLING_ADDRESS';
+                      if (errorLower.includes('network') || errorLower.includes('timeout')) return 'Error code: NETWORK_ERROR';
+                      return 'Error code: PAYMENT_ERROR';
+                    })()}
+                  </div>
+                )}
               </div>
             </Alert>
           )}

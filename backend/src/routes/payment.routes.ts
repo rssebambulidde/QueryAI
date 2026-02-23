@@ -180,13 +180,32 @@ router.post(
 
     // Duplicate payment prevention — reject if user has a pending payment for the same tier
     const recentPayments = await DatabaseService.getUserPayments(userId, 20);
-    const hasPending = recentPayments.some(
+    const pendingForTier = recentPayments.filter(
       (p) => p.status === 'pending' && p.tier === tier
     );
-    if (hasPending) {
-      throw new ValidationError(
-        'You already have a pending payment for this tier. Please complete or cancel it before starting a new one.'
+
+    // Auto-cancel stale pending payments (>30 minutes old)
+    const STALE_THRESHOLD_MS = 30 * 60 * 1000;
+    for (const p of pendingForTier) {
+      const age = Date.now() - new Date(p.created_at).getTime();
+      if (age > STALE_THRESHOLD_MS) {
+        await DatabaseService.updatePayment(p.id, { status: 'cancelled' });
+        logger.info('Auto-cancelled stale pending payment', { paymentId: p.id, ageMinutes: Math.round(age / 60000) });
+      }
+    }
+
+    // Re-check for remaining (recent) pending payments
+    const activePending = pendingForTier.filter(
+      (p) => Date.now() - new Date(p.created_at).getTime() <= STALE_THRESHOLD_MS
+    );
+    if (activePending.length > 0) {
+      const pendingId = activePending[0].id;
+      const err = new ValidationError(
+        'You already have a recent pending payment for this tier. Cancel it or wait for it to complete before starting a new one.'
       );
+      // Attach payment ID so the frontend can offer to cancel it
+      (err as unknown as Record<string, unknown>).pendingPaymentId = pendingId;
+      throw err;
     }
     
     logger.info('Payment initiation request', {
@@ -920,6 +939,39 @@ router.post(
     return res.status(200).json({
       success: true,
       data: { synced, message: synced ? 'Subscription synced' : 'No updates needed' },
+    });
+  })
+);
+
+/**
+ * POST /api/payment/:paymentId/cancel
+ * Let the user cancel their own pending payment so they can start a new one.
+ */
+router.post(
+  '/:paymentId/cancel',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const { paymentId } = req.params;
+
+    const payment = await DatabaseService.getPaymentById(paymentId);
+    if (!payment) {
+      throw new ValidationError('Payment not found.');
+    }
+    if (payment.user_id !== userId) {
+      throw new ValidationError('Payment not found.');
+    }
+    if (payment.status !== 'pending') {
+      throw new ValidationError(`Cannot cancel a payment with status "${payment.status}".`);
+    }
+
+    await DatabaseService.updatePayment(paymentId, { status: 'cancelled' });
+
+    logger.info('User cancelled pending payment', { userId, paymentId });
+
+    return res.status(200).json({
+      success: true,
+      data: { message: 'Pending payment cancelled.' },
     });
   })
 );

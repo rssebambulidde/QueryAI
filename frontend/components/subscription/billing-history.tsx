@@ -11,10 +11,13 @@ import {
   CreditCard,
   RefreshCw,
   Filter,
+  XCircle,
 } from 'lucide-react';
 import { getPaymentErrorMessage, cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
+import { paymentApi } from '@/lib/api';
 import type { Payment, BillingHistory as BillingHistoryData } from '@/lib/api';
+import { useToast } from '@/lib/hooks/use-toast';
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -139,11 +142,15 @@ function PaymentRow({
   payment,
   onDownloadInvoice,
   onRetryPayment,
+  onCancelPayment,
+  cancellingId,
   lastSyncTime,
 }: {
   payment: Payment;
   onDownloadInvoice: (id: string) => void;
   onRetryPayment: (id: string) => void;
+  onCancelPayment: (id: string) => void;
+  cancellingId: string | null;
   lastSyncTime: Date | null;
 }) {
   const pm = getPaymentMethod(payment);
@@ -240,6 +247,18 @@ function PaymentRow({
             </Button>
           </div>
         )}
+        {payment.status === 'pending' && (
+          <Button
+            onClick={() => onCancelPayment(payment.id)}
+            variant="outline"
+            size="sm"
+            disabled={cancellingId === payment.id}
+            className="border-red-300 text-red-600 hover:bg-red-50"
+          >
+            <XCircle className="w-4 h-4 mr-1" />
+            {cancellingId === payment.id ? 'Cancelling...' : 'Cancel'}
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -251,11 +270,15 @@ function PaymentCard({
   payment,
   onDownloadInvoice,
   onRetryPayment,
+  onCancelPayment,
+  cancellingId,
   lastSyncTime,
 }: {
   payment: Payment;
   onDownloadInvoice: (id: string) => void;
   onRetryPayment: (id: string) => void;
+  onCancelPayment: (id: string) => void;
+  cancellingId: string | null;
   lastSyncTime: Date | null;
 }) {
   const pm = getPaymentMethod(payment);
@@ -356,6 +379,18 @@ function PaymentCard({
             Retry Payment
           </Button>
         )}
+        {payment.status === 'pending' && (
+          <Button
+            onClick={() => onCancelPayment(payment.id)}
+            variant="outline"
+            size="sm"
+            disabled={cancellingId === payment.id}
+            className="flex-1 min-w-[100px] border-red-300 text-red-600 hover:bg-red-50 touch-manipulation min-h-[44px] text-xs"
+          >
+            <XCircle className="w-3 h-3 mr-1" />
+            {cancellingId === payment.id ? 'Cancelling...' : 'Cancel Payment'}
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -436,6 +471,7 @@ interface BillingHistoryProps {
   onSync: () => void;
   onDownloadInvoice: (paymentId: string) => void;
   onRetryPayment: (paymentId: string) => void;
+  onPaymentCancelled: () => void;
 }
 
 export function BillingHistory({
@@ -446,11 +482,31 @@ export function BillingHistory({
   onSync,
   onDownloadInvoice,
   onRetryPayment,
+  onPaymentCancelled,
 }: BillingHistoryProps) {
   const { isMobile } = useMobile();
+  const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  const handleCancelPayment = async (paymentId: string) => {
+    try {
+      setCancellingId(paymentId);
+      await paymentApi.cancelPendingPayment(paymentId);
+      toast.success('Pending payment cancelled.');
+      onPaymentCancelled();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data
+          ?.error?.message ||
+        (err instanceof Error ? err.message : 'Failed to cancel payment');
+      toast.error(msg);
+    } finally {
+      setCancellingId(null);
+    }
+  };
 
   const payments = billingHistory?.payments ?? [];
   const totalCount = payments.length;
@@ -591,6 +647,8 @@ export function BillingHistory({
                       payment={payment}
                       onDownloadInvoice={onDownloadInvoice}
                       onRetryPayment={onRetryPayment}
+                      onCancelPayment={handleCancelPayment}
+                      cancellingId={cancellingId}
                       lastSyncTime={lastSyncTime}
                     />
                   ) : (
@@ -599,6 +657,8 @@ export function BillingHistory({
                       payment={payment}
                       onDownloadInvoice={onDownloadInvoice}
                       onRetryPayment={onRetryPayment}
+                      onCancelPayment={handleCancelPayment}
+                      cancellingId={cancellingId}
                       lastSyncTime={lastSyncTime}
                     />
                   )

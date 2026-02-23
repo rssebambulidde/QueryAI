@@ -1729,6 +1729,11 @@ export const paymentApi = {
     });
     return response.data;
   },
+
+  cancelPendingPayment: async (paymentId: string): Promise<ApiResponse<{ message: string }>> => {
+    const response = await apiClient.post(`/api/payment/${paymentId}/cancel`);
+    return response.data;
+  },
 };
 
 // Metrics API Types

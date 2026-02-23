@@ -1217,6 +1217,7 @@ export function SubscriptionManager() {
         onSync={handleSyncBillingStatus}
         onDownloadInvoice={handleDownloadInvoice}
         onRetryPayment={handleRetryPayment}
+        onPaymentCancelled={() => loadBillingHistory()}
       />
 
       {/* Payment Dialog */}
