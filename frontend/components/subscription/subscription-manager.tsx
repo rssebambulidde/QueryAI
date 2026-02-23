@@ -8,18 +8,17 @@ import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 import { Check, X, Zap, Folder, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink, RefreshCw, Pause, Play } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
+import { BillingHistory as BillingHistoryComponent } from '@/components/subscription/billing-history';
 import { usePricing } from '@/lib/hooks/use-pricing';
 import { useTierLimits } from '@/lib/hooks/useTierLimits';
 import type { BillingPeriod, Tier } from '@/lib/pricing';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
 import { getPaymentErrorMessage } from '@/lib/utils';
-import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 export function SubscriptionManager() {
   const { toast } = useToast();
-  const { isMobile } = useMobile();
   const { getPricing, getAnnualSavings, formatPrice, isEnterpriseTier } = usePricing();
   const { getLimits: getDynamicLimits } = useTierLimits();
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null);
@@ -32,7 +31,6 @@ export function SubscriptionManager() {
   const [paymentDialogInitialBilling, setPaymentDialogInitialBilling] = useState<BillingPeriod | undefined>();
   const [paymentDialogInitialRecurring, setPaymentDialogInitialRecurring] = useState(false);
   const [billingHistory, setBillingHistory] = useState<BillingHistory | null>(null);
-  const [showBillingHistory, setShowBillingHistory] = useState(false);
   const [showCancelOptions, setShowCancelOptions] = useState(false);
   const [showDowngradeOptions, setShowDowngradeOptions] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -1211,356 +1209,15 @@ export function SubscriptionManager() {
       )}
 
       {/* Billing History */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Billing History</h3>
-          <div className="flex items-center gap-2">
-            {billingHistory?.payments.some((p) => p.status === 'pending') && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSyncBillingStatus}
-                disabled={syncingBilling}
-                className={`flex items-center gap-2 text-orange-600 border-orange-200 hover:bg-orange-50 ${
-                  syncingBilling ? 'opacity-75 cursor-not-allowed' : ''
-                }`}
-                title={syncingBilling ? 'Syncing subscription with PayPal...' : 'Sync billing status with PayPal'}
-              >
-                <RefreshCw className={`w-4 h-4 ${syncingBilling ? 'animate-spin' : ''}`} />
-                {syncingBilling ? 'Syncing subscription...' : 'Sync billing status'}
-              </Button>
-            )}
-            <button
-              onClick={() => setShowBillingHistory(!showBillingHistory)}
-              className="text-orange-600 hover:text-orange-700"
-            >
-              {showBillingHistory ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-        {showBillingHistory && (
-          <div className="mt-4">
-            {billingHistory?.payments.some((p) => p.status === 'pending') && (
-              <>
-                <Alert variant="info" className="mb-4">
-                  Pending recurring payments detected. If you completed payment on PayPal, click &quot;Sync billing status&quot; above to update your plan.
-                  {lastSyncTime && (
-                    <span className="block mt-1 text-xs">
-                      Last synced: {Math.floor((Date.now() - lastSyncTime.getTime()) / 60000)} minutes ago
-                    </span>
-                  )}
-                </Alert>
-                {billingHistory.payments
-                  .filter((p) => p.status === 'pending')
-                  .map((payment) => {
-                    const timeSincePayment = payment.created_at
-                      ? Math.floor((Date.now() - new Date(payment.created_at).getTime()) / 60000)
-                      : 0;
-                    
-                    if (timeSincePayment > 5) {
-                      return (
-                        <Alert key={payment.id} variant="warning" className="mb-4">
-                          <div className="flex items-start gap-2">
-                            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                            <div className="flex-1">
-                              <p className="text-sm">
-                                Payment has been pending for {timeSincePayment} minutes.
-                                {timeSincePayment > 10 && ' This may indicate a payment issue.'}
-                              </p>
-                              <Button
-                                size="sm"
-                                onClick={handleSyncBillingStatus}
-                                disabled={syncingBilling}
-                                className={`flex items-center gap-1 mt-2 bg-amber-600 hover:bg-amber-700 text-white ${
-                                  syncingBilling ? 'opacity-75 cursor-not-allowed' : ''
-                                }`}
-                                title={syncingBilling ? 'Syncing subscription...' : 'Retry syncing subscription status'}
-                              >
-                                <RefreshCw className={`w-3 h-3 ${syncingBilling ? 'animate-spin' : ''}`} />
-                                {syncingBilling ? 'Syncing...' : 'Sync Again'}
-                              </Button>
-                            </div>
-                          </div>
-                        </Alert>
-                      );
-                    }
-                    return null;
-                  })}
-              </>
-            )}
-            {billingHistory && billingHistory.payments.length > 0 ? (
-              <div className="space-y-3">
-                {!isMobile && (
-                  <div className="grid grid-cols-12 gap-2 px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-2">
-                    <div className="col-span-4">Description</div>
-                    <div className="col-span-2">Provider</div>
-                    <div className="col-span-2">Date</div>
-                    <div className="col-span-2">Status</div>
-                    <div className="col-span-2 text-right">Invoice</div>
-                  </div>
-                )}
-                {billingHistory.payments.map((payment: Payment) => {
-                  // Determine payment method and details
-                  const isPayPal = payment.payment_provider === 'paypal' ||
-                    payment.paypal_order_id ||
-                    payment.paypal_payment_id ||
-                    payment.paypal_subscription_id ||
-                    payment.payment_method === 'paypal';
-                  
-                  const paypalEmail = payment.callback_data?.payerEmail || payment.callback_data?.payer_email;
-                  const cardLast4 = payment.callback_data?.last4 || payment.callback_data?.last_4;
-                  const cardBrand = payment.callback_data?.card_brand || payment.callback_data?.cardBrand;
-                  
-                  // Build payment method display
-                  let paymentMethodDisplay = '—';
-                  if (isPayPal) {
-                    paymentMethodDisplay = paypalEmail ? `PayPal • ${paypalEmail}` : 'PayPal';
-                  } else if (cardLast4) {
-                    const brand = cardBrand ? `${cardBrand} ` : '';
-                    paymentMethodDisplay = `Card • ${brand}•••• ${cardLast4}`;
-                  } else if (payment.payment_method) {
-                    paymentMethodDisplay = payment.payment_method;
-                  }
-                  
-                  // Calculate time since payment creation
-                  const timeSincePayment = payment.created_at
-                    ? Math.floor((Date.now() - new Date(payment.created_at).getTime()) / 60000)
-                    : 0;
-                  
-                  if (isMobile) {
-                    // Mobile: Card Layout
-                    return (
-                      <div
-                        key={payment.id}
-                        className="border rounded-lg p-4 space-y-3 hover:bg-gray-50/50"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm">
-                              {payment.tier.toUpperCase()} — {payment.currency} {payment.amount.toLocaleString()}
-                            </div>
-                            {payment.payment_description && (
-                              <div className="text-xs text-gray-500 mt-1 break-words">{payment.payment_description}</div>
-                            )}
-                          </div>
-                          <div className="flex-shrink-0">
-                            <span
-                              className={cn(
-                                "text-xs font-medium px-2 py-1 rounded",
-                                payment.status === 'completed'
-                                  ? 'bg-green-100 text-green-700'
-                                  : payment.status === 'failed' || payment.status === 'cancelled'
-                                    ? 'bg-red-100 text-red-700'
-                                    : 'bg-amber-100 text-amber-700'
-                              )}
-                            >
-                              {payment.status}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <div className="text-xs text-gray-600 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">Provider:</span>
-                            {isPayPal ? (
-                              <>
-                                <span className="text-orange-600 font-semibold">PayPal</span>
-                                {paypalEmail && (
-                                  <span className="text-gray-500 truncate" title={paypalEmail}>
-                                    • {paypalEmail}
-                                  </span>
-                                )}
-                              </>
-                            ) : cardLast4 ? (
-                              <>
-                                <CreditCard className="w-3 h-3 text-gray-500" />
-                                <span>
-                                  {cardBrand && <span className="capitalize">{cardBrand} </span>}
-                                  •••• {cardLast4}
-                                </span>
-                              </>
-                            ) : (
-                              <span>{paymentMethodDisplay}</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">Date:</span>
-                            <span>{new Date(payment.created_at).toLocaleDateString()}</span>
-                            {payment.status === 'pending' && (
-                              <span className="text-gray-500">
-                                {new Date(payment.created_at).toLocaleTimeString()}
-                              </span>
-                            )}
-                          </div>
-                          {payment.status === 'pending' && timeSincePayment > 0 && (
-                            <div className="text-amber-600">
-                              Pending for {timeSincePayment} {timeSincePayment === 1 ? 'minute' : 'minutes'}
-                            </div>
-                          )}
-                          {payment.status === 'pending' && lastSyncTime && (
-                            <div className="text-gray-500">
-                              Last synced: {Math.floor((Date.now() - lastSyncTime.getTime()) / 60000)}m ago
-                            </div>
-                          )}
-                        </div>
-                        
-                        {payment.status === 'failed' && (
-                          <div className="text-xs text-red-600 bg-red-50 p-2 rounded">
-                            <AlertCircle className="w-3 h-3 inline mr-1" />
-                            {getPaymentErrorMessage(
-                              payment.callback_data?.failure_reason || payment.callback_data?.failed_payment_reason || 'Payment failed',
-                              payment
-                            )}
-                          </div>
-                        )}
-                        
-                        <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
-                          {payment.status === 'completed' && (
-                            <Button
-                              onClick={() => handleDownloadInvoice(payment.id)}
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 min-w-[100px] touch-manipulation min-h-[44px] text-xs"
-                            >
-                              <Download className="w-3 h-3 mr-1" />
-                              Invoice
-                            </Button>
-                          )}
-                          {payment.status === 'failed' && (
-                            <Button
-                              onClick={() => handleRetryPayment(payment.id)}
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 min-w-[100px] border-orange-500 text-orange-600 hover:bg-orange-50 touch-manipulation min-h-[44px] text-xs"
-                            >
-                              Retry Payment
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }
-                  
-                  // Desktop: Table Layout
-                  return (
-                    <div
-                      key={payment.id}
-                      className="grid grid-cols-12 gap-2 items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50/50"
-                    >
-                      <div className="col-span-4 min-w-0">
-                        <div className="font-medium">
-                          {payment.tier.toUpperCase()} — {payment.currency} {payment.amount.toLocaleString()}
-                        </div>
-                        {payment.payment_description && (
-                          <div className="text-xs text-gray-500 truncate">{payment.payment_description}</div>
-                        )}
-                        {payment.status === 'failed' && (
-                          <div className="text-xs text-red-600 mt-1">
-                            <AlertCircle className="w-3 h-3 inline mr-1" />
-                            {getPaymentErrorMessage(
-                              payment.callback_data?.failure_reason || payment.callback_data?.failed_payment_reason || 'Payment failed',
-                              payment
-                            )}
-                          </div>
-                        )}
-                        {payment.status === 'pending' && timeSincePayment > 0 && (
-                          <div className="text-xs text-amber-600 mt-1">
-                            Pending for {timeSincePayment} {timeSincePayment === 1 ? 'minute' : 'minutes'}
-                          </div>
-                        )}
-                      </div>
-                      <div className="col-span-2 text-sm text-gray-600">
-                        <div className="flex items-center gap-1.5">
-                          {isPayPal ? (
-                            <>
-                              <span className="text-orange-600 font-semibold text-xs">PayPal</span>
-                              {paypalEmail && (
-                                <span className="text-gray-500 text-xs truncate" title={paypalEmail}>
-                                  • {paypalEmail}
-                                </span>
-                              )}
-                            </>
-                          ) : cardLast4 ? (
-                            <>
-                              <CreditCard className="w-4 h-4 text-gray-500" />
-                              <span className="text-xs">
-                                {cardBrand && <span className="capitalize">{cardBrand} </span>}
-                                •••• {cardLast4}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-xs">{paymentMethodDisplay}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-span-2 text-sm text-gray-600">
-                        {new Date(payment.created_at).toLocaleDateString()}
-                        {payment.status === 'pending' && (
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {new Date(payment.created_at).toLocaleTimeString()}
-                          </div>
-                        )}
-                      </div>
-                      <div className="col-span-2 text-sm">
-                        <span
-                          className={
-                            payment.status === 'completed'
-                              ? 'text-green-600'
-                              : payment.status === 'failed' || payment.status === 'cancelled'
-                                ? 'text-red-600'
-                                : 'text-amber-600'
-                          }
-                        >
-                          {payment.status}
-                        </span>
-                        {payment.status === 'pending' && lastSyncTime && (
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            Last synced: {Math.floor((Date.now() - lastSyncTime.getTime()) / 60000)}m ago
-                          </div>
-                        )}
-                      </div>
-                      <div className="col-span-2 text-right">
-                        {payment.status === 'completed' && (
-                          <Button
-                            onClick={() => handleDownloadInvoice(payment.id)}
-                            variant="outline"
-                            size="sm"
-                          >
-                            <Download className="w-4 h-4 mr-2" />
-                            Invoice
-                          </Button>
-                        )}
-                        {payment.status === 'failed' && (
-                          <div className="flex flex-col gap-2 items-end">
-                            <Button
-                              onClick={() => handleRetryPayment(payment.id)}
-                              variant="outline"
-                              size="sm"
-                              className="border-orange-500 text-orange-600 hover:bg-orange-50"
-                            >
-                              Retry Payment
-                            </Button>
-                            {(payment.callback_data?.failure_reason || payment.callback_data?.failed_payment_reason) && (
-                              <span className="text-xs text-red-600 max-w-[200px] text-right">
-                                {getPaymentErrorMessage(
-                                  payment.callback_data?.failure_reason || payment.callback_data?.failed_payment_reason || 'Payment failed',
-                                  payment
-                                )}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-gray-600 text-center py-4">No billing history found</p>
-            )}
-          </div>
-        )}
-      </div>
+      <BillingHistoryComponent
+        billingHistory={billingHistory}
+        tier={subscriptionData?.subscription?.tier || 'free'}
+        syncingBilling={syncingBilling}
+        lastSyncTime={lastSyncTime}
+        onSync={handleSyncBillingStatus}
+        onDownloadInvoice={handleDownloadInvoice}
+        onRetryPayment={handleRetryPayment}
+      />
 
       {/* Payment Dialog */}
       {showPaymentDialog && selectedTier && (
