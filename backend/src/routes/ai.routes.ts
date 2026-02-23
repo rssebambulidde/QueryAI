@@ -6,7 +6,6 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
 import { apiLimiter } from '../middleware/rateLimiter';
 import { enforceQueryLimit, enforceResearchMode } from '../middleware/subscription.middleware';
-import { logQueryUsage } from '../middleware/usageCounter.middleware';
 import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
 import { validateRequest } from '../middleware/validate';
 import { QuestionRequestSchema, RegenerateRequestSchema } from '../schemas/ai-request.schema';
@@ -31,7 +30,6 @@ router.post(
   enforceResearchMode,
   enforceQueryLimit,
   apiLimiter,
-  logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
     // req.body has been validated & stripped by Zod middleware
     const body = req.body;
@@ -151,7 +149,6 @@ router.post(
   enforceResearchMode,
   enforceQueryLimit,
   apiLimiter,
-  logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
     // req.body has been validated & stripped by Zod middleware
     const body = req.body;
@@ -337,6 +334,21 @@ router.post(
             );
           } catch (saveError: any) {
             logger.warn('Failed to save chat messages', { error: saveError.message });
+          }
+        }
+
+        // Log usage for chat mode (research mode logs via postProcessStream)
+        if (userId && fullAnswer) {
+          try {
+            const { DatabaseService } = await import('../services/database.service');
+            await DatabaseService.logUsage(userId, 'query', {
+              question: request.question.substring(0, 200),
+              model: request.model || 'gpt-4o-mini',
+              mode: 'chat',
+              streaming: true,
+            });
+          } catch (usageError: any) {
+            logger.warn('Failed to log chat query usage', { error: usageError?.message });
           }
         }
       } else {
@@ -910,7 +922,6 @@ router.post(
   enforceResearchMode,
   enforceQueryLimit,
   apiLimiter,
-  logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
     const { messageId, conversationId, options } = req.body;
     const userId = req.user?.id;
@@ -1160,6 +1171,21 @@ router.post(
         newMessageId: newVersionMsg.id,
         newVersion: newVersionMsg.version,
       });
+
+      // ── Log usage for regeneration ───────────────────────────────
+      if (userId && cleanedAnswer) {
+        try {
+          const { DatabaseService } = await import('../services/database.service');
+          await DatabaseService.logUsage(userId, 'query', {
+            question: userMessage.content.substring(0, 200),
+            model: mergedRequest.model || 'gpt-4o-mini',
+            streaming: true,
+            regeneration: true,
+          });
+        } catch (usageError: any) {
+          logger.warn('Failed to log regeneration query usage', { error: usageError?.message });
+        }
+      }
 
       // ── Done ─────────────────────────────────────────────────────
       if (!abortController.signal.aborted && !res.writableEnded) {

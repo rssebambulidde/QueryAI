@@ -554,9 +554,21 @@ export const aiApi = {
         });
 
         if (!response.ok) {
+          // Parse error body for human-readable messages
+          const errorBody = await response.text().catch(() => '');
+          let parsedError: any = null;
+          try { parsedError = JSON.parse(errorBody); } catch { /* ignore */ }
+
           // Don't retry on client errors (4xx) except 429
           if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const err: any = new Error(
+              parsedError?.error?.message || `HTTP error! status: ${response.status}`
+            );
+            err.response = {
+              status: response.status,
+              data: parsedError,
+            };
+            throw err;
           }
           // Retry on server errors (5xx) and rate limits (429)
           if (retryCount < maxRetries) {
@@ -564,7 +576,14 @@ export const aiApi = {
             await new Promise((resolve) => setTimeout(resolve, retryDelay * retryCount));
             continue;
           }
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const err: any = new Error(
+            parsedError?.error?.message || `HTTP error! status: ${response.status}`
+          );
+          err.response = {
+            status: response.status,
+            data: parsedError,
+          };
+          throw err;
         }
 
         const reader = response.body?.getReader();
@@ -797,12 +816,15 @@ export const aiApi = {
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => '');
-      let errorMessage = `HTTP error! status: ${response.status}`;
-      try {
-        const parsed = JSON.parse(errorBody);
-        if (parsed?.error?.message) errorMessage = parsed.error.message;
-      } catch { /* use default */ }
-      throw new Error(errorMessage);
+      let parsedError: any = null;
+      try { parsedError = JSON.parse(errorBody); } catch { /* ignore */ }
+      const errorMessage = parsedError?.error?.message || `HTTP error! status: ${response.status}`;
+      const err: any = new Error(errorMessage);
+      err.response = {
+        status: response.status,
+        data: parsedError,
+      };
+      throw err;
     }
 
     const reader = response.body?.getReader();
