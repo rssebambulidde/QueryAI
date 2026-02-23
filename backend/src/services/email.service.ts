@@ -1526,4 +1526,94 @@ export class EmailService {
       return false;
     }
   }
+
+  // ── 9.6.12 Subscription Pause / Resume Emails ────────────────
+
+  /**
+   * Notify user that their subscription has been paused.
+   */
+  static async sendSubscriptionPausedEmail(
+    userEmail: string,
+    userName: string,
+    subscription: any
+  ): Promise<boolean> {
+    try {
+      const expiresAt = subscription.pause_expires_at
+        ? new Date(subscription.pause_expires_at).toLocaleDateString('en-US', {
+            year: 'numeric', month: 'long', day: 'numeric',
+          })
+        : 'N/A';
+
+      const year = new Date().getFullYear();
+      const subject = 'Your QueryAI subscription has been paused';
+      const htmlContent = `
+        <html><body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f9fafb;">
+        <div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+          <div style="background:#EA580C;padding:24px;text-align:center;">
+            <h1 style="color:#fff;margin:0;font-size:24px;">Subscription Paused</h1>
+          </div>
+          <div style="padding:24px;">
+            <p>Hi ${userName},</p>
+            <p>Your <strong>${(subscription.tier ?? '').toUpperCase()}</strong> subscription has been paused.</p>
+            <p>Your current features will remain accessible until <strong>${expiresAt}</strong>.
+            After that date, your account will automatically revert to the Free tier.</p>
+            <p>You can resume your subscription at any time from your account settings.</p>
+            ${subscription.pause_reason ? `<p><em>Reason: ${subscription.pause_reason}</em></p>` : ''}
+            <p style="margin-top:24px;">
+              <a href="${process.env.FRONTEND_URL || 'https://queryai.app'}/dashboard/settings"
+                 style="display:inline-block;padding:12px 24px;background:#EA580C;color:#fff;border-radius:6px;text-decoration:none;">
+                Resume Subscription
+              </a>
+            </p>
+          </div>
+          <div style="background:#f9fafb;padding:16px;text-align:center;font-size:12px;color:#6b7280;">
+            <p>&copy; ${year} QueryAI. All rights reserved.</p>
+          </div>
+        </div>
+        </body></html>
+      `;
+
+      return await this.sendEmail(userEmail, userName, subject, htmlContent);
+    } catch (error) {
+      logger.error('Failed to send subscription paused email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Notify user that their subscription has been resumed.
+   */
+  static async sendSubscriptionResumedEmail(
+    userEmail: string,
+    userName: string,
+    subscription: any
+  ): Promise<boolean> {
+    try {
+      const year = new Date().getFullYear();
+      const subject = 'Your QueryAI subscription has been resumed';
+      const htmlContent = `
+        <html><body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f9fafb;">
+        <div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+          <div style="background:#16a34a;padding:24px;text-align:center;">
+            <h1 style="color:#fff;margin:0;font-size:24px;">Subscription Resumed</h1>
+          </div>
+          <div style="padding:24px;">
+            <p>Hi ${userName},</p>
+            <p>Great news! Your <strong>${(subscription.tier ?? '').toUpperCase()}</strong> subscription is now active again.</p>
+            <p>All your features have been fully restored. Billing will resume on your next billing date.</p>
+            <p>Thank you for continuing with QueryAI!</p>
+          </div>
+          <div style="background:#f9fafb;padding:16px;text-align:center;font-size:12px;color:#6b7280;">
+            <p>&copy; ${year} QueryAI. All rights reserved.</p>
+          </div>
+        </div>
+        </body></html>
+      `;
+
+      return await this.sendEmail(userEmail, userName, subject, htmlContent);
+    } catch (error) {
+      logger.error('Failed to send subscription resumed email:', error);
+      return false;
+    }
+  }
 }

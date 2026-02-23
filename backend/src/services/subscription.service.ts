@@ -1142,4 +1142,283 @@ export class SubscriptionService {
       return null;
     }
   }
+
+  // ── 9.6.12 Subscription Pause / Resume ─────────────────────────
+
+  /** Maximum pause duration in days. */
+  private static MAX_PAUSE_DAYS = 30;
+  /** Default pause duration in days when none specified. */
+  private static DEFAULT_PAUSE_DAYS = 14;
+
+  /**
+   * Pause a subscription.
+   * Suspends at PayPal (if applicable) and sets status to 'suspended'.
+   * After `days` days (max 30), a cron will auto-downgrade to free.
+   */
+  static async pauseSubscription(
+    userId: string,
+    days?: number,
+    reason?: string
+  ): Promise<Database.Subscription | null> {
+    try {
+      const subscription = await DatabaseService.getUserSubscription(userId);
+      if (!subscription) {
+        throw new Error('Subscription not found');
+      }
+      if (subscription.tier === 'free') {
+        throw new Error('Cannot pause a free subscription');
+      }
+      if (subscription.status === 'suspended') {
+        throw new Error('Subscription is already paused');
+      }
+      if (subscription.status !== 'active') {
+        throw new Error('Only active subscriptions can be paused');
+      }
+
+      const pauseDays = Math.min(
+        Math.max(days ?? SubscriptionService.DEFAULT_PAUSE_DAYS, 1),
+        SubscriptionService.MAX_PAUSE_DAYS
+      );
+
+      // Suspend at PayPal if applicable
+      if (subscription.paypal_subscription_id) {
+        try {
+          await PayPalService.suspendSubscription(
+            subscription.paypal_subscription_id,
+            reason || 'User requested pause'
+          );
+          logger.info('PayPal subscription suspended', {
+            userId,
+            paypalSubscriptionId: subscription.paypal_subscription_id,
+          });
+        } catch (paypalError) {
+          logger.error('Failed to suspend PayPal subscription, updating DB only', {
+            userId,
+            paypalSubscriptionId: subscription.paypal_subscription_id,
+            error: paypalError,
+          });
+        }
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + pauseDays * 24 * 60 * 60 * 1000);
+
+      const updated = await DatabaseService.updateSubscription(userId, {
+        status: 'suspended',
+        paused_at: now.toISOString(),
+        pause_expires_at: expiresAt.toISOString(),
+        pause_reason: reason || null,
+      } as Partial<Database.Subscription>);
+
+      await DatabaseService.logSubscriptionHistory(
+        subscription.id,
+        userId,
+        'status_change',
+        { status: 'active', tier: subscription.tier },
+        { status: 'suspended', pause_expires_at: expiresAt.toISOString() },
+        reason || `User paused subscription for ${pauseDays} days`
+      );
+
+      logger.info('Subscription paused', {
+        userId,
+        pauseDays,
+        pauseExpiresAt: expiresAt.toISOString(),
+      });
+
+      return updated;
+    } catch (error) {
+      logger.error('Failed to pause subscription:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Resume a paused subscription.
+   * Reactivates at PayPal (if applicable) and sets status back to 'active'.
+   */
+  static async resumeSubscription(
+    userId: string
+  ): Promise<Database.Subscription | null> {
+    try {
+      const subscription = await DatabaseService.getUserSubscription(userId);
+      if (!subscription) {
+        throw new Error('Subscription not found');
+      }
+      if (subscription.status !== 'suspended') {
+        throw new Error('Subscription is not paused');
+      }
+
+      // Reactivate at PayPal if applicable
+      if (subscription.paypal_subscription_id) {
+        try {
+          await PayPalService.activateSubscription(
+            subscription.paypal_subscription_id,
+            'User resumed subscription'
+          );
+          logger.info('PayPal subscription reactivated', {
+            userId,
+            paypalSubscriptionId: subscription.paypal_subscription_id,
+          });
+        } catch (paypalError) {
+          logger.error('Failed to reactivate PayPal subscription, updating DB only', {
+            userId,
+            paypalSubscriptionId: subscription.paypal_subscription_id,
+            error: paypalError,
+          });
+        }
+      }
+
+      const updated = await DatabaseService.updateSubscription(userId, {
+        status: 'active',
+        paused_at: null,
+        pause_expires_at: null,
+        pause_reason: null,
+      } as Partial<Database.Subscription>);
+
+      await DatabaseService.logSubscriptionHistory(
+        subscription.id,
+        userId,
+        'status_change',
+        { status: 'suspended', tier: subscription.tier },
+        { status: 'active' },
+        'User resumed subscription'
+      );
+
+      logger.info('Subscription resumed', { userId });
+      return updated;
+    } catch (error) {
+      logger.error('Failed to resume subscription:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle PayPal BILLING.SUBSCRIPTION.SUSPENDED webhook.
+   * Sets local status to 'suspended' if not already.
+   */
+  static async handlePayPalSubscriptionSuspended(
+    paypalSubscriptionId: string,
+    reason?: string
+  ): Promise<void> {
+    try {
+      const subscription = await DatabaseService.getSubscriptionByPayPalSubscriptionId(
+        paypalSubscriptionId
+      );
+      if (!subscription) {
+        logger.warn('Subscription not found for PayPal suspended event', { paypalSubscriptionId });
+        return;
+      }
+      if (subscription.status === 'suspended') {
+        logger.info('Subscription already suspended, skipping', { paypalSubscriptionId });
+        return;
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + SubscriptionService.MAX_PAUSE_DAYS * 24 * 60 * 60 * 1000);
+
+      await DatabaseService.updateSubscription(subscription.user_id, {
+        status: 'suspended',
+        paused_at: now.toISOString(),
+        pause_expires_at: expiresAt.toISOString(),
+        pause_reason: reason || 'Suspended via PayPal',
+      } as Partial<Database.Subscription>);
+
+      await DatabaseService.logSubscriptionHistory(
+        subscription.id,
+        subscription.user_id,
+        'status_change',
+        { status: subscription.status, tier: subscription.tier },
+        { status: 'suspended' },
+        reason || `PayPal subscription suspended`
+      );
+
+      logger.info('PayPal subscription suspended processed', {
+        userId: subscription.user_id,
+        paypalSubscriptionId,
+      });
+    } catch (error) {
+      logger.error('Failed to handle PayPal subscription suspended', { paypalSubscriptionId, error });
+    }
+  }
+
+  /**
+   * Cron: Process expired pauses.
+   * Subscriptions that have been suspended past pause_expires_at get downgraded to free.
+   */
+  static async processExpiredPauses(): Promise<{ processed: number; downgraded: number }> {
+    const stats = { processed: 0, downgraded: 0 };
+    try {
+      const { supabaseAdmin } = await import('../config/database');
+      const now = new Date().toISOString();
+
+      const { data: expired, error } = await supabaseAdmin
+        .from('subscriptions')
+        .select('*')
+        .eq('status', 'suspended')
+        .not('pause_expires_at', 'is', null)
+        .lte('pause_expires_at', now);
+
+      if (error) {
+        logger.error('Failed to fetch expired pauses:', error);
+        return stats;
+      }
+      if (!expired || expired.length === 0) return stats;
+
+      stats.processed = expired.length;
+      for (const sub of expired) {
+        try {
+          // Cancel at PayPal if still connected
+          if (sub.paypal_subscription_id) {
+            try {
+              await PayPalService.cancelSubscription(
+                sub.paypal_subscription_id,
+                'Pause period expired — auto-downgrade'
+              );
+            } catch (ppErr) {
+              logger.warn('PayPal cancel during pause expiry failed', {
+                userId: sub.user_id,
+                error: ppErr,
+              });
+            }
+          }
+
+          await DatabaseService.updateSubscription(sub.user_id, {
+            tier: 'free',
+            status: 'active',
+            paused_at: null,
+            pause_expires_at: null,
+            pause_reason: null,
+            paypal_subscription_id: undefined,
+            cancel_at_period_end: false,
+          } as Partial<Database.Subscription>);
+
+          await DatabaseService.logSubscriptionHistory(
+            sub.id,
+            sub.user_id,
+            'status_change',
+            { status: 'suspended', tier: sub.tier },
+            { status: 'active', tier: 'free' },
+            'Pause period expired — auto-downgraded to free'
+          );
+
+          stats.downgraded++;
+          logger.info('Expired pause downgraded to free', {
+            userId: sub.user_id,
+            previousTier: sub.tier,
+          });
+        } catch (subErr) {
+          logger.error('Failed to process expired pause for user', {
+            userId: sub.user_id,
+            error: subErr,
+          });
+        }
+      }
+
+      logger.info('Expired pauses processed', stats);
+      return stats;
+    } catch (error) {
+      logger.error('processExpiredPauses failed:', error);
+      return stats;
+    }
+  }
 }

@@ -951,6 +951,37 @@ export async function cancelSubscription(
 }
 
 /**
+ * Suspend (pause) a subscription in PayPal.
+ * The subscription remains in SUSPENDED state until activated again.
+ */
+export async function suspendSubscription(
+  subscriptionId: string,
+  reason: string = 'User requested pause'
+): Promise<void> {
+  await subscriptions().suspendSubscription({
+    id: subscriptionId,
+    body: { reason },
+  });
+
+  logger.info('PayPal subscription suspended', { subscriptionId, reason });
+}
+
+/**
+ * Activate (resume) a previously suspended subscription in PayPal.
+ */
+export async function activateSubscription(
+  subscriptionId: string,
+  reason?: string
+): Promise<void> {
+  await subscriptions().activateSubscription({
+    id: subscriptionId,
+    body: reason ? { reason } : undefined,
+  });
+
+  logger.info('PayPal subscription activated', { subscriptionId, reason });
+}
+
+/**
  * Update subscription (e.g. custom_id). Plan changes typically use revise API.
  */
 export async function updateSubscription(
@@ -1047,6 +1078,7 @@ export type WebhookEventType =
   | 'BILLING.SUBSCRIPTION.ACTIVATED'
   | 'BILLING.SUBSCRIPTION.UPDATED'
   | 'BILLING.SUBSCRIPTION.CANCELLED'
+  | 'BILLING.SUBSCRIPTION.SUSPENDED'
   | 'BILLING.SUBSCRIPTION.EXPIRED'
   | 'BILLING.SUBSCRIPTION.PAYMENT.FAILED'
   | 'PAYMENT.CAPTURE.REFUNDED'
@@ -1063,6 +1095,8 @@ export class PayPalService {
   static createSubscription = createSubscription;
   static getSubscription = getSubscription;
   static cancelSubscription = cancelSubscription;
+  static suspendSubscription = suspendSubscription;
+  static activateSubscription = activateSubscription;
   static updateSubscription = updateSubscription;
   static verifyWebhookSignature = verifyWebhookSignature;
   // 9.6.6 Dynamic plan management

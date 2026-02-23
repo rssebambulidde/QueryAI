@@ -247,6 +247,95 @@ router.post(
 );
 
 /**
+ * POST /api/subscription/pause
+ * Pause subscription for a number of days (max 30, default 14).
+ * Suspends billing at PayPal and sets status to 'suspended'.
+ */
+router.post(
+  '/pause',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const { days, reason } = req.body as { days?: number; reason?: string };
+
+    const paused = await SubscriptionService.pauseSubscription(userId, days, reason);
+    if (!paused) {
+      throw new ValidationError('Failed to pause subscription');
+    }
+
+    logger.info('Subscription paused', { userId, days, reason });
+
+    // Send notification email
+    try {
+      const { EmailService } = await import('../services/email.service');
+      const userProfile = await DatabaseService.getUserProfile(userId);
+      if (userProfile) {
+        await EmailService.sendSubscriptionPausedEmail(
+          userProfile.email,
+          userProfile.full_name || userProfile.email,
+          paused
+        );
+      }
+    } catch (e) {
+      logger.error('Failed to send pause email', { userId, error: e });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Subscription paused for ${days ?? 14} days`,
+      data: { subscription: paused },
+    });
+  })
+);
+
+/**
+ * POST /api/subscription/resume
+ * Resume a paused subscription. Reactivates billing at PayPal.
+ */
+router.post(
+  '/resume',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    const resumed = await SubscriptionService.resumeSubscription(userId);
+    if (!resumed) {
+      throw new ValidationError('Failed to resume subscription');
+    }
+
+    logger.info('Subscription resumed', { userId });
+
+    // Send notification email
+    try {
+      const { EmailService } = await import('../services/email.service');
+      const userProfile = await DatabaseService.getUserProfile(userId);
+      if (userProfile) {
+        await EmailService.sendSubscriptionResumedEmail(
+          userProfile.email,
+          userProfile.full_name || userProfile.email,
+          resumed
+        );
+      }
+    } catch (e) {
+      logger.error('Failed to send resume email', { userId, error: e });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Subscription resumed',
+      data: { subscription: resumed },
+    });
+  })
+);
+
+/**
  * GET /api/subscription/paypal-status
  * Get PayPal subscription status (for recurring subscriptions with paypal_subscription_id)
  */

@@ -1334,7 +1334,7 @@ export interface Subscription {
   id: string;
   user_id: string;
   tier: 'free' | 'pro' | 'enterprise';
-  status: 'active' | 'cancelled' | 'expired';
+  status: 'active' | 'cancelled' | 'expired' | 'suspended';
   current_period_start?: string;
   current_period_end?: string;
   cancel_at_period_end: boolean;
@@ -1342,6 +1342,9 @@ export interface Subscription {
   billing_period?: 'monthly' | 'annual';
   annual_discount?: number;
   grace_period_end?: string;
+  paused_at?: string | null;
+  pause_expires_at?: string | null;
+  pause_reason?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1560,6 +1563,16 @@ export const subscriptionApi = {
 
   reactivate: async (): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.post('/api/subscription/reactivate');
+    return response.data;
+  },
+
+  pause: async (days?: number, reason?: string): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.post('/api/subscription/pause', { days, reason });
+    return response.data;
+  },
+
+  resume: async (): Promise<ApiResponse<{ subscription: Subscription }>> => {
+    const response = await apiClient.post('/api/subscription/resume');
     return response.data;
   },
 

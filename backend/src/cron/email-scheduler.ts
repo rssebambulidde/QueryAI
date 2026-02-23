@@ -11,6 +11,7 @@ import { runExpirationWarningScheduler } from '../services/expiration-warning.se
 import { runSubscriptionLifecycleScheduler } from '../services/subscription-lifecycle.service';
 import { runUsageAlertProcessor } from '../services/usage-alerts.service';
 import { processEmailQueue } from '../services/email-queue.service';
+import { SubscriptionService } from '../services/subscription.service';
 
 export async function runEmailScheduler(): Promise<void> {
   logger.info('Email scheduler: starting');
@@ -20,6 +21,11 @@ export async function runEmailScheduler(): Promise<void> {
     await runExpirationWarningScheduler();
     await runSubscriptionLifecycleScheduler();
     await runUsageAlertProcessor();
+
+    // 9.6.12 — downgrade subscriptions whose pause period has expired
+    const pauseStats = await SubscriptionService.processExpiredPauses();
+    logger.info('Email scheduler: expired pauses processed', pauseStats);
+
     const q = await processEmailQueue(100);
     logger.info('Email scheduler: queue processed', { processed: q.processed, sent: q.sent, failed: q.failed });
     logger.info('Email scheduler: done');

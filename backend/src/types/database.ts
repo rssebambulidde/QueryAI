@@ -62,7 +62,7 @@ export namespace Database {
     id: string;
     user_id: string;
     tier: SubscriptionTier;
-    status: 'active' | 'cancelled' | 'expired';
+    status: 'active' | 'cancelled' | 'expired' | 'suspended';
     current_period_start?: string;
     current_period_end?: string;
     cancel_at_period_end: boolean;
@@ -85,6 +85,12 @@ export namespace Database {
     promo_code_id?: string | null;
     /** Discount % from promo code (0–100). */
     promo_discount_percent?: number | null;
+    /** When the subscription was paused (9.6.12). */
+    paused_at?: string | null;
+    /** Auto-downgrade deadline for paused subscriptions (9.6.12). */
+    pause_expires_at?: string | null;
+    /** User-provided reason for pausing (9.6.12). */
+    pause_reason?: string | null;
     created_at: string;
     updated_at: string;
   }

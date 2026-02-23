@@ -5,7 +5,7 @@ import { subscriptionApi, usageApi, paymentApi, SubscriptionData, UsageLimit, Pa
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
-import { Check, X, Zap, Folder, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink, RefreshCw } from 'lucide-react';
+import { Check, X, Zap, Folder, Download, ChevronDown, ChevronUp, AlertCircle, ArrowUp, Search, CreditCard, ExternalLink, RefreshCw, Pause, Play } from 'lucide-react';
 import { PaymentDialog } from '@/components/payment/payment-dialog';
 import { UsageDisplay } from '@/components/usage/usage-display';
 import { usePricing } from '@/lib/hooks/use-pricing';
@@ -48,6 +48,11 @@ export function SubscriptionManager() {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [previousPaymentStatuses, setPreviousPaymentStatuses] = useState<Map<string, string>>(new Map());
   const [gracePeriodTimeRemaining, setGracePeriodTimeRemaining] = useState<string>('');
+  const [showPauseConfirm, setShowPauseConfirm] = useState(false);
+  const [pauseDays, setPauseDays] = useState(14);
+  const [pauseReason, setPauseReason] = useState('');
+  const [pausing, setPausing] = useState(false);
+  const [resuming, setResuming] = useState(false);
 
   useEffect(() => {
     loadSubscriptionData();
@@ -390,6 +395,50 @@ export function SubscriptionManager() {
       }
     } catch (err: any) {
       setError(err.message || 'Failed to reactivate subscription');
+    }
+  };
+
+  const handlePauseSubscription = async () => {
+    try {
+      setPausing(true);
+      setError(null);
+      const response = await subscriptionApi.pause(pauseDays, pauseReason || undefined);
+      if (response.success) {
+        toast({
+          title: 'Subscription paused',
+          description: `Your subscription has been paused for ${pauseDays} days.`,
+        });
+        await loadSubscriptionData();
+        setShowPauseConfirm(false);
+        setPauseReason('');
+      } else {
+        setError(response.error?.message || 'Failed to pause subscription');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to pause subscription');
+    } finally {
+      setPausing(false);
+    }
+  };
+
+  const handleResumeSubscription = async () => {
+    try {
+      setResuming(true);
+      setError(null);
+      const response = await subscriptionApi.resume();
+      if (response.success) {
+        toast({
+          title: 'Subscription resumed',
+          description: 'Your subscription is now active again.',
+        });
+        await loadSubscriptionData();
+      } else {
+        setError(response.error?.message || 'Failed to resume subscription');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to resume subscription');
+    } finally {
+      setResuming(false);
     }
   };
 
@@ -1028,6 +1077,103 @@ export function SubscriptionManager() {
                   </Button>
                 </>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Subscription Paused Banner */}
+      {subscription.status === 'suspended' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg shadow p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <Pause className="w-5 h-5 text-amber-600" />
+            <h3 className="text-lg font-semibold text-amber-700">Subscription Paused</h3>
+          </div>
+          <p className="text-sm text-amber-700 mb-1">
+            Your <strong>{tier.toUpperCase()}</strong> subscription is currently paused.
+            {subscription.pause_expires_at && (
+              <> It will automatically revert to Free on{' '}
+              <strong>
+                {new Date(subscription.pause_expires_at).toLocaleDateString('en-US', {
+                  year: 'numeric', month: 'long', day: 'numeric',
+                })}
+              </strong>.
+              </>
+            )}
+          </p>
+          {subscription.pause_reason && (
+            <p className="text-xs text-amber-600 mb-3">Reason: {subscription.pause_reason}</p>
+          )}
+          <Button
+            onClick={handleResumeSubscription}
+            disabled={resuming}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            <Play className="w-4 h-4 mr-2" />
+            {resuming ? 'Resuming...' : 'Resume Subscription'}
+          </Button>
+        </div>
+      )}
+
+      {/* Pause Subscription */}
+      {tier !== 'free' && subscription.status === 'active' && !subscription.cancel_at_period_end && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Pause className="w-5 h-5 text-amber-600" />
+              <h3 className="text-lg font-semibold text-amber-600">Pause Subscription</h3>
+            </div>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            Need a break? Pause your subscription for up to 30 days. You keep your tier until the pause expires.
+          </p>
+          {!showPauseConfirm ? (
+            <Button
+              onClick={() => setShowPauseConfirm(true)}
+              variant="outline"
+              className="border-amber-400 text-amber-600 hover:bg-amber-50"
+            >
+              <Pause className="w-4 h-4 mr-2" />
+              Pause Subscription
+            </Button>
+          ) : (
+            <div className="space-y-3 border-t pt-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Pause duration (days)</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={pauseDays}
+                  onChange={(e) => setPauseDays(Math.min(30, Math.max(1, Number(e.target.value))))}
+                  className="mt-1 w-32"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Reason (optional)</label>
+                <Input
+                  type="text"
+                  value={pauseReason}
+                  onChange={(e) => setPauseReason(e.target.value)}
+                  placeholder="e.g. Going on vacation"
+                  className="mt-1"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handlePauseSubscription}
+                  disabled={pausing}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  {pausing ? 'Pausing...' : `Pause for ${pauseDays} days`}
+                </Button>
+                <Button
+                  onClick={() => { setShowPauseConfirm(false); setPauseReason(''); }}
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
         </div>

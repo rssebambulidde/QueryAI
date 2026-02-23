@@ -1352,7 +1352,7 @@ router.post(
     }
 
     if (
-      (eventType === 'BILLING.SUBSCRIPTION.CANCELLED' || eventType === 'BILLING.SUBSCRIPTION.SUSPENDED') &&
+      eventType === 'BILLING.SUBSCRIPTION.CANCELLED' &&
       resource
     ) {
       const subscriptionId = resource.id as string | undefined;
@@ -1362,7 +1362,26 @@ router.post(
           subscriptionId,
           `PayPal event: ${eventType}`
         );
-        logger.info('PayPal subscription cancel/suspend processed via webhook', {
+        logger.info('PayPal subscription cancel processed via webhook', {
+          paypalSubscriptionId: subscriptionId,
+          eventType,
+        });
+      }
+    }
+
+    // Handle subscription suspended event (9.6.12 — separate from cancel)
+    if (
+      eventType === 'BILLING.SUBSCRIPTION.SUSPENDED' &&
+      resource
+    ) {
+      const subscriptionId = resource.id as string | undefined;
+      if (subscriptionId) {
+        const { SubscriptionService } = await import('../services/subscription.service');
+        await SubscriptionService.handlePayPalSubscriptionSuspended(
+          subscriptionId,
+          `PayPal event: ${eventType}`
+        );
+        logger.info('PayPal subscription suspend processed via webhook', {
           paypalSubscriptionId: subscriptionId,
           eventType,
         });
