@@ -25,7 +25,6 @@ export interface SubmitFeedbackParams {
   userId: string;
   messageId: string;
   conversationId?: string;
-  topicId?: string;
   rating: -1 | 1;
   comment?: string;
   flaggedCitations?: FlaggedCitation[];
@@ -41,7 +40,6 @@ export interface MessageFeedback {
   user_id: string;
   message_id: string;
   conversation_id: string | null;
-  topic_id: string | null;
   rating: -1 | 1;
   comment: string | null;
   flagged_citations: FlaggedCitation[];
@@ -69,7 +67,6 @@ export class FeedbackService {
         p_user_id: params.userId,
         p_message_id: params.messageId,
         p_conversation_id: params.conversationId || null,
-        p_topic_id: params.topicId || null,
         p_rating: params.rating,
         p_comment: params.comment || null,
         p_flagged_citations: JSON.stringify(params.flaggedCitations || []),
@@ -122,7 +119,6 @@ export class FeedbackService {
     const { error } = await supabaseAdmin.from('answer_evaluations').insert({
       user_id: params.userId,
       conversation_id: params.conversationId || null,
-      topic_id: params.topicId || null,
       question: (params.question || '').substring(0, 2000),
       answer: (params.answer || '').substring(0, 5000),
       sources_snapshot: (params.sources || []).map(s => ({
@@ -223,23 +219,6 @@ export class FeedbackService {
 
     if (error) {
       throw new Error(`Failed to fetch feedback by model: ${error.message}`);
-    }
-
-    return data || [];
-  }
-
-  /**
-   * Feedback breakdown per topic.
-   */
-  static async getByTopic(days: number = 30, limit: number = 20) {
-    const { data, error } = await supabaseAdmin
-      .rpc('get_feedback_by_topic', {
-        p_days: days,
-        p_limit: limit,
-      });
-
-    if (error) {
-      throw new Error(`Failed to fetch feedback by topic: ${error.message}`);
     }
 
     return data || [];

@@ -301,27 +301,6 @@ router.get(
 );
 
 /**
- * GET /api/admin/feedback/by-topic
- * Feedback breakdown per topic.
- */
-router.get(
-  '/feedback/by-topic',
-  authenticate,
-  requireSuperAdmin,
-  apiLimiter,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { FeedbackService } = await import('../services/feedback.service');
-
-    const days = Math.min(Math.max(parseInt(req.query.days as string, 10) || 30, 1), 365);
-    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 20, 1), 100);
-
-    const byTopic = await FeedbackService.getByTopic(days, limit);
-
-    res.json({ success: true, data: { byTopic } });
-  })
-);
-
-/**
  * GET /api/admin/feedback/flagged
  * Recent feedback with flagged citations.
  */

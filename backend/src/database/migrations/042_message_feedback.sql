@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS message_feedback (
   user_id           uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   message_id        uuid NOT NULL,
   conversation_id   uuid REFERENCES conversations(id) ON DELETE SET NULL,
-  topic_id          uuid REFERENCES topics(id) ON DELETE SET NULL,
   rating            smallint NOT NULL CHECK (rating IN (-1, 1)),  -- thumbs down / up
   comment           text,
   flagged_citations jsonb DEFAULT '[]'::jsonb,  -- array of { sourceUrl, sourceTitle, reason? }
@@ -26,7 +25,6 @@ CREATE TABLE IF NOT EXISTS message_feedback (
 CREATE INDEX IF NOT EXISTS idx_message_feedback_user      ON message_feedback (user_id);
 CREATE INDEX IF NOT EXISTS idx_message_feedback_created   ON message_feedback (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_message_feedback_rating    ON message_feedback (rating);
-CREATE INDEX IF NOT EXISTS idx_message_feedback_topic     ON message_feedback (topic_id) WHERE topic_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_message_feedback_model     ON message_feedback (model)    WHERE model IS NOT NULL;
 
 -- RLS: users can only manage their own feedback
@@ -45,7 +43,6 @@ CREATE OR REPLACE FUNCTION private.upsert_message_feedback(
   p_user_id           uuid,
   p_message_id        uuid,
   p_conversation_id   uuid DEFAULT NULL,
-  p_topic_id          uuid DEFAULT NULL,
   p_rating            smallint DEFAULT 1,
   p_comment           text DEFAULT NULL,
   p_flagged_citations jsonb DEFAULT '[]'::jsonb,
@@ -60,11 +57,11 @@ DECLARE
   v_id uuid;
 BEGIN
   INSERT INTO message_feedback (
-    user_id, message_id, conversation_id, topic_id,
+    user_id, message_id, conversation_id,
     rating, comment, flagged_citations, model
   )
   VALUES (
-    p_user_id, p_message_id, p_conversation_id, p_topic_id,
+    p_user_id, p_message_id, p_conversation_id,
     p_rating, p_comment, p_flagged_citations, p_model
   )
   ON CONFLICT (user_id, message_id)
@@ -113,7 +110,7 @@ BEGIN
     count(*)::bigint AS total_feedback,
     count(*) FILTER (WHERE mf.rating = 1)::bigint  AS thumbs_up,
     count(*) FILTER (WHERE mf.rating = -1)::bigint AS thumbs_down,
-    count(*) FILTER (WHERE jsonb_array_length(mf.flagged_citations) > 0)::bigint AS flagged_count,
+    count(*) FILTER (WHERE jsonb_typeof(mf.flagged_citations) = 'array' AND jsonb_array_length(mf.flagged_citations) > 0)::bigint AS flagged_count,
     round(avg(mf.rating)::numeric, 3) AS avg_rating
   FROM message_feedback mf
   WHERE mf.created_at >= now() - make_interval(days => p_days)
@@ -151,7 +148,7 @@ BEGIN
     count(*)::bigint AS total_feedback,
     count(*) FILTER (WHERE mf.rating = 1)::bigint  AS thumbs_up,
     count(*) FILTER (WHERE mf.rating = -1)::bigint AS thumbs_down,
-    count(*) FILTER (WHERE jsonb_array_length(mf.flagged_citations) > 0)::bigint AS flagged_count,
+    count(*) FILTER (WHERE jsonb_typeof(mf.flagged_citations) = 'array' AND jsonb_array_length(mf.flagged_citations) > 0)::bigint AS flagged_count,
     CASE WHEN count(*) > 0
       THEN round(count(*) FILTER (WHERE mf.rating = 1)::numeric / count(*)::numeric * 100, 1)
       ELSE 0
@@ -165,48 +162,3 @@ $$;
 
 REVOKE ALL ON FUNCTION private.get_feedback_by_model FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION private.get_feedback_by_model TO service_role;
-
--- ═══════════════════════════════════════════════════════════════════════
--- 5. RPC: get_feedback_by_topic  (admin: breakdown per topic)
--- ═══════════════════════════════════════════════════════════════════════
-
-CREATE OR REPLACE FUNCTION private.get_feedback_by_topic(
-  p_days int DEFAULT 30,
-  p_limit int DEFAULT 20
-)
-RETURNS TABLE (
-  topic_id       uuid,
-  topic_name     text,
-  total_feedback bigint,
-  thumbs_up      bigint,
-  thumbs_down    bigint,
-  approval_rate  numeric
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT
-    mf.topic_id,
-    t.name AS topic_name,
-    count(*)::bigint AS total_feedback,
-    count(*) FILTER (WHERE mf.rating = 1)::bigint  AS thumbs_up,
-    count(*) FILTER (WHERE mf.rating = -1)::bigint AS thumbs_down,
-    CASE WHEN count(*) > 0
-      THEN round(count(*) FILTER (WHERE mf.rating = 1)::numeric / count(*)::numeric * 100, 1)
-      ELSE 0
-    END AS approval_rate
-  FROM message_feedback mf
-  LEFT JOIN topics t ON t.id = mf.topic_id
-  WHERE mf.created_at >= now() - make_interval(days => p_days)
-    AND mf.topic_id IS NOT NULL
-  GROUP BY mf.topic_id, t.name
-  ORDER BY total_feedback DESC
-  LIMIT p_limit;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION private.get_feedback_by_topic FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION private.get_feedback_by_topic TO service_role;

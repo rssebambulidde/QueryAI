@@ -316,7 +316,6 @@ CREATE OR REPLACE FUNCTION public.upsert_message_feedback(
   p_user_id           uuid,
   p_message_id        uuid,
   p_conversation_id   uuid DEFAULT NULL,
-  p_topic_id          uuid DEFAULT NULL,
   p_rating            smallint DEFAULT 1,
   p_comment           text DEFAULT NULL,
   p_flagged_citations jsonb DEFAULT '[]'::jsonb,
@@ -328,10 +327,10 @@ AS $$
 DECLARE v_id uuid;
 BEGIN
   INSERT INTO message_feedback (
-    user_id, message_id, conversation_id, topic_id,
+    user_id, message_id, conversation_id,
     rating, comment, flagged_citations, model
   ) VALUES (
-    p_user_id, p_message_id, p_conversation_id, p_topic_id,
+    p_user_id, p_message_id, p_conversation_id,
     p_rating, p_comment, p_flagged_citations, p_model
   )
   ON CONFLICT (user_id, message_id) DO UPDATE SET
@@ -374,7 +373,7 @@ BEGIN
     count(*)::bigint AS total_feedback,
     count(*) FILTER (WHERE mf.rating = 1)::bigint  AS thumbs_up,
     count(*) FILTER (WHERE mf.rating = -1)::bigint AS thumbs_down,
-    count(*) FILTER (WHERE jsonb_array_length(mf.flagged_citations) > 0)::bigint AS flagged_count,
+    count(*) FILTER (WHERE jsonb_typeof(mf.flagged_citations) = 'array' AND jsonb_array_length(mf.flagged_citations) > 0)::bigint AS flagged_count,
     round(avg(mf.rating)::numeric, 3) AS avg_rating
   FROM message_feedback mf
   WHERE mf.created_at >= now() - make_interval(days => p_days)
@@ -405,7 +404,7 @@ BEGIN
     count(*)::bigint AS total_feedback,
     count(*) FILTER (WHERE mf.rating = 1)::bigint  AS thumbs_up,
     count(*) FILTER (WHERE mf.rating = -1)::bigint AS thumbs_down,
-    count(*) FILTER (WHERE jsonb_array_length(mf.flagged_citations) > 0)::bigint AS flagged_count,
+    count(*) FILTER (WHERE jsonb_typeof(mf.flagged_citations) = 'array' AND jsonb_array_length(mf.flagged_citations) > 0)::bigint AS flagged_count,
     CASE WHEN count(*) > 0
       THEN round(count(*) FILTER (WHERE mf.rating = 1)::numeric / count(*)::numeric * 100, 1)
       ELSE 0
@@ -420,95 +419,3 @@ REVOKE ALL ON FUNCTION public.get_feedback_by_model FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.get_feedback_by_model FROM anon;
 REVOKE ALL ON FUNCTION public.get_feedback_by_model FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.get_feedback_by_model TO service_role;
-
-CREATE OR REPLACE FUNCTION public.get_feedback_by_topic(
-  p_days  int DEFAULT 30,
-  p_limit int DEFAULT 20
-) RETURNS TABLE (
-  topic_id       uuid,
-  topic_name     text,
-  total_feedback bigint,
-  thumbs_up      bigint,
-  thumbs_down    bigint,
-  approval_rate  numeric
-)
-LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT mf.topic_id, t.name AS topic_name,
-    count(*)::bigint AS total_feedback,
-    count(*) FILTER (WHERE mf.rating = 1)::bigint  AS thumbs_up,
-    count(*) FILTER (WHERE mf.rating = -1)::bigint AS thumbs_down,
-    CASE WHEN count(*) > 0
-      THEN round(count(*) FILTER (WHERE mf.rating = 1)::numeric / count(*)::numeric * 100, 1)
-      ELSE 0
-    END AS approval_rate
-  FROM message_feedback mf
-  LEFT JOIN topics t ON t.id = mf.topic_id
-  WHERE mf.created_at >= now() - make_interval(days => p_days)
-    AND mf.topic_id IS NOT NULL
-  GROUP BY mf.topic_id, t.name
-  ORDER BY total_feedback DESC LIMIT p_limit;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.get_feedback_by_topic FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_feedback_by_topic FROM anon;
-REVOKE ALL ON FUNCTION public.get_feedback_by_topic FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.get_feedback_by_topic TO service_role;
-
--- ═══════════════════════════════════════════════════════════════════════
--- 043: topic hierarchy RPCs
--- ═══════════════════════════════════════════════════════════════════════
-
-CREATE OR REPLACE FUNCTION public.get_topic_ancestors(p_topic_id UUID, p_user_id UUID)
-RETURNS TABLE (id UUID, name TEXT, description TEXT, parent_topic_id UUID, depth INT)
-LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  RETURN QUERY
-  WITH RECURSIVE ancestors AS (
-    SELECT t.id, t.name, t.description, t.parent_topic_id, 0 AS depth
-    FROM topics t WHERE t.id = p_topic_id AND t.user_id = p_user_id
-    UNION ALL
-    SELECT t.id, t.name, t.description, t.parent_topic_id, a.depth + 1
-    FROM topics t INNER JOIN ancestors a ON t.id = a.parent_topic_id
-    WHERE t.user_id = p_user_id AND a.depth < 10
-  )
-  SELECT ancestors.id, ancestors.name, ancestors.description,
-         ancestors.parent_topic_id, ancestors.depth
-  FROM ancestors ORDER BY ancestors.depth DESC;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.get_topic_ancestors FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_topic_ancestors FROM anon;
-REVOKE ALL ON FUNCTION public.get_topic_ancestors FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.get_topic_ancestors TO service_role;
-
-CREATE OR REPLACE FUNCTION public.get_topic_descendants(p_topic_id UUID, p_user_id UUID)
-RETURNS TABLE (id UUID, depth INT)
-LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  RETURN QUERY
-  WITH RECURSIVE descendants AS (
-    SELECT t.id, 0 AS depth FROM topics t
-    WHERE t.id = p_topic_id AND t.user_id = p_user_id
-    UNION ALL
-    SELECT t.id, d.depth + 1 FROM topics t
-    INNER JOIN descendants d ON t.parent_topic_id = d.id
-    WHERE t.user_id = p_user_id AND d.depth < 10
-  )
-  SELECT descendants.id, descendants.depth FROM descendants;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.get_topic_descendants FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_topic_descendants FROM anon;
-REVOKE ALL ON FUNCTION public.get_topic_descendants FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.get_topic_descendants TO service_role;

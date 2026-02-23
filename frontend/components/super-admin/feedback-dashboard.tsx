@@ -40,15 +40,6 @@ interface ByModelRow {
   approval_rate: number;
 }
 
-interface ByTopicRow {
-  topic_id: string;
-  topic_name: string;
-  total_feedback: number;
-  thumbs_up: number;
-  thumbs_down: number;
-  approval_rate: number;
-}
-
 interface FlaggedCitation {
   sourceUrl: string;
   sourceTitle: string;
@@ -60,7 +51,6 @@ interface MessageFeedback {
   user_id: string;
   message_id: string;
   conversation_id: string | null;
-  topic_id: string | null;
   rating: -1 | 1;
   comment: string | null;
   flagged_citations: FlaggedCitation[];
@@ -76,7 +66,7 @@ export default function FeedbackDashboard() {
   const [days, setDays] = useState<DayOption>(30);
   const [analytics, setAnalytics] = useState<AnalyticsRow[]>([]);
   const [byModel, setByModel] = useState<ByModelRow[]>([]);
-  const [byTopic, setByTopic] = useState<ByTopicRow[]>([]);
+
   const [recent, setRecent] = useState<MessageFeedback[]>([]);
   const [flagged, setFlagged] = useState<MessageFeedback[]>([]);
 
@@ -95,15 +85,13 @@ export default function FeedbackDashboard() {
       setLoadingAnalytics(true);
       setError(null);
 
-      const [analyticsRes, modelRes, topicRes] = await Promise.all([
+      const [analyticsRes, modelRes] = await Promise.all([
         apiClient.get('/api/admin/feedback/analytics', { params: { days: d, groupBy: 'day' } }),
         apiClient.get('/api/admin/feedback/by-model', { params: { days: d } }),
-        apiClient.get('/api/admin/feedback/by-topic', { params: { days: d, limit: 20 } }),
       ]);
 
       if (analyticsRes.data.success) setAnalytics(analyticsRes.data.data.analytics || []);
       if (modelRes.data.success) setByModel(modelRes.data.data.byModel || []);
-      if (topicRes.data.success) setByTopic(topicRes.data.data.byTopic || []);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to load feedback analytics');
     } finally {
@@ -363,38 +351,6 @@ export default function FeedbackDashboard() {
                     <td className="py-2 pr-4 text-right text-green-600">{Number(row.thumbs_up)}</td>
                     <td className="py-2 pr-4 text-right text-red-500">{Number(row.thumbs_down)}</td>
                     <td className="py-2 pr-4 text-right text-amber-600">{Number(row.flagged_count)}</td>
-                    <td className="py-2 text-right">
-                      <ApprovalBadge rate={Number(row.approval_rate)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Section>
-      )}
-
-      {/* ── By Topic ───────────────────────────────────────── */}
-      {byTopic.length > 0 && (
-        <Section title="By Topic" icon={<BarChart3 className="w-5 h-5 text-gray-500" />}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 text-left text-gray-500">
-                  <th className="py-2 pr-4 font-medium">Topic</th>
-                  <th className="py-2 pr-4 font-medium text-right">Total</th>
-                  <th className="py-2 pr-4 font-medium text-right">Up</th>
-                  <th className="py-2 pr-4 font-medium text-right">Down</th>
-                  <th className="py-2 font-medium text-right">Approval</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byTopic.map((row) => (
-                  <tr key={row.topic_id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-2 pr-4">{row.topic_name || '(unknown)'}</td>
-                    <td className="py-2 pr-4 text-right font-medium">{Number(row.total_feedback)}</td>
-                    <td className="py-2 pr-4 text-right text-green-600">{Number(row.thumbs_up)}</td>
-                    <td className="py-2 pr-4 text-right text-red-500">{Number(row.thumbs_down)}</td>
                     <td className="py-2 text-right">
                       <ApprovalBadge rate={Number(row.approval_rate)} />
                     </td>
