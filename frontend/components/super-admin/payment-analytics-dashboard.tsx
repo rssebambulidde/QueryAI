@@ -173,6 +173,58 @@ export default function PaymentAnalyticsDashboard() {
 
   const handleDays = (d: DayOption) => setDays(d);
 
+  // ── Derived chart data (memoized; MUST be before any early returns) ──
+
+  const revenueTrendChart = useMemo(() => (
+    data?.revenueTrend?.map((p) => ({
+      name: shortDate(p.date),
+      Revenue: p.revenue,
+      Payments: p.count,
+    })) ?? []
+  ), [data?.revenueTrend]);
+
+  const failedTrendChart = useMemo(() => (
+    data?.failedPaymentTrends?.map((p) => ({
+      name: shortDate(p.date),
+      Failed: p.failed,
+      Completed: p.completed,
+    })) ?? []
+  ), [data?.failedPaymentTrends]);
+
+  const revenueByTierChart = useMemo(() => (
+    data?.revenueByTier?.map((r) => ({
+      name: tierLabel(r.tier),
+      Revenue: r.revenue,
+    })) ?? []
+  ), [data?.revenueByTier]);
+
+  const funnelChart = useMemo(() => {
+    if (!data?.conversionFunnel) return [];
+    return [
+      { name: 'Free', Users: data.conversionFunnel.freeUsers },
+      { name: 'Pro', Users: data.conversionFunnel.proUsers },
+      { name: 'Enterprise', Users: data.conversionFunnel.enterpriseUsers },
+    ];
+  }, [data?.conversionFunnel]);
+
+  // Stable dataKeys references (constant, so memoize with empty deps)
+  const revenueTrendKeys = useMemo(() => [
+    { key: 'Revenue', color: '#16a34a', name: 'Revenue ($)' },
+  ], []);
+
+  const revenueByTierKeys = useMemo(() => [
+    { key: 'Revenue', color: '#f97316', name: 'Revenue ($)' },
+  ], []);
+
+  const failedTrendKeys = useMemo(() => [
+    { key: 'Completed', color: '#16a34a', name: 'Completed' },
+    { key: 'Failed', color: '#ef4444', name: 'Failed' },
+  ], []);
+
+  const funnelKeys = useMemo(() => [
+    { key: 'Users', color: '#6366f1', name: 'Users' },
+  ], []);
+
   // ── Loading / Error ────────────────────────────────────────
 
   if (loading && !data) {
@@ -192,49 +244,6 @@ export default function PaymentAnalyticsDashboard() {
   }
 
   if (!data) return null;
-
-  // ── Derived chart data (memoized to prevent re-render flicker) ──
-
-  const revenueTrendChart = useMemo(() => data.revenueTrend.map((p) => ({
-    name: shortDate(p.date),
-    Revenue: p.revenue,
-    Payments: p.count,
-  })), [data.revenueTrend]);
-
-  const failedTrendChart = useMemo(() => data.failedPaymentTrends.map((p) => ({
-    name: shortDate(p.date),
-    Failed: p.failed,
-    Completed: p.completed,
-  })), [data.failedPaymentTrends]);
-
-  const revenueByTierChart = useMemo(() => data.revenueByTier.map((r) => ({
-    name: tierLabel(r.tier),
-    Revenue: r.revenue,
-  })), [data.revenueByTier]);
-
-  const funnelChart = useMemo(() => [
-    { name: 'Free', Users: data.conversionFunnel.freeUsers },
-    { name: 'Pro', Users: data.conversionFunnel.proUsers },
-    { name: 'Enterprise', Users: data.conversionFunnel.enterpriseUsers },
-  ], [data.conversionFunnel]);
-
-  // Stable dataKeys references (constant, so memoize with empty deps)
-  const revenueTrendKeys = useMemo(() => [
-    { key: 'Revenue', color: '#16a34a', name: 'Revenue ($)' },
-  ], []);
-
-  const revenueByTierKeys = useMemo(() => [
-    { key: 'Revenue', color: '#f97316', name: 'Revenue ($)' },
-  ], []);
-
-  const failedTrendKeys = useMemo(() => [
-    { key: 'Completed', color: '#16a34a', name: 'Completed' },
-    { key: 'Failed', color: '#ef4444', name: 'Failed' },
-  ], []);
-
-  const funnelKeys = useMemo(() => [
-    { key: 'Users', color: '#6366f1', name: 'Users' },
-  ], []);
 
   // ── Render ─────────────────────────────────────────────────
 
