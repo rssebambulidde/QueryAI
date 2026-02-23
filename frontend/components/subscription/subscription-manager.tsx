@@ -404,8 +404,7 @@ export function SubscriptionManager() {
       setError(null);
       const response = await subscriptionApi.pause(pauseDays, pauseReason || undefined);
       if (response.success) {
-        toast({
-          title: 'Subscription paused',
+        toast.success('Subscription paused', {
           description: `Your subscription has been paused for ${pauseDays} days.`,
         });
         await loadSubscriptionData();
@@ -427,8 +426,7 @@ export function SubscriptionManager() {
       setError(null);
       const response = await subscriptionApi.resume();
       if (response.success) {
-        toast({
-          title: 'Subscription resumed',
+        toast.success('Subscription resumed', {
           description: 'Your subscription is now active again.',
         });
         await loadSubscriptionData();
