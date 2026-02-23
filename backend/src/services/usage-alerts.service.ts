@@ -30,6 +30,22 @@ const UsageAlertThresholdsSchema = z.object({
 
 export type UsageAlertThresholds = z.infer<typeof UsageAlertThresholdsSchema>;
 
+export interface AlertHistoryRow {
+  id: string;
+  userId: string;
+  email: string;
+  fullName: string | null;
+  type: string;
+  title: string;
+  message: string;
+  metric: string | null;
+  threshold: number | null;
+  percentage: number | null;
+  tier: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
 const SETTINGS_KEY = 'usage_alert_thresholds';
 
 const DEFAULT_THRESHOLDS: UsageAlertThresholds = {
@@ -177,6 +193,90 @@ export class UsageAlertsService {
     if (error) {
       logger.error('createNotification failed', { error: error.message, params });
     }
+  }
+
+  /**
+   * Admin: list sent alert notifications with user profile info.
+   * Returns newest first with pagination.
+   */
+  static async getAlertHistory(opts: {
+    limit?: number;
+    offset?: number;
+    type?: string;
+  } = {}): Promise<{ alerts: AlertHistoryRow[]; total: number }> {
+    const { supabaseAdmin } = await import('../config/database');
+    const limit = Math.min(opts.limit ?? 50, 200);
+    const offset = opts.offset ?? 0;
+
+    // Count total
+    let countQuery = supabaseAdmin
+      .from('user_notifications')
+      .select('id', { count: 'exact', head: true })
+      .in('type', ['usage_warning', 'usage_limit']);
+    if (opts.type) {
+      countQuery = countQuery.eq('type', opts.type);
+    }
+    const { count } = await countQuery;
+
+    // Fetch alerts
+    let query = supabaseAdmin
+      .from('user_notifications')
+      .select('id, user_id, type, title, message, metadata, is_read, created_at')
+      .in('type', ['usage_warning', 'usage_limit'])
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (opts.type) {
+      query = query.eq('type', opts.type);
+    }
+
+    const { data: alerts, error } = await query;
+    if (error) {
+      logger.error('getAlertHistory failed', { error: error.message });
+      throw error;
+    }
+
+    if (!alerts?.length) return { alerts: [], total: 0 };
+
+    // Fetch user profiles for all user_ids in the result
+    const userIds = [...new Set(alerts.map((a: { user_id: string }) => a.user_id))];
+    const { data: profiles } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email, full_name')
+      .in('id', userIds);
+
+    const profileMap = new Map(
+      (profiles ?? []).map((p: { id: string; email: string; full_name: string | null }) => [p.id, p])
+    );
+
+    const enriched: AlertHistoryRow[] = alerts.map((a: {
+      id: string;
+      user_id: string;
+      type: string;
+      title: string;
+      message: string;
+      metadata: Record<string, unknown>;
+      is_read: boolean;
+      created_at: string;
+    }) => {
+      const profile = profileMap.get(a.user_id);
+      return {
+        id: a.id,
+        userId: a.user_id,
+        email: profile?.email ?? 'unknown',
+        fullName: profile?.full_name ?? null,
+        type: a.type,
+        title: a.title,
+        message: a.message,
+        metric: (a.metadata?.metric as string) ?? null,
+        threshold: (a.metadata?.threshold as number) ?? null,
+        percentage: (a.metadata?.percentage as number) ?? null,
+        tier: (a.metadata?.tier as string) ?? null,
+        isRead: a.is_read,
+        createdAt: a.created_at,
+      };
+    });
+
+    return { alerts: enriched, total: count ?? 0 };
   }
 }
 

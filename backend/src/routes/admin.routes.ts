@@ -915,6 +915,27 @@ router.put(
 // ── Payment Analytics ──────────────────────────────────────────
 
 /**
+ * GET /api/admin/settings/usage-alert-history
+ * List users who have been sent usage alerts, newest first.
+ * Query: ?limit=50&offset=0&type=usage_warning|usage_limit
+ */
+router.get(
+  '/settings/usage-alert-history',
+  authenticate,
+  requireSuperAdmin,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { UsageAlertsService } = await import('../services/usage-alerts.service');
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 50, 1), 200);
+    const offset = Math.max(parseInt(req.query.offset as string, 10) || 0, 0);
+    const type = req.query.type as string | undefined;
+
+    const result = await UsageAlertsService.getAlertHistory({ limit, offset, type });
+    res.json({ success: true, data: result });
+  })
+);
+
+/**
  * GET /api/admin/payment-analytics
  * Full payment analytics dashboard: MRR, churn, ARPU, revenue by tier,
  * conversion funnel, failed payment trends, revenue trend.

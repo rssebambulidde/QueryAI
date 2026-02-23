@@ -2275,6 +2275,14 @@ export const adminApi = {
     return response.data;
   },
 
+  /** Get usage alert history — users who received alerts (superadmin). */
+  getUsageAlertHistory: async (
+    params?: { limit?: number; offset?: number; type?: string },
+  ): Promise<ApiResponse<{ alerts: AlertHistoryRow[]; total: number }>> => {
+    const response = await apiClient.get('/api/admin/settings/usage-alert-history', { params });
+    return response.data;
+  },
+
 };
 
 // ── Usage Alert Threshold types ──────────────────────────────────────────────
@@ -2283,6 +2291,22 @@ export interface UsageAlertThresholdConfig {
   thresholds: number[];
   enabled: boolean;
   metrics: ('queries' | 'tavilySearches' | 'collections')[];
+}
+
+export interface AlertHistoryRow {
+  id: string;
+  userId: string;
+  email: string;
+  fullName: string | null;
+  type: string;
+  title: string;
+  message: string;
+  metric: string | null;
+  threshold: number | null;
+  percentage: number | null;
+  tier: string | null;
+  isRead: boolean;
+  createdAt: string;
 }
 
 // ── Notification types ───────────────────────────────────────────────────────
