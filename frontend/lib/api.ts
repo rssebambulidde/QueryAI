@@ -698,6 +698,126 @@ export const aiApi = {
     }
   },
 
+  /**
+   * Anonymous streaming — same SSE protocol as askStream but hits the
+   * unauthenticated `/api/ai/ask/anonymous` endpoint. No conversation
+   * persistence. Used by the anonymous chat page.
+   */
+  askAnonymousStream: async function* (
+    request: QuestionRequest,
+    options?: {
+      signal?: AbortSignal;
+      onError?: (error: Error) => void;
+    }
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[] }, void, unknown> {
+    try {
+      const response = await fetch(`${API_URL}/api/ai/ask/anonymous`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Include token if available (optionalAuthenticate)
+          ...(typeof window !== 'undefined' && localStorage.getItem('accessToken')
+            ? { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+            : {}),
+        },
+        body: JSON.stringify(request),
+        signal: options?.signal,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        let parsedError: any = null;
+        try { parsedError = JSON.parse(errorBody); } catch { /* ignore */ }
+        const err: any = new Error(
+          parsedError?.error?.message || `HTTP error! status: ${response.status}`
+        );
+        err.response = { status: response.status, data: parsedError };
+        throw err;
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is null');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentEvent = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+
+            if (line.startsWith('event: ')) {
+              currentEvent = line.slice(7).trim();
+              continue;
+            }
+
+            if (line.startsWith('data: ')) {
+              const payload = line.slice(6);
+              switch (currentEvent) {
+                case 'chunk':
+                  yield payload;
+                  break;
+                case 'sources':
+                  try { yield { sources: JSON.parse(payload) as Source[] }; } catch { /* skip */ }
+                  break;
+                case 'followUpQuestions':
+                  try {
+                    const fup = JSON.parse(payload);
+                    yield { followUpQuestions: fup.questions, refusal: fup.refusal };
+                  } catch { /* skip */ }
+                  break;
+                case 'qualityScore':
+                  try {
+                    const qs = JSON.parse(payload);
+                    yield { qualityScore: qs.score };
+                  } catch { /* skip */ }
+                  break;
+                case 'done':
+                  return;
+                case 'error':
+                  try {
+                    const err = JSON.parse(payload);
+                    throw new Error(err.message || 'Stream error');
+                  } catch (e) {
+                    if (e instanceof Error && e.message !== 'Stream error') throw e;
+                  }
+                  break;
+                default:
+                  // Legacy fallback
+                  try {
+                    const data = JSON.parse(payload);
+                    if (data.sources) { yield { sources: data.sources }; }
+                    if (data.chunk) { yield data.chunk; }
+                    if (data.followUpQuestions) { yield { followUpQuestions: data.followUpQuestions }; }
+                    if (data.done) { return; }
+                    if (data.error) { throw new Error(data.error.message || 'Stream error'); }
+                  } catch { /* skip */ }
+                  break;
+              }
+              currentEvent = '';
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error: any) {
+      if (options?.signal?.aborted || error.name === 'AbortError') return;
+      if (options?.onError) options.onError(error);
+      throw error;
+    }
+  },
+
   summarize: async (originalResponse: string, keyword: string, sources?: Source[]): Promise<ApiResponse<{ summary: string }>> => {
     const response = await apiClient.post('/api/ai/summarize', { originalResponse, keyword, sources });
     return response.data;

@@ -1,0 +1,124 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { AnonymousChatContainer } from '@/components/chat/anonymous-chat-container';
+import { AnonymousSidebar } from '@/components/sidebar/anonymous-sidebar';
+import { useMobile } from '@/lib/hooks/use-mobile';
+import { Menu, X } from 'lucide-react';
+
+const MAX_ANONYMOUS_QUERIES = 5;
+const SESSION_QUERY_KEY = 'queryai_anon_queries';
+
+function getSessionQueryCount(): number {
+  if (typeof window === 'undefined') return 0;
+  return parseInt(sessionStorage.getItem(SESSION_QUERY_KEY) || '0', 10);
+}
+
+export default function AnonymousChatPage() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
+  const { isMobile } = useMobile();
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [chatKey, setChatKey] = useState(0); // key to reset chat container
+  const [queryCount, setQueryCount] = useState(0);
+
+  // Check auth on mount
+  useEffect(() => {
+    checkAuth().catch(() => {});
+  }, [checkAuth]);
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace('/dashboard');
+    }
+  }, [isAuthenticated, isLoading, router]);
+
+  // Sync query count from sessionStorage
+  useEffect(() => {
+    setQueryCount(getSessionQueryCount());
+    const interval = setInterval(() => {
+      setQueryCount(getSessionQueryCount());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle OAuth redirect tokens in hash
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const { hash } = window.location;
+    if (hash && hash.includes('access_token')) {
+      window.location.replace(`/auth/callback${hash}`);
+    }
+  }, []);
+
+  const handleNewChat = () => {
+    setChatKey((k) => k + 1); // Reset the chat container
+    setIsMobileSidebarOpen(false);
+  };
+
+  // Show loading spinner while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FAF8F5]">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-900" />
+          <p className="mt-4 text-sm text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render for authenticated users (they'll be redirected)
+  if (isAuthenticated) return null;
+
+  return (
+    <div className="h-screen flex flex-col bg-[#FAF8F5]">
+      {/* Mobile hamburger */}
+      {isMobile && (
+        <button
+          onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+          className="fixed top-4 left-4 z-50 bg-white shadow-lg rounded-lg p-2 border border-gray-200"
+          aria-label="Toggle menu"
+        >
+          {isMobileSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
+      )}
+
+      <main className="flex-1 flex overflow-hidden">
+        {/* Mobile sidebar overlay */}
+        {isMobile && isMobileSidebarOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+              onClick={() => setIsMobileSidebarOpen(false)}
+            />
+            <div className="fixed inset-y-0 left-0 z-50 w-[280px]">
+              <AnonymousSidebar
+                onNewChat={handleNewChat}
+                queryCount={queryCount}
+                maxQueries={MAX_ANONYMOUS_QUERIES}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Desktop sidebar */}
+        {!isMobile && (
+          <AnonymousSidebar
+            onNewChat={handleNewChat}
+            queryCount={queryCount}
+            maxQueries={MAX_ANONYMOUS_QUERIES}
+          />
+        )}
+
+        {/* Main chat area */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-white">
+          <AnonymousChatContainer key={chatKey} onNewChat={handleNewChat} />
+        </div>
+      </main>
+    </div>
+  );
+}

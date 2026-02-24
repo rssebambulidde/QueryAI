@@ -50,9 +50,9 @@ export function LandingHeader() {
               Sign in
             </Button>
           </Link>
-          <Link href="/signup">
+          <Link href="/chat">
             <Button size="sm" className="min-h-[44px] sm:min-h-9 min-w-[100px]">
-              Get started
+              Try it free
             </Button>
           </Link>
         </nav>

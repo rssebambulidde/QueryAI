@@ -18,21 +18,19 @@ export function LandingHero() {
           Ask questions. Get answers backed by your documents and the web, with citations.
         </p>
         <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link href="/signup">
+          <Link href="/chat">
             <Button size="lg" className="w-full sm:w-auto min-w-[200px] min-h-[48px] text-base">
-              Get started free
+              Try it free — no sign-up
             </Button>
           </Link>
-          <button
-            type="button"
-            onClick={scrollToHow}
-            className="text-gray-600 hover:text-gray-900 font-medium text-base underline underline-offset-2 touch-manipulation min-h-[48px] sm:min-h-0"
-          >
-            See how it works
-          </button>
+          <Link href="/signup">
+            <Button variant="outline" size="lg" className="w-full sm:w-auto min-w-[200px] min-h-[48px] text-base">
+              Create an account
+            </Button>
+          </Link>
         </div>
         <p className="mt-4 text-sm text-gray-500">
-          Free tier · No credit card required
+          Try instantly · No sign-up required
         </p>
       </div>
     </section>

@@ -122,3 +122,27 @@ export const webhookLimiter = rateLimit({
     });
   },
 });
+
+// Rate limiter for anonymous (unauthenticated) AI query endpoint
+// Stricter IP-based limits to prevent abuse while allowing product trial
+export const anonymousAiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 queries per IP per hour
+  message: 'Anonymous query limit reached. Sign up for free to continue.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: {
+    trustProxy: true,
+  },
+  handler: (req: Request, res: Response) => {
+    logger.warn(`Anonymous AI rate limit exceeded for IP: ${req.ip}`);
+    const error = new RateLimitError('You\'ve reached the anonymous query limit. Sign up for free to keep asking questions.');
+    res.status(error.statusCode).json({
+      success: false,
+      error: {
+        message: error.message,
+        code: 'ANONYMOUS_LIMIT_REACHED',
+      },
+    });
+  },
+});

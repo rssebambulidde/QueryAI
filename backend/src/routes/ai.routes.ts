@@ -3,8 +3,8 @@ import { AIService } from '../services/ai.service';
 import type { QuestionRequest } from '../services/ai.service';
 import { RequestQueueService, QueuePriority } from '../services/request-queue.service';
 import { asyncHandler } from '../middleware/errorHandler';
-import { authenticate } from '../middleware/auth.middleware';
-import { apiLimiter } from '../middleware/rateLimiter';
+import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
+import { apiLimiter, anonymousAiLimiter } from '../middleware/rateLimiter';
 import { enforceQueryLimit, enforceResearchMode } from '../middleware/subscription.middleware';
 import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
 import { validateRequest } from '../middleware/validate';
@@ -133,6 +133,150 @@ router.post(
       message: 'Question answered successfully',
       data: result,
     });
+  })
+);
+
+/**
+ * POST /api/ai/ask/anonymous
+ * Answer a question using AI (streaming) — no authentication required.
+ * Uses IP-based rate limiting. Conversations are NOT saved.
+ * Designed for the anonymous "try before sign-up" experience.
+ */
+router.post(
+  '/ask/anonymous',
+  validateRequest(QuestionRequestSchema),
+  optionalAuthenticate,
+  anonymousAiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body;
+
+    // Anonymous users get a deterministic pseudo-ID for logging (not saved to DB)
+    const anonId = req.user?.id || `anon-${req.ip || 'unknown'}`;
+
+    const request: QuestionRequest = {
+      question: body.question.trim(),
+      context: body.context?.trim(),
+      conversationHistory: body.conversationHistory?.length ? body.conversationHistory : undefined,
+      enableSearch: body.enableSearch !== false,
+      topic: body.topic?.trim(),
+      maxSearchResults: Math.min(body.maxSearchResults ?? 3, 3), // Limit web results for anonymous
+      enableDocumentSearch: false,
+      enableWebSearch: body.enableWebSearch !== false,
+      maxDocumentChunks: 0,
+      mode: body.mode || 'research',
+    };
+
+    logger.info('Anonymous AI streaming request', {
+      anonId,
+      questionLength: request.question.length,
+      mode: request.mode,
+      ip: req.ip,
+    });
+
+    // Set headers for Server-Sent Events (SSE)
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.flushHeaders();
+
+    const abortController = new AbortController();
+
+    req.on('close', () => {
+      abortController.abort();
+      logger.info('Anonymous client disconnected', { anonId });
+      if (!res.writableEnded) res.end();
+    });
+
+    try {
+      // ── RAG retrieval (research mode only) ─────────────────────────
+      let sources: any[] | undefined = undefined;
+
+      if (request.mode !== 'chat') {
+        try {
+          const { RAGService } = await import('../services/rag.service');
+          const ragOptions: any = {
+            userId: undefined, // No user for anonymous
+            enableDocumentSearch: false,
+            enableWebSearch: request.enableWebSearch !== false,
+            maxDocumentChunks: 0,
+            maxWebResults: request.maxSearchResults ?? 3,
+            topic: request.topic,
+            timeRange: request.timeRange,
+            startDate: request.startDate,
+            endDate: request.endDate,
+            country: request.country,
+          };
+
+          if (request.enableSearch === false) {
+            ragOptions.enableWebSearch = false;
+          }
+
+          const ragContext = await RAGService.retrieveContext(request.question, ragOptions);
+          sources = RAGService.extractSources(ragContext);
+        } catch (ragError: any) {
+          logger.warn('Failed to retrieve RAG context for anonymous streaming', {
+            error: ragError.message,
+          });
+        }
+      }
+
+      // Send sources early via SSE
+      if (sources && sources.length > 0) {
+        res.write(StreamingService.formatSSEMessage('sources', sources));
+      }
+
+      // Stream the response — use a generic userId for the pipeline
+      // The pipeline will generate an answer but nothing is persisted
+      const stream = AIService.answerQuestionStream(request, anonId, { signal: abortController.signal });
+      let fullAnswer = '';
+      let structuredMeta: { followUpQuestions?: string[]; citedSources?: any[] } | null = null;
+
+      for await (const chunk of stream) {
+        if (typeof chunk === 'string' && chunk.startsWith('{"__structured":true')) {
+          try {
+            structuredMeta = JSON.parse(chunk);
+          } catch {
+            fullAnswer += chunk;
+            res.write(StreamingService.formatSSEMessage('chunk', chunk));
+          }
+        } else {
+          fullAnswer += chunk;
+          res.write(StreamingService.formatSSEMessage('chunk', chunk));
+        }
+      }
+
+      // Emit follow-up questions if available (no DB persistence)
+      if (structuredMeta?.followUpQuestions && structuredMeta.followUpQuestions.length > 0) {
+        res.write(StreamingService.formatSSEMessage('followUpQuestions', { questions: structuredMeta.followUpQuestions }));
+      }
+
+      // No conversation/message saving for anonymous users
+
+      // Send completion
+      if (!abortController.signal.aborted && !res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('done', {}));
+        res.end();
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError' || error.code === 'ABORT_ERR' || abortController.signal.aborted) {
+        logger.info('Anonymous stream cancelled', { anonId });
+        if (!res.writableEnded) res.end();
+        return;
+      }
+
+      logger.error('Error in anonymous streaming endpoint:', error);
+
+      if (!res.writableEnded) {
+        res.write(StreamingService.formatSSEMessage('error', {
+          message: error.message || 'Failed to generate response',
+          code: error.code || 'STREAM_ERROR',
+        }));
+        res.end();
+      }
+    }
   })
 );
 
