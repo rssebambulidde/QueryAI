@@ -1168,6 +1168,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       }
 
       // Call LLM provider with retry logic and circuit breaker
+      // Chat mode: plain text response; Research mode: structured JSON output
+      const isChatMode = request.mode === 'chat';
+      const useJson = !isChatMode;
       try {
         const retryResult = await RetryService.execute(
           async () => {
@@ -1176,7 +1179,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
               messages: context.messages as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
               temperature: context.temperature,
               maxTokens: context.maxTokens,
-              responseFormat: 'json',
+              responseFormat: useJson ? 'json' : 'text',
               signal: options?.signal,
             });
           },
@@ -1232,9 +1235,68 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         throw openaiError;
       }
 
-      const fullResponse = completion.content || '{}';
+      const fullResponse = completion.content || (isChatMode ? '' : '{}');
       
-      // ── Parse structured JSON response ──────────────────────────────
+      // ── Chat mode: use raw text ─────────────────────────────────────
+      if (isChatMode) {
+        // Chat mode returns plain text — skip JSON parsing, citations, and quality scoring
+        let answer = fullResponse;
+        let followUpQuestions: string[] | undefined;
+
+        // Try to extract inline follow-up questions from the text
+        const followUpResult = await ResponseProcessorService.processFollowUpQuestions(
+          fullResponse,
+          request.question,
+          context.topicName
+        );
+        answer = followUpResult.answer;
+        followUpQuestions = followUpResult.questions.length > 0 ? followUpResult.questions : undefined;
+
+        // Save message pair if conversationId is provided
+        if (request.conversationId && userId && !options?.skipSave) {
+          try {
+            const { ConversationService } = await import('./conversation.service');
+            const { MessageService } = await import('./message.service');
+
+            let conversationId = request.conversationId;
+            let conversation = await ConversationService.getConversation(conversationId, userId);
+
+            if (!conversation) {
+              const title = ConversationService.generateTitleFromMessage(request.question);
+              conversation = await ConversationService.createConversation({
+                userId,
+                title,
+                mode: 'chat',
+              });
+              conversationId = conversation.id;
+            }
+
+            await MessageService.saveMessagePair(
+              conversationId,
+              request.question,
+              answer,
+              undefined,
+              { model: context.selectedModel, isResend: !!request.resendUserMessageId },
+            );
+          } catch (saveError: any) {
+            logger.warn('Failed to save chat messages (non-stream)', { error: saveError.message });
+          }
+        }
+
+        return {
+          answer,
+          model: context.selectedModel,
+          sources: [],
+          usage: completion.usage ? {
+            promptTokens: completion.usage.promptTokens,
+            completionTokens: completion.usage.completionTokens,
+            totalTokens: completion.usage.totalTokens,
+          } : { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          followUpQuestions,
+        };
+      }
+
+      // ── Research mode: Parse structured JSON response ──────────────────────────────
       // Non-OpenAI providers (especially Anthropic) may wrap JSON in
       // markdown fences or add preamble — sanitize before parsing.
       let structured: AIStructuredResponse | null = null;
