@@ -306,7 +306,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               'w-10 h-10 flex items-center justify-center rounded-lg transition-colors',
               activeTab === 'collections' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
             )}
-            title="Library"
+            title="Collections"
           >
             <Folder className="w-5 h-5" />
           </button>
@@ -419,7 +419,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             )}
           >
             <Folder className="w-[18px] h-[18px]" />
-            Library
+            Collections
           </button>
           <button
             onClick={() => onTabChange('sources')}
