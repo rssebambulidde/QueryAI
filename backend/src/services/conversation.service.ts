@@ -45,7 +45,6 @@ export class ConversationService {
         .insert({
           user_id: input.userId,
           title: input.title || 'New Conversation',
-          topic_id: input.topicId || null,
           mode: input.mode || 'research',
         })
         .select()
@@ -146,7 +145,6 @@ export class ConversationService {
           return (rpcData as any[]).map((row) => ({
             id: row.id,
             user_id: row.user_id,
-            topic_id: row.topic_id ?? undefined,
             title: row.title ?? undefined,
             mode: row.mode ?? 'research',
             metadata: row.metadata ?? undefined,
@@ -278,10 +276,6 @@ export class ConversationService {
       
       if (updates.title !== undefined) {
         updateData.title = updates.title;
-      }
-      
-      if (updates.topicId !== undefined) {
-        updateData.topic_id = updates.topicId;
       }
       
       if (updates.metadata !== undefined) {
