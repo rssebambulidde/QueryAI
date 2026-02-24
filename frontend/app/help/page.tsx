@@ -5,7 +5,7 @@ import { Logo } from '@/components/logo';
 
 export const metadata: Metadata = {
   title: 'User Guide | QueryAI',
-  description: 'How to use QueryAI: for students, researchers, professionals, and more. Chat, documents, topics, citations, and settings.',
+  description: 'How to use QueryAI: for students, researchers, professionals, and more. Chat, documents, collections, citations, and settings.',
 };
 
 const sections = [
@@ -14,7 +14,7 @@ const sections = [
   { id: 'chat-research', title: 'Chat & research' },
   { id: 'conversations', title: 'Conversations' },
   { id: 'documents', title: 'Documents' },
-  { id: 'topics', title: 'Topics' },
+  { id: 'collections', title: 'Collections' },
   { id: 'settings', title: 'Settings' },
   { id: 'account', title: 'Account & privacy' },
   { id: 'advanced-rag', title: 'Advanced RAG parameters' },
@@ -73,7 +73,7 @@ export default function HelpPage() {
               After you sign in, you land on the <strong>dashboard</strong>. The dashboard has two main tabs in the sidebar: <strong>Query Assistant</strong> (chat) and <strong>Collections</strong>. Under <strong>Query Assistant</strong>, type your question in the box at the bottom and press Enter or click Send. QueryAI searches the web and your uploaded documents (if any) and returns an answer with citations.
             </p>
             <p>
-              Use the <strong>sidebar</strong> to switch between the Query Assistant and Collections tabs, open or search conversations, start a new chat, or filter by topic. Your <strong>account menu</strong> (avatar, top right) gives access to Profile, Settings, Subscription, and Sign out.
+              Use the <strong>sidebar</strong> to switch between the Query Assistant and Collections tabs, open or search conversations, or start a new chat. Your <strong>account menu</strong> (avatar, top right) gives access to Profile, Settings, Subscription, and Sign out.
             </p>
           </section>
 
@@ -88,19 +88,19 @@ export default function HelpPage() {
               <li>
                 <strong className="text-gray-900">University students</strong>
                 <span className="block text-gray-600 mt-1">
-                  Use QueryAI for essays, assignments, and papers: ask questions in plain language, get answers with citations you can cite. Upload lecture notes, readings, or PDFs and turn on <strong>Docs</strong> so answers draw from your course materials as well as the web. Create <strong>topics</strong> per course or assignment (e.g. &quot;Economics 101&quot;, &quot;Research methods&quot;) and use research mode to keep conversations focused. Export conversations to PDF or text for your references.
+                  Use QueryAI for essays, assignments, and papers: ask questions in plain language, get answers with citations you can cite. Upload lecture notes, readings, or PDFs and turn on <strong>Docs</strong> so answers draw from your course materials as well as the web. Create <strong>collections</strong> per course or assignment (e.g. &quot;Economics 101&quot;, &quot;Research methods&quot;) to group related conversations. Export conversations to PDF or text for your references.
                 </span>
               </li>
               <li>
                 <strong className="text-gray-900">Researchers &amp; academics</strong>
                 <span className="block text-gray-600 mt-1">
-                  Upload papers, reports, or datasets and combine them with web search for literature and context. Use <strong>topics</strong> to scope each conversation to a project or subfield. Rely on citations to verify and trace claims. Use <strong>Advanced RAG</strong> in Settings to tune how many document chunks and web results are used. Organize work with <strong>Collections</strong> and pin important conversations.
+                  Upload papers, reports, or datasets and combine them with web search for literature and context. Use <strong>collections</strong> to organize conversations by project or subfield. Rely on citations to verify and trace claims. Organize work with collections and pin important conversations.
                 </span>
               </li>
               <li>
                 <strong className="text-gray-900">Professionals &amp; business users</strong>
                 <span className="block text-gray-600 mt-1">
-                  Fact-check claims, prepare briefs, or summarize internal docs. Upload policy docs, contracts, or reports and ask questions that mix your documents with the web. Use <strong>Search preferences</strong> and <strong>Citation preferences</strong> in Settings to match your workflow. Enterprise users can use <strong>Team collaboration</strong> for shared research and documents.
+                  Fact-check claims, prepare briefs, or summarize internal docs. Upload policy docs, contracts, or reports and ask questions that mix your documents with the web. Use <strong>Citation preferences</strong> in Settings to match your workflow. Enterprise users can use <strong>Team collaboration</strong> for shared research and documents.
                 </span>
               </li>
               <li>
@@ -121,7 +121,7 @@ export default function HelpPage() {
               <li><strong>Web vs Docs</strong> – Use the source toggles (Web / Docs) above the input to include or exclude web search and your uploaded documents. At least one source is always on.</li>
               <li><strong>Citations</strong> – Click a citation number in the answer to open the source panel and see the exact snippet or link. Use the citation settings (gear icon) to change how citations appear.</li>
               <li><strong>Follow-up questions</strong> – After an answer, suggested follow-ups may appear; click one to ask it in the same conversation.</li>
-              <li><strong>Research mode / topics</strong> – You can focus a conversation on a specific topic. When a topic is set, the assistant keeps answers scoped to that topic.</li>
+              <li><strong>Research mode</strong> – Focus a conversation on a specific subject. The assistant keeps answers scoped to that subject.</li>
             </ul>
           </section>
 
@@ -150,27 +150,23 @@ export default function HelpPage() {
               5. Documents
             </h2>
             <p>
-              Upload documents so QueryAI can search them and cite them in answers. Go to{' '}
-              <Link href="/dashboard/settings/documents" className="text-orange-600 hover:underline">Settings → Documents</Link> to:
+              Upload documents so QueryAI can search them and cite them in answers. Use the <strong>Docs</strong> toggle in the chat to include your uploaded documents in search results.
             </p>
             <ul className="list-disc pl-6 space-y-1">
               <li><strong>Upload</strong> – Add PDFs, Word docs, and other supported files. They are processed (extracted and indexed) before they appear in search.</li>
               <li><strong>View & metadata</strong> – Open a document to view it and edit its filename or metadata.</li>
               <li><strong>Delete</strong> – Remove a document from your library.</li>
-              <li><strong>Clear processing</strong> – Clear extracted text and chunks for a document (e.g. to re-process). The file stays in storage.</li>
-              <li><strong>Topics</strong> – Tag documents with topics to better organize and filter them.</li>
             </ul>
           </section>
 
-          <section id="topics" className="scroll-mt-8">
+          <section id="collections" className="scroll-mt-8">
             <h2 className="text-xl font-semibold text-gray-900 border-b border-gray-200 pb-2">
-              6. Topics
+              6. Collections
             </h2>
             <p>
-              <strong>Topics</strong> help you organize research (e.g. &quot;Legal&quot;, &quot;Market data&quot;). Manage them under{' '}
-              <Link href="/dashboard/settings/topics" className="text-orange-600 hover:underline">Settings → Topics</Link>:
-              create, edit, or delete topics. You can assign a topic to a conversation or to documents so that
-              answers and search stay focused when you use topic filters.
+              <strong>Collections</strong> help you organize research (e.g. &quot;Legal&quot;, &quot;Market data&quot;). Open the{' '}
+              <strong>Collections</strong> tab in the sidebar to create, rename, or delete collections.
+              Save any conversation to a collection from the chat area to keep related research grouped together.
             </p>
           </section>
 
@@ -183,12 +179,8 @@ export default function HelpPage() {
             </p>
             <ul className="list-disc pl-6 space-y-1">
               <li><strong>Profile</strong> – Name, email, and account details.</li>
-              <li><strong>Search preferences</strong> – Default search and web/document options.</li>
               <li><strong>Citation preferences</strong> – How citations look (e.g. numbers, style).</li>
-              <li><strong>Advanced RAG</strong> – Fine-tune document retrieval (chunks, scoring).</li>
               <li><strong>Subscription</strong> – Plan and billing.</li>
-              <li><strong>Documents</strong> – Upload and manage documents.</li>
-              <li><strong>Topics</strong> – Create and manage topics.</li>
               <li><strong>Team collaboration</strong> – For Enterprise plans: manage team members and collaboration.</li>
             </ul>
           </section>
@@ -209,7 +201,7 @@ export default function HelpPage() {
               9. Advanced RAG parameters
             </h2>
             <p>
-              In <strong>Settings → Advanced RAG</strong> you can tune how the RAG (retrieval-augmented generation) system works:
+              QueryAI uses RAG (retrieval-augmented generation) to combine your documents with web search. Here&apos;s how the key parameters work:
             </p>
             <ul className="list-disc pl-6 space-y-2 mt-2">
               <li><strong>Enable Reranking</strong> – Re-ranks retrieved chunks with a cross-encoder so the most relevant passages are sent to the AI. Improves answer quality when you have many similar chunks.</li>

@@ -166,7 +166,6 @@ export class CollectionService {
           conversations (
             id,
             user_id,
-            topic_id,
             title,
             metadata,
             created_at,
@@ -401,7 +400,6 @@ export class CollectionService {
           conversations (
             id,
             user_id,
-            topic_id,
             title,
             metadata,
             created_at,

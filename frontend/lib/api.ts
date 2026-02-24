@@ -312,7 +312,6 @@ export interface Topic {
 export interface Conversation {
   id: string;
   user_id: string;
-  topic_id?: string;
   title?: string;
   mode?: 'research' | 'chat';
   metadata?: {

@@ -56,7 +56,7 @@ export default function CookiePolicyPage() {
             <ul className="list-disc pl-6 space-y-1 mt-2">
               <li><strong>Session / authentication:</strong> Tokens that keep you signed in (e.g. access and refresh tokens).</li>
               <li><strong>Remember me:</strong> If you choose &quot;Remember me&quot; when signing in, we use local storage to keep you signed in for a longer period.</li>
-              <li><strong>Preferences:</strong> Settings such as RAG options, default topic, private mode, and pinned conversations are stored in local storage so we can remember your choices.</li>
+              <li><strong>Preferences:</strong> Settings such as RAG options, private mode, and pinned conversations are stored in local storage so we can remember your choices.</li>
             </ul>
             <p className="mt-2">
               You can clear local storage (and sign out) via your browser settings or by signing out in the app.

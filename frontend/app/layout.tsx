@@ -111,7 +111,7 @@ export default function RootLayout({
       "Real-time web search integration",
       "Document analysis (PDF, DOCX, images)",
       "Source-cited answers",
-      "Topic scoping",
+      "Research-focused scoping",
       "Conversation threads",
       "Collections organization"
     ]

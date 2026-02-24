@@ -87,7 +87,6 @@ export function exportConversationToJson(
       title: conversation.title,
       created_at: conversation.created_at,
       updated_at: conversation.updated_at,
-      topic_id: conversation.topic_id,
     },
     messages: messages.map((message) => ({
       id: message.id,
