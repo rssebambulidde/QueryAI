@@ -82,6 +82,8 @@ export default function SettingsLayout({
 
   const currentPage = visibleNav.find(item => item.href === pathname);
   const currentPageLabel = currentPage?.label || 'Settings';
+  const isSuperAdminPage = pathname === '/dashboard/settings/super-admin';
+  const contentMaxWidth = isSuperAdminPage ? 'max-w-6xl' : 'max-w-3xl';
 
   // Group navigation items
   const groups = ['account', 'research', 'admin'].map(groupKey => ({
@@ -168,7 +170,7 @@ export default function SettingsLayout({
         </header>
 
         <main className="flex-1 min-w-0 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-4 py-6 pb-[env(safe-area-inset-bottom)]">
+          <div className={cn(contentMaxWidth, 'mx-auto px-4 py-6 pb-[env(safe-area-inset-bottom)]')}>
             {children}
           </div>
         </main>
@@ -200,7 +202,7 @@ export default function SettingsLayout({
 
       {/* Content area */}
       <main className="flex-1 min-w-0 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-8 py-8">
+        <div className={cn(contentMaxWidth, 'mx-auto px-8 py-8')}>
           {children}
         </div>
       </main>

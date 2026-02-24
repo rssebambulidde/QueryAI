@@ -111,7 +111,7 @@ export default function SuperAdminPage() {
 
       {/* Tabs + Content */}
       <div className="flex gap-6">
-        <nav className="flex flex-col gap-1 min-w-[160px] flex-shrink-0 border-r border-gray-200 pr-4" aria-label="Tabs">
+        <nav className="flex flex-col gap-1 min-w-[140px] w-[140px] flex-shrink-0 border-r border-gray-200 pr-3" aria-label="Tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
