@@ -9,29 +9,12 @@ import { AnonymousSidebar } from '@/components/sidebar/anonymous-sidebar';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { Menu, X } from 'lucide-react';
 
-const ANON_HOURLY_LIMIT = 15;
-const ANON_RATE_KEY = 'queryai_anon_hourly';
-
-function getHourlyCount(): number {
-  if (typeof window === 'undefined') return 0;
-  try {
-    const raw = sessionStorage.getItem(ANON_RATE_KEY);
-    if (raw) {
-      const bucket = JSON.parse(raw);
-      const currentHour = Math.floor(Date.now() / 3_600_000);
-      if (bucket.hour === currentHour) return bucket.count;
-    }
-  } catch { /* ignore */ }
-  return 0;
-}
-
 export default function AnonymousChatPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
   const { isMobile } = useMobile();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0); // key to reset chat container
-  const [queryCount, setQueryCount] = useState(0);
   const [conversations, setConversations] = useState<AnonymousConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
 
@@ -46,15 +29,6 @@ export default function AnonymousChatPage() {
       router.replace('/dashboard');
     }
   }, [isAuthenticated, isLoading, router]);
-
-  // Sync hourly query count
-  useEffect(() => {
-    setQueryCount(getHourlyCount());
-    const interval = setInterval(() => {
-      setQueryCount(getHourlyCount());
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Handle OAuth redirect tokens in hash
   useEffect(() => {
@@ -128,8 +102,6 @@ export default function AnonymousChatPage() {
             <div className="fixed inset-y-0 left-0 z-50 w-[280px]">
               <AnonymousSidebar
                 onNewChat={handleNewChat}
-                queryCount={queryCount}
-                maxQueries={ANON_HOURLY_LIMIT}
                 conversations={conversations}
                 activeConversationId={activeConversationId}
                 onRenameConversation={handleRenameConversation}
@@ -143,8 +115,6 @@ export default function AnonymousChatPage() {
         {!isMobile && (
           <AnonymousSidebar
             onNewChat={handleNewChat}
-            queryCount={queryCount}
-            maxQueries={ANON_HOURLY_LIMIT}
             conversations={conversations}
             activeConversationId={activeConversationId}
             onRenameConversation={handleRenameConversation}

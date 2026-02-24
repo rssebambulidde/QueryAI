@@ -10,8 +10,6 @@ import type { AnonymousConversation } from '@/components/chat/anonymous-chat-con
 
 interface AnonymousSidebarProps {
   onNewChat: () => void;
-  queryCount: number;
-  maxQueries: number;
   /** Conversation stubs from current session */
   conversations?: AnonymousConversation[];
   /** Currently active conversation id */
@@ -31,8 +29,6 @@ interface AnonymousSidebarProps {
  */
 export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
   onNewChat,
-  queryCount,
-  maxQueries,
   conversations = [],
   activeConversationId,
   onSelectConversation,
@@ -198,21 +194,6 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
 
       {/* Spacer (only when no conversations to fill) */}
       {(isCollapsed || conversations.length === 0) && <div className="flex-1" />}
-
-      {/* Query counter (only when not collapsed) */}
-      {!isCollapsed && queryCount > 0 && (
-        <div className="px-4 mb-2">
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                style={{ width: `${Math.min((queryCount / maxQueries) * 100, 100)}%` }}
-              />
-            </div>
-            <span>{queryCount}/{maxQueries}</span>
-          </div>
-        </div>
-      )}
 
       {/* Not saved notice */}
       {!isCollapsed && (
