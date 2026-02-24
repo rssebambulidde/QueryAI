@@ -225,7 +225,9 @@ export class SubscriptionService {
       const subscriptionData = await this.getUserSubscriptionWithLimits(userId);
 
       if (!subscriptionData) {
-        return { allowed: false, used: 0, limit: 0, remaining: 0 };
+        // Fail-open: allow creation when subscription lookup fails
+        logger.warn('Subscription lookup returned null during collection limit check, allowing by default', { userId });
+        return { allowed: true, used: 0, limit: null, remaining: null };
       }
 
       const { limits } = subscriptionData;
@@ -242,8 +244,9 @@ export class SubscriptionService {
         .eq('user_id', userId);
 
       if (error) {
-        logger.error('Error counting user collections:', error);
-        return { allowed: false, used: 0, limit: limits.maxCollections, remaining: 0 };
+        // Fail-open: allow creation if we can't count existing collections
+        logger.error('Error counting user collections, allowing by default:', error);
+        return { allowed: true, used: 0, limit: limits.maxCollections, remaining: limits.maxCollections };
       }
 
       const used = count ?? 0;
@@ -256,8 +259,9 @@ export class SubscriptionService {
         remaining,
       };
     } catch (error) {
-      logger.error('Failed to check collection limit:', error);
-      return { allowed: false, used: 0, limit: 0, remaining: 0 };
+      // Fail-open: don't block collection creation on transient errors
+      logger.error('Failed to check collection limit, allowing by default:', error);
+      return { allowed: true, used: 0, limit: null, remaining: null };
     }
   }
 

@@ -68,6 +68,9 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
         toast.success('Collection created successfully');
         setFormData({ name: '', description: '', color: '#f97316' });
         await loadCollections();
+      } else {
+        // API returned but without success/data
+        toast.error(response.message || 'Failed to create collection. Please try again.');
       }
     } catch (error: any) {
       let errorMessage = error.response?.data?.error?.message || error.message || 'Failed to create collection';
@@ -331,13 +334,14 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
                   <Button
                     onClick={handleCreate}
                     disabled={isCreating || !formData.name.trim()}
+                    isLoading={isCreating}
                     className={cn(
                       "touch-manipulation min-h-[44px]",
                       isMobile ? "w-full" : "flex-1"
                     )}
                   >
                     <Plus className="w-4 h-4 mr-2" />
-                    Create Collection
+                    {isCreating ? 'Creating...' : 'Create Collection'}
                   </Button>
                 )}
               </div>
