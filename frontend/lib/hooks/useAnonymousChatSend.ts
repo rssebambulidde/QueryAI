@@ -4,6 +4,7 @@ import { useRef, useCallback } from 'react';
 import type { Message } from '@/components/chat/chat-message';
 import { aiApi, QuestionRequest, Source } from '@/lib/api';
 import type { StreamingState } from '@/components/chat/streaming-controls';
+import { parseFollowUpQuestions } from '@/components/chat/chat-types';
 
 // ─── Dependencies ─────────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ export function useAnonymousChatSend(deps: UseAnonymousChatSendDeps): UseAnonymo
   const pendingChunksRef = useRef<string[]>([]);
   const rafRef = useRef<number | null>(null);
   const assistantMsgRef = useRef<Message | null>(null);
+  const responseTimeStartRef = useRef<number | null>(null);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -111,6 +113,7 @@ export function useAnonymousChatSend(deps: UseAnonymousChatSendDeps): UseAnonymo
           }
         };
 
+        responseTimeStartRef.current = Date.now();
         setMessages((prev) => [...prev, assistantMessage]);
 
         // Build a minimal request — no conversation ID, no persistence
@@ -129,6 +132,8 @@ export function useAnonymousChatSend(deps: UseAnonymousChatSendDeps): UseAnonymo
         };
 
         let followUpQuestions: string[] | undefined;
+        let isRefusal = false;
+        let qualityScore: number | undefined;
         let streamSources: Source[] | undefined;
 
         const generator = aiApi.askAnonymousStream(request, {
@@ -136,46 +141,80 @@ export function useAnonymousChatSend(deps: UseAnonymousChatSendDeps): UseAnonymo
           onError: (err) => {
             console.error('Anonymous stream error:', err);
             setStreamingState('error');
+            setError(err.message || 'Streaming error occurred');
           },
         });
 
         for await (const chunk of generator) {
-          if (typeof chunk === 'string') {
-            pendingChunksRef.current.push(chunk);
-            scheduleFlush();
-          } else {
-            // Metadata object
-            if ('sources' in chunk && chunk.sources) {
-              streamSources = chunk.sources;
-              assistantMessage = { ...assistantMessage, sources: chunk.sources };
+          if (typeof chunk === 'object' && 'sources' in chunk) {
+            streamSources = (chunk as { sources?: Source[] }).sources;
+            if (streamSources) {
+              flushPendingChunks();
+              assistantMessage = { ...assistantMessage, sources: streamSources };
               assistantMsgRef.current = assistantMessage;
               setMessages((prev) => {
                 const u = [...prev];
                 u[u.length - 1] = assistantMessage;
                 return u;
               });
+              // Dispatch event so SourcesSidebar can react
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('sourcesUpdated'));
+              }
             }
-            if ('followUpQuestions' in chunk && chunk.followUpQuestions) {
-              followUpQuestions = chunk.followUpQuestions;
-            }
+            continue;
+          }
+          if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
+            followUpQuestions = chunk.followUpQuestions;
+            if ((chunk as { refusal?: boolean }).refusal) isRefusal = true;
+            continue;
+          }
+          if (typeof chunk === 'object' && 'qualityScore' in chunk) {
+            qualityScore = (chunk as { qualityScore?: number }).qualityScore;
+            continue;
+          }
+          if (typeof chunk === 'string') {
+            pendingChunksRef.current.push(chunk);
+            scheduleFlush();
           }
         }
 
         // Final flush
         flushPendingChunks();
 
-        // Finalize the assistant message
+        // Extract follow-ups from text if not received via structured chunk
+        if (!followUpQuestions) {
+          const parsed = parseFollowUpQuestions(assistantMessage.content);
+          if (parsed) {
+            assistantMessage.content = parsed.cleanedText;
+            followUpQuestions = parsed.questions;
+          }
+        }
+
+        // Calculate response time
+        const responseTime = responseTimeStartRef.current ? Date.now() - responseTimeStartRef.current : null;
+        responseTimeStartRef.current = null;
+
+        // Finalize the assistant message (matching authenticated format exactly)
         assistantMessage = {
           ...assistantMsgRef.current!,
           isStreaming: false,
           followUpQuestions,
+          isRefusal: isRefusal || undefined,
+          qualityScore,
           sources: streamSources || assistantMsgRef.current?.sources,
+          responseTime: responseTime || undefined,
         };
         setMessages((prev) => {
           const u = [...prev];
           u[u.length - 1] = assistantMessage;
           return u;
         });
+
+        // Dispatch sources update event if sources present
+        if ((streamSources || assistantMessage.sources) && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sourcesUpdated'));
+        }
 
         setStreamingState('completed');
 
