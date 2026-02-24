@@ -109,9 +109,9 @@ export default function SuperAdminPage() {
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex flex-wrap gap-x-1 gap-y-1 overflow-x-auto" aria-label="Tabs">
+      {/* Tabs + Content */}
+      <div className="flex gap-6">
+        <nav className="flex flex-col gap-1 min-w-[160px] flex-shrink-0 border-r border-gray-200 pr-4" aria-label="Tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -119,23 +119,23 @@ export default function SuperAdminPage() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'flex items-center gap-1.5 py-2.5 px-2 border-b-2 font-medium text-xs whitespace-nowrap',
+                  'flex items-center gap-2 py-2 px-3 rounded-lg font-medium text-sm whitespace-nowrap text-left transition-colors',
                   activeTab === tab.id
-                    ? 'border-orange-500 text-orange-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? 'bg-orange-50 text-orange-600'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                 )}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="w-4 h-4 flex-shrink-0" />
                 {tab.label}
               </button>
             );
           })}
         </nav>
-      </div>
 
-      {/* Tab Content */}
-      <div className="mt-6">
-        {renderTabContent()}
+        {/* Tab Content */}
+        <div className="flex-1 min-w-0">
+          {renderTabContent()}
+        </div>
       </div>
     </div>
   );
