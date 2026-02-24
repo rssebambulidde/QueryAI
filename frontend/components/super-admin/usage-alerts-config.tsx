@@ -274,7 +274,7 @@ export default function UsageAlertsConfig() {
                     style={{ left: `${t}%` }}
                     title={`${t}%`}
                   >
-                    <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] text-gray-600 font-medium whitespace-nowrap">
+                    <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-gray-600 font-medium whitespace-nowrap">
                       {t}%
                     </span>
                   </div>

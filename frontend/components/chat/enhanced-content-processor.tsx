@@ -105,7 +105,7 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
   // Unique citation numbers for footnotes
   const citationNumbers = useMemo(() => getCitationNumbers(citations), [citations]);
 
-  const wrapperClass = 'ai-response-content font-sans text-[15px] leading-[1.72] tracking-[0.01em] text-gray-800 antialiased max-w-none break-words overflow-wrap-anywhere';
+  const wrapperClass = 'ai-response-content font-sans text-base leading-[1.72] tracking-[0.01em] text-gray-800 antialiased max-w-none break-words overflow-wrap-anywhere';
 
   // ── Markdown components (with citation-aware <a> handler) ────────────
   const markdownComponents = useMemo(() => ({

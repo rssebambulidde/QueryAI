@@ -23,7 +23,7 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({ score, classNa
       <button
         type="button"
         className={cn(
-          'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-medium leading-tight transition-colors',
+          'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium leading-tight transition-colors',
           color,
         )}
         onMouseEnter={() => setShowTooltip(true)}
@@ -36,7 +36,7 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({ score, classNa
       {showTooltip && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-nowrap z-50">
           <div className="font-medium mb-0.5">Quality score: {Math.round(score * 100)}%</div>
-          <div className="text-gray-300 text-[10px]">Based on length, citations, structure, and formatting</div>
+          <div className="text-gray-300 text-xs">Based on length, citations, structure, and formatting</div>
           <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-gray-900" />
         </div>
       )}

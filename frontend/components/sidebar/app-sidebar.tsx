@@ -450,10 +450,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       {/* ── Change 1: Branded header with action buttons ── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-white text-[11px] font-bold">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-white text-xs font-bold">
             Q
           </div>
-          <span className="text-[15px] font-semibold text-gray-900 tracking-tight">QueryAI</span>
+          <span className="text-base font-semibold text-gray-900 tracking-tight">QueryAI</span>
         </div>
         <div className="flex items-center gap-0.5">
           <button
@@ -482,7 +482,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           <button
             onClick={() => onTabChange('chat')}
             className={cn(
-              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors',
+              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
               activeTab === 'chat'
                 ? 'bg-gray-100 text-gray-900'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -494,7 +494,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           <button
             onClick={() => onTabChange('collections')}
             className={cn(
-              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors',
+              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
               activeTab === 'collections'
                 ? 'bg-gray-100 text-gray-900'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -506,7 +506,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           {user?.role === 'super_admin' && (
             <button
               onClick={() => router.push('/dashboard/settings/super-admin')}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
             >
               <ShieldCheck className="w-[18px] h-[18px]" />
               Super Admin
@@ -526,7 +526,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
             {/* Section header with search toggle */}
             <div className="flex items-center justify-between px-4 py-1.5">
-              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 {totalCount > 0 ? `Conversations (${totalCount})` : 'Conversations'}
               </span>
               <button
@@ -615,7 +615,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   {pinnedConvs.length > 0 && (
                     <>
                       <div className="px-3 pt-1 pb-0.5">
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Pinned</span>
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pinned</span>
                       </div>
                       {pinnedConvs.map((conversation) => (
                         <ConversationItemComponent
@@ -644,7 +644,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   {dateGroups.map((group) => (
                     <React.Fragment key={group.label}>
                       <div className="px-3 pt-2 pb-0.5">
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{group.label}</span>
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{group.label}</span>
                       </div>
                       {group.conversations.map((conversation) => (
                         <ConversationItemComponent
@@ -676,7 +676,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           <div className="py-2">
             {/* Section header with search toggle */}
             <div className="flex items-center justify-between px-4 py-1.5">
-              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 {collections.length > 0 ? `Collections (${collections.length})` : 'Collections'}
               </span>
               <div className="flex items-center gap-0.5">
@@ -814,7 +814,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                       <button
                         onClick={() => handleCollectionClick(collection.id)}
                         className={cn(
-                          'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-colors text-left',
+                          'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left',
                           expandedCollectionId === collection.id
                             ? 'bg-gray-100 text-gray-900'
                             : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -826,7 +826,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                         )} />
                         <span className="truncate flex-1">{collection.name || 'Unnamed'}</span>
                         {collection.conversation_count !== undefined && collection.conversation_count > 0 && (
-                          <span className="text-[11px] text-gray-400">{collection.conversation_count}</span>
+                          <span className="text-xs text-gray-400">{collection.conversation_count}</span>
                         )}
                         {expandedCollectionId === collection.id ? (
                           <ChevronUp className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
@@ -864,12 +864,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         {hasHigherTier && (
           <button
             onClick={handleUpgrade}
-            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-medium text-gray-700 hover:bg-orange-50/80 transition-colors border-b border-gray-100 group bg-gradient-to-r from-orange-50/60 to-transparent"
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-orange-50/80 transition-colors border-b border-gray-100 group bg-gradient-to-r from-orange-50/60 to-transparent"
             style={{ borderLeft: '2px solid #fb923c' }}
           >
             <Sparkles className="w-4 h-4 text-orange-500 group-hover:text-orange-600" />
             <span className="flex-1 text-left">Upgrade</span>
-            <span className="text-[11px] text-gray-400 group-hover:text-orange-500 transition-colors">{getUpgradeText()}</span>
+            <span className="text-xs text-gray-400 group-hover:text-orange-500 transition-colors">{getUpgradeText()}</span>
           </button>
         )}
 
@@ -894,10 +894,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             </div>
           )}
           <div className="flex-1 min-w-0 text-left">
-            <p className="text-[13px] font-medium text-gray-900 truncate">
+            <p className="text-sm font-medium text-gray-900 truncate">
               {user?.full_name || user?.email || 'User'}
             </p>
-            <p className="text-[11px] text-gray-400 truncate">
+            <p className="text-xs text-gray-400 truncate">
               {getTierName(subscriptionTier)} Plan
             </p>
           </div>

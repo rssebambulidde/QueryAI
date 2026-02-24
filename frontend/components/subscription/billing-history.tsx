@@ -127,7 +127,7 @@ function FilterTabs({
           >
             {opt.label}
             {count > 0 && (
-              <span className="ml-1 text-[10px] opacity-70">({count})</span>
+              <span className="ml-1 text-xs opacity-70">({count})</span>
             )}
           </button>
         );

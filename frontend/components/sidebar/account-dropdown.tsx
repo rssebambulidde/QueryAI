@@ -150,14 +150,14 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold text-gray-900 truncate">
+              <p className="text-sm font-semibold text-gray-900 truncate">
                 {user?.full_name || 'User'}
               </p>
-              <p className="text-[11px] text-gray-500 truncate">
+              <p className="text-xs text-gray-500 truncate">
                 {user?.email}
               </p>
             </div>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-gray-100 text-gray-600 flex-shrink-0">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-600 flex-shrink-0">
               {getTierName(subscriptionTier)}
             </span>
           </div>
@@ -172,8 +172,8 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
                 privateMode ? 'text-orange-600' : 'text-gray-400'
               )} />
               <div>
-                <p className="text-[13px] font-medium text-gray-900">Private Mode</p>
-                <p className="text-[11px] text-gray-400">Hide search history</p>
+                <p className="text-sm font-medium text-gray-900">Private Mode</p>
+                <p className="text-xs text-gray-400">Hide search history</p>
               </div>
             </div>
             <button
@@ -202,7 +202,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
           {/* Settings */}
           <button
             onClick={() => navigate('/dashboard/settings')}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors text-left touch-manipulation"
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left touch-manipulation"
           >
             <Settings className="w-4 h-4 text-gray-400" />
             <span className="flex-1 font-medium">Settings</span>
@@ -213,12 +213,12 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
           {hasHigherTier && (
             <button
               onClick={() => navigate('/dashboard/settings/subscription')}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-700 hover:bg-gray-50 transition-colors text-left touch-manipulation"
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left touch-manipulation"
             >
               <Sparkles className="w-4 h-4 text-orange-500" />
               <div className="flex-1 min-w-0">
                 <span className="font-medium">Upgrade</span>
-                <p className="text-[11px] text-gray-400 truncate">{getUpgradeText()}</p>
+                <p className="text-xs text-gray-400 truncate">{getUpgradeText()}</p>
               </div>
               <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
             </button>
@@ -229,7 +229,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
         <div className="border-t border-gray-100">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] text-gray-500 hover:text-red-600 hover:bg-red-50/50 transition-colors text-left touch-manipulation"
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50/50 transition-colors text-left touch-manipulation"
           >
             <LogOut className="w-4 h-4" />
             <span className="font-medium">Sign Out</span>

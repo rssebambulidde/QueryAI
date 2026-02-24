@@ -18,7 +18,7 @@ export const getMarkdownComponents = (isUser: boolean) => ({
     <h3 className="text-base font-semibold mt-3 mb-1.5 first:mt-0 text-gray-900 text-left" {...props} />
   ),
   h4: ({ node, ...props }: any) => (
-    <h4 className="text-[15px] font-semibold mt-2.5 mb-1 first:mt-0 text-gray-900 text-left" {...props} />
+    <h4 className="text-base font-semibold mt-2.5 mb-1 first:mt-0 text-gray-900 text-left" {...props} />
   ),
   ul: ({ node, ...props }: any) => (
     <ul className="list-disc list-outside ml-4 my-3 space-y-1.5 text-left" {...props} />

@@ -120,7 +120,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
               if (e.key === 'Enter') handleEdit();
               if (e.key === 'Escape') handleCancelEdit();
             }}
-            className="h-7 text-[13px] flex-1"
+            className="h-7 text-sm flex-1"
             autoFocus
             onClick={(e) => e.stopPropagation()}
           />
@@ -149,7 +149,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
             <span title="Express" className="flex items-center gap-0.5 flex-shrink-0">
               <MessageCircle className="w-3 h-3 text-purple-400" />
               <span className={cn(
-                'text-[10px] font-medium text-purple-400 transition-all overflow-hidden whitespace-nowrap',
+                'text-xs font-medium text-purple-400 transition-all overflow-hidden whitespace-nowrap',
                 isHovered ? 'max-w-[50px] opacity-100' : 'max-w-0 opacity-0'
               )}>Express</span>
             </span>
@@ -157,20 +157,20 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
             <span title="Deep Research" className="flex items-center gap-0.5 flex-shrink-0">
               <Search className="w-3 h-3 text-blue-400" />
               <span className={cn(
-                'text-[10px] font-medium text-blue-400 transition-all overflow-hidden whitespace-nowrap',
+                'text-xs font-medium text-blue-400 transition-all overflow-hidden whitespace-nowrap',
                 isHovered ? 'max-w-[60px] opacity-100' : 'max-w-0 opacity-0'
               )}>Research</span>
             </span>
           )}
 
           {/* Title — primary content, clean and simple */}
-          <span className="flex-1 text-[13px] truncate">
+          <span className="flex-1 text-sm truncate">
             {conversation.title || 'New Conversation'}
           </span>
 
           {/* Hover metadata: time stamp */}
           <span className={cn(
-            'text-[11px] text-gray-400 flex-shrink-0 transition-opacity whitespace-nowrap',
+            'text-xs text-gray-400 flex-shrink-0 transition-opacity whitespace-nowrap',
             (isHovered || isMobile) ? 'opacity-100' : 'opacity-0'
           )}>
             {formatTime(conversation.lastMessageAt || conversation.updated_at)}
@@ -198,7 +198,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                 {onPin && (
                   <button
                     onClick={handlePin}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
                   >
                     <Pin className={cn('w-3.5 h-3.5', isPinned && 'fill-current')} />
                     {isPinned ? 'Unpin' : 'Pin'}
@@ -207,7 +207,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                 {onSaveToCollection && (
                   <button
                     onClick={handleAddToCollection}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
                   >
                     <Folder className="w-3.5 h-3.5" />
                     Add to Collection
@@ -215,7 +215,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                 )}
                 <button
                   onClick={handleRename}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                   Rename
@@ -223,7 +223,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                 <div className="border-t border-gray-100 my-0.5" />
                 <button
                   onClick={handleDelete}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-red-600 hover:bg-red-50 text-left touch-manipulation min-h-[36px]"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left touch-manipulation min-h-[36px]"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Delete

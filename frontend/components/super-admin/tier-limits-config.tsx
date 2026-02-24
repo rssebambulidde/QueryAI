@@ -244,7 +244,7 @@ export default function TierLimitsConfig() {
                         {isUnlimited ? 'Unlimited' : 'Set unlimited'}
                       </button>
                     </div>
-                    <p className="text-[11px] text-gray-400 mb-1.5">
+                    <p className="text-xs text-gray-400 mb-1.5">
                       {LIMIT_LABELS[field].description}
                     </p>
                     {isUnlimited ? (
@@ -273,7 +273,7 @@ export default function TierLimitsConfig() {
                     <label className="text-xs font-medium text-gray-600">
                       {LIMIT_LABELS.allowResearchMode.label}
                     </label>
-                    <p className="text-[11px] text-gray-400">
+                    <p className="text-xs text-gray-400">
                       {LIMIT_LABELS.allowResearchMode.description}
                     </p>
                   </div>

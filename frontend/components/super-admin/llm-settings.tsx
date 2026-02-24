@@ -239,7 +239,7 @@ export default function LLMSettings() {
                   <tr key={id} className="border-t border-blue-100">
                     <td className="py-2 pr-4 font-medium">{settings.providers.find(p => p.id === id)?.displayName ?? id}</td>
                     <td className="py-2 pr-4">
-                      <code className="rounded bg-blue-100 px-1.5 py-0.5 text-[11px] font-mono">{info.envVar}</code>
+                      <code className="rounded bg-blue-100 px-1.5 py-0.5 text-xs font-mono">{info.envVar}</code>
                     </td>
                     <td className="py-2">
                       <a
@@ -409,7 +409,7 @@ function ProviderCard({
         {provider.configured ? 'API key configured' : 'No API key'}
       </p>
       {info && (
-        <p className="text-[11px] text-gray-400 mb-3 font-mono">
+        <p className="text-xs text-gray-400 mb-3 font-mono">
           {info.envVar}
           {!provider.configured && (
             <> &middot;{' '}
@@ -637,7 +637,7 @@ function ModelComparisonTable({ providers }: { providers: LLMProviderInfo[] }) {
                       )}
                     >
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <span className={cn('inline-block px-2 py-0.5 rounded-full text-[11px] font-medium', PROVIDER_COLORS[m.providerId] || 'bg-gray-100 text-gray-700')}>
+                        <span className={cn('inline-block px-2 py-0.5 rounded-full text-xs font-medium', PROVIDER_COLORS[m.providerId] || 'bg-gray-100 text-gray-700')}>
                           {m.providerName}
                         </span>
                       </td>
@@ -667,7 +667,7 @@ function ModelComparisonTable({ providers }: { providers: LLMProviderInfo[] }) {
                             <span
                               key={cap}
                               className={cn(
-                                'inline-block px-1.5 py-0.5 rounded text-[10px] font-medium',
+                                'inline-block px-1.5 py-0.5 rounded text-xs font-medium',
                                 cap === 'vision'
                                   ? 'bg-pink-50 text-pink-600'
                                   : cap === 'structured_output'
@@ -681,7 +681,7 @@ function ModelComparisonTable({ providers }: { providers: LLMProviderInfo[] }) {
                         </div>
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
-                        <span className={cn('inline-block px-2 py-0.5 rounded-full text-[11px] font-medium', modeInfo.color)}>
+                        <span className={cn('inline-block px-2 py-0.5 rounded-full text-xs font-medium', modeInfo.color)}>
                           {modeInfo.label}
                         </span>
                       </td>
@@ -696,7 +696,7 @@ function ModelComparisonTable({ providers }: { providers: LLMProviderInfo[] }) {
           </div>
 
           {/* Legend */}
-          <div className="mt-4 flex flex-wrap items-center gap-4 text-[11px] text-gray-500">
+          <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500">
             <span className="flex items-center gap-1">
               <Star className="w-3 h-3 text-orange-400 fill-orange-400" /> Provider default
             </span>
@@ -790,19 +790,19 @@ function LLMUsageMonitor() {
               {/* Summary cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                  <p className="text-[10px] font-medium text-blue-600 uppercase">Total Queries</p>
+                  <p className="text-xs font-medium text-blue-600 uppercase">Total Queries</p>
                   <p className="text-lg font-bold text-blue-900">{stats.totalQueries.toLocaleString()}</p>
                 </div>
                 <div className="bg-red-50 rounded-lg p-3 border border-red-200">
-                  <p className="text-[10px] font-medium text-red-600 uppercase">Total LLM Cost</p>
+                  <p className="text-xs font-medium text-red-600 uppercase">Total LLM Cost</p>
                   <p className="text-lg font-bold text-red-900">${stats.totalCost.toFixed(4)}</p>
                 </div>
                 <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
-                  <p className="text-[10px] font-medium text-purple-600 uppercase">Total Tokens</p>
+                  <p className="text-xs font-medium text-purple-600 uppercase">Total Tokens</p>
                   <p className="text-lg font-bold text-purple-900">{stats.totalTokens.toLocaleString()}</p>
                 </div>
                 <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
-                  <p className="text-[10px] font-medium text-orange-600 uppercase">Avg Cost/Query</p>
+                  <p className="text-xs font-medium text-orange-600 uppercase">Avg Cost/Query</p>
                   <p className="text-lg font-bold text-orange-900">${stats.averageCostPerQuery.toFixed(6)}</p>
                 </div>
               </div>
@@ -824,7 +824,7 @@ function LLMUsageMonitor() {
                                 style={{ height: `${Math.max(pct, 2)}%` }}
                               />
                               {/* Tooltip */}
-                              <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-900 text-white text-[10px] rounded px-2 py-1 whitespace-nowrap z-10">
+                              <div className="absolute bottom-full mb-1 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
                                 {d.date}: ${d.cost.toFixed(4)} · {d.queries} queries
                               </div>
                             </div>
@@ -832,7 +832,7 @@ function LLMUsageMonitor() {
                         });
                       })()}
                     </div>
-                    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
                       <span>{stats.dailyTrend[0]?.date}</span>
                       <span>{stats.dailyTrend[stats.dailyTrend.length - 1]?.date}</span>
                     </div>
@@ -874,7 +874,7 @@ function LLMUsageMonitor() {
                                       style={{ width: `${sharePct}%` }}
                                     />
                                   </div>
-                                  <span className="text-[10px] text-gray-500 w-10 text-right">{sharePct.toFixed(1)}%</span>
+                                  <span className="text-xs text-gray-500 w-10 text-right">{sharePct.toFixed(1)}%</span>
                                 </div>
                               </td>
                             </tr>
@@ -1019,7 +1019,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
               <input type="range" min={10} max={10_000} step={10} value={totalUsers}
                 onChange={(e) => setTotalUsers(Number(e.target.value))}
                 className="w-full accent-orange-500" />
-              <div className="flex justify-between text-[10px] text-gray-400"><span>10</span><span>10,000</span></div>
+              <div className="flex justify-between text-xs text-gray-400"><span>10</span><span>10,000</span></div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -1028,7 +1028,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
               <input type="range" min={1} max={200} step={1} value={avgQueriesPerUser}
                 onChange={(e) => setAvgQueriesPerUser(Number(e.target.value))}
                 className="w-full accent-orange-500" />
-              <div className="flex justify-between text-[10px] text-gray-400"><span>1</span><span>200</span></div>
+              <div className="flex justify-between text-xs text-gray-400"><span>1</span><span>200</span></div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -1037,7 +1037,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
               <input type="range" min={0} max={100} step={5} value={chatRatio}
                 onChange={(e) => setChatRatio(Number(e.target.value))}
                 className="w-full accent-orange-500" />
-              <div className="flex justify-between text-[10px] text-gray-400"><span>All Research</span><span>All Chat</span></div>
+              <div className="flex justify-between text-xs text-gray-400"><span>All Research</span><span>All Chat</span></div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -1046,7 +1046,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
               <input type="range" min={100} max={10_000} step={100} value={avgInputTokens}
                 onChange={(e) => setAvgInputTokens(Number(e.target.value))}
                 className="w-full accent-orange-500" />
-              <div className="flex justify-between text-[10px] text-gray-400"><span>100</span><span>10,000</span></div>
+              <div className="flex justify-between text-xs text-gray-400"><span>100</span><span>10,000</span></div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -1055,7 +1055,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
               <input type="range" min={50} max={8_000} step={50} value={avgOutputTokens}
                 onChange={(e) => setAvgOutputTokens(Number(e.target.value))}
                 className="w-full accent-orange-500" />
-              <div className="flex justify-between text-[10px] text-gray-400"><span>50</span><span>8,000</span></div>
+              <div className="flex justify-between text-xs text-gray-400"><span>50</span><span>8,000</span></div>
             </div>
           </div>
 
@@ -1067,7 +1067,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
                 <div key={tier} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-semibold text-gray-700">{info.label}</span>
-                    <span className="text-[10px] text-gray-400">${info.monthlyUSD}/mo</span>
+                    <span className="text-xs text-gray-400">${info.monthlyUSD}/mo</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <input type="range" min={0} max={100} step={1}
@@ -1076,7 +1076,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
                       className="flex-1 accent-orange-500" />
                     <span className="text-xs font-mono w-8 text-right">{(tierDist as any)[tier]}%</span>
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-1">
+                  <p className="text-xs text-gray-400 mt-1">
                     {Math.round(totalUsers * ((tierDist as any)[tier] / 100))} users
                     {info.queryLimit ? ` · ${info.queryLimit} q/mo` : ' · Unlimited'}
                   </p>
@@ -1088,28 +1088,28 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
           {/* ── Summary Cards ─────────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-              <p className="text-[10px] font-medium text-blue-600 uppercase">Total Queries/Mo</p>
+              <p className="text-xs font-medium text-blue-600 uppercase">Total Queries/Mo</p>
               <p className="text-lg font-bold text-blue-900">{totalQueries.toLocaleString()}</p>
-              <p className="text-[10px] text-blue-500">{chatQueries.toLocaleString()} chat · {researchQueries.toLocaleString()} research</p>
+              <p className="text-xs text-blue-500">{chatQueries.toLocaleString()} chat · {researchQueries.toLocaleString()} research</p>
             </div>
             <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-              <p className="text-[10px] font-medium text-green-600 uppercase">Subscription Revenue</p>
+              <p className="text-xs font-medium text-green-600 uppercase">Subscription Revenue</p>
               <p className="text-lg font-bold text-green-900">${monthlyRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/mo</p>
-              <p className="text-[10px] text-green-500">${(monthlyRevenue * 12).toLocaleString()}/yr</p>
+              <p className="text-xs text-green-500">${(monthlyRevenue * 12).toLocaleString()}/yr</p>
             </div>
             <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
-              <p className="text-[10px] font-medium text-orange-600 uppercase">Cheapest LLM Cost</p>
+              <p className="text-xs font-medium text-orange-600 uppercase">Cheapest LLM Cost</p>
               <p className="text-lg font-bold text-orange-900">
                 ${sorted.length > 0 ? sorted[sorted.length - 1].totalCost.toFixed(2) : '—'}/mo
               </p>
-              <p className="text-[10px] text-orange-500">{sorted.length > 0 ? sorted[sorted.length - 1].displayName : ''}</p>
+              <p className="text-xs text-orange-500">{sorted.length > 0 ? sorted[sorted.length - 1].displayName : ''}</p>
             </div>
             <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
-              <p className="text-[10px] font-medium text-purple-600 uppercase">Best Profit Margin</p>
+              <p className="text-xs font-medium text-purple-600 uppercase">Best Profit Margin</p>
               <p className="text-lg font-bold text-purple-900">
                 {sorted.length > 0 && sorted[0].margin > 0 ? `${sorted[0].margin.toFixed(1)}%` : '—'}
               </p>
-              <p className="text-[10px] text-purple-500">{sorted.length > 0 ? sorted[0].displayName : ''}</p>
+              <p className="text-xs text-purple-500">{sorted.length > 0 ? sorted[0].displayName : ''}</p>
             </div>
           </div>
 
@@ -1135,7 +1135,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
                     <tr key={`est-${m.providerId}-${m.id}`} className={cn('hover:bg-gray-50', !m.configured && 'opacity-50')}>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={cn(
-                          'inline-block px-2 py-0.5 rounded-full text-[11px] font-medium',
+                          'inline-block px-2 py-0.5 rounded-full text-xs font-medium',
                           m.providerId === 'openai' ? 'bg-green-100 text-green-800' :
                           m.providerId === 'anthropic' ? 'bg-amber-100 text-amber-800' :
                           m.providerId === 'google' ? 'bg-blue-100 text-blue-800' :
@@ -1145,7 +1145,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
                       <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{m.displayName}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span className={cn(
-                          'inline-block px-2 py-0.5 rounded-full text-[11px] font-medium',
+                          'inline-block px-2 py-0.5 rounded-full text-xs font-medium',
                           m.modeFit === 'chat' ? 'bg-sky-100 text-sky-700' :
                           m.modeFit === 'research' ? 'bg-indigo-100 text-indigo-700' :
                           'bg-gray-100 text-gray-700',
@@ -1177,7 +1177,7 @@ function CostProfitEstimator({ providers }: { providers: LLMProviderInfo[] }) {
           </div>
 
           {/* Footnote */}
-          <p className="text-[11px] text-gray-400">
+          <p className="text-xs text-gray-400">
             Estimates assume each query uses one model. "Both" models show cost for all {totalQueries.toLocaleString()} queries.
             Chat-only models use {chatQueries.toLocaleString()} queries; Research-only models use {researchQueries.toLocaleString()} queries.
             Actual costs vary with prompt length, caching, and real token counts.

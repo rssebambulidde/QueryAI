@@ -53,7 +53,7 @@ export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
               onClick={() => onQuestionClick(question)}
               className={cn(
                 'flex items-start gap-2 w-full text-left px-2 py-1.5 rounded-md',
-                'text-[13px] text-gray-600 hover:text-gray-900',
+                'text-sm text-gray-600 hover:text-gray-900',
                 'hover:bg-gray-100 transition-colors cursor-pointer group/item'
               )}
               title={question}

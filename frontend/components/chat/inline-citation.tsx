@@ -139,7 +139,7 @@ export const InlineCitation: React.FC<InlineCitationProps> = ({
       <button
         onClick={handleClick}
         className={cn(
-          'inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded text-[11px] font-semibold',
+          'inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded text-xs font-semibold',
           'transition-all duration-200 cursor-pointer select-none',
           'hover:scale-110 active:scale-95',
           isDocument

@@ -410,7 +410,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               {!isUser && !isStreaming && !message.isStreaming && citationCount > 0 && !isChatMode && (
                 <button
                   onClick={() => onOpenSources?.(message.sources ?? [], '')}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-medium leading-tight hover:bg-blue-100 transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium leading-tight hover:bg-blue-100 transition-colors"
                   title="View cited sources"
                 >
                   <BookOpen className="w-3 h-3" />
@@ -621,7 +621,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                 <ThumbsDown className="w-3.5 h-3.5" />
               </button>
               {flaggedCitations.length > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-medium">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-medium">
                   <Flag className="w-3 h-3" />
                   {flaggedCitations.length} flagged
                 </span>
@@ -643,7 +643,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   </button>
                   {showFlagMenu && (
                     <div className="absolute bottom-full left-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[240px] max-w-[320px] max-h-[200px] overflow-y-auto">
-                      <div className="px-3 py-1.5 text-[11px] font-medium text-gray-500 uppercase tracking-wide border-b border-gray-100">Flag citations</div>
+                      <div className="px-3 py-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide border-b border-gray-100">Flag citations</div>
                       {message.sources.map((src, idx) => {
                         const isFlagged = flaggedCitations.some(c => c.sourceUrl === (src.url || ''));
                         return (

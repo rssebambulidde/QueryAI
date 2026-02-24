@@ -220,7 +220,7 @@ export const CitationSettings: React.FC<CitationSettingsProps> = ({
               {preferences.style === 'inline' && (
                 <span>
                   Citations appear as{' '}
-                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded text-[11px] font-semibold bg-blue-100 text-blue-700 border border-blue-300">
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-300">
                     {preferences.showInlineNumbers ? '1' : '📄'}
                   </span>{' '}
                   badges within the text.

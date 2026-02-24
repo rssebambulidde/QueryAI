@@ -319,7 +319,7 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
       <div ref={messagesEndRef} />
 
       {/* Footer legal links */}
-      <footer className="flex items-center justify-center gap-3 py-2 text-[11px] text-gray-400 border-t border-gray-100 flex-shrink-0">
+      <footer className="flex items-center justify-center gap-3 py-2 text-xs text-gray-400 border-t border-gray-100 flex-shrink-0">
         <a href="/privacy" className="hover:text-gray-600 transition-colors">Privacy</a>
         <span>·</span>
         <a href="/terms" className="hover:text-gray-600 transition-colors">Terms</a>
