@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Sparkles, BookOpen } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { MessageSquare, Folder, ChevronLeft, ChevronRight, Plus, Search, X, FolderOpen, ChevronDown, ChevronUp, ShieldCheck, PanelLeftClose, PanelLeft, SquarePen, Pin, Sparkles, BookOpen, Check, Loader2 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { cn } from '@/lib/utils';
@@ -25,6 +25,21 @@ import { SourceExplorerModal } from '@/components/research/source-explorer-modal
 import type { CitedSource } from '@/lib/api';
 
 type TabType = 'chat' | 'collections' | 'sources';
+
+function getDateGroup(dateString?: string): string {
+  if (!dateString) return 'Older';
+  const date = new Date(dateString);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86400000);
+  const weekAgo = new Date(today.getTime() - 7 * 86400000);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (date >= today) return 'Today';
+  if (date >= yesterday) return 'Yesterday';
+  if (date >= weekAgo) return 'Previous 7 Days';
+  if (date >= monthStart) return 'This Month';
+  return 'Older';
+}
 
 interface AppSidebarProps {
   activeTab: TabType;
@@ -51,6 +66,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   const [isCollectionSearchOpen, setIsCollectionSearchOpen] = useState(false);
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
   const [explorerSource, setExplorerSource] = useState<CitedSource | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [showInlineCollectionForm, setShowInlineCollectionForm] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [isCreatingCollection, setIsCreatingCollection] = useState(false);
+  const sidebarWidthRef = useRef(280);
+  const newCollectionInputRef = useRef<HTMLInputElement>(null);
   const accountButtonRef = React.useRef<HTMLButtonElement>(null);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -75,6 +96,42 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         }
       }
     }
+  }, []);
+
+  // Load saved sidebar width
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebarWidth');
+      if (saved) {
+        const w = Math.max(240, Math.min(400, parseInt(saved)));
+        setSidebarWidth(w);
+        sidebarWidthRef.current = w;
+      }
+    }
+  }, []);
+
+  // Resize handler
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidthRef.current;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMouseMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      const newWidth = Math.max(240, Math.min(400, startWidth + delta));
+      sidebarWidthRef.current = newWidth;
+      setSidebarWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem('sidebarWidth', String(sidebarWidthRef.current));
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
   }, []);
 
   const savePinnedConversations = (pinned: Set<string>) => {
@@ -212,12 +269,33 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     }
   };
 
+  const handleInlineCreateCollection = async () => {
+    const name = newCollectionName.trim();
+    if (!name) return;
+    try {
+      setIsCreatingCollection(true);
+      const response = await collectionApi.create({ name });
+      if (response.success && response.data) {
+        toast.success('Collection created');
+        setNewCollectionName('');
+        setShowInlineCollectionForm(false);
+        await loadCollections();
+      } else {
+        toast.error('Failed to create collection');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create collection');
+    } finally {
+      setIsCreatingCollection(false);
+    }
+  };
+
   const handleCollectionClick = async (collectionId: string) => {
     setExpandedCollectionId(expandedCollectionId === collectionId ? null : collectionId);
   };
 
-  // Filter and sort conversations
-  const filteredConversations = useMemo(() => {
+  // Filter, sort, and group conversations
+  const { pinnedConvs, dateGroups, totalCount } = useMemo(() => {
     let filtered = conversations.filter((conv) =>
       conv.title?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
       conv.lastMessage?.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
@@ -226,7 +304,21 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
     const unpinned = filtered.filter((conv) => !pinnedConversations.has(conv.id));
     pinned.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
     unpinned.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-    return [...pinned, ...unpinned];
+
+    const ORDER = ['Today', 'Yesterday', 'Previous 7 Days', 'This Month', 'Older'];
+    const grouped = new Map<string, typeof unpinned>();
+    for (const conv of unpinned) {
+      const group = getDateGroup(conv.lastMessageAt || conv.updated_at);
+      if (!grouped.has(group)) grouped.set(group, []);
+      grouped.get(group)!.push(conv);
+    }
+    const groups: { label: string; conversations: typeof unpinned }[] = [];
+    for (const label of ORDER) {
+      const convs = grouped.get(label);
+      if (convs && convs.length > 0) groups.push({ label, conversations: convs });
+    }
+
+    return { pinnedConvs: pinned, dateGroups: groups, totalCount: filtered.length };
   }, [conversations, debouncedSearchQuery, pinnedConversations]);
 
   // Filter collections
@@ -362,10 +454,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
   // ── Expanded sidebar ─────────────────────────────────────────────
   return (
-    <div className={cn(
-      'flex flex-col bg-white border-r border-gray-100 w-[260px] flex-shrink-0',
-      isMobile ? 'h-full min-h-0' : 'h-full'
-    )}>
+    <div
+      className={cn(
+        'flex flex-col bg-white border-r border-gray-100 flex-shrink-0 relative',
+        isMobile ? 'h-full min-h-0' : 'h-full'
+      )}
+      style={{ width: isMobile ? '100%' : `${sidebarWidth}px` }}
+    >
       {/* ── Change 1: Branded header with action buttons ── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center gap-2">
@@ -382,6 +477,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           >
             <SquarePen className="w-4 h-4 text-gray-500" />
           </button>
+          <NotificationBell />
           {!isMobile && (
             <button
               onClick={() => setIsCollapsed(true)}
@@ -457,7 +553,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             {/* Section header with search toggle */}
             <div className="flex items-center justify-between px-4 py-1.5">
               <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                Conversations
+                {totalCount > 0 ? `Conversations (${totalCount})` : 'Conversations'}
               </span>
               <button
                 onClick={() => {
@@ -509,50 +605,92 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               </div>
             )}
 
-            {/* Conversation list — shown directly, no collapsible wrapper */}
+            {/* Conversation list with pinned section + date groups */}
             <div className="px-2">
               {isLoading ? (
                 <ConversationSkeleton count={5} />
-              ) : filteredConversations.length === 0 ? (
-                <div className="px-3 py-6 text-center">
-                  <p className="text-xs text-gray-400">
+              ) : totalCount === 0 ? (
+                <div className="px-3 py-8 text-center">
+                  <MessageSquare className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-gray-500 mb-1">
                     {debouncedSearchQuery ? `No results for "${debouncedSearchQuery}"` : 'No conversations yet'}
+                  </p>
+                  <p className="text-xs text-gray-400 mb-3">
+                    {debouncedSearchQuery ? 'Try a different search term' : 'Ask a question to get started'}
                   </p>
                   {debouncedSearchQuery ? (
                     <button
                       onClick={() => { setSearchQuery(''); setIsSearchOpen(false); }}
-                      className="mt-1.5 text-xs text-gray-500 hover:text-gray-700 underline"
+                      className="text-xs text-gray-500 hover:text-gray-700 underline"
                     >
                       Clear search
                     </button>
                   ) : (
                     <button
                       onClick={handleNewConversation}
-                      className="mt-2 text-xs text-gray-500 hover:text-gray-700 underline"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                     >
-                      Start a new conversation
+                      <Plus className="w-3.5 h-3.5" />
+                      New conversation
                     </button>
                   )}
                 </div>
               ) : (
                 <div className="space-y-0.5">
-                  {filteredConversations.map((conversation) => (
-                    <ConversationItemComponent
-                      key={conversation.id}
-                      conversation={conversation}
-                      isActive={conversation.id === currentConversationId}
-                      onSelect={() => selectConversation(conversation.id)}
-                      onDelete={(e) => handleDeleteConversation(conversation.id, e)}
-                      onSaveToCollection={(conversationId) => {
-                        setSelectedConversationForCollection(conversationId);
-                        setShowSaveDialog(true);
-                      }}
-                      onPin={(conversationId) => {
-                        handleTogglePin(conversationId, { stopPropagation: () => {} } as React.MouseEvent);
-                      }}
-                      isPinned={pinnedConversations.has(conversation.id)}
-                      formatTime={formatTime}
-                    />
+                  {/* Pinned conversations */}
+                  {pinnedConvs.length > 0 && (
+                    <>
+                      <div className="px-3 pt-1 pb-0.5">
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Pinned</span>
+                      </div>
+                      {pinnedConvs.map((conversation) => (
+                        <ConversationItemComponent
+                          key={conversation.id}
+                          conversation={conversation}
+                          isActive={conversation.id === currentConversationId}
+                          onSelect={() => selectConversation(conversation.id)}
+                          onDelete={(e) => handleDeleteConversation(conversation.id, e)}
+                          onSaveToCollection={(conversationId) => {
+                            setSelectedConversationForCollection(conversationId);
+                            setShowSaveDialog(true);
+                          }}
+                          onPin={(conversationId) => {
+                            handleTogglePin(conversationId, { stopPropagation: () => {} } as React.MouseEvent);
+                          }}
+                          isPinned={true}
+                          formatTime={formatTime}
+                        />
+                      ))}
+                      {dateGroups.length > 0 && (
+                        <div className="mx-3 my-1.5 border-t border-gray-100" />
+                      )}
+                    </>
+                  )}
+                  {/* Date-grouped conversations */}
+                  {dateGroups.map((group) => (
+                    <React.Fragment key={group.label}>
+                      <div className="px-3 pt-2 pb-0.5">
+                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{group.label}</span>
+                      </div>
+                      {group.conversations.map((conversation) => (
+                        <ConversationItemComponent
+                          key={conversation.id}
+                          conversation={conversation}
+                          isActive={conversation.id === currentConversationId}
+                          onSelect={() => selectConversation(conversation.id)}
+                          onDelete={(e) => handleDeleteConversation(conversation.id, e)}
+                          onSaveToCollection={(conversationId) => {
+                            setSelectedConversationForCollection(conversationId);
+                            setShowSaveDialog(true);
+                          }}
+                          onPin={(conversationId) => {
+                            handleTogglePin(conversationId, { stopPropagation: () => {} } as React.MouseEvent);
+                          }}
+                          isPinned={false}
+                          formatTime={formatTime}
+                        />
+                      ))}
+                    </React.Fragment>
                   ))}
                 </div>
               )}
@@ -565,7 +703,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             {/* Section header with search toggle */}
             <div className="flex items-center justify-between px-4 py-1.5">
               <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                Collections
+                {collections.length > 0 ? `Collections (${collections.length})` : 'Collections'}
               </span>
               <div className="flex items-center gap-0.5">
                 <button
@@ -582,14 +720,61 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   <Search className="w-3.5 h-3.5" />
                 </button>
                 <button
-                  onClick={() => router.push('/dashboard?tab=collections')}
-                  className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    setShowInlineCollectionForm(!showInlineCollectionForm);
+                    if (!showInlineCollectionForm) {
+                      setTimeout(() => newCollectionInputRef.current?.focus(), 50);
+                    } else {
+                      setNewCollectionName('');
+                    }
+                  }}
+                  className={cn(
+                    'p-1 rounded-md transition-colors',
+                    showInlineCollectionForm ? 'bg-gray-100 text-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                  )}
                   title="New Collection"
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
+
+            {/* Inline collection creation form */}
+            {showInlineCollectionForm && (
+              <div className="px-3 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    ref={newCollectionInputRef}
+                    type="text"
+                    placeholder="Collection name..."
+                    value={newCollectionName}
+                    onChange={(e) => setNewCollectionName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleInlineCreateCollection();
+                      if (e.key === 'Escape') {
+                        setNewCollectionName('');
+                        setShowInlineCollectionForm(false);
+                      }
+                    }}
+                    className="h-8 text-xs bg-gray-50 border-gray-200 focus:bg-white flex-1"
+                    disabled={isCreatingCollection}
+                  />
+                  <button
+                    onClick={handleInlineCreateCollection}
+                    disabled={!newCollectionName.trim() || isCreatingCollection}
+                    className="p-1.5 text-green-600 hover:bg-green-50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {isCreatingCollection ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  </button>
+                  <button
+                    onClick={() => { setNewCollectionName(''); setShowInlineCollectionForm(false); }}
+                    className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-md"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Collection search — toggled */}
             {isCollectionSearchOpen && (
@@ -627,16 +812,24 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               {isLoadingCollections ? (
                 <CollectionSkeleton count={5} />
               ) : filteredCollections.length === 0 ? (
-                <div className="px-3 py-6 text-center">
-                  <p className="text-xs text-gray-400">
+                <div className="px-3 py-8 text-center">
+                  <Folder className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-gray-500 mb-1">
                     {debouncedCollectionSearchQuery ? `No results for "${debouncedCollectionSearchQuery}"` : 'No collections yet'}
+                  </p>
+                  <p className="text-xs text-gray-400 mb-3">
+                    {debouncedCollectionSearchQuery ? 'Try a different search term' : 'Organize your conversations into collections'}
                   </p>
                   {!debouncedCollectionSearchQuery && (
                     <button
-                      onClick={() => router.push('/dashboard?tab=collections')}
-                      className="mt-2 text-xs text-gray-500 hover:text-gray-700 underline"
+                      onClick={() => {
+                        setShowInlineCollectionForm(true);
+                        setTimeout(() => newCollectionInputRef.current?.focus(), 50);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
                     >
-                      Create your first collection
+                      <Plus className="w-3.5 h-3.5" />
+                      Create collection
                     </button>
                   )}
                 </div>
@@ -701,20 +894,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         className="border-t border-gray-100 flex-shrink-0 relative"
         style={isMobile ? { paddingBottom: 'max(0px, env(safe-area-inset-bottom))' } : undefined}
       >
-        {/* Notification Bell (expanded) */}
-        <div className="px-2 py-1">
-          <NotificationBell />
-        </div>
-
         {/* Upgrade CTA — show when any higher tier exists */}
         {hasHigherTier && (
           <button
             onClick={handleUpgrade}
-            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-medium text-gray-600 hover:bg-gray-50 transition-colors border-b border-gray-100 group"
+            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] font-medium text-gray-700 hover:bg-orange-50/80 transition-colors border-b border-gray-100 group bg-gradient-to-r from-orange-50/60 to-transparent"
+            style={{ borderLeft: '2px solid #fb923c' }}
           >
             <Sparkles className="w-4 h-4 text-orange-500 group-hover:text-orange-600" />
             <span className="flex-1 text-left">Upgrade</span>
-            <span className="text-[11px] text-gray-400">{getUpgradeText()}</span>
+            <span className="text-[11px] text-gray-400 group-hover:text-orange-500 transition-colors">{getUpgradeText()}</span>
           </button>
         )}
 
@@ -785,6 +974,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               router.push('/dashboard');
             }
           }}
+        />
+      )}
+
+      {/* Resize handle */}
+      {!isMobile && (
+        <div
+          onMouseDown={handleResizeStart}
+          className="absolute top-0 -right-0.5 w-1.5 h-full cursor-col-resize hover:bg-blue-500/20 active:bg-blue-500/40 transition-colors z-10"
         />
       )}
     </div>

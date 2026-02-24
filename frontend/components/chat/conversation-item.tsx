@@ -144,11 +144,23 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
             <Pin className="w-3 h-3 text-gray-400 fill-gray-400 flex-shrink-0" />
           )}
 
-          {/* Mode indicator */}
+          {/* Mode indicator — text badge on hover */}
           {conversation.mode === 'chat' ? (
-            <span title="Express"><MessageCircle className="w-3 h-3 text-purple-400 flex-shrink-0" /></span>
+            <span title="Express" className="flex items-center gap-0.5 flex-shrink-0">
+              <MessageCircle className="w-3 h-3 text-purple-400" />
+              <span className={cn(
+                'text-[10px] font-medium text-purple-400 transition-all overflow-hidden whitespace-nowrap',
+                isHovered ? 'max-w-[50px] opacity-100' : 'max-w-0 opacity-0'
+              )}>Express</span>
+            </span>
           ) : (
-            <span title="Deep Research"><Search className="w-3 h-3 text-blue-400 flex-shrink-0" /></span>
+            <span title="Deep Research" className="flex items-center gap-0.5 flex-shrink-0">
+              <Search className="w-3 h-3 text-blue-400" />
+              <span className={cn(
+                'text-[10px] font-medium text-blue-400 transition-all overflow-hidden whitespace-nowrap',
+                isHovered ? 'max-w-[60px] opacity-100' : 'max-w-0 opacity-0'
+              )}>Research</span>
+            </span>
           )}
 
           {/* Title — primary content, clean and simple */}
