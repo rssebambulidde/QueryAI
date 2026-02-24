@@ -35,8 +35,6 @@ export default function HomePage() {
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
       router.push('/dashboard');
-    } else if (!isLoading && !isAuthenticated) {
-      router.push('/chat');
     }
   }, [isAuthenticated, isLoading, router]);
 
