@@ -77,11 +77,23 @@ interface AnonymousChatContainerProps {
   onNewChat: () => void;
   /** Called when a new conversation is created (for the sidebar list) */
   onConversationCreated?: (conversation: AnonymousConversation) => void;
+  /** Pre-loaded messages when switching back to an existing conversation */
+  initialMessages?: Message[];
+  /** Current conversation ID (from parent, for switching) */
+  conversationId?: string | null;
+  /** Called whenever messages change so parent can cache them */
+  onMessagesChange?: (conversationId: string, messages: Message[]) => void;
 }
 
-export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ onNewChat, onConversationCreated }) => {
+export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
+  onNewChat,
+  onConversationCreated,
+  initialMessages,
+  conversationId: parentConversationId,
+  onMessagesChange,
+}) => {
   // State
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(initialMessages || []);
   const [conversationMode, setConversationMode] = useState<'research' | 'chat'>('chat');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -102,7 +114,7 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
   const isDeepResearch = conversationMode === 'research';
 
   // Track conversation in sidebar list after first assistant reply
-  const conversationIdRef = useRef<string | null>(null);
+  const conversationIdRef = useRef<string | null>(parentConversationId || null);
   useEffect(() => {
     // When the first assistant message arrives, register a conversation entry
     const assistantMsgs = messages.filter((m) => m.role === 'assistant' && m.content);
@@ -116,7 +128,11 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
         createdAt: new Date(),
       });
     }
-  }, [messages, onConversationCreated]);
+    // Sync messages to parent for caching
+    if (conversationIdRef.current && messages.length > 0) {
+      onMessagesChange?.(conversationIdRef.current, messages);
+    }
+  }, [messages, onConversationCreated, onMessagesChange]);
 
   // Hook — always uses 'chat' mode for the actual API call (Deep Research blocked)
   const { sendMessage, cancelStream } = useAnonymousChatSend({

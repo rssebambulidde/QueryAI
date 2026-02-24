@@ -62,8 +62,14 @@ followed by 4 bullet questions ("- ") derived from this specific exchange.`;
 Guidelines:
 - Answer questions directly using your general knowledge
 - Admit uncertainty rather than guessing
-- Use clear formatting: paragraphs, bold for key terms, markdown lists where helpful
-- Be professional but friendly`;
+- Structure your response with clear markdown formatting:
+  - Use **bold** for key terms and important concepts
+  - Use numbered lists (1. 2. 3.) or bullet points (- ) for multiple items
+  - Separate distinct ideas into short paragraphs with blank lines between them
+  - Use ### headings to organise longer answers into sections
+  - Use tables when comparing items or presenting structured data
+- Be professional but friendly
+- Keep paragraphs short (2-4 sentences each)`;
 
     if (conversationState) {
       prompt += `\n\n## Conversation Context\n${conversationState}`;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { AnonymousChatContainer } from '@/components/chat/anonymous-chat-container';
@@ -8,6 +8,7 @@ import type { AnonymousConversation } from '@/components/chat/anonymous-chat-con
 import { AnonymousSidebar } from '@/components/sidebar/anonymous-sidebar';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { Menu, X } from 'lucide-react';
+import type { Message } from '@/components/chat/chat-message';
 
 export default function HomePage() {
   const router = useRouter();
@@ -17,6 +18,9 @@ export default function HomePage() {
   const [chatKey, setChatKey] = useState(0);
   const [conversations, setConversations] = useState<AnonymousConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+
+  // Store messages per conversation so we can switch between them
+  const messageStoreRef = useRef<Record<string, Message[]>>({});
 
   // If Supabase OAuth redirected to site root with tokens in hash, send to callback to complete sign-in
   useEffect(() => {
@@ -50,17 +54,32 @@ export default function HomePage() {
     setActiveConversationId(conv.id);
   }, []);
 
+  /** Called by the container whenever its messages change so we can cache them */
+  const handleMessagesChange = useCallback((convId: string, msgs: Message[]) => {
+    messageStoreRef.current[convId] = msgs;
+  }, []);
+
+  const handleSelectConversation = useCallback((id: string) => {
+    setActiveConversationId(id);
+    setChatKey((k) => k + 1); // re-mount container with cached messages
+    setIsMobileSidebarOpen(false);
+  }, []);
+
   const handleRenameConversation = useCallback((id: string, newTitle: string) => {
     setConversations((prev) => prev.map((c) => c.id === id ? { ...c, title: newTitle } : c));
   }, []);
 
   const handleDeleteConversation = useCallback((id: string) => {
     setConversations((prev) => prev.filter((c) => c.id !== id));
+    delete messageStoreRef.current[id];
     if (activeConversationId === id) {
       setChatKey((k) => k + 1);
       setActiveConversationId(null);
     }
   }, [activeConversationId]);
+
+  // Resolve initial messages for the active conversation (if switching back)
+  const initialMessages = activeConversationId ? (messageStoreRef.current[activeConversationId] || []) : [];
 
   // Show loading spinner while checking auth
   if (isLoading) {
@@ -103,6 +122,7 @@ export default function HomePage() {
                 onNewChat={handleNewChat}
                 conversations={conversations}
                 activeConversationId={activeConversationId}
+                onSelectConversation={handleSelectConversation}
                 onRenameConversation={handleRenameConversation}
                 onDeleteConversation={handleDeleteConversation}
               />
@@ -116,6 +136,7 @@ export default function HomePage() {
             onNewChat={handleNewChat}
             conversations={conversations}
             activeConversationId={activeConversationId}
+            onSelectConversation={handleSelectConversation}
             onRenameConversation={handleRenameConversation}
             onDeleteConversation={handleDeleteConversation}
           />
@@ -123,7 +144,14 @@ export default function HomePage() {
 
         {/* Main chat area */}
         <div className="flex-1 flex flex-col overflow-hidden bg-white">
-          <AnonymousChatContainer key={chatKey} onNewChat={handleNewChat} onConversationCreated={handleConversationCreated} />
+          <AnonymousChatContainer
+            key={chatKey}
+            onNewChat={handleNewChat}
+            onConversationCreated={handleConversationCreated}
+            initialMessages={initialMessages}
+            conversationId={activeConversationId}
+            onMessagesChange={handleMessagesChange}
+          />
         </div>
       </main>
     </div>
