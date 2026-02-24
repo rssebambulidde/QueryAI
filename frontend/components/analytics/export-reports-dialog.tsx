@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DateRange } from './date-range-picker';
-import jsPDF from 'jspdf';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
@@ -93,9 +92,10 @@ export function ExportReportsDialog({
     }
   };
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     setExporting(true);
     try {
+      const jsPDF = (await import('jspdf')).default;
       const doc = new jsPDF();
       let yPos = 20;
 

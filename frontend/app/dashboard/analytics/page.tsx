@@ -2,17 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useUserRole } from '@/lib/hooks/use-user-role';
 import { DateRangePicker, DateRange } from '@/components/analytics/date-range-picker';
-import { MetricsCards } from '@/components/analytics/metrics-cards';
-import { PerformanceDashboard } from '@/components/analytics/performance-dashboard';
-import { QualityMetrics } from '@/components/analytics/quality-metrics';
-import { CostDashboard } from '@/components/analytics/cost-dashboard';
-import { ExportReportsDialog } from '@/components/analytics/export-reports-dialog';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { useMetrics } from '@/lib/hooks/use-metrics';
+
+// Heavy analytics components — lazy-loaded (only super admins see this page)
+const MetricsCards = dynamic(() => import('@/components/analytics/metrics-cards').then(m => ({ default: m.MetricsCards })), { ssr: false });
+const PerformanceDashboard = dynamic(() => import('@/components/analytics/performance-dashboard').then(m => ({ default: m.PerformanceDashboard })), { ssr: false });
+const QualityMetrics = dynamic(() => import('@/components/analytics/quality-metrics').then(m => ({ default: m.QualityMetrics })), { ssr: false });
+const CostDashboard = dynamic(() => import('@/components/analytics/cost-dashboard').then(m => ({ default: m.CostDashboard })), { ssr: false });
+const ExportReportsDialog = dynamic(() => import('@/components/analytics/export-reports-dialog').then(m => ({ default: m.ExportReportsDialog })), { ssr: false });
 
 export default function AnalyticsPage() {
   const router = useRouter();

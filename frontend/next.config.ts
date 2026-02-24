@@ -20,7 +20,14 @@ const nextConfig: NextConfig = {
   
   experimental: {
     optimizeCss: true,
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: [
+      'lucide-react',
+      'recharts',
+      'zod',
+      'react-hook-form',
+      '@supabase/supabase-js',
+      'framer-motion',
+    ],
   },
   
   async headers() {
