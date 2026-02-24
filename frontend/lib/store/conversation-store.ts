@@ -13,7 +13,7 @@ interface ConversationState {
 
   // Actions
   loadConversations: () => Promise<void>;
-  createConversation: (title?: string, topicId?: string, options?: { autoSelect?: boolean; mode?: 'research' | 'chat' }) => Promise<Conversation>;
+  createConversation: (title?: string, options?: { autoSelect?: boolean; mode?: 'research' | 'chat' }) => Promise<Conversation>;
   selectConversation: (id: string | null) => void;
   updateConversation: (id: string, title: string) => Promise<void>;
   updateConversationFilters: (id: string, filters: any) => Promise<void>;
@@ -48,10 +48,10 @@ export const useConversationStore = create<ConversationState>()(
         }
       },
 
-      createConversation: async (title?: string, topicId?: string, options?: { autoSelect?: boolean; mode?: 'research' | 'chat' }) => {
+      createConversation: async (title?: string, options?: { autoSelect?: boolean; mode?: 'research' | 'chat' }) => {
         const autoSelect = options?.autoSelect ?? true;
         try {
-          const response = await conversationApi.create({ title, topicId, mode: options?.mode });
+          const response = await conversationApi.create({ title, mode: options?.mode });
           if (response.success && response.data) {
             const newConversation = response.data;
             set((state) => ({

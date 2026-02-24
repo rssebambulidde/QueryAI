@@ -18,7 +18,6 @@ export const ChatInputArea: React.FC<
 > = ({
   onSend,
   disabled,
-  selectedTopic,
   dynamicStarters,
   isLoading,
   isStreaming,

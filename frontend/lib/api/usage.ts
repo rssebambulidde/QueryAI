@@ -17,7 +17,7 @@ export const usageApi = {
 };
 
 export const metricsApi = {
-  getRetrievalMetrics: async (options?: { startDate?: string; endDate?: string; topicId?: string; limit?: number; offset?: number }): Promise<ApiResponse<RetrievalMetrics>> => {
+  getRetrievalMetrics: async (options?: { startDate?: string; endDate?: string; limit?: number; offset?: number }): Promise<ApiResponse<RetrievalMetrics>> => {
     const response = await apiClient.get('/api/metrics/retrieval', { params: options });
     return response.data;
   },

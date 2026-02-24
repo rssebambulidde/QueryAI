@@ -6,7 +6,7 @@
  * a single location without circular dependencies.
  */
 
-import type { Source, QuestionResponse, Topic } from '@/lib/api';
+import type { Source, QuestionResponse } from '@/lib/api';
 import type { Message, RegenerateOptions, MessageVersionSummary } from './chat-message';
 import type { StreamingState } from './streaming-controls';
 import type { QueryExpansionSettings } from '@/components/advanced/query-expansion-display';
@@ -140,7 +140,6 @@ export interface ChatMessageListProps {
   isStreaming: boolean;
   streamingState: StreamingState;
   error: string | null;
-  selectedTopic: Topic | null;
   isMobile: boolean;
   /** Current conversation ID for citation click-through tracking. */
   conversationId?: string;
@@ -196,7 +195,6 @@ export interface UploadStatus {
 export interface ChatInputAreaProps {
   onSend: (content: string) => void;
   disabled: boolean;
-  selectedTopic: Topic | null;
   dynamicStarters: string[] | null;
   isLoading: boolean;
   isStreaming: boolean;
@@ -244,7 +242,6 @@ export interface SourcesSidebarProps {
 }
 
 export interface ResearchModeBarProps {
-  selectedTopic: Topic | null;
   dynamicStarters: string[] | null;
   onSend: (question: string) => void;
   isLoading: boolean;

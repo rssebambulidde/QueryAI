@@ -10,11 +10,11 @@ export const conversationApi = {
     const response = await apiClient.get(`/api/conversations/${id}`);
     return response.data;
   },
-  create: async (data: { title?: string; topicId?: string }): Promise<ApiResponse<Conversation>> => {
+  create: async (data: { title?: string }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.post('/api/conversations', data);
     return response.data;
   },
-  update: async (id: string, data: { title?: string; topicId?: string | null; metadata?: any; filters?: any }): Promise<ApiResponse<Conversation>> => {
+  update: async (id: string, data: { title?: string; metadata?: any; filters?: any }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.put(`/api/conversations/${id}`, data);
     return response.data;
   },

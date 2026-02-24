@@ -89,7 +89,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     updateConversationFilters,
     updateConversation,
   } = useConversationStore();
-  const { unifiedFilters, setUnifiedFilters, selectedTopic, setSelectedTopic } = useFilterStore();
+  const { unifiedFilters, setUnifiedFilters } = useFilterStore();
 
   // RAG settings — document search always disabled (Phase 2)
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
@@ -254,13 +254,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             // Set conversation mode from DB
             if (!isStale()) { setConversationMode(conversation.mode || 'chat'); }
             // Topic hydration retired in Phase 2
-            if (!isStale()) { setSelectedTopic(null); }
             const oldFilters = conversation.metadata?.filters || {};
             if (!isStale()) {
               setUnifiedFilters({
-                topicId: null,
-                topic: null,
-                keyword: oldFilters.topic,
                 timeRange: oldFilters.timeRange,
                 startDate: oldFilters.startDate,
                 endDate: oldFilters.endDate,
@@ -273,16 +269,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             console.error('Failed to load conversation:', err);
             toast.error('Failed to load conversation data');
             setMessages([]);
-            setUnifiedFilters({ topicId: null, topic: null });
-            setSelectedTopic(null);
+            setUnifiedFilters({});
           }
         }
       } else {
         if (isStale()) return;
         setMessages([]);
         setConversationMode('chat');
-        setUnifiedFilters({ topicId: null, topic: null });
-        setSelectedTopic(null);
+        setUnifiedFilters({});
         setSourcePanelContext(null);
       }
     };
@@ -291,7 +285,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       conversationLoadRequestRef.current += 1;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentConversationId, conversationSelectionVersion, setUnifiedFilters, setSelectedTopic]);
+  }, [currentConversationId, conversationSelectionVersion, setUnifiedFilters]);
 
   // Persist RAG settings
   useEffect(() => {
@@ -516,7 +510,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           onModeChange={handleModeChange}
           onSend={(msg) => handleUserInput(msg)}
           disabled={isLoading || isStreaming}
-          selectedTopic={selectedTopic}
           dynamicStarters={dynamicStarters}
           isLoading={isLoading}
           isStreaming={isStreaming}
@@ -559,7 +552,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
                 isStreaming={isStreaming}
                 streamingState={streamingState}
                 error={error}
-                selectedTopic={selectedTopic}
                 isMobile={isMobile}
                 mode={conversationMode || 'chat'}
                 conversationId={currentConversationId ?? undefined}
@@ -602,7 +594,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             onModeChange={handleModeChange}
             onSend={(msg) => handleUserInput(msg)}
             disabled={isLoading || isStreaming}
-            selectedTopic={selectedTopic}
             dynamicStarters={dynamicStarters}
             isLoading={isLoading}
             isStreaming={isStreaming}

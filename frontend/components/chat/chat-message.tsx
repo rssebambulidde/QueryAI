@@ -39,7 +39,6 @@ export interface ChatMessageType {
   isActionResponse?: boolean; // Flag to indicate if this is an action-generated response
   isStreaming?: boolean; // Flag to indicate if message is still streaming
   isRefusal?: boolean; // true when response is an off-topic refusal (11.1)
-  isTopicChangeMessage?: boolean; // synthetic "Research mode disabled" / "topic now" – hide action buttons
   responseTime?: number; // Response time in milliseconds
   qualityScore?: number; // Answer quality score (0-1)
   searchResults?: SearchResult[]; // Results from /search command
@@ -62,8 +61,6 @@ export interface MessageVersionSummary {
 // Keep Message as an alias for backward compatibility
 export type Message = ChatMessageType;
 
-const REFUSAL_PATTERN = /outside|limited to|disable research mode|research (mode|topic)/i;
-
 export interface RegenerateOptions {
   model?: string;
   maxDocumentChunks?: number;
@@ -83,23 +80,20 @@ interface ChatMessageProps {
   /** Open Perplexity-style sources sidebar with this message's sources and optional query for header */
   onOpenSources?: (sources: Source[], query?: string) => void;
   isStreaming?: boolean; // Whether the message is currently streaming
-  selectedTopicName?: string | null; // For refusal hint (11.2)
-  onExitResearchMode?: () => void; // For refusal hint "exit research mode" action
+  onExitResearchMode?: () => void;
   onDelete?: (messageId: string) => void;
   onRegenerate?: (messageId: string, options?: RegenerateOptions) => void | Promise<void>;
   onVersionSelect?: (messageId: string, version: MessageVersionSummary) => void;
   onCompareVersions?: (messageId: string, versions: MessageVersionSummary[]) => void;
   /** Conversation ID for citation click-through tracking. */
   conversationId?: string;
-  /** Topic ID for feedback context. */
-  topicId?: string;
   /** Called when user flags a citation from within the message. */
   onFlagCitation?: (messageId: string, sourceUrl: string, sourceTitle: string) => void;
   /** Conversation mode — chat mode hides citations, sources, regenerate. */
   mode?: 'research' | 'chat';
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onOpenSources, isStreaming = false, selectedTopicName, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, topicId, onFlagCitation, mode }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onOpenSources, isStreaming = false, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, onFlagCitation, mode }) => {
   const { isMobile } = useMobile();
   const isUser = message.role === 'user';
   const isChatMode = mode === 'chat';
@@ -178,7 +172,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
       await feedbackApi.submitFeedback({
         messageId: message.id,
         conversationId,
-        topicId,
         rating: feedbackRating,
         comment: feedbackComment.trim() || undefined,
         flaggedCitations: flaggedCitations.length > 0 ? flaggedCitations : undefined,
@@ -493,7 +486,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                 </div>
               )}
               {/* Regenerate button for assistant messages — hidden in chat mode */}
-              {!isUser && onRegenerate && !isChatMode && !message.isActionResponse && !message.isTopicChangeMessage && !isStreaming && !message.isStreaming && (
+              {!isUser && onRegenerate && !isChatMode && !message.isActionResponse && !isStreaming && !message.isStreaming && (
                 <div className="relative">
                   <div className="flex items-center">
                     <button
@@ -598,7 +591,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
 
 
         {/* Feedback — thumbs up / thumbs down for assistant messages */}
-        {!isUser && !isStreaming && !message.isStreaming && message.content.trim() && !message.isTopicChangeMessage && (
+        {!isUser && !isStreaming && !message.isStreaming && message.content.trim() && (
           <div className="mt-2">
             <div className="flex items-center gap-1">
               <button
@@ -722,29 +715,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
           />
         )}
 
-        {/* 11.2 Refusal hint: when message is a refusal and in research mode */}
-        {!isUser &&
-          selectedTopicName &&
-          (message.isRefusal || (REFUSAL_PATTERN.test(message.content || '') && (message.content?.length || 0) < 500)) && (
-            <div className="mt-2 px-3 py-2 rounded-lg bg-orange-50 border border-orange-200 text-sm text-orange-800">
-              This question seems outside <strong>{selectedTopicName}</strong>.{' '}
-              {onExitResearchMode ? (
-                <>
-                  Ask something about {selectedTopicName} or{' '}
-                  <button
-                    type="button"
-                    onClick={onExitResearchMode}
-                    className="font-medium underline hover:no-underline"
-                  >
-                    exit research mode
-                  </button>{' '}
-                  to ask anything.
-                </>
-              ) : (
-                `Ask something about ${selectedTopicName} or exit research mode to ask anything.`
-              )}
-            </div>
-          )}
       </div>
     </div>
   );

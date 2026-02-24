@@ -12,7 +12,6 @@ export interface RAGSettings {
   maxDocumentChunks?: number;
   minScore?: number;
   maxWebResults?: number;
-  topicId?: string;
 }
 
 interface RAGSourceSelectorProps {

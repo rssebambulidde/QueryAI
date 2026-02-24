@@ -43,7 +43,7 @@ export interface UseChatSendDeps {
   setPreviousCost: (c: { total: number } | null) => void;
 
   // Store actions
-  createConversation: (title?: string, topicId?: string, options?: { autoSelect?: boolean; mode?: 'research' | 'chat' }) => Promise<{ id: string }>;
+  createConversation: (title?: string, options?: { autoSelect?: boolean; mode?: 'research' | 'chat' }) => Promise<{ id: string }>;
   selectConversation: (id: string | null) => void;
   updateConversationFilters: (id: string, filters: Record<string, any>) => Promise<void>;
   updateConversation: (id: string, title: string) => Promise<void>;
@@ -186,7 +186,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
       if (!conversationId && !isResend) {
         try {
           const title = generateConversationTitle(content);
-          const newConversation = await createConversation(title, undefined, { autoSelect: false, mode: liveMode });
+          const newConversation = await createConversation(title, { autoSelect: false, mode: liveMode });
           conversationId = newConversation.id;
           if (Object.keys(searchFilters).length > 0) {
             try {

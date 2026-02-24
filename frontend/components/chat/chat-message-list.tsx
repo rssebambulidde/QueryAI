@@ -39,7 +39,6 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   isStreaming,
   streamingState,
   error,
-  selectedTopic,
   isMobile,
   mode,
   conversationId,
@@ -197,7 +196,6 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                   onEdit={onEditMessage}
                   onFollowUpClick={(question) => onFollowUpClick(question)}
                   userQuestion={userQuestion}
-                  selectedTopicName={selectedTopic?.name ?? null}
                   onExitResearchMode={onExitResearchMode}
                   onOpenSources={
                     message.sources && message.sources.length > 0
@@ -210,7 +208,6 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                   onVersionSelect={onVersionSelect}
                   onCompareVersions={onCompareVersions}
                   conversationId={conversationId}
-                  topicId={selectedTopic?.id}
                   mode={mode}
                 />
 

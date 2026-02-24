@@ -296,19 +296,6 @@ export interface DocumentItem {
   metadata?: Record<string, unknown>;
 }
 
-/** @deprecated Topics retired in v2 — kept for type compatibility */
-export interface Topic {
-  id: string;
-  user_id: string;
-  name: string;
-  description?: string;
-  scope_config?: Record<string, any>;
-  parent_topic_id?: string | null;
-  topic_path?: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface Conversation {
   id: string;
   user_id: string;
@@ -316,7 +303,6 @@ export interface Conversation {
   mode?: 'research' | 'chat';
   metadata?: {
     filters?: {
-      topic?: string;
       timeRange?: TimeRange;
       startDate?: string;
       endDate?: string;
@@ -866,11 +852,6 @@ export const aiApi = {
     return response.data;
   },
 
-  suggestedStarters: async (topicId: string): Promise<ApiResponse<{ starters: string[] }>> => {
-    const response = await apiClient.get('/api/ai/suggested-starters', { params: { topicId } });
-    return response.data;
-  },
-
   regenerate: async (
     messageId: string,
     conversationId: string,
@@ -1118,12 +1099,12 @@ export const conversationApi = {
     return response.data;
   },
 
-  create: async (data: { title?: string; topicId?: string; mode?: 'research' | 'chat' }): Promise<ApiResponse<Conversation>> => {
+  create: async (data: { title?: string; mode?: 'research' | 'chat' }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.post('/api/conversations', data);
     return response.data;
   },
 
-  update: async (id: string, data: { title?: string; topicId?: string | null; metadata?: any; filters?: any; mode?: 'research' | 'chat' }): Promise<ApiResponse<Conversation>> => {
+  update: async (id: string, data: { title?: string; metadata?: any; filters?: any; mode?: 'research' | 'chat' }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.put(`/api/conversations/${id}`, data);
     return response.data;
   },
@@ -1380,7 +1361,6 @@ export const analyticsApi = {
   // ── Cross-conversation cited sources ──────────────────────────────
 
   getCitedSources: async (options?: {
-    topicId?: string;
     startDate?: string;
     endDate?: string;
     limit?: number;
@@ -1402,15 +1382,6 @@ export const analyticsApi = {
     return response.data;
   },
 
-  getTopicCitedSources: async (
-    topicId: string,
-    limit: number = 20
-  ): Promise<ApiResponse<{ sources: TopicCitedSource[] }>> => {
-    const response = await apiClient.get(`/api/analytics/cited-sources/topic/${topicId}`, {
-      params: { limit },
-    });
-    return response.data;
-  },
 };
 
 // Cited Sources Types
@@ -1432,20 +1403,7 @@ export interface SourceConversation {
   conversation_title: string | null;
   message_id: string;
   snippet: string | null;
-  topic_id: string | null;
-  topic_name: string | null;
   cited_at: string;
-}
-
-export interface TopicCitedSource {
-  id: string;
-  source_url: string | null;
-  source_type: 'document' | 'web';
-  document_id: string | null;
-  source_title: string;
-  source_domain: string | null;
-  topic_citation_count: number;
-  total_citation_count: number;
 }
 
 // Subscription API Types
@@ -2022,7 +1980,6 @@ export const metricsApi = {
   getRetrievalMetrics: async (options?: {
     startDate?: string;
     endDate?: string;
-    topicId?: string;
     limit?: number;
     offset?: number;
   }): Promise<ApiResponse<RetrievalMetrics>> => {
@@ -2169,7 +2126,6 @@ export interface FlaggedCitation {
 export interface FeedbackSubmission {
   messageId: string;
   conversationId?: string;
-  topicId?: string;
   rating: -1 | 1;
   comment?: string;
   flaggedCitations?: FlaggedCitation[];
@@ -2185,7 +2141,6 @@ export interface MessageFeedback {
   user_id: string;
   message_id: string;
   conversation_id: string | null;
-  topic_id: string | null;
   rating: -1 | 1;
   comment: string | null;
   flagged_citations: FlaggedCitation[];
@@ -2223,45 +2178,17 @@ export const feedbackApi = {
 // Workspace API
 // ═══════════════════════════════════════════════════════════════════
 
-export interface WorkspaceTopicNode {
-  id: string;
-  name: string;
-  description: string | null;
-  conversationCount: number;
-  documentCount: number;
-  createdAt: string;
-}
-
 export interface WorkspaceDocumentNode {
   id: string;
   filename: string;
   fileType: string;
   fileSize: number;
-  topicId: string | null;
   status: string;
   createdAt: string;
 }
 
-export interface WorkspaceConversationEdge {
-  topicId: string;
-  count: number;
-}
-
-export interface WorkspaceTopicCitation {
-  topicId: string;
-  citations: Array<{
-    sourceTitle: string;
-    sourceType: 'document' | 'web';
-    documentId: string | null;
-    citationCount: number;
-  }>;
-}
-
 export interface WorkspaceGraphData {
-  topics: WorkspaceTopicNode[];
   documents: WorkspaceDocumentNode[];
-  conversationCounts: WorkspaceConversationEdge[];
-  topicCitations: WorkspaceTopicCitation[];
 }
 
 export const workspaceApi = {

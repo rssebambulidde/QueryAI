@@ -1,25 +1,22 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Globe, FileText, ExternalLink, MessageSquare, TrendingUp, Search, X, ChevronRight } from 'lucide-react';
+import { Globe, FileText, ExternalLink, MessageSquare, Search, X, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { analyticsApi, CitedSource, TopicCitedSource, type Topic } from '@/lib/api';
+import { analyticsApi, CitedSource } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 
 interface CitedSourcesPanelProps {
-  selectedTopic?: Topic | null;
   onSourceExplore: (source: CitedSource) => void;
   className?: string;
 }
 
 export const CitedSourcesPanel: React.FC<CitedSourcesPanelProps> = ({
-  selectedTopic,
   onSourceExplore,
   className,
 }) => {
   const [sources, setSources] = useState<CitedSource[]>([]);
-  const [topicSources, setTopicSources] = useState<TopicCitedSource[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -39,17 +36,6 @@ export const CitedSourcesPanel: React.FC<CitedSourcesPanelProps> = ({
     }
   }, [toast]);
 
-  const loadTopicSources = useCallback(async (topicId: string) => {
-    try {
-      const res = await analyticsApi.getTopicCitedSources(topicId);
-      if (res.success && res.data) {
-        setTopicSources(res.data.sources);
-      }
-    } catch {
-      setTopicSources([]);
-    }
-  }, []);
-
   useEffect(() => {
     loadSources();
     // Listen for global sourcesUpdated event to reload sources
@@ -59,14 +45,6 @@ export const CitedSourcesPanel: React.FC<CitedSourcesPanelProps> = ({
       window.removeEventListener('sourcesUpdated', handler);
     };
   }, [loadSources]);
-
-  useEffect(() => {
-    if (selectedTopic?.id) {
-      loadTopicSources(selectedTopic.id);
-    } else {
-      setTopicSources([]);
-    }
-  }, [selectedTopic?.id, loadTopicSources]);
 
   const filteredSources = searchQuery
     ? sources.filter(
@@ -125,51 +103,6 @@ export const CitedSourcesPanel: React.FC<CitedSourcesPanelProps> = ({
                 <X className="w-3 h-3" />
               </button>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Topic-specific section */}
-      {selectedTopic && topicSources.length > 0 && !searchQuery && (
-        <div className="px-3 pb-2">
-          <div className="bg-orange-50 border border-orange-100 rounded-lg p-2.5">
-            <div className="flex items-center gap-1.5 mb-2">
-              <TrendingUp className="w-3.5 h-3.5 text-orange-600" />
-              <span className="text-[11px] font-semibold text-orange-700">
-                Top in: {selectedTopic.name}
-              </span>
-            </div>
-            <div className="space-y-1">
-              {topicSources.slice(0, 5).map((ts) => (
-                <button
-                  key={ts.id}
-                  onClick={() =>
-                    onSourceExplore({
-                      ...ts,
-                      first_cited_at: '',
-                      last_cited_at: '',
-                      citation_count: ts.total_citation_count,
-                      conversation_count: 0,
-                    })
-                  }
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-orange-100/60 transition-colors text-left group"
-                >
-                  {ts.source_type === 'web' ? (
-                    <Globe className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
-                  ) : (
-                    <FileText className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[12px] font-medium text-gray-800 truncate">
-                      {ts.source_title || ts.source_domain || 'Untitled'}
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-orange-600 font-medium flex-shrink-0">
-                    {ts.topic_citation_count}×
-                  </span>
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       )}
