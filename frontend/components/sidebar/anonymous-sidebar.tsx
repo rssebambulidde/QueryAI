@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { SquarePen, LogIn, UserPlus, MessageSquareWarning, PanelLeftClose, PanelLeft, MessageSquare, MoreHorizontal, Pencil, Trash2, Check, X as XIcon } from 'lucide-react';
+import { SquarePen, LogIn, UserPlus, PanelLeftClose, PanelLeft, MessageSquare, MoreHorizontal, Pencil, Trash2, Check, X as XIcon } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -194,16 +194,6 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
 
       {/* Spacer (only when no conversations to fill) */}
       {(isCollapsed || conversations.length === 0) && <div className="flex-1" />}
-
-      {/* Not saved notice */}
-      {!isCollapsed && (
-        <div className="px-4 pb-3">
-          <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700">
-            <MessageSquareWarning className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <span>Conversations are not saved. <Link href="/signup" className="underline font-medium text-amber-800 hover:text-amber-900">Sign up</Link> to keep your history.</span>
-          </div>
-        </div>
-      )}
 
       {/* Auth CTAs */}
       <div className={cn(
