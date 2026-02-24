@@ -54,6 +54,8 @@ export const errorHandler = (
       method: req.method,
       body: req.body,
     });
+    // Also write to stderr so Railway always captures 500s
+    console.error('[500 UNHANDLED]', req.method, req.path, err.message, err.stack);
   }
 
   // Determine error message
