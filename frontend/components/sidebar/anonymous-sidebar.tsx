@@ -91,7 +91,7 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-3 border-b border-gray-100">
-        {!isCollapsed && <Logo href="/chat" showName size="sm" />}
+        {!isCollapsed && <Logo href="/" showName size="sm" />}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"

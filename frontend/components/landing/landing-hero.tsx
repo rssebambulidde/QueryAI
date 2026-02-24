@@ -18,7 +18,7 @@ export function LandingHero() {
           Ask questions. Get answers backed by your documents and the web, with citations.
         </p>
         <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link href="/chat">
+          <Link href="/">
             <Button size="lg" className="w-full sm:w-auto min-w-[200px] min-h-[48px] text-base">
               Try it free — no sign-up
             </Button>
