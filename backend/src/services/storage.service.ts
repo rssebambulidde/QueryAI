@@ -14,14 +14,22 @@ export class StorageService {
       throw new AppError('Storage initialization failed', 500, 'STORAGE_ERROR');
     }
 
-    const exists = buckets?.some((bucket) => bucket.name === BUCKET_NAME);
-    if (!exists) {
+    const existing = buckets?.find((bucket) => bucket.name === BUCKET_NAME);
+    if (!existing) {
       const { error: createError } = await supabaseAdmin.storage.createBucket(BUCKET_NAME, {
-        public: false,
+        public: true,
       });
       if (createError) {
         logger.error('Failed to create storage bucket', { error: createError.message });
         throw new AppError('Storage bucket creation failed', 500, 'STORAGE_ERROR');
+      }
+    } else if (!existing.public) {
+      // Ensure bucket is public so avatar URLs work via getPublicUrl()
+      const { error: updateError } = await supabaseAdmin.storage.updateBucket(BUCKET_NAME, {
+        public: true,
+      });
+      if (updateError) {
+        logger.warn('Failed to make storage bucket public', { error: updateError.message });
       }
     }
   }
