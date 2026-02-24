@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { AnonymousChatContainer } from '@/components/chat/anonymous-chat-container';
+import type { AnonymousConversation } from '@/components/chat/anonymous-chat-container';
 import { AnonymousSidebar } from '@/components/sidebar/anonymous-sidebar';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { Menu, X } from 'lucide-react';
@@ -23,6 +24,8 @@ export default function AnonymousChatPage() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0); // key to reset chat container
   const [queryCount, setQueryCount] = useState(0);
+  const [conversations, setConversations] = useState<AnonymousConversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
 
   // Check auth on mount
   useEffect(() => {
@@ -56,8 +59,14 @@ export default function AnonymousChatPage() {
 
   const handleNewChat = () => {
     setChatKey((k) => k + 1); // Reset the chat container
+    setActiveConversationId(null);
     setIsMobileSidebarOpen(false);
   };
+
+  const handleConversationCreated = useCallback((conv: AnonymousConversation) => {
+    setConversations((prev) => [conv, ...prev]);
+    setActiveConversationId(conv.id);
+  }, []);
 
   // Show loading spinner while checking auth
   if (isLoading) {
@@ -100,6 +109,8 @@ export default function AnonymousChatPage() {
                 onNewChat={handleNewChat}
                 queryCount={queryCount}
                 maxQueries={MAX_ANONYMOUS_QUERIES}
+                conversations={conversations}
+                activeConversationId={activeConversationId}
               />
             </div>
           </>
@@ -111,12 +122,14 @@ export default function AnonymousChatPage() {
             onNewChat={handleNewChat}
             queryCount={queryCount}
             maxQueries={MAX_ANONYMOUS_QUERIES}
+            conversations={conversations}
+            activeConversationId={activeConversationId}
           />
         )}
 
         {/* Main chat area */}
         <div className="flex-1 flex flex-col overflow-hidden bg-white">
-          <AnonymousChatContainer key={chatKey} onNewChat={handleNewChat} />
+          <AnonymousChatContainer key={chatKey} onNewChat={handleNewChat} onConversationCreated={handleConversationCreated} />
         </div>
       </main>
     </div>

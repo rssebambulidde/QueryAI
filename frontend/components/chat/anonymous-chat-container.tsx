@@ -14,8 +14,6 @@ import { SignInPrompt } from './sign-in-prompt';
 import { useAnonymousChatSend } from '@/lib/hooks/useAnonymousChatSend';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { useToast } from '@/lib/hooks/use-toast';
-import { Search, MessageCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 // ─── Default no-op values for advanced features (not used in anonymous mode) ─
 const NOOP = () => {};
@@ -48,27 +46,25 @@ function incrementSessionQueryCount(): number {
   return count;
 }
 
-// ─── Suggestion chips ────────────────────────────────────────────────────────
-
-const SUGGESTION_CHIPS = [
-  'Research a topic',
-  'Verify a claim',
-  'Compare two things',
-  'Explain a concept',
-  'Summarize an article',
-  'Find recent news',
-];
-
 // ─── Component ───────────────────────────────────────────────────────────────
+
+/** Lightweight conversation stub kept in memory for anonymous sidebar list */
+export interface AnonymousConversation {
+  id: string;
+  title: string;
+  createdAt: Date;
+}
 
 interface AnonymousChatContainerProps {
   onNewChat: () => void;
+  /** Called when a new conversation is created (for the sidebar list) */
+  onConversationCreated?: (conversation: AnonymousConversation) => void;
 }
 
-export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ onNewChat }) => {
+export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ onNewChat, onConversationCreated }) => {
   // State
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversationMode, setConversationMode] = useState<'research' | 'chat'>('research');
+  const [conversationMode] = useState<'research' | 'chat'>('chat');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingState, setStreamingState] = useState<StreamingState>('completed');
@@ -84,6 +80,23 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
 
   const isGated = queryCount >= MAX_ANONYMOUS_QUERIES;
   const isEmpty = messages.length === 0;
+
+  // Track conversation in sidebar list after first assistant reply
+  const conversationIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    // When the first assistant message arrives, register a conversation entry
+    const assistantMsgs = messages.filter((m) => m.role === 'assistant' && m.content);
+    if (assistantMsgs.length > 0 && !conversationIdRef.current) {
+      const firstUserMsg = messages.find((m) => m.role === 'user');
+      const title = firstUserMsg?.content?.slice(0, 60) || 'New conversation';
+      conversationIdRef.current = `anon-conv-${Date.now()}`;
+      onConversationCreated?.({
+        id: conversationIdRef.current,
+        title,
+        createdAt: new Date(),
+      });
+    }
+  }, [messages, onConversationCreated]);
 
   // Hook
   const { sendMessage, cancelStream } = useAnonymousChatSend({
@@ -123,11 +136,6 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
     await sendMessage(content);
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
-    if (isGated) return;
-    sendMessage(suggestion);
-  };
-
   // ─── Render ─────────────────────────────────────────────────────────────
 
   // If query limit is reached and no messages, show gate
@@ -137,65 +145,22 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Empty state — centred greeting + input + suggestion chips */}
+      {/* Empty state — centred greeting + input (no suggestion chips) */}
       {isEmpty && (
-        <div className="flex flex-1 min-h-0 items-center justify-center">
-          <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-            {/* Icon + Greeting */}
-            <div className="text-center mb-8">
-              <div className={cn(
-                'inline-flex items-center justify-center w-16 h-16 rounded-full mb-4',
-                conversationMode === 'chat'
-                  ? 'bg-gradient-to-br from-purple-100 to-purple-200'
-                  : 'bg-gradient-to-br from-blue-100 to-blue-200'
-              )}>
-                {conversationMode === 'chat'
-                  ? <MessageCircle className="w-8 h-8 text-purple-600" />
-                  : <Search className="w-8 h-8 text-blue-600" />
-                }
-              </div>
-              <h3 className="text-2xl font-semibold text-gray-900 mb-2">
-                {welcomeGreeting}
-              </h3>
-              <p className="text-gray-500">
-                {conversationMode === 'chat'
-                  ? 'Fast AI answers — quick and conversational.'
-                  : 'In-depth research with cited sources and web search.'
-                }
-              </p>
-            </div>
-
-            {/* Input */}
-            <ChatInputArea
-              variant="empty"
-              mode={conversationMode}
-              onModeChange={setConversationMode}
-              onSend={handleSend}
-              disabled={isLoading || isStreaming}
-              selectedTopic={null}
-              dynamicStarters={null}
-              isLoading={isLoading}
-              isStreaming={isStreaming}
-              onOpenCitationSettings={NOOP}
-              welcomeGreeting={undefined}
-              ragSettings={{ enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 0, minScore: 0.5, maxWebResults: 3 }}
-              onRagSettingsChange={NOOP}
-            />
-
-            {/* Suggestion chips */}
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {SUGGESTION_CHIPS.map((chip) => (
-                <button
-                  key={chip}
-                  onClick={() => handleSuggestionClick(chip)}
-                  className="px-4 py-2 text-sm text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-full border border-gray-200 hover:border-gray-300 transition-colors"
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        <ChatInputArea
+          variant="empty"
+          mode={conversationMode}
+          onSend={handleSend}
+          disabled={isLoading || isStreaming}
+          selectedTopic={null}
+          dynamicStarters={null}
+          isLoading={isLoading}
+          isStreaming={isStreaming}
+          onOpenCitationSettings={NOOP}
+          welcomeGreeting={welcomeGreeting}
+          ragSettings={{ enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 0, minScore: 0.5, maxWebResults: 3 }}
+          onRagSettingsChange={NOOP}
+        />
       )}
 
       {/* Conversation mode */}
@@ -263,7 +228,6 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
               <ChatInputArea
                 variant="conversation"
                 mode={conversationMode}
-                onModeChange={setConversationMode}
                 onSend={handleSend}
                 disabled={isLoading || isStreaming}
                 selectedTopic={null}
@@ -280,6 +244,17 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
       )}
 
       <div ref={messagesEndRef} />
+
+      {/* Footer legal links */}
+      <footer className="flex items-center justify-center gap-3 py-2 text-[11px] text-gray-400 border-t border-gray-100 flex-shrink-0">
+        <a href="/privacy" className="hover:text-gray-600 transition-colors">Privacy</a>
+        <span>·</span>
+        <a href="/terms" className="hover:text-gray-600 transition-colors">Terms</a>
+        <span>·</span>
+        <a href="/cookie-policy" className="hover:text-gray-600 transition-colors">Cookies</a>
+        <span>·</span>
+        <a href="/disclaimer" className="hover:text-gray-600 transition-colors">Disclaimer</a>
+      </footer>
     </div>
   );
 };
