@@ -5,11 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   User,
-  Search,
   FileText,
-  Settings as SettingsIcon,
   CreditCard,
-  ArrowLeft,
   Users,
   ShieldCheck,
   Menu,
@@ -35,10 +32,7 @@ interface SettingsNavItem {
 const settingsNav: SettingsNavItem[] = [
   { href: '/dashboard/settings/profile', label: 'Profile', icon: User, group: 'account' },
   { href: '/dashboard/settings/subscription', label: 'Subscription', icon: CreditCard, group: 'account' },
-  // Documents & Topics retired in v2
-  { href: '/dashboard/settings/search', label: 'Search', icon: Search, group: 'research' },
   { href: '/dashboard/settings/citations', label: 'Citations', icon: FileText, group: 'research' },
-  { href: '/dashboard/settings/advanced', label: 'Advanced RAG', icon: SettingsIcon, group: 'advanced' },
   { href: '/dashboard/settings/team', label: 'Team', icon: Users, group: 'admin', requiresEnterprise: true },
   { href: '/dashboard/settings/super-admin', label: 'Super Admin', icon: ShieldCheck, group: 'admin', requiresSuperAdmin: true },
 ];
@@ -46,7 +40,6 @@ const settingsNav: SettingsNavItem[] = [
 const groupLabels: Record<string, string> = {
   account: 'Account',
   research: 'Research',
-  advanced: 'Advanced',
   admin: 'Administration',
 };
 
@@ -91,7 +84,7 @@ export default function SettingsLayout({
   const currentPageLabel = currentPage?.label || 'Settings';
 
   // Group navigation items
-  const groups = ['account', 'research', 'advanced', 'admin'].map(groupKey => ({
+  const groups = ['account', 'research', 'admin'].map(groupKey => ({
     key: groupKey,
     label: groupLabels[groupKey],
     items: visibleNav.filter(item => item.group === groupKey),

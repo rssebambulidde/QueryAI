@@ -10,5 +10,9 @@ export default function SettingsPage() {
     router.replace('/dashboard/settings/profile');
   }, [router]);
 
-  return null;
+  return (
+    <div className="flex items-center justify-center py-16">
+      <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-gray-900" />
+    </div>
+  );
 }

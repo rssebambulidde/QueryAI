@@ -47,7 +47,8 @@ export default function SuperAdminPage() {
   const { isSuperAdmin } = useUserRole();
   const [activeTab, setActiveTab] = useState<TabId>('feedback');
 
-  // Redirect if not super admin
+  // Layout already hides this nav item for non-super-admins.
+  // Belt-and-suspenders redirect for direct URL access.
   if (!isLoading && (!isAuthenticated || !isSuperAdmin)) {
     router.push('/dashboard');
     return null;
@@ -55,9 +56,9 @@ export default function SuperAdminPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center py-16">
         <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
           <p className="mt-4 text-gray-600">Loading...</p>
         </div>
       </div>
@@ -110,7 +111,7 @@ export default function SuperAdminPage() {
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
+        <nav className="-mb-px flex flex-wrap gap-x-1 gap-y-1 overflow-x-auto" aria-label="Tabs">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -118,13 +119,13 @@ export default function SuperAdminPage() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap',
+                  'flex items-center gap-1.5 py-2.5 px-2 border-b-2 font-medium text-xs whitespace-nowrap',
                   activeTab === tab.id
                     ? 'border-orange-500 text-orange-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 )}
               >
-                <Icon className="w-4 h-4" />
+                <Icon className="w-3.5 h-3.5" />
                 {tab.label}
               </button>
             );
