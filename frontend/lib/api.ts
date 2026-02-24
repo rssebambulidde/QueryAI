@@ -495,7 +495,7 @@ async function* _streamGeneration(
           const payload = line.slice(6);
           switch (currentEvent) {
             case 'chunk':
-              yield payload;
+              try { yield JSON.parse(payload); } catch { yield payload; }
               break;
             case 'done':
               return;
@@ -623,8 +623,8 @@ export const aiApi = {
 
                 switch (currentEvent) {
                   case 'chunk':
-                    // Plain text — no JSON parsing needed
-                    yield payload;
+                    // Payload is JSON-encoded (newlines escaped) — decode it
+                    try { yield JSON.parse(payload); } catch { yield payload; }
                     break;
                   case 'sources':
                     try {
@@ -765,7 +765,7 @@ export const aiApi = {
               const payload = line.slice(6);
               switch (currentEvent) {
                 case 'chunk':
-                  yield payload;
+                  try { yield JSON.parse(payload); } catch { yield payload; }
                   break;
                 case 'sources':
                   try { yield { sources: JSON.parse(payload) as Source[] }; } catch { /* skip */ }
@@ -972,7 +972,7 @@ export const aiApi = {
 
             switch (currentEvent) {
               case 'chunk':
-                yield payload;
+                try { yield JSON.parse(payload); } catch { yield payload; }
                 break;
               case 'sources':
                 try { yield { sources: JSON.parse(payload) as Source[] }; } catch { /* skip */ }

@@ -42,10 +42,12 @@ export class StreamingService {
   }
 
   /**
-   * Format SSE (Server-Sent Events) message
+   * Format SSE (Server-Sent Events) message.
+   * Always JSON-encodes data so newlines within text chunks don't break
+   * SSE framing (the spec terminates `data:` fields at `\n`).
    */
   static formatSSEMessage(event: string, data: any): string {
-    const dataStr = typeof data === 'string' ? data : JSON.stringify(data);
+    const dataStr = JSON.stringify(data);
     return `event: ${event}\ndata: ${dataStr}\n\n`;
   }
 
