@@ -16,7 +16,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { UsageWarningBanner } from '@/components/notifications/usage-warning-banner';
 // import { RoleDebug } from '@/components/debug/role-debug'; // Uncomment to debug role issues
 
-type TabType = 'chat' | 'collections' | 'sources';
+type TabType = 'chat' | 'collections';
 
 function DashboardContent() {
   const router = useRouter();
@@ -49,7 +49,7 @@ function DashboardContent() {
   // Read tab from URL query parameter on mount and when it changes
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    if (tabParam && ['chat', 'collections', 'sources'].includes(tabParam)) {
+    if (tabParam && ['chat', 'collections'].includes(tabParam)) {
       setActiveTab(tabParam as TabType);
     } else if (tabParam === 'subscription') {
       // Redirect to settings/subscription
