@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { SquarePen, LogIn, UserPlus, MessageSquareWarning, PanelLeftClose, PanelLeft, MessageSquare } from 'lucide-react';
+import { SquarePen, LogIn, UserPlus, MessageSquareWarning, PanelLeftClose, PanelLeft, MessageSquare, MoreHorizontal, Pencil, Trash2, Check, X as XIcon } from 'lucide-react';
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,10 @@ interface AnonymousSidebarProps {
   activeConversationId?: string | null;
   /** Called when user clicks a conversation in the list */
   onSelectConversation?: (id: string) => void;
+  /** Called to rename a conversation */
+  onRenameConversation?: (id: string, newTitle: string) => void;
+  /** Called to delete a conversation */
+  onDeleteConversation?: (id: string) => void;
 }
 
 /**
@@ -32,8 +36,55 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
   conversations = [],
   activeConversationId,
   onSelectConversation,
+  onRenameConversation,
+  onDeleteConversation,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const menuRef = useRef<HTMLDivElement>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null);
+      }
+    };
+    if (menuOpenId) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpenId]);
+
+  // Focus edit input when entering rename mode
+  useEffect(() => {
+    if (editingId) editInputRef.current?.focus();
+  }, [editingId]);
+
+  const startRename = (conv: AnonymousConversation) => {
+    setEditingId(conv.id);
+    setEditTitle(conv.title);
+    setMenuOpenId(null);
+  };
+
+  const confirmRename = () => {
+    if (editingId && editTitle.trim()) {
+      onRenameConversation?.(editingId, editTitle.trim());
+    }
+    setEditingId(null);
+    setEditTitle('');
+  };
+
+  const cancelRename = () => {
+    setEditingId(null);
+    setEditTitle('');
+  };
+
+  const handleDelete = (id: string) => {
+    onDeleteConversation?.(id);
+    setMenuOpenId(null);
+  };
 
   return (
     <aside
@@ -75,19 +126,72 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
             Recent (not saved)
           </div>
           {conversations.map((conv) => (
-            <button
-              key={conv.id}
-              onClick={() => onSelectConversation?.(conv.id)}
-              className={cn(
-                'flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm text-left transition-colors truncate',
-                activeConversationId === conv.id
-                  ? 'bg-gray-100 text-gray-900 font-medium'
-                  : 'text-gray-600 hover:bg-gray-50'
+            <div key={conv.id} className="relative group">
+              {editingId === conv.id ? (
+                /* Inline rename */
+                <div className="flex items-center gap-1 px-2 py-1.5">
+                  <input
+                    ref={editInputRef}
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') confirmRename();
+                      if (e.key === 'Escape') cancelRename();
+                    }}
+                    className="flex-1 text-sm px-2 py-1 border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                    maxLength={80}
+                  />
+                  <button onClick={confirmRename} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Save">
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={cancelRename} className="p-1 text-gray-400 hover:bg-gray-100 rounded" title="Cancel">
+                    <XIcon className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                /* Normal conversation row */
+                <button
+                  onClick={() => onSelectConversation?.(conv.id)}
+                  className={cn(
+                    'flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm text-left transition-colors',
+                    activeConversationId === conv.id
+                      ? 'bg-gray-100 text-gray-900 font-medium'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  )}
+                >
+                  <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
+                  <span className="truncate flex-1">{conv.title}</span>
+                  {/* 3-dot menu trigger */}
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === conv.id ? null : conv.id); }}
+                    className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-gray-200 transition-opacity"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5 text-gray-400" />
+                  </span>
+                </button>
               )}
-            >
-              <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
-              <span className="truncate">{conv.title}</span>
-            </button>
+
+              {/* Dropdown menu */}
+              {menuOpenId === conv.id && editingId !== conv.id && (
+                <div ref={menuRef} className="absolute right-2 top-full z-20 mt-0.5 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1">
+                  <button
+                    onClick={() => startRename(conv)}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Rename
+                  </button>
+                  <button
+                    onClick={() => handleDelete(conv.id)}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}

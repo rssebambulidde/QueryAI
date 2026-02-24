@@ -32,18 +32,36 @@ const DEFAULT_RERANK_SETTINGS: RerankingSettings = {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const MAX_ANONYMOUS_QUERIES = 5;
-const SESSION_QUERY_KEY = 'queryai_anon_queries';
+const ANON_HOURLY_LIMIT = 15; // max messages per hour
+const ANON_RATE_KEY = 'queryai_anon_hourly';
 
-function getSessionQueryCount(): number {
-  if (typeof window === 'undefined') return 0;
-  return parseInt(sessionStorage.getItem(SESSION_QUERY_KEY) || '0', 10);
+interface HourlyBucket {
+  hour: number; // getTime() floored to hour
+  count: number;
 }
 
-function incrementSessionQueryCount(): number {
-  const count = getSessionQueryCount() + 1;
-  sessionStorage.setItem(SESSION_QUERY_KEY, count.toString());
-  return count;
+function getHourlyBucket(): HourlyBucket {
+  if (typeof window === 'undefined') return { hour: 0, count: 0 };
+  try {
+    const raw = sessionStorage.getItem(ANON_RATE_KEY);
+    if (raw) {
+      const bucket: HourlyBucket = JSON.parse(raw);
+      const currentHour = Math.floor(Date.now() / 3_600_000);
+      if (bucket.hour === currentHour) return bucket;
+    }
+  } catch { /* ignore */ }
+  return { hour: Math.floor(Date.now() / 3_600_000), count: 0 };
+}
+
+function incrementHourlyBucket(): HourlyBucket {
+  const bucket = getHourlyBucket();
+  bucket.count += 1;
+  sessionStorage.setItem(ANON_RATE_KEY, JSON.stringify(bucket));
+  return bucket;
+}
+
+function isHourlyLimitReached(): boolean {
+  return getHourlyBucket().count >= ANON_HOURLY_LIMIT;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -64,22 +82,24 @@ interface AnonymousChatContainerProps {
 export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ onNewChat, onConversationCreated }) => {
   // State
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversationMode] = useState<'research' | 'chat'>('chat');
+  const [conversationMode, setConversationMode] = useState<'research' | 'chat'>('chat');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingState, setStreamingState] = useState<StreamingState>('completed');
   const [error, setError] = useState<string | null>(null);
   const [sourcePanelContext, setSourcePanelContext] = useState<{ sources: Source[]; query: string } | null>(null);
-  const [queryCount, setQueryCount] = useState(getSessionQueryCount);
+  const [hourlyCount, setHourlyCount] = useState(() => getHourlyBucket().count);
   const [showSignInBanner, setShowSignInBanner] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [showDeepResearchGate, setShowDeepResearchGate] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
   const { isMobile } = useMobile();
 
-  const isGated = queryCount >= MAX_ANONYMOUS_QUERIES;
+  const isRateLimited = hourlyCount >= ANON_HOURLY_LIMIT;
   const isEmpty = messages.length === 0;
+  const isDeepResearch = conversationMode === 'research';
 
   // Track conversation in sidebar list after first assistant reply
   const conversationIdRef = useRef<string | null>(null);
@@ -98,10 +118,10 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
     }
   }, [messages, onConversationCreated]);
 
-  // Hook
+  // Hook — always uses 'chat' mode for the actual API call (Deep Research blocked)
   const { sendMessage, cancelStream } = useAnonymousChatSend({
     messages,
-    conversationMode,
+    conversationMode: 'chat', // always chat for anonymous
     setMessages,
     setIsLoading,
     setIsStreaming,
@@ -109,10 +129,10 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
     setError,
     toast,
     onQuerySent: () => {
-      const newCount = incrementSessionQueryCount();
-      setQueryCount(newCount);
+      const bucket = incrementHourlyBucket();
+      setHourlyCount(bucket.count);
       // Show sign-in banner after first answer
-      if (newCount === 1 && !bannerDismissed) {
+      if (bucket.count === 1 && !bannerDismissed) {
         setShowSignInBanner(true);
       }
     },
@@ -131,27 +151,66 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
     return 'Good evening! What would you like to research?';
   })();
 
+  const handleModeChange = (mode: 'research' | 'chat') => {
+    setConversationMode(mode);
+    if (mode === 'research') {
+      setShowDeepResearchGate(true);
+    } else {
+      setShowDeepResearchGate(false);
+    }
+  };
+
   const handleSend = async (content: string) => {
-    if (isGated) return;
+    // Block send in Deep Research mode
+    if (isDeepResearch) {
+      setShowDeepResearchGate(true);
+      return;
+    }
+    // Block if hourly rate limited
+    if (isRateLimited) {
+      toast.error('Hourly message limit reached. Please wait or sign up for unlimited access.');
+      return;
+    }
     await sendMessage(content);
   };
 
   // ─── Render ─────────────────────────────────────────────────────────────
 
-  // If query limit is reached and no messages, show gate
-  if (isGated && isEmpty) {
-    return <SignInPrompt variant="gate" />;
+  // If hourly rate limited and no messages, show gate
+  if (isRateLimited && isEmpty) {
+    return <SignInPrompt variant="gate" message="You've reached the hourly message limit. Sign up for unlimited access." />;
   }
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Empty state — centred greeting + input (no suggestion chips) */}
+      {/* Deep Research sign-in gate */}
+      {showDeepResearchGate && isDeepResearch && (
+        <div className="mx-auto max-w-3xl px-4 mt-4 mb-2">
+          <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm">
+            <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
+            <span className="flex-1 text-gray-700">
+              <strong>Deep Research</strong> requires a free account.{' '}
+              <a href="/signup" className="text-blue-600 hover:underline font-medium">Sign up</a> or{' '}
+              <a href="/login" className="text-blue-600 hover:underline font-medium">sign in</a> to use it.
+            </span>
+            <button
+              onClick={() => { setConversationMode('chat'); setShowDeepResearchGate(false); }}
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-amber-100 transition-colors"
+            >
+              Use Express instead
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state — centred greeting + input */}
       {isEmpty && (
         <ChatInputArea
           variant="empty"
           mode={conversationMode}
+          onModeChange={handleModeChange}
           onSend={handleSend}
-          disabled={isLoading || isStreaming}
+          disabled={isLoading || isStreaming || isDeepResearch}
           selectedTopic={null}
           dynamicStarters={null}
           isLoading={isLoading}
@@ -167,7 +226,7 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
       {!isEmpty && (
         <>
           {/* Sign-in prompt banner */}
-          {showSignInBanner && !bannerDismissed && !isGated && (
+          {showSignInBanner && !bannerDismissed && !isRateLimited && (
             <SignInPrompt
               variant="banner"
               onDismiss={() => {
@@ -177,9 +236,9 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
             />
           )}
 
-          {/* Gate overlay if limit reached */}
-          {isGated ? (
-            <SignInPrompt variant="gate" />
+          {/* Gate overlay if hourly rate limited */}
+          {isRateLimited ? (
+            <SignInPrompt variant="gate" message="You've reached the hourly message limit. Sign up for unlimited access." />
           ) : (
             <>
               <div className="flex flex-1 min-h-0">
@@ -228,8 +287,9 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({ 
               <ChatInputArea
                 variant="conversation"
                 mode={conversationMode}
+                onModeChange={handleModeChange}
                 onSend={handleSend}
-                disabled={isLoading || isStreaming}
+                disabled={isLoading || isStreaming || isDeepResearch}
                 selectedTopic={null}
                 dynamicStarters={null}
                 isLoading={isLoading}

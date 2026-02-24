@@ -9,12 +9,20 @@ import { AnonymousSidebar } from '@/components/sidebar/anonymous-sidebar';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { Menu, X } from 'lucide-react';
 
-const MAX_ANONYMOUS_QUERIES = 5;
-const SESSION_QUERY_KEY = 'queryai_anon_queries';
+const ANON_HOURLY_LIMIT = 15;
+const ANON_RATE_KEY = 'queryai_anon_hourly';
 
-function getSessionQueryCount(): number {
+function getHourlyCount(): number {
   if (typeof window === 'undefined') return 0;
-  return parseInt(sessionStorage.getItem(SESSION_QUERY_KEY) || '0', 10);
+  try {
+    const raw = sessionStorage.getItem(ANON_RATE_KEY);
+    if (raw) {
+      const bucket = JSON.parse(raw);
+      const currentHour = Math.floor(Date.now() / 3_600_000);
+      if (bucket.hour === currentHour) return bucket.count;
+    }
+  } catch { /* ignore */ }
+  return 0;
 }
 
 export default function AnonymousChatPage() {
@@ -39,12 +47,12 @@ export default function AnonymousChatPage() {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  // Sync query count from sessionStorage
+  // Sync hourly query count
   useEffect(() => {
-    setQueryCount(getSessionQueryCount());
+    setQueryCount(getHourlyCount());
     const interval = setInterval(() => {
-      setQueryCount(getSessionQueryCount());
-    }, 1000);
+      setQueryCount(getHourlyCount());
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -67,6 +75,19 @@ export default function AnonymousChatPage() {
     setConversations((prev) => [conv, ...prev]);
     setActiveConversationId(conv.id);
   }, []);
+
+  const handleRenameConversation = useCallback((id: string, newTitle: string) => {
+    setConversations((prev) => prev.map((c) => c.id === id ? { ...c, title: newTitle } : c));
+  }, []);
+
+  const handleDeleteConversation = useCallback((id: string) => {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    if (activeConversationId === id) {
+      // Deleted the active conversation — start a new chat
+      setChatKey((k) => k + 1);
+      setActiveConversationId(null);
+    }
+  }, [activeConversationId]);
 
   // Show loading spinner while checking auth
   if (isLoading) {
@@ -108,9 +129,11 @@ export default function AnonymousChatPage() {
               <AnonymousSidebar
                 onNewChat={handleNewChat}
                 queryCount={queryCount}
-                maxQueries={MAX_ANONYMOUS_QUERIES}
+                maxQueries={ANON_HOURLY_LIMIT}
                 conversations={conversations}
                 activeConversationId={activeConversationId}
+                onRenameConversation={handleRenameConversation}
+                onDeleteConversation={handleDeleteConversation}
               />
             </div>
           </>
@@ -121,9 +144,11 @@ export default function AnonymousChatPage() {
           <AnonymousSidebar
             onNewChat={handleNewChat}
             queryCount={queryCount}
-            maxQueries={MAX_ANONYMOUS_QUERIES}
+            maxQueries={ANON_HOURLY_LIMIT}
             conversations={conversations}
             activeConversationId={activeConversationId}
+            onRenameConversation={handleRenameConversation}
+            onDeleteConversation={handleDeleteConversation}
           />
         )}
 
