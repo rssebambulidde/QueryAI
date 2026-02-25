@@ -34,7 +34,7 @@ const INLINE_ACCEPTED_TYPES = [
 ];
 
 /** Max inline attachment file size — 10 MB (sent as base64 in JSON body) */
-const INLINE_MAX_SIZE = 10 * 1024 * 1024;
+const INLINE_MAX_SIZE = 50 * 1024 * 1024; // 50 MB — matches backend multer limit
 
 /** Max number of inline attachments per message */
 const INLINE_MAX_COUNT = 5;
@@ -352,7 +352,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         continue;
       }
       if (file.size > INLINE_MAX_SIZE) {
-        errors.push(`${file.name}: Too large (max 10 MB)`);
+        errors.push(`${file.name}: Too large (max 50 MB)`);
         continue;
       }
       try {
@@ -377,8 +377,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               });
               continue; // Successfully uploaded — skip base64 fallback
             }
-          } catch {
-            // Upload failed (e.g., anonymous user) — fall back to base64
+          } catch (uploadErr: any) {
+            // Upload failed (e.g., anonymous user, network error) — fall back to base64
+            console.warn('[ChatInput] Server upload failed, falling back to base64:', uploadErr?.message || uploadErr);
           }
         }
 

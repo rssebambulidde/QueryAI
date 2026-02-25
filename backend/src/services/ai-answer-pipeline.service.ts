@@ -655,6 +655,46 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             if (docsWithText.length > 0) {
               attachmentContext = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
             }
+
+            // Emit extraction statuses so frontend can show badges on message bubbles
+            const resolvedStatuses = resolved.map((r) => ({
+              name: r.fileName,
+              status: r.extractedText ? 'success' as const : 'failed' as const,
+              chars: r.extractedText?.length ?? 0,
+            }));
+            if (resolvedStatuses.length > 0) {
+              (request as any)._extractionStatuses = [
+                ...((request as any)._extractionStatuses || []),
+                ...resolvedStatuses,
+              ];
+            }
+
+            // Persist fileId doc references into conversation metadata so
+            // attachments survive cross-session reloads.
+            if (request.conversationId) {
+              try {
+                const { ConversationService } = await import('./conversation.service');
+                const savedAttachments = resolved.map((r) => ({
+                  name: r.fileName,
+                  mimeType: r.mimeType,
+                  extractedText: r.extractedText
+                    ? r.extractedText.length > 12000
+                      ? AttachmentExtractorService.smartTruncate(r.extractedText, request.question, 12000)
+                      : r.extractedText
+                    : '',
+                  extractionStatus: r.extractedText ? 'success' : 'failed',
+                  fileId: r.id,
+                }));
+                await ConversationService.updateConversation(
+                  request.conversationId,
+                  userId,
+                  { metadata: { savedAttachments } },
+                );
+              } catch (saveErr: any) {
+                logger.warn('Failed to persist attachmentIds to metadata', { error: saveErr.message });
+              }
+            }
+
             logger.info('Resolved attachmentIds for follow-up', {
               ids: (request as any).attachmentIds,
               resolved: resolved.length,
@@ -675,6 +715,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         const images = request.attachments.filter((a) => a.type === 'image');
 
         // ── Resolve fileId attachments from chat_attachments table ─────
+        let fileIdResolvedDocs: Array<{ name: string; text: string; mimeType: string; fileId: string; extractionStatus: string }> = [];
         if (withFileId.length > 0 && userId) {
           try {
             const { ChatAttachmentService } = await import('./chat-attachment.service');
@@ -686,6 +727,14 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             if (docsWithText.length > 0) {
               attachmentContext = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
             }
+            // Collect for metadata persistence
+            fileIdResolvedDocs = resolved.map((r) => ({
+              name: r.fileName,
+              text: r.extractedText || '',
+              mimeType: r.mimeType,
+              fileId: r.id,
+              extractionStatus: r.extractedText ? 'success' : 'failed',
+            }));
             // Build extraction statuses from resolved data
             const resolvedStatuses = resolved.map((r) => ({
               name: r.fileName,
@@ -739,26 +788,40 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         });
 
         // ── Persist extracted document text to conversation metadata ─────
-        // fileId docs are already persisted in chat_attachments table.
-        // Only base64 docs need to be saved to conversation metadata.
-        if (base64ExtractedDocs.length > 0 && request.conversationId && userId) {
+        // Save both fileId (pre-uploaded) and base64 doc references so that
+        // loadConversationData can restore attachment indicators on reload.
+        const allDocsToSave = [
+          ...fileIdResolvedDocs.map((doc) => ({
+            name: doc.name,
+            mimeType: doc.mimeType,
+            extractedText: doc.text.length > 12000
+              ? AttachmentExtractorService.smartTruncate(doc.text, request.question, 12000)
+              : doc.text,
+            extractionStatus: doc.extractionStatus,
+            fileId: doc.fileId,
+          })),
+          ...base64ExtractedDocs.map((doc) => ({
+            name: doc.name,
+            mimeType: doc.mimeType,
+            extractedText: doc.text.length > 12000
+              ? AttachmentExtractorService.smartTruncate(doc.text, request.question, 12000)
+              : doc.text,
+            extractionStatus: 'success',
+          })),
+        ];
+        if (allDocsToSave.length > 0 && request.conversationId && userId) {
           try {
             const { ConversationService } = await import('./conversation.service');
-            const savedAttachments = base64ExtractedDocs.map((doc) => ({
-              name: doc.name,
-              mimeType: doc.mimeType,
-              extractedText: doc.text.length > 12000
-                ? AttachmentExtractorService.smartTruncate(doc.text, request.question, 12000)
-                : doc.text,
-            }));
             await ConversationService.updateConversation(
               request.conversationId,
               userId,
-              { metadata: { savedAttachments } },
+              { metadata: { savedAttachments: allDocsToSave } },
             );
-            logger.info('Saved base64 attachment context to conversation metadata', {
+            logger.info('Saved attachment context to conversation metadata', {
               conversationId: request.conversationId,
-              documentCount: savedAttachments.length,
+              documentCount: allDocsToSave.length,
+              fileIdDocs: fileIdResolvedDocs.length,
+              base64Docs: base64ExtractedDocs.length,
             });
           } catch (saveErr: any) {
             logger.warn('Failed to save attachment context to conversation', { error: saveErr.message });

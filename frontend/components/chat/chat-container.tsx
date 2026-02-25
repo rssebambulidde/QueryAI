@@ -279,6 +279,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
                 mimeType: s.mimeType || 'application/octet-stream',
                 size: 0,
                 data: '', // no base64 — backend has the extracted text in metadata
+                fileId: s.fileId,
+                extractionStatus: s.extractionStatus || 'success',
+                extractionChars: s.extractedText?.length ?? 0,
               }));
               setConversationAttachments(restoredAttachments);
 
