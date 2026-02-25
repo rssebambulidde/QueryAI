@@ -485,6 +485,32 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   // handleDocumentDelete retired in Phase 2
 
+  /** Remove a single conversation-level attachment (local state + DB metadata). */
+  const removeConversationAttachment = useCallback(async (id: string) => {
+    // Find the attachment being removed (needed for backend name match)
+    const removed = conversationAttachments.find((a) => a.id === id);
+    // Update local state immediately
+    setConversationAttachments((prev) => prev.filter((a) => a.id !== id));
+
+    // Persist removal to backend metadata if we have a conversation
+    if (currentConversationId && removed) {
+      try {
+        const conversation = await conversationApi.get(currentConversationId);
+        if (conversation.success && conversation.data) {
+          const meta = (conversation.data as any).metadata || {};
+          const savedAttachments = (meta.savedAttachments || []).filter(
+            (s: any) => s.name !== removed.name,
+          );
+          await conversationApi.update(currentConversationId, {
+            metadata: { savedAttachments },
+          });
+        }
+      } catch (err) {
+        console.error('Failed to remove attachment from conversation metadata:', err);
+      }
+    }
+  }, [conversationAttachments, currentConversationId]);
+
   /** Intercepts /queue commands, otherwise delegates to the send hook */
   const handleUserInput = async (content: string, attachments?: ChatAttachment[]) => {
     const queueMatch = content.match(/^\/queue\s+(.+)/i);
@@ -592,6 +618,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           ragSettings={ragSettings}
           onRagSettingsChange={setRagSettings}
           activeConversationAttachments={conversationAttachments}
+          onClearConversationAttachment={removeConversationAttachment}
         />
       )}
 
@@ -675,6 +702,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             onCancelQueueJob={handleCancelQueueJob}          ragSettings={ragSettings}
           onRagSettingsChange={setRagSettings}
           activeConversationAttachments={conversationAttachments}
+          onClearConversationAttachment={removeConversationAttachment}
           />
         </>
       )}

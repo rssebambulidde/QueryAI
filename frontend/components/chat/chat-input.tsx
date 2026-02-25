@@ -225,6 +225,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   mode,
   onModeChange,
   activeConversationAttachments,
+  onClearConversationAttachment,
+  onClearAllConversationAttachments,
 }) => {
   const isChatMode = mode === 'chat';
   const { isMobile } = useMobile();
@@ -773,6 +775,32 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               attachments={inlineAttachments}
               onRemove={removeInlineAttachment}
             />
+          )}
+
+          {/* Conversation-level (persistent) attachment chips */}
+          {(activeConversationAttachments?.length ?? 0) > 0 && inlineAttachments.length === 0 && (
+            <div className="flex items-center gap-1.5 px-3 pb-2 flex-wrap">
+              <span className="text-[10px] text-gray-400 mr-0.5">Attached:</span>
+              {activeConversationAttachments!.map((att) => (
+                <span
+                  key={att.id}
+                  className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-600 max-w-[160px]"
+                >
+                  <FileText className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                  <span className="truncate">{att.name}</span>
+                  {onClearConversationAttachment && (
+                    <button
+                      type="button"
+                      onClick={() => onClearConversationAttachment(att.id)}
+                      className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400 hover:text-red-500 transition-colors"
+                      aria-label={`Detach ${att.name}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
           )}
 
           {/* Source control pills row */}

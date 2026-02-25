@@ -179,6 +179,11 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
     }
   };
 
+  /** Remove a conversation-level attachment (local only — anon has no DB conversations). */
+  const removeConversationAttachment = useCallback((id: string) => {
+    setConversationAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
   const handleSend = async (content: string, attachments?: ChatAttachment[]) => {
     // Block send in Deep Research mode
     if (isDeepResearch) {
@@ -250,6 +255,7 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
           ragSettings={{ enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 0, minScore: 0.5, maxWebResults: 3 }}
           onRagSettingsChange={NOOP}
           activeConversationAttachments={conversationAttachments}
+          onClearConversationAttachment={removeConversationAttachment}
         />
       )}
 
@@ -327,6 +333,7 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
                 ragSettings={{ enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 0, minScore: 0.5, maxWebResults: 3 }}
                 onRagSettingsChange={NOOP}
                 activeConversationAttachments={conversationAttachments}
+                onClearConversationAttachment={removeConversationAttachment}
               />
             </>
           )}

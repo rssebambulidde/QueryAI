@@ -266,6 +266,8 @@ export interface ChatInputAreaProps {
   onModeChange?: (mode: 'research' | 'chat') => void;
   /** Attachments that are active for the entire conversation (persisted across messages). */
   activeConversationAttachments?: ChatAttachment[];
+  /** Remove a single conversation-level attachment by ID. */
+  onClearConversationAttachment?: (id: string) => void;
 }
 
 export interface SourcesSidebarProps {
