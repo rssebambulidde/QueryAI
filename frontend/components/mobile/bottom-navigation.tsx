@@ -37,12 +37,6 @@ const navItems: BottomNavItem[] = [
     icon: FileText,
     href: '/dashboard?tab=collections',
   },
-  {
-    id: 'settings',
-    label: 'Settings',
-    icon: Settings,
-    href: '/dashboard/settings',
-  },
 ];
 
 function getTierName(tier: string): string {
@@ -140,7 +134,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
         style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
       >
         <div className="flex items-stretch h-14 min-h-[56px]">
-          {/* Left: Account icon only (opens modal), then Chat, Collections, Settings */}
+          {/* Left: Account icon only (opens modal), then Chat, Collections */}
           {user && onSignOut && (
             <div
               className="flex items-center justify-center flex-shrink-0 border-r border-gray-200 pl-2 pr-1"

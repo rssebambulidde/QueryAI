@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { getMarkdownComponents } from '@/lib/utils/markdown-components';
 import { X, ChevronLeft, ChevronRight, Globe, FileText, Eye, GitCompare } from 'lucide-react';
+import { useMobile } from '@/lib/hooks/use-mobile';
 import type { MessageVersionSummary } from './chat-message';
 import type { Source } from '@/lib/api';
 
@@ -210,6 +211,7 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
     [versions],
   );
 
+  const { isMobile } = useMobile();
   const [leftIdx, setLeftIdx] = useState(initialLeft ?? 0);
   const [rightIdx, setRightIdx] = useState(initialRight ?? sorted.length - 1);
   const [viewMode, setViewMode] = useState<'formatted' | 'changes'>('formatted');
@@ -227,71 +229,105 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
   if (sorted.length < 2) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[85vh] flex flex-col">
+    <div className={cn(
+      "fixed inset-0 z-[100] flex items-center justify-center bg-black/50",
+      isMobile ? "p-0" : "p-4"
+    )}>
+      <div className={cn(
+        "bg-white shadow-2xl w-full flex flex-col",
+        isMobile
+          ? "h-full rounded-none max-h-none"
+          : "rounded-xl max-w-5xl max-h-[85vh]"
+      )}
+      style={isMobile ? {
+        marginTop: 'env(safe-area-inset-top)',
+        marginBottom: 'env(safe-area-inset-bottom)',
+      } : {}}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-gray-900">Compare Versions</h2>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">{stats.removed} words removed</span>
-              <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">{stats.added} words added</span>
-              <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{stats.similarity}% similar</span>
+        <div className={cn(
+          "flex items-start justify-between border-b border-gray-200 flex-shrink-0",
+          isMobile ? "px-4 py-3" : "px-5 py-3"
+        )}>
+          <div className={cn(isMobile ? "flex flex-col gap-2" : "flex items-center gap-3")}>
+            <h2 className={cn(
+              "font-semibold text-gray-900",
+              isMobile ? "text-base" : "text-lg"
+            )}>Compare Versions</h2>
+            <div className={cn(
+              "flex items-center gap-1.5 text-xs text-gray-500",
+              isMobile && "flex-wrap"
+            )}>
+              <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">{stats.removed} removed</span>
+              <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">{stats.added} added</span>
+              <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{stats.similarity}%</span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {/* View mode toggle */}
             <div className="flex items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5">
               <button
                 onClick={() => setViewMode('formatted')}
                 className={cn(
-                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors touch-manipulation',
+                  isMobile && 'min-h-[36px] min-w-[36px] justify-center',
                   viewMode === 'formatted'
                     ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-500 hover:text-gray-700',
                 )}
               >
                 <Eye className="w-3.5 h-3.5" />
-                Formatted
+                {!isMobile && 'Formatted'}
               </button>
               <button
                 onClick={() => setViewMode('changes')}
                 className={cn(
-                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors touch-manipulation',
+                  isMobile && 'min-h-[36px] min-w-[36px] justify-center',
                   viewMode === 'changes'
                     ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-500 hover:text-gray-700',
                 )}
               >
                 <GitCompare className="w-3.5 h-3.5" />
-                Changes
+                {!isMobile && 'Changes'}
               </button>
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+              className={cn(
+                "rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors touch-manipulation",
+                isMobile ? "p-2 min-w-[44px] min-h-[44px] flex items-center justify-center" : "p-1.5"
+              )}
               aria-label="Close comparison"
             >
-              <X className="w-5 h-5" />
+              <X className={cn(isMobile ? "w-6 h-6" : "w-5 h-5")} />
             </button>
           </div>
         </div>
 
         {/* Version selectors */}
-        <div className="flex items-center justify-between px-5 py-2 bg-gray-50 border-b border-gray-100">
+        <div className={cn(
+          "bg-gray-50 border-b border-gray-100 flex-shrink-0",
+          isMobile
+            ? "flex flex-col gap-2 px-4 py-2"
+            : "flex items-center justify-between px-5 py-2"
+        )}>
           <VersionSelector
-            label="Left"
+            label={isMobile ? 'Old' : 'Left'}
             versions={sorted}
             selectedIdx={leftIdx}
             onChange={setLeftIdx}
             disabledIdx={rightIdx}
+            compact={isMobile}
           />
           <VersionSelector
-            label="Right"
+            label={isMobile ? 'New' : 'Right'}
             versions={sorted}
             selectedIdx={rightIdx}
             onChange={setRightIdx}
             disabledIdx={leftIdx}
+            compact={isMobile}
           />
         </div>
 
@@ -301,7 +337,12 @@ export const MessageVersionCompare: React.FC<MessageVersionCompareProps> = ({
         ) : null}
 
         {/* Diff panes */}
-        <div className="flex-1 overflow-hidden grid grid-cols-2 divide-x divide-gray-200">
+        <div className={cn(
+          "flex-1 overflow-hidden grid",
+          isMobile
+            ? "grid-cols-1 divide-y divide-gray-200 overflow-y-auto"
+            : "grid-cols-2 divide-x divide-gray-200"
+        )}>
           {viewMode === 'changes' ? (
             <>
               <DiffPane
@@ -347,12 +388,14 @@ function VersionSelector({
   selectedIdx,
   onChange,
   disabledIdx,
+  compact = false,
 }: {
   label: string;
   versions: MessageVersionSummary[];
   selectedIdx: number;
   onChange: (idx: number) => void;
   disabledIdx: number;
+  compact?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -360,14 +403,20 @@ function VersionSelector({
       <button
         onClick={() => onChange(Math.max(0, selectedIdx - 1))}
         disabled={selectedIdx === 0}
-        className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+        className={cn(
+          "rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation",
+          compact ? "p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center" : "p-0.5"
+        )}
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
       <select
         value={selectedIdx}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="text-sm border border-gray-200 rounded px-2 py-1 bg-white"
+        className={cn(
+          "border border-gray-200 rounded bg-white",
+          compact ? "text-sm px-2 py-1.5 min-h-[36px] flex-1" : "text-sm px-2 py-1"
+        )}
       >
         {versions.map((v, i) => (
           <option key={v.id} value={i} disabled={i === disabledIdx}>
@@ -378,7 +427,10 @@ function VersionSelector({
       <button
         onClick={() => onChange(Math.min(versions.length - 1, selectedIdx + 1))}
         disabled={selectedIdx === versions.length - 1}
-        className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"
+        className={cn(
+          "rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation",
+          compact ? "p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center" : "p-0.5"
+        )}
       >
         <ChevronRight className="w-4 h-4" />
       </button>
@@ -478,9 +530,9 @@ function SourceComparison({ left, right }: { left: MessageVersionSummary; right:
   };
 
   return (
-    <div className="px-5 py-2 bg-gray-50 border-b border-gray-100">
-      <div className="flex items-center gap-4 text-xs">
-        <div className="flex items-center gap-2">
+    <div className="px-4 sm:px-5 py-2 bg-gray-50 border-b border-gray-100 flex-shrink-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-gray-500 font-medium">Sources:</span>
           <span className="text-gray-600">v{left.version}: {leftSources.length}</span>
           <span className="text-gray-400">vs</span>
@@ -495,7 +547,7 @@ function SourceComparison({ left, right }: { left: MessageVersionSummary; right:
             <span className="px-1.5 py-0.5 rounded bg-green-50 text-green-600">{rightOnly.length} only in v{right.version}</span>
           )}
         </div>
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
           {leftOption && getOptionLabel(leftOption) && (
             <span className="px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-200">
               v{left.version}: {getOptionLabel(leftOption)}

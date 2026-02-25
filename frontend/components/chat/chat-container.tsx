@@ -242,6 +242,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
     const loadConversationData = async () => {
       if (currentConversationId) {
+        // Guard: if conversations are loaded and the persisted ID isn't among them,
+        // it's stale (e.g. from a previous session/user). Clear it instead of fetching.
+        if (conversations.length > 0 && !conversations.some(c => c.id === currentConversationId)) {
+          console.warn('[ChatContainer] Stale conversationId detected, clearing:', currentConversationId);
+          selectConversation(null);
+          return;
+        }
+
         setSourcePanelContext(null);
         try {
           const messagesResponse = await conversationApi.getMessages(currentConversationId);
@@ -264,8 +272,15 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
               });
             }
           }
-        } catch (err) {
+        } catch (err: any) {
           if (!isStale()) {
+            // If 404/403, the conversation doesn't exist or belong to this user — clear it silently
+            const status = err?.response?.status || err?.status;
+            if (status === 404 || status === 403) {
+              console.warn('[ChatContainer] Conversation not found/forbidden, clearing:', currentConversationId);
+              selectConversation(null);
+              return;
+            }
             console.error('Failed to load conversation:', err);
             toast.error('Failed to load conversation data');
             setMessages([]);

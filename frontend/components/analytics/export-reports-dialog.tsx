@@ -290,28 +290,31 @@ export function ExportReportsDialog({
         <div className={cn(
           "flex gap-2 border-t border-gray-200 flex-shrink-0",
           isMobile ? "flex-col p-4" : "justify-end p-6 pt-4"
-        )}>
-          <Button
-            variant="outline"
-            onClick={onClose}
-            disabled={exporting}
-            className={cn(
-              "touch-manipulation min-h-[44px]",
-              isMobile ? "w-full" : ""
-            )}
-          >
-            Cancel
-          </Button>
+        )}
+        style={isMobile ? { paddingBottom: 'max(16px, env(safe-area-inset-bottom))' } : {}}
+        >
+          {/* On mobile: primary action (Export) first so it's always visible */}
           <Button
             onClick={handleExport}
             disabled={exporting}
             isLoading={exporting}
             className={cn(
               "touch-manipulation min-h-[44px]",
-              isMobile ? "w-full" : ""
+              isMobile ? "w-full order-1" : "order-2"
             )}
           >
             Export {exportFormat.toUpperCase()}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={exporting}
+            className={cn(
+              "touch-manipulation min-h-[44px]",
+              isMobile ? "w-full order-2" : "order-1"
+            )}
+          >
+            Cancel
           </Button>
         </div>
       </div>

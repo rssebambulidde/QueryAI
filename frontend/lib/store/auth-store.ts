@@ -243,6 +243,8 @@ export const useAuthStore = create<AuthState>()(
           if (typeof window !== 'undefined') {
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
+            // Clear persisted conversation state so next login doesn't try to load a stale ID
+            localStorage.removeItem('conversation-storage');
           }
         }
       },

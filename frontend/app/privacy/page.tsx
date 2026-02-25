@@ -26,14 +26,14 @@ export default function PrivacyPage() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Privacy Policy</h1>
         <p className="text-sm text-gray-500 mb-8">
-          Last updated: January 2025 · QueryAI by SamaBrains Solution Company · Kampala, Uganda
+          Last updated: February 2026 · QueryAI by SamaBrains Solution Company · Kampala, Uganda
         </p>
 
         <div className="prose prose-gray max-w-none space-y-6 text-gray-700">
           <section>
             <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-2">1. Introduction</h2>
             <p>
-              SamaBrains Solution Company (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) operates QueryAI, a fact research assistant. We are based in Kampala, Uganda. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our service. Contact us at <a href="mailto:info@samabrain.com" className="text-blue-600 hover:underline">info@samabrain.com</a>.
+              SamaBrains Solution Company (&quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) operates QueryAI, a fact research assistant. We are based in Kampala, Uganda. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our service. Contact us at <a href="mailto:info@samabrain.com" className="text-orange-600 hover:underline">info@samabrain.com</a>.
             </p>
           </section>
 
@@ -78,7 +78,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-2">6. Your Rights</h2>
             <p>
-              Depending on your location, you may have rights to access, correct, delete, or port your data, and to object to or restrict certain processing. To exercise these rights or ask questions, contact us at <a href="mailto:info@samabrain.com" className="text-blue-600 hover:underline">info@samabrain.com</a>.
+              Depending on your location, you may have rights to access, correct, delete, or port your data, and to object to or restrict certain processing. To exercise these rights or ask questions, contact us at <a href="mailto:info@samabrain.com" className="text-orange-600 hover:underline">info@samabrain.com</a>.
             </p>
           </section>
 
@@ -92,7 +92,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-2">8. Children</h2>
             <p>
-              QueryAI is not intended for users under 13. We do not knowingly collect personal information from children under 13. If you believe we have collected such data, please contact us at <a href="mailto:info@samabrain.com" className="text-blue-600 hover:underline">info@samabrain.com</a>.
+              QueryAI is not intended for users under 13. We do not knowingly collect personal information from children under 13. If you believe we have collected such data, please contact us at <a href="mailto:info@samabrain.com" className="text-orange-600 hover:underline">info@samabrain.com</a>.
             </p>
           </section>
 
@@ -108,16 +108,16 @@ export default function PrivacyPage() {
             <p>
               SamaBrains Solution Company<br />
               Kampala, Uganda<br />
-              Email: <a href="mailto:info@samabrain.com" className="text-blue-600 hover:underline">info@samabrain.com</a>
+              Email: <a href="mailto:info@samabrain.com" className="text-orange-600 hover:underline">info@samabrain.com</a>
             </p>
           </section>
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-200 flex flex-wrap gap-4 text-sm">
-          <Link href="/cookie-policy" className="text-blue-600 hover:underline">Cookies</Link>
-          <Link href="/terms" className="text-blue-600 hover:underline">Terms of Service</Link>
-          <Link href="/disclaimer" className="text-blue-600 hover:underline">Disclaimer</Link>
-          <Link href="/" className="text-blue-600 hover:underline">Home</Link>
+          <Link href="/cookie-policy" className="text-orange-600 hover:underline">Cookies</Link>
+          <Link href="/terms" className="text-orange-600 hover:underline">Terms of Service</Link>
+          <Link href="/disclaimer" className="text-orange-600 hover:underline">Disclaimer</Link>
+          <Link href="/" className="text-orange-600 hover:underline">Home</Link>
         </div>
       </main>
     </div>

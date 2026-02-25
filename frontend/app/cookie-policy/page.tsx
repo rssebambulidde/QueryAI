@@ -26,7 +26,7 @@ export default function CookiePolicyPage() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Cookie Policy</h1>
         <p className="text-sm text-gray-500 mb-8">
-          Last updated: February 2025 · QueryAI by SamaBrains Solution Company · Kampala, Uganda
+          Last updated: February 2026 · QueryAI by SamaBrains Solution Company · Kampala, Uganda
         </p>
 
         <div className="prose prose-gray max-w-none space-y-6 text-gray-700">
@@ -91,10 +91,10 @@ export default function CookiePolicyPage() {
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-200 flex flex-wrap gap-4 text-sm">
-          <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>
-          <Link href="/terms" className="text-blue-600 hover:underline">Terms of Service</Link>
-          <Link href="/disclaimer" className="text-blue-600 hover:underline">Disclaimer</Link>
-          <Link href="/" className="text-blue-600 hover:underline">Home</Link>
+          <Link href="/privacy" className="text-orange-600 hover:underline">Privacy Policy</Link>
+          <Link href="/terms" className="text-orange-600 hover:underline">Terms of Service</Link>
+          <Link href="/disclaimer" className="text-orange-600 hover:underline">Disclaimer</Link>
+          <Link href="/" className="text-orange-600 hover:underline">Home</Link>
         </div>
       </main>
     </div>

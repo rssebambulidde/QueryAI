@@ -287,23 +287,18 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
         <div className={cn(
           "flex items-center border-t border-gray-200 bg-gray-50 flex-shrink-0",
           isMobile 
-            ? "flex-col gap-3 px-4 py-4 pb-safe-area-inset-bottom" 
+            ? "flex-col gap-3 px-4 py-4" 
             : "justify-end gap-3 px-6 py-4"
-        )}>
-          <Button 
-            onClick={onClose} 
-            variant="outline" 
-            disabled={isExporting}
-            className={isMobile ? "w-full" : ""}
-          >
-            Cancel
-          </Button>
+        )}
+        style={isMobile ? { paddingBottom: 'max(16px, env(safe-area-inset-bottom))' } : {}}
+        >
+          {/* On mobile: primary action (Export) first so it's always visible */}
           <Button
             onClick={handleExport}
             disabled={isExporting || messageCount === 0}
             className={cn(
               "bg-orange-600 hover:bg-orange-700 text-white",
-              isMobile && "w-full"
+              isMobile ? "w-full order-1" : "order-2"
             )}
           >
             {isExporting ? (
@@ -317,6 +312,14 @@ export const ConversationExportDialog: React.FC<ConversationExportDialogProps> =
                 Export
               </>
             )}
+          </Button>
+          <Button 
+            onClick={onClose} 
+            variant="outline" 
+            disabled={isExporting}
+            className={isMobile ? "w-full order-2" : "order-1"}
+          >
+            Cancel
           </Button>
         </div>
       </div>

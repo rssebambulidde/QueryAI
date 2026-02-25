@@ -26,14 +26,14 @@ export default function TermsPage() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Terms of Service</h1>
         <p className="text-sm text-gray-500 mb-8">
-          Last updated: January 2025 · QueryAI by SamaBrains Solution Company · Kampala, Uganda
+          Last updated: February 2026 · QueryAI by SamaBrains Solution Company · Kampala, Uganda
         </p>
 
         <div className="prose prose-gray max-w-none space-y-6 text-gray-700">
           <section>
             <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-2">1. Agreement to Terms</h2>
             <p>
-              By accessing or using QueryAI (&quot;Service&quot;), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service. The Service is provided by SamaBrains Solution Company, based in Kampala, Uganda. Contact: <a href="mailto:info@samabrain.com" className="text-blue-600 hover:underline">info@samabrain.com</a>.
+              By accessing or using QueryAI (&quot;Service&quot;), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service. The Service is provided by SamaBrains Solution Company, based in Kampala, Uganda. Contact: <a href="mailto:info@samabrain.com" className="text-orange-600 hover:underline">info@samabrain.com</a>.
             </p>
           </section>
 
@@ -82,7 +82,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold text-gray-900 mt-8 mb-2">7. Disclaimers</h2>
             <p>
-              THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; WITHOUT WARRANTIES OF ANY KIND. We do not warrant that results are complete, accurate, or suitable for any particular purpose. See our <Link href="/disclaimer" className="text-blue-600 hover:underline">Disclaimer</Link> for more information.
+              THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; WITHOUT WARRANTIES OF ANY KIND. We do not warrant that results are complete, accurate, or suitable for any particular purpose. See our <Link href="/disclaimer" className="text-orange-600 hover:underline">Disclaimer</Link> for more information.
             </p>
           </section>
 
@@ -126,16 +126,16 @@ export default function TermsPage() {
             <p>
               SamaBrains Solution Company<br />
               Kampala, Uganda<br />
-              Email: <a href="mailto:info@samabrain.com" className="text-blue-600 hover:underline">info@samabrain.com</a>
+              Email: <a href="mailto:info@samabrain.com" className="text-orange-600 hover:underline">info@samabrain.com</a>
             </p>
           </section>
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-200 flex flex-wrap gap-4 text-sm">
-          <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>
-          <Link href="/cookie-policy" className="text-blue-600 hover:underline">Cookies</Link>
-          <Link href="/disclaimer" className="text-blue-600 hover:underline">Disclaimer</Link>
-          <Link href="/" className="text-blue-600 hover:underline">Home</Link>
+          <Link href="/privacy" className="text-orange-600 hover:underline">Privacy Policy</Link>
+          <Link href="/cookie-policy" className="text-orange-600 hover:underline">Cookies</Link>
+          <Link href="/disclaimer" className="text-orange-600 hover:underline">Disclaimer</Link>
+          <Link href="/" className="text-orange-600 hover:underline">Home</Link>
         </div>
       </main>
     </div>

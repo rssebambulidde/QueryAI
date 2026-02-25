@@ -860,8 +860,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         className="border-t border-gray-100 flex-shrink-0 relative"
         style={isMobile ? { paddingBottom: 'max(0px, env(safe-area-inset-bottom))' } : undefined}
       >
-        {/* Upgrade CTA — show when any higher tier exists */}
-        {hasHigherTier && (
+        {/* Upgrade CTA — show when any higher tier exists (desktop only; mobile has it in BottomNavigation account modal) */}
+        {!isMobile && hasHigherTier && (
           <button
             onClick={handleUpgrade}
             className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-orange-50/80 transition-colors border-b border-gray-100 group bg-gradient-to-r from-orange-50/60 to-transparent"
@@ -873,46 +873,50 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           </button>
         )}
 
-        {/* Account row — opens dropdown for private mode & profile */}
-        <button
-          ref={accountButtonRef}
-          onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
-          className={cn(
-            'w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors min-h-[44px]',
-            isAccountDropdownOpen ? 'bg-gray-50' : 'hover:bg-gray-50'
-          )}
-        >
-          {user?.avatar_url ? (
-            <img
-              src={user.avatar_url}
-              alt=""
-              className="w-8 h-8 rounded-full flex-shrink-0 object-cover"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold">
-              {getUserInitials()}
-            </div>
-          )}
-          <div className="flex-1 min-w-0 text-left">
-            <p className="text-sm font-medium text-gray-900 truncate">
-              {user?.full_name || user?.email || 'User'}
-            </p>
-            <p className="text-xs text-gray-400 truncate">
-              {getTierName(subscriptionTier)} Plan
-            </p>
-          </div>
-          <ChevronDown className={cn(
-            'w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform',
-            isAccountDropdownOpen && 'rotate-180'
-          )} />
-        </button>
+        {/* Account row — opens dropdown for private mode & profile (desktop only; mobile has BottomNavigation account modal) */}
+        {!isMobile && (
+          <>
+            <button
+              ref={accountButtonRef}
+              onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
+              className={cn(
+                'w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors min-h-[44px]',
+                isAccountDropdownOpen ? 'bg-gray-50' : 'hover:bg-gray-50'
+              )}
+            >
+              {user?.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt=""
+                  className="w-8 h-8 rounded-full flex-shrink-0 object-cover"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center flex-shrink-0 text-white text-xs font-semibold">
+                  {getUserInitials()}
+                </div>
+              )}
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {user?.full_name || user?.email || 'User'}
+                </p>
+                <p className="text-xs text-gray-400 truncate">
+                  {getTierName(subscriptionTier)} Plan
+                </p>
+              </div>
+              <ChevronDown className={cn(
+                'w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform',
+                isAccountDropdownOpen && 'rotate-180'
+              )} />
+            </button>
 
-        <AccountDropdown
-          isOpen={isAccountDropdownOpen}
-          onClose={() => setIsAccountDropdownOpen(false)}
-          subscriptionTier={subscriptionTier}
-          anchorRef={accountButtonRef}
-        />
+            <AccountDropdown
+              isOpen={isAccountDropdownOpen}
+              onClose={() => setIsAccountDropdownOpen(false)}
+              subscriptionTier={subscriptionTier}
+              anchorRef={accountButtonRef}
+            />
+          </>
+        )}
       </div>
 
       {/* Save to Collection Dialog */}
