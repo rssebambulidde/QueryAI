@@ -114,12 +114,16 @@ function toGeminiFormat(
   const history: Content[] = [];
 
   for (const m of messages) {
+    // Flatten ContentPart[] to plain string (vision payloads only supported by OpenAI)
+    const text = typeof m.content === 'string'
+      ? m.content
+      : m.content.filter((p): p is { type: 'text'; text: string } => p.type === 'text').map(p => p.text).join('\n');
     if (m.role === 'system') {
-      systemParts.push(m.content);
+      systemParts.push(text);
     } else {
       history.push({
         role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
+        parts: [{ text }],
       });
     }
   }

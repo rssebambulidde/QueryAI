@@ -96,10 +96,14 @@ function splitSystemMessages(
   const rest: Array<{ role: 'user' | 'assistant'; content: string }> = [];
 
   for (const m of messages) {
+    // Flatten ContentPart[] to plain string (vision payloads only supported by OpenAI)
+    const text = typeof m.content === 'string'
+      ? m.content
+      : m.content.filter((p): p is { type: 'text'; text: string } => p.type === 'text').map(p => p.text).join('\n');
     if (m.role === 'system') {
-      systemParts.push(m.content);
+      systemParts.push(text);
     } else {
-      rest.push({ role: m.role as 'user' | 'assistant', content: m.content });
+      rest.push({ role: m.role as 'user' | 'assistant', content: text });
     }
   }
 

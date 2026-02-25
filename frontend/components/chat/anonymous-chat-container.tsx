@@ -176,7 +176,7 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
     }
   };
 
-  const handleSend = async (content: string) => {
+  const handleSend = async (content: string, _attachments?: any) => {
     // Block send in Deep Research mode
     if (isDeepResearch) {
       setShowDeepResearchGate(true);

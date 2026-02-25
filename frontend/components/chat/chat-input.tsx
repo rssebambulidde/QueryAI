@@ -2,12 +2,11 @@
 
 import React, { useState, useRef, useEffect, useCallback, DragEvent, ClipboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, ChevronUp, Search, MessageCircle } from 'lucide-react';
+import { Send, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, ChevronUp, Search, MessageCircle, Paperclip } from 'lucide-react';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
-// Document quick-select retired in Phase 2 (v2 migration)
-// import { DocumentQuickSelect } from './document-quick-select';
-// import type { DocumentItem } from '@/lib/api';
+import type { ChatAttachment } from './chat-types';
+import { AttachmentPreviewStrip } from './attachment-preview';
 
 /** Accepted MIME types for document upload */
 const ACCEPTED_TYPES = [
@@ -24,10 +23,42 @@ const ACCEPTED_EXTENSIONS = ['.pdf', '.txt', '.csv', '.docx', '.doc'];
 /** Maximum file size in bytes (50MB) */
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
+/** MIME types accepted for inline chat attachments (images + docs) */
+const INLINE_ACCEPTED_TYPES = [
+  ...ACCEPTED_TYPES,
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+];
+
+/** Max inline attachment file size — 10 MB (sent as base64 in JSON body) */
+const INLINE_MAX_SIZE = 10 * 1024 * 1024;
+
+/** Max number of inline attachments per message */
+const INLINE_MAX_COUNT = 5;
+
 /** Check if a file is an accepted document type */
 function isAcceptedFile(file: File): boolean {
   if (ACCEPTED_TYPES.includes(file.type)) return true;
   return ACCEPTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext));
+}
+
+/** Check if a file is accepted for inline chat attachments (images + docs) */
+function isInlineAcceptedFile(file: File): boolean {
+  if (INLINE_ACCEPTED_TYPES.includes(file.type)) return true;
+  if (file.type.startsWith('image/')) return true;
+  return ACCEPTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext));
+}
+
+/** Convert a File to a base64 data URI */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 /** Format file size for display */
@@ -79,7 +110,7 @@ interface PendingFile {
 }
 
 interface ChatInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, attachments?: ChatAttachment[]) => void;
   disabled?: boolean;
   placeholder?: string;
   showQueueOption?: boolean;
@@ -135,8 +166,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [researchHintDismissed, setResearchHintDismissed] = useState(false);
+  const [inlineAttachments, setInlineAttachments] = useState<ChatAttachment[]>([]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inlineFileInputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const dragCounterRef = useRef(0);
@@ -164,9 +197,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [showModeMenu]);
 
   const handleSend = () => {
-    if (message.trim() && !disabled) {
-      onSend(message.trim());
+    if ((message.trim() || inlineAttachments.length > 0) && !disabled) {
+      onSend(message.trim(), inlineAttachments.length > 0 ? inlineAttachments : undefined);
       setMessage('');
+      // Revoke object URLs to free memory
+      inlineAttachments.forEach((att) => { if (att.previewUrl) URL.revokeObjectURL(att.previewUrl); });
+      setInlineAttachments([]);
       // Reset textarea height
       if (textInputRef.current) {
         textInputRef.current.style.height = 'auto';
@@ -188,6 +224,76 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   };
+
+  // ── Inline attachment helpers ──────────────────────────────────────────────
+
+  /** Add files as inline chat attachments (images + docs, base64 encoded) */
+  const addInlineAttachments = useCallback(async (files: File[]) => {
+    setValidationError(null);
+    const remaining = INLINE_MAX_COUNT - inlineAttachments.length;
+    if (remaining <= 0) {
+      setValidationError(`Maximum ${INLINE_MAX_COUNT} attachments per message`);
+      return;
+    }
+
+    const toProcess = files.slice(0, remaining);
+    const errors: string[] = [];
+    const newAttachments: ChatAttachment[] = [];
+
+    for (const file of toProcess) {
+      if (!isInlineAcceptedFile(file)) {
+        errors.push(`${file.name}: Unsupported type`);
+        continue;
+      }
+      if (file.size > INLINE_MAX_SIZE) {
+        errors.push(`${file.name}: Too large (max 10 MB)`);
+        continue;
+      }
+      try {
+        const data = await fileToBase64(file);
+        const isImage = file.type.startsWith('image/');
+        newAttachments.push({
+          id: `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          type: isImage ? 'image' : 'document',
+          name: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          size: file.size,
+          data,
+          previewUrl: isImage ? URL.createObjectURL(file) : undefined,
+        });
+      } catch {
+        errors.push(`${file.name}: Failed to read file`);
+      }
+    }
+
+    if (files.length > remaining) {
+      errors.push(`Only ${remaining} more attachment(s) allowed`);
+    }
+    if (errors.length > 0) setValidationError(errors.join('. '));
+    if (newAttachments.length > 0) {
+      setInlineAttachments((prev) => [...prev, ...newAttachments]);
+    }
+  }, [inlineAttachments.length]);
+
+  /** Remove an inline attachment by ID */
+  const removeInlineAttachment = useCallback((id: string) => {
+    setInlineAttachments((prev) => {
+      const att = prev.find((a) => a.id === id);
+      if (att?.previewUrl) URL.revokeObjectURL(att.previewUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+  }, []);
+
+  /** Handle the inline (paperclip) file input change */
+  const handleInlineFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      addInlineAttachments(Array.from(files));
+    }
+    e.target.value = '';
+  }, [addInlineAttachments]);
+
+  // ── Knowledge-base upload helpers (existing) ───────────────────────────────
 
   // Validate and process files
   const processFiles = useCallback((files: FileList | File[]) => {
@@ -286,28 +392,40 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      processFiles(files);
+      const fileArray = Array.from(files);
+      // Route images (and all files in chat mode) to inline attachments
+      const inlineFiles = fileArray.filter((f) => f.type.startsWith('image/') || isChatMode);
+      const kbFiles = fileArray.filter((f) => !f.type.startsWith('image/') && !isChatMode);
+      if (inlineFiles.length > 0) addInlineAttachments(inlineFiles);
+      if (kbFiles.length > 0) processFiles(kbFiles);
     }
-  }, [processFiles]);
+  }, [processFiles, addInlineAttachments, isChatMode]);
 
-  // Paste handler for files
+  // Paste handler for files (images go to inline attachments)
   const handlePaste = useCallback((e: ClipboardEvent<HTMLDivElement>) => {
     const items = e.clipboardData.items;
-    const files: File[] = [];
+    const inlineFiles: File[] = [];
+    const kbFiles: File[] = [];
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (item.kind === 'file') {
         const file = item.getAsFile();
-        if (file) files.push(file);
+        if (!file) continue;
+        if (file.type.startsWith('image/') || isChatMode) {
+          inlineFiles.push(file);
+        } else {
+          kbFiles.push(file);
+        }
       }
     }
 
-    if (files.length > 0) {
+    if (inlineFiles.length > 0 || kbFiles.length > 0) {
       e.preventDefault();
-      processFiles(files);
+      if (inlineFiles.length > 0) addInlineAttachments(inlineFiles);
+      if (kbFiles.length > 0) processFiles(kbFiles);
     }
-  }, [processFiles]);
+  }, [processFiles, addInlineAttachments, isChatMode]);
 
   const isUploading = uploadStatus?.status === 'uploading';
   const isUploadError = uploadStatus?.status === 'error';
@@ -328,7 +446,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <div className="flex flex-col items-center gap-2 text-orange-600">
             <Upload className="w-8 h-8" />
             <span className="font-medium">Drop files here</span>
-            <span className="text-sm text-orange-500">PDF, DOC, TXT, CSV (max 50MB)</span>
+            <span className="text-sm text-orange-500">Images, PDF, DOC, TXT, CSV</span>
           </div>
         </div>
       )}
@@ -528,8 +646,33 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             aria-label="Message input"
           />
 
+          {/* Inline attachments preview strip */}
+          {inlineAttachments.length > 0 && (
+            <AttachmentPreviewStrip
+              attachments={inlineAttachments}
+              onRemove={removeInlineAttachment}
+            />
+          )}
+
           {/* Source control pills row */}
           <div className="flex items-center gap-2 px-3 pb-2.5 flex-wrap">
+            {/* Paperclip — attach files/images for this message */}
+            <button
+              type="button"
+              onClick={() => inlineFileInputRef.current?.click()}
+              disabled={disabled || inlineAttachments.length >= INLINE_MAX_COUNT}
+              className={cn(
+                'flex items-center justify-center w-8 h-8 rounded-full border transition-colors',
+                inlineAttachments.length >= INLINE_MAX_COUNT
+                  ? 'border-gray-200 text-gray-300 cursor-not-allowed'
+                  : 'border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+              )}
+              aria-label="Attach files or images"
+              title={`Attach files or images (${inlineAttachments.length}/${INLINE_MAX_COUNT})`}
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
+
             {/* Mode selector dropup */}
             {onModeChange && (
               <div ref={modeMenuRef} className="relative">
@@ -609,6 +752,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             disabled={isUploading}
             aria-hidden="true"
           />
+          {/* Hidden file input for inline attachments (images + docs) */}
+          <input
+            ref={inlineFileInputRef}
+            type="file"
+            multiple
+            accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.csv,.docx,.doc,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+            style={{ display: 'none' }}
+            onChange={handleInlineFileChange}
+            disabled={disabled}
+            aria-hidden="true"
+          />
         </div>
 
         {/* Send button */}
@@ -624,7 +778,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         ) : (
           <Button
             onClick={handleSend}
-            disabled={disabled || !message.trim()}
+            disabled={disabled || (!message.trim() && inlineAttachments.length === 0)}
             className="px-4 sm:px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-2xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 touch-manipulation min-h-[52px] ml-1 sm:ml-2"
             aria-label="Send message"
           >

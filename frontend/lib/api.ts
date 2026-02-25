@@ -206,6 +206,13 @@ export interface QuestionRequest {
     topK?: number;
     diversityWeight?: number;
   };
+  // Inline attachments (ephemeral — images & docs base64)
+  attachments?: Array<{
+    type: 'image' | 'document';
+    name: string;
+    mimeType: string;
+    data: string;
+  }>;
 }
 
 export interface QuestionResponse {

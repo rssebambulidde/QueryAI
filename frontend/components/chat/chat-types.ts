@@ -14,6 +14,23 @@ import type { RerankingSettings } from '@/components/advanced/reranking-controls
 import type { UnifiedFilters } from './unified-filter-panel';
 import type { RAGSettings } from './rag-source-selector';
 
+// ─── Inline chat attachment ──────────────────────────────────────────────────
+
+/** An ephemeral file/image attached to a single chat message (never persisted to storage). */
+export interface ChatAttachment {
+  id: string;
+  /** 'image' for images, 'document' for PDF/DOC/TXT/CSV */
+  type: 'image' | 'document';
+  name: string;
+  mimeType: string;
+  /** File size in bytes */
+  size: number;
+  /** Base64-encoded file data (data URI for images, raw base64 for docs) */
+  data: string;
+  /** Object URL for local preview — only valid in the browser session */
+  previewUrl?: string;
+}
+
 // ─── Shared regex / helpers ──────────────────────────────────────────────────
 
 /** Regex to extract follow-up questions from assistant response text. */
@@ -193,7 +210,7 @@ export interface UploadStatus {
 }
 
 export interface ChatInputAreaProps {
-  onSend: (content: string) => void;
+  onSend: (content: string, attachments?: ChatAttachment[]) => void;
   disabled: boolean;
   dynamicStarters: string[] | null;
   isLoading: boolean;

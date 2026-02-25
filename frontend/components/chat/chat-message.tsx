@@ -13,6 +13,7 @@ import { EnhancedContentProcessor } from './enhanced-content-processor';
 import { ChatErrorBoundary } from './chat-error-boundary';
 import { SourceBreakdown } from './source-breakdown';
 import { Source } from '@/lib/api';
+import { MessageAttachments } from './attachment-preview';
 import { analyticsApi, feedbackApi } from '@/lib/api';
 import type { FlaggedCitation } from '@/lib/api';
 import { ResponseTimeIndicator } from '@/components/health/response-time-indicator';
@@ -42,6 +43,8 @@ export interface ChatMessageType {
   responseTime?: number; // Response time in milliseconds
   qualityScore?: number; // Answer quality score (0-1)
   searchResults?: SearchResult[]; // Results from /search command
+  /** Ephemeral inline attachments (images / docs) — display only, not persisted */
+  attachments?: import('./chat-types').ChatAttachment[];
   // Version history
   version?: number;
   parentMessageId?: string | null;
@@ -307,7 +310,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                 </div>
               </div>
             ) : isUser ? (
-              <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{message.content}</div>
+              <div>
+                {/* Inline attachments (images / docs) */}
+                {message.attachments && message.attachments.length > 0 && (
+                  <MessageAttachments attachments={message.attachments} className="mb-2" />
+                )}
+                <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere">{message.content}</div>
+              </div>
             ) : !isUser && (isStreaming || message.isStreaming) && !(message.content || '').trim() ? (
               <div className="flex items-center gap-1.5 text-gray-500">
                 <span className="text-sm">Query assistant, thinking.</span>

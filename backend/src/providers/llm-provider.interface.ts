@@ -33,9 +33,14 @@ export type ModelCapability = 'chat' | 'structured_output' | 'vision';
 
 // ─── Chat completion params & results ────────────────────────────────────────
 
+/** Content part for multi-modal messages (vision). */
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } };
+
 export interface ChatCompletionParams {
   model: string;
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string | ContentPart[] }>;
   temperature?: number;
   maxTokens?: number;
   responseFormat?: 'json' | 'text';

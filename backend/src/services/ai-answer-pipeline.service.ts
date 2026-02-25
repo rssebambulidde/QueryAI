@@ -528,7 +528,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     topicDescription?: string,
     topicScopeConfig?: Record<string, any> | null,
     fewShotExamples?: string,
-    conversationState?: string
+    conversationState?: string,
+    imageAttachments?: Array<{ name: string; mimeType: string; data: string }>,
   ): ChatMessage[] {
     return PromptBuilderService.buildMessages(
       question,
@@ -542,7 +543,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       topicDescription,
       topicScopeConfig,
       fewShotExamples,
-      conversationState
+      conversationState,
+      imageAttachments,
     );
   }
 
@@ -628,10 +630,43 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         } catch { /* ignore */ }
       }
 
+      // ── Inline attachment processing ──────────────────────────────────
+      let attachmentContext = '';
+      let imageAttachments: Array<{ name: string; mimeType: string; data: string }> | undefined;
+
+      if (request.attachments && request.attachments.length > 0) {
+        const { AttachmentExtractorService } = await import('./attachment-extractor.service');
+        // Extract text from document attachments
+        const extracted = await AttachmentExtractorService.extractAll(request.attachments);
+        if (extracted.length > 0) {
+          attachmentContext = AttachmentExtractorService.formatAsContext(extracted);
+        }
+        // Collect image attachments for multi-part vision message
+        const images = request.attachments.filter((a) => a.type === 'image');
+        if (images.length > 0) {
+          imageAttachments = images.map((img) => ({
+            name: img.name,
+            mimeType: img.mimeType,
+            data: img.data,
+          }));
+        }
+        logger.info('Processed inline attachments for chat mode', {
+          totalAttachments: request.attachments.length,
+          documents: extracted.length,
+          images: images.length,
+        });
+      }
+
+      // Prepend attachment context to the question if documents were extracted
+      const enrichedQuestion = attachmentContext
+        ? `${request.question}\n${attachmentContext}`
+        : request.question;
+
       const messages = PromptBuilderService.buildChatMessages(
-        request.question,
+        enrichedQuestion,
         conversationHistory,
-        conversationStateText
+        conversationStateText,
+        imageAttachments,
       );
 
       return {
@@ -1047,10 +1082,34 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     }
 
     // ── Build messages ─────────────────────────────────────────────────
+    // Process inline attachments for research mode (same as chat mode)
+    let researchAttachmentContext = '';
+    let researchImageAttachments: Array<{ name: string; mimeType: string; data: string }> | undefined;
+
+    if (request.attachments && request.attachments.length > 0) {
+      const { AttachmentExtractorService } = await import('./attachment-extractor.service');
+      const extracted = await AttachmentExtractorService.extractAll(request.attachments);
+      if (extracted.length > 0) {
+        researchAttachmentContext = AttachmentExtractorService.formatAsContext(extracted);
+      }
+      const images = request.attachments.filter((a) => a.type === 'image');
+      if (images.length > 0) {
+        researchImageAttachments = images.map((img) => ({
+          name: img.name,
+          mimeType: img.mimeType,
+          data: img.data,
+        }));
+      }
+    }
+
+    const enrichedContext = researchAttachmentContext
+      ? (request.context || '') + researchAttachmentContext
+      : request.context;
+
     const messages = this.buildMessages(
       request.question,
       ragContext,
-      request.context,
+      enrichedContext,
       conversationHistory,
       request.enableDocumentSearch,
       request.enableWebSearch,
@@ -1059,7 +1118,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       topicDescription,
       topicScopeConfig,
       fewShotExamplesText,
-      conversationStateText
+      conversationStateText,
+      researchImageAttachments,
     );
 
     return {
@@ -1176,7 +1236,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           async () => {
             return await context.provider.chatCompletion({
               model: context.selectedModel,
-              messages: context.messages as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+              messages: context.messages as any,
               temperature: context.temperature,
               maxTokens: context.maxTokens,
               responseFormat: useJson ? 'json' : 'text',
@@ -1996,7 +2056,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       const useJson = !isChatMode; // Research mode expects JSON structured output
       const stream = context.provider.chatCompletionStream({
         model: context.selectedModel,
-        messages: context.messages as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+        messages: context.messages as any,
         temperature: context.temperature,
         maxTokens: context.maxTokens,
         responseFormat: useJson ? 'json' : 'text',

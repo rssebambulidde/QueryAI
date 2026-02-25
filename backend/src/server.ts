@@ -108,9 +108,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Body parsing middleware (50mb to support inline base64 attachments)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve static files (for API tester)
 app.use(express.static(path.join(__dirname, '../public')));

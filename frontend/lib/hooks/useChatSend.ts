@@ -56,7 +56,7 @@ export interface UseChatSendDeps {
 // ─── Return interface ───────────────────────────────────────────────────────
 
 export interface UseChatSendReturn {
-  sendMessage: (content: string, filters?: UnifiedFilters, options?: SendOptions) => Promise<void>;
+  sendMessage: (content: string, filters?: UnifiedFilters, options?: SendOptions, attachments?: import('@/components/chat/chat-types').ChatAttachment[]) => Promise<void>;
   cancelStream: () => void;
   pauseStream: () => void;
   resumeStream: () => void;
@@ -159,8 +159,8 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
   // ── Core send pipeline ───────────────────────────────────────────────────
 
   const sendMessage = useCallback(
-    async (content: string, filters?: UnifiedFilters, options?: SendOptions) => {
-      if (!content.trim()) return;
+    async (content: string, filters?: UnifiedFilters, options?: SendOptions, attachments?: import('@/components/chat/chat-types').ChatAttachment[]) => {
+      if (!content.trim() && (!attachments || attachments.length === 0)) return;
 
       const isResend = options?.isResend === true;
       const activeFilters: UnifiedFilters = filters !== undefined ? filters : unifiedFilters;
@@ -204,7 +204,13 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
 
       // Add user message
       if (!isResend) {
-        const userMessage: Message = { id: Date.now().toString(), role: 'user', content, timestamp: new Date() };
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          role: 'user',
+          content: content || (attachments?.length ? `[Sent ${attachments.length} attachment(s)]` : ''),
+          timestamp: new Date(),
+          attachments,
+        };
         const isFirstMessage = messages.length === 0;
         setMessages((prev) => [...prev, userMessage]);
         if (conversationId && isFirstMessage) {
@@ -269,7 +275,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
         setMessages((prev) => [...prev, assistantMessage]);
 
         const request: QuestionRequest = {
-          question: content,
+          question: content || (attachments?.length ? `Describe / analyze the attached file(s).` : ''),
           conversationHistory,
           conversationId: conversationId ?? undefined,
           mode: liveMode,
@@ -286,6 +292,15 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           queryExpansionSettings: queryExpansionEnabled ? queryExpansionSettings : undefined,
           enableReranking: rerankingEnabled,
           rerankingSettings: rerankingEnabled ? rerankingSettings : undefined,
+          // Inline attachments — ephemeral base64 payloads
+          ...(attachments && attachments.length > 0 && {
+            attachments: attachments.map((a) => ({
+              type: a.type,
+              name: a.name,
+              mimeType: a.mimeType,
+              data: a.data,
+            })),
+          }),
         };
 
         try {

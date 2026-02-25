@@ -1,5 +1,5 @@
 import logger from '../config/logger';
-import type { ChatMessage } from '../providers/llm-provider.interface';
+import type { ChatMessage, ContentPart } from '../providers/llm-provider.interface';
 import { CitationValidatorService } from './citation-validator.service';
 import { AnswerQualityService } from './answer-quality.service';
 import { ConflictResolutionService } from './conflict-resolution.service';
@@ -84,7 +84,8 @@ Guidelines:
   static buildChatMessages(
     question: string,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
-    conversationState?: string
+    conversationState?: string,
+    imageAttachments?: Array<{ name: string; mimeType: string; data: string }>,
   ): ChatMessage[] {
     const messages: ChatMessage[] = [];
 
@@ -111,7 +112,19 @@ Guidelines:
       }
     }
 
-    messages.push({ role: 'user', content: question });
+    // Build user message — multi-part if images are attached
+    if (imageAttachments && imageAttachments.length > 0) {
+      const parts: ContentPart[] = [
+        { type: 'text', text: question },
+        ...imageAttachments.map((img) => ({
+          type: 'image_url' as const,
+          image_url: { url: img.data, detail: 'auto' as const },
+        })),
+      ];
+      messages.push({ role: 'user', content: parts });
+    } else {
+      messages.push({ role: 'user', content: question });
+    }
 
     return messages;
   }
@@ -268,7 +281,8 @@ ${this.getOutputFormatBlock()}`;
     topicDescription?: string,
     topicScopeConfig?: Record<string, any> | null,
     fewShotExamples?: string,
-    conversationState?: string
+    conversationState?: string,
+    imageAttachments?: Array<{ name: string; mimeType: string; data: string }>,
   ): ChatMessage[] {
     const messages: ChatMessage[] = [];
 
@@ -304,11 +318,19 @@ ${this.getOutputFormatBlock()}`;
       }
     }
 
-    // Add current question
-    messages.push({
-      role: 'user',
-      content: question,
-    });
+    // Add current question — multi-part if images are attached
+    if (imageAttachments && imageAttachments.length > 0) {
+      const parts: ContentPart[] = [
+        { type: 'text', text: question },
+        ...imageAttachments.map((img) => ({
+          type: 'image_url' as const,
+          image_url: { url: img.data, detail: 'auto' as const },
+        })),
+      ];
+      messages.push({ role: 'user', content: parts });
+    } else {
+      messages.push({ role: 'user', content: question });
+    }
 
     return messages;
   }

@@ -19,7 +19,7 @@ import { CitationSettings } from './citation-settings';
 import type { QueryExpansionSettings } from '@/components/advanced/query-expansion-display';
 import type { RerankingSettings } from '@/components/advanced/reranking-controls';
 
-import { mapApiMessagesToUi, type ApiMessage, type LastResponseData } from './chat-types';
+import { mapApiMessagesToUi, type ApiMessage, type LastResponseData, type ChatAttachment } from './chat-types';
 import { ChatMessageList } from './chat-message-list';
 import { ChatInputArea } from './chat-input-area';
 import { SourcesSidebar } from './sources-sidebar';
@@ -449,13 +449,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   // handleDocumentDelete retired in Phase 2
 
   /** Intercepts /queue commands, otherwise delegates to the send hook */
-  const handleUserInput = async (content: string) => {
+  const handleUserInput = async (content: string, attachments?: ChatAttachment[]) => {
     const queueMatch = content.match(/^\/queue\s+(.+)/i);
     if (queueMatch) {
       await handleQueueSend(queueMatch[1].trim());
       return;
     }
-    await handleSend(content);
+    await handleSend(content, undefined, undefined, attachments);
   };
 
   // Research mode retired in v2
@@ -523,7 +523,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           variant="empty"
           mode={conversationMode}
           onModeChange={handleModeChange}
-          onSend={(msg) => handleUserInput(msg)}
+          onSend={(msg, attachments) => handleUserInput(msg, attachments)}
           disabled={isLoading || isStreaming}
           dynamicStarters={dynamicStarters}
           isLoading={isLoading}
@@ -607,7 +607,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             variant="conversation"
             mode={conversationMode || 'chat'}
             onModeChange={handleModeChange}
-            onSend={(msg) => handleUserInput(msg)}
+            onSend={(msg, attachments) => handleUserInput(msg, attachments)}
             disabled={isLoading || isStreaming}
             dynamicStarters={dynamicStarters}
             isLoading={isLoading}

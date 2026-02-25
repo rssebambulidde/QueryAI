@@ -264,6 +264,15 @@ export const QuestionRequestSchema = z.object({
 
   // ── Resend / edit support ───────────────────────────
   resendUserMessageId: uuid.optional(),
+
+  // ── Inline attachments (ephemeral images & docs) ───
+  attachments: z.array(z.object({
+    type: z.enum(['image', 'document']),
+    name: z.string().max(500),
+    mimeType: z.string().max(200),
+    /** Base64 data URI (e.g. "data:image/png;base64,...") */
+    data: z.string().max(15_000_000), // ~10 MB base64 ≈ 13.3 M chars
+  })).max(5).optional(),
 })
   // Strip unknown keys so typos like "enableRerankingg" produce a clean
   // object without silently passing through.
