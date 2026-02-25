@@ -55,9 +55,28 @@ followed by 4 bullet questions ("- ") derived from this specific exchange.`;
    * Returns plain text response.
    */
   static buildChatPrompt(
-    conversationState?: string
+    conversationState?: string,
+    attachmentContext?: string,
   ): string {
-    let prompt = `You are a helpful AI assistant. Be concise, accurate, and conversational.
+    const hasAttachments = !!attachmentContext;
+
+    let prompt = hasAttachments
+      ? `You are a helpful AI assistant. The user has attached one or more documents to this conversation. You MUST base your answers on the content of these attached documents.
+
+CRITICAL RULES FOR ATTACHED DOCUMENTS:
+- Your answers MUST be grounded in the attached document content below. Do NOT make up or hallucinate information that is not in the documents.
+- If the user asks a question and the answer is in the attached documents, quote or reference the relevant parts.
+- If the answer is NOT found in the attached documents, clearly say "Based on the attached document(s), I could not find information about [topic]." — do NOT guess or use general knowledge to fill gaps.
+- When referencing content, mention the document name (e.g., "According to [filename]...").
+- Structure your response with clear markdown formatting:
+  - Use **bold** for key terms and important concepts
+  - Use numbered lists (1. 2. 3.) or bullet points (- ) for multiple items
+  - Use ### headings to organise longer answers into sections
+- Be professional and precise.
+- Keep paragraphs short (2-4 sentences each).
+
+${attachmentContext}`
+      : `You are a helpful AI assistant. Be concise, accurate, and conversational.
 
 Guidelines:
 - Answer questions directly using your general knowledge
@@ -86,12 +105,13 @@ Guidelines:
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
     conversationState?: string,
     imageAttachments?: Array<{ name: string; mimeType: string; data: string }>,
+    attachmentContext?: string,
   ): ChatMessage[] {
     const messages: ChatMessage[] = [];
 
     messages.push({
       role: 'system',
-      content: this.buildChatPrompt(conversationState),
+      content: this.buildChatPrompt(conversationState, attachmentContext),
     });
 
     // Add conversation history
@@ -107,6 +127,11 @@ Guidelines:
               if (typeof parsed.answer === 'string') content = parsed.answer;
             } catch { /* keep as-is */ }
           }
+        }
+        // Strip previously-appended document context from history messages
+        // (document context is now in the system prompt instead)
+        if (msg.role === 'user') {
+          content = content.replace(/\n\n## User-Attached Documents[\s\S]*$/, '').trim();
         }
         messages.push({ role: msg.role, content });
       }

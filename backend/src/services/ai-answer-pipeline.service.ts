@@ -700,16 +700,13 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         }
       }
 
-      // Prepend attachment context to the question if documents were extracted
-      const enrichedQuestion = attachmentContext
-        ? `${request.question}\n${attachmentContext}`
-        : request.question;
-
+      // Pass the raw question to the LLM — document context is now in the system prompt
       const messages = PromptBuilderService.buildChatMessages(
-        enrichedQuestion,
+        request.question,
         conversationHistory,
         conversationStateText,
         imageAttachments,
+        attachmentContext || undefined,
       );
 
       return {
