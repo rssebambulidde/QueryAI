@@ -112,6 +112,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   const [inlineUploadStatus, setInlineUploadStatus] = useState<UploadStatus | null>(null);
   const [lastUploadFile, setLastUploadFile] = useState<File | null>(null);
   const conversationLoadRequestRef = useRef(0);
+  const conversationLoadPrevIdRef = useRef<string | null>(null);
   /** Conversation-level attachments — re-sent with every follow-up message. */
   const [conversationAttachments, setConversationAttachments] = useState<ChatAttachment[]>([]);
 
@@ -253,7 +254,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         }
 
         setSourcePanelContext(null);
-        setConversationAttachments([]);
+        // Only clear conversation attachments when switching to a genuinely different conversation.
+        // When re-selecting the same conversation (e.g. after stream completes), preserve them.
+        const prevId = conversationLoadPrevIdRef.current;
+        if (currentConversationId !== prevId) {
+          setConversationAttachments([]);
+        }
+        conversationLoadPrevIdRef.current = currentConversationId;
         try {
           const messagesResponse = await conversationApi.getMessages(currentConversationId);
           const conversationResponse = await conversationApi.get(currentConversationId);
@@ -322,6 +329,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         setUnifiedFilters({});
         setSourcePanelContext(null);
         setConversationAttachments([]);
+        conversationLoadPrevIdRef.current = null;
       }
     };
     loadConversationData();

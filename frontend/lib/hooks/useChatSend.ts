@@ -139,7 +139,28 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           // Avoid wiping optimistic streamed UI when backend persistence is slightly delayed
           return;
         }
-        setMessages(mapApiMessagesToUi(messagesResponse.data));
+        const dbMessages = mapApiMessagesToUi(messagesResponse.data);
+
+        // Preserve ephemeral `attachments` from the current UI messages so
+        // document/image indicators stay visible on user message bubbles
+        // after the post-stream DB reload.
+        setMessages((prev) => {
+          // Build a map of user-message attachments from the current state
+          const attachmentsByContent = new Map<string, typeof prev[0]['attachments']>();
+          for (const m of prev) {
+            if (m.role === 'user' && m.attachments?.length) {
+              attachmentsByContent.set(m.content, m.attachments);
+            }
+          }
+          return dbMessages.map((m) => {
+            if (m.role === 'user' && !m.attachments?.length) {
+              const existing = attachmentsByContent.get(m.content);
+              if (existing) return { ...m, attachments: existing };
+            }
+            return m;
+          });
+        });
+
         const lastMsg = messagesResponse.data[messagesResponse.data.length - 1];
         if (lastMsg?.metadata) extractResponseMetadata(lastMsg.metadata);
       }
