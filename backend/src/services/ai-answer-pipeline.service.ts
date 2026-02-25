@@ -640,20 +640,90 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       let attachmentContext = '';
       let imageAttachments: Array<{ name: string; mimeType: string; data: string }> | undefined;
 
+      // ── Resolve pre-uploaded attachment IDs (follow-up messages) ────────
+      // When the frontend sends attachmentIds, load extracted text from the
+      // chat_attachments table — no base64 re-sent, no re-extraction.
+      if ((request as any).attachmentIds && (request as any).attachmentIds.length > 0 && userId) {
+        try {
+          const { ChatAttachmentService } = await import('./chat-attachment.service');
+          const resolved = await ChatAttachmentService.resolveByIds((request as any).attachmentIds, userId);
+          if (resolved.length > 0) {
+            const { AttachmentExtractorService } = await import('./attachment-extractor.service');
+            const docsWithText = resolved
+              .filter((r) => r.extractedText)
+              .map((r) => ({ name: r.fileName, text: r.extractedText!, mimeType: r.mimeType }));
+            if (docsWithText.length > 0) {
+              attachmentContext = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
+            }
+            logger.info('Resolved attachmentIds for follow-up', {
+              ids: (request as any).attachmentIds,
+              resolved: resolved.length,
+              withText: docsWithText.length,
+            });
+          }
+        } catch (resolveErr: any) {
+          logger.warn('Failed to resolve attachmentIds', { error: resolveErr.message });
+        }
+      }
+
       if (request.attachments && request.attachments.length > 0) {
         const { AttachmentExtractorService } = await import('./attachment-extractor.service');
-        // Extract text from document attachments (with per-file status)
-        const { extracted, statuses: extractionStatuses } = await AttachmentExtractorService.extractAllWithStatus(request.attachments);
-        if (extracted.length > 0) {
-          attachmentContext = AttachmentExtractorService.formatAsContext(extracted, request.question);
-        }
-        // Store extraction statuses so the route can emit them via SSE
-        if (extractionStatuses.length > 0) {
-          // We'll store them on the request so the route/stream can access them
-          (request as any)._extractionStatuses = extractionStatuses;
-        }
-        // Collect image attachments for multi-part vision message
+
+        // Separate attachments: those with fileId (pre-uploaded) vs legacy base64
+        const withFileId = request.attachments.filter((a: any) => a.fileId);
+        const withBase64 = request.attachments.filter((a: any) => !a.fileId && a.type === 'document');
         const images = request.attachments.filter((a) => a.type === 'image');
+
+        // ── Resolve fileId attachments from chat_attachments table ─────
+        if (withFileId.length > 0 && userId) {
+          try {
+            const { ChatAttachmentService } = await import('./chat-attachment.service');
+            const fileIds = withFileId.map((a: any) => a.fileId);
+            const resolved = await ChatAttachmentService.resolveByIds(fileIds, userId);
+            const docsWithText = resolved
+              .filter((r) => r.extractedText)
+              .map((r) => ({ name: r.fileName, text: r.extractedText!, mimeType: r.mimeType }));
+            if (docsWithText.length > 0) {
+              attachmentContext = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
+            }
+            // Build extraction statuses from resolved data
+            const resolvedStatuses = resolved.map((r) => ({
+              name: r.fileName,
+              status: r.extractedText ? 'success' as const : 'failed' as const,
+              chars: r.extractedText?.length ?? 0,
+            }));
+            if (resolvedStatuses.length > 0) {
+              (request as any)._extractionStatuses = [
+                ...((request as any)._extractionStatuses || []),
+                ...resolvedStatuses,
+              ];
+            }
+            logger.info('Resolved fileId attachments', { count: resolved.length });
+          } catch (resolveErr: any) {
+            logger.warn('Failed to resolve fileId attachments', { error: resolveErr.message });
+          }
+        }
+
+        // ── Extract text from legacy base64 document attachments ─────
+        let base64ExtractedDocs: Array<{ name: string; text: string; mimeType: string }> = [];
+        if (withBase64.length > 0) {
+          const { extracted, statuses: extractionStatuses } = await AttachmentExtractorService.extractAllWithStatus(withBase64);
+          base64ExtractedDocs = extracted;
+          if (extracted.length > 0) {
+            const base64Context = AttachmentExtractorService.formatAsContext(extracted, request.question);
+            attachmentContext = attachmentContext
+              ? attachmentContext + '\n\n' + base64Context
+              : base64Context;
+          }
+          if (extractionStatuses.length > 0) {
+            (request as any)._extractionStatuses = [
+              ...((request as any)._extractionStatuses || []),
+              ...extractionStatuses,
+            ];
+          }
+        }
+
+        // Collect image attachments for multi-part vision message
         if (images.length > 0) {
           imageAttachments = images.map((img) => ({
             name: img.name,
@@ -663,20 +733,20 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         }
         logger.info('Processed inline attachments for chat mode', {
           totalAttachments: request.attachments.length,
-          documents: extracted.length,
+          fileIdDocs: withFileId.length,
+          base64Docs: withBase64.length,
           images: images.length,
         });
 
         // ── Persist extracted document text to conversation metadata ─────
-        // So follow-up messages (even across sessions) can reference the documents.
-        if (extracted.length > 0 && request.conversationId && userId) {
+        // fileId docs are already persisted in chat_attachments table.
+        // Only base64 docs need to be saved to conversation metadata.
+        if (base64ExtractedDocs.length > 0 && request.conversationId && userId) {
           try {
             const { ConversationService } = await import('./conversation.service');
-            const savedAttachments = extracted.map((doc) => ({
+            const savedAttachments = base64ExtractedDocs.map((doc) => ({
               name: doc.name,
               mimeType: doc.mimeType,
-              // Store up to 12K chars — use smart truncation so follow-ups
-              // get the most relevant portions rather than just the first N chars.
               extractedText: doc.text.length > 12000
                 ? AttachmentExtractorService.smartTruncate(doc.text, request.question, 12000)
                 : doc.text,
@@ -686,7 +756,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
               userId,
               { metadata: { savedAttachments } },
             );
-            logger.info('Saved attachment context to conversation metadata', {
+            logger.info('Saved base64 attachment context to conversation metadata', {
               conversationId: request.conversationId,
               documentCount: savedAttachments.length,
             });
@@ -694,8 +764,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             logger.warn('Failed to save attachment context to conversation', { error: saveErr.message });
           }
         }
-      } else if (request.conversationId && userId) {
-        // ── No new attachments — check conversation for previously saved context ─
+      } else if (!attachmentContext && request.conversationId && userId) {
+        // ── No new attachments and no attachmentIds — check conversation for saved context ─
         try {
           const { ConversationService } = await import('./conversation.service');
           const conversation = await ConversationService.getConversation(request.conversationId, userId);

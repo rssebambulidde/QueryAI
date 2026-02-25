@@ -313,15 +313,27 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           queryExpansionSettings: queryExpansionEnabled ? queryExpansionSettings : undefined,
           enableReranking: rerankingEnabled,
           rerankingSettings: rerankingEnabled ? rerankingSettings : undefined,
-          // Inline attachments — ephemeral base64 payloads
-          ...(attachments && attachments.length > 0 && {
-            attachments: attachments.map((a) => ({
-              type: a.type,
-              name: a.name,
-              mimeType: a.mimeType,
-              data: a.data,
-            })),
-          }),
+          // Inline attachments — use fileId when available (upload-then-reference),
+          // otherwise fall back to base64 payloads. Conversation-level attachments
+          // with fileIds are sent as attachmentIds (no base64 at all).
+          ...(attachments && attachments.length > 0 && (() => {
+            // Separate: attachments that need base64 vs ones with fileId-only
+            const withData = attachments.filter((a) => a.data || !a.fileId);
+            const fileIdOnly = attachments.filter((a) => a.fileId && !a.data).map((a) => a.fileId!);
+
+            return {
+              ...(withData.length > 0 && {
+                attachments: withData.map((a) => ({
+                  type: a.type,
+                  name: a.name,
+                  mimeType: a.mimeType,
+                  data: a.data,
+                  ...(a.fileId && { fileId: a.fileId }),
+                })),
+              }),
+              ...(fileIdOnly.length > 0 && { attachmentIds: fileIdOnly }),
+            };
+          })()),
         };
 
         try {

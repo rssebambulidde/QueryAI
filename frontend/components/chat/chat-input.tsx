@@ -7,6 +7,7 @@ import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import type { ChatAttachment } from './chat-types';
 import { AttachmentPreviewStrip } from './attachment-preview';
+import { attachmentApi } from '@/lib/api';
 
 /** Accepted MIME types for document upload */
 const ACCEPTED_TYPES = [
@@ -328,7 +329,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   // ── Inline attachment helpers ──────────────────────────────────────────────
 
-  /** Add files as inline chat attachments (images + docs, base64 encoded) */
+  /** Add files as inline chat attachments.
+   *  Documents are uploaded to the server immediately (upload-then-reference pattern)
+   *  so follow-up messages only need to send the fileId, not the full base64 payload.
+   *  Images still use base64 (required for vision).
+   */
   const addInlineAttachments = useCallback(async (files: File[]) => {
     setValidationError(null);
     const remaining = INLINE_MAX_COUNT - inlineAttachments.length;
@@ -351,8 +356,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         continue;
       }
       try {
-        const data = await fileToBase64(file);
         const isImage = file.type.startsWith('image/');
+
+        // For documents, try server-side upload first (upload-then-reference)
+        if (!isImage) {
+          try {
+            const uploadResult = await attachmentApi.upload(file);
+            if (uploadResult.success && uploadResult.data) {
+              newAttachments.push({
+                id: `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                type: 'document',
+                name: file.name,
+                mimeType: file.type || 'application/octet-stream',
+                size: file.size,
+                data: '', // No base64 — server has the file
+                fileId: uploadResult.data.id,
+                extractionStatus: uploadResult.data.extractionStatus,
+                extractionChars: uploadResult.data.extractionChars,
+                extractionReason: uploadResult.data.extractionReason,
+              });
+              continue; // Successfully uploaded — skip base64 fallback
+            }
+          } catch {
+            // Upload failed (e.g., anonymous user) — fall back to base64
+          }
+        }
+
+        // Base64 fallback (always used for images, fallback for documents)
+        const data = await fileToBase64(file);
         newAttachments.push({
           id: `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           type: isImage ? 'image' : 'document',

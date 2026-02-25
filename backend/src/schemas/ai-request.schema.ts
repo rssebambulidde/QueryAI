@@ -272,7 +272,14 @@ export const QuestionRequestSchema = z.object({
     mimeType: z.string().max(200),
     /** Base64 data URI (e.g. "data:image/png;base64,...") */
     data: z.string().max(15_000_000), // ~10 MB base64 ≈ 13.3 M chars
+    /** Server-side attachment ID (upload-then-reference pattern).
+     *  When present, the pipeline loads extracted text from DB instead of re-extracting from data. */
+    fileId: uuid.optional(),
   })).max(5).optional(),
+
+  // ── Pre-uploaded attachment IDs (follow-up messages) ───
+  // On follow-ups, the frontend sends only IDs — no base64 payloads.
+  attachmentIds: z.array(uuid).max(5).optional(),
 })
   // Strip unknown keys so typos like "enableRerankingg" produce a clean
   // object without silently passing through.

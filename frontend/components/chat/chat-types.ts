@@ -29,6 +29,8 @@ export interface ChatAttachment {
   data: string;
   /** Object URL for local preview — only valid in the browser session */
   previewUrl?: string;
+  /** Server-side attachment ID from upload-then-reference flow */
+  fileId?: string;
   /** Extraction result from the backend (set after SSE extractionStatus event) */
   extractionStatus?: 'success' | 'truncated' | 'failed';
   /** Number of characters extracted (0 for failed) */

@@ -212,7 +212,10 @@ export interface QuestionRequest {
     name: string;
     mimeType: string;
     data: string;
+    fileId?: string; // Server-side attachment ID (upload-then-reference)
   }>;
+  // Pre-uploaded attachment IDs (follow-up messages — no base64 payload)
+  attachmentIds?: string[];
 }
 
 export interface QuestionResponse {
@@ -2527,3 +2530,46 @@ export type {
   SystemStatus,
   ComponentStatus,
 } from './api-health';
+
+// ── Attachment Upload API (upload-then-reference pattern) ─────────────────────
+
+export interface AttachmentUploadResult {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  extractionStatus: 'success' | 'truncated' | 'failed';
+  extractionChars: number;
+  extractionReason?: string;
+}
+
+export const attachmentApi = {
+  /**
+   * Upload a file for chat attachment. Returns server-side ID + extraction result.
+   * Subsequent messages can reference this ID instead of re-sending base64.
+   */
+  upload: async (file: File, conversationId?: string): Promise<ApiResponse<AttachmentUploadResult>> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (conversationId) {
+      formData.append('conversationId', conversationId);
+    }
+    const response = await apiClient.post('/api/attachments/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120_000, // 2 min for large files
+    });
+    return response.data;
+  },
+
+  /** Get attachment metadata by ID. */
+  get: async (id: string): Promise<ApiResponse<{ id: string; fileName: string; mimeType: string }>> => {
+    const response = await apiClient.get(`/api/attachments/${id}`);
+    return response.data;
+  },
+
+  /** Delete an attachment. */
+  delete: async (id: string): Promise<ApiResponse<{ deleted: boolean }>> => {
+    const response = await apiClient.delete(`/api/attachments/${id}`);
+    return response.data;
+  },
+};

@@ -131,13 +131,14 @@ export function useAnonymousChatSend(deps: UseAnonymousChatSendDeps): UseAnonymo
           enableWebSearch: liveMode !== 'chat',
           enableSearch: liveMode !== 'chat',
           maxSearchResults: 3,
-          // Inline attachments — ephemeral base64 payloads
+          // Inline attachments — base64 payloads (anonymous users have no server upload)
           ...(attachments && attachments.length > 0 && {
             attachments: attachments.map((a) => ({
               type: a.type,
               name: a.name,
               mimeType: a.mimeType,
               data: a.data,
+              ...(a.fileId && { fileId: a.fileId }),
             })),
           }),
         };
