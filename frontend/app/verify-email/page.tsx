@@ -61,11 +61,8 @@ function VerifyEmailContent() {
   }, [searchParams, router, checkAuth]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className={cn(
-        "max-w-md w-full space-y-8",
-        isMobile && "px-4"
-      )}>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-6 sm:py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-6 sm:space-y-8">
         <div className="text-center">
           {status === 'loading' && (
             <>
@@ -174,8 +171,8 @@ function VerifyEmailContent() {
 
 function VerifyEmailFallback() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 text-center">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-6 sm:py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-6 sm:space-y-8 text-center">
         <Loader2 className="mx-auto h-12 w-12 animate-spin text-orange-600" />
         <p className="text-gray-600">Loading...</p>
       </div>

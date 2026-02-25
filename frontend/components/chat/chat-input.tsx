@@ -625,7 +625,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <Button
             onClick={handleSend}
             disabled={disabled || !message.trim()}
-            className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-2xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 touch-manipulation min-h-[52px] ml-2"
+            className="px-4 sm:px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-2xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 touch-manipulation min-h-[52px] ml-1 sm:ml-2"
             aria-label="Send message"
           >
             <Send className="w-4 h-4" />

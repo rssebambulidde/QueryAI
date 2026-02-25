@@ -6,6 +6,7 @@ import { SquarePen, LogIn, UserPlus, PanelLeftClose, PanelLeft, MessageSquare, M
 import { Logo } from '@/components/logo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useMobile } from '@/lib/hooks/use-mobile';
 import type { AnonymousConversation } from '@/components/chat/anonymous-chat-container';
 
 interface AnonymousSidebarProps {
@@ -41,6 +42,7 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
   const [editTitle, setEditTitle] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const { isMobile } = useMobile();
 
   // Close menu on outside click
   useEffect(() => {
@@ -86,7 +88,7 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
     <aside
       className={cn(
         'flex flex-col h-full border-r border-gray-200 bg-white transition-all duration-200 flex-shrink-0',
-        isCollapsed ? 'w-[60px]' : 'w-[260px]'
+        isCollapsed ? 'w-[60px]' : (isMobile ? 'w-full' : 'w-[260px]')
       )}
     >
       {/* Header */}
@@ -94,7 +96,7 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
         {!isCollapsed && <Logo href="/" showName size="sm" />}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center"
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {isCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
@@ -106,7 +108,7 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
         <button
           onClick={onNewChat}
           className={cn(
-            'flex items-center gap-2 w-full rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors',
+            'flex items-center gap-2 w-full rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors touch-manipulation min-h-[44px]',
             isCollapsed && 'justify-center px-2'
           )}
         >
@@ -134,13 +136,13 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
                       if (e.key === 'Enter') confirmRename();
                       if (e.key === 'Escape') cancelRename();
                     }}
-                    className="flex-1 text-sm px-2 py-1 border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                    className="flex-1 text-sm px-2 py-1 border border-blue-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white min-h-[36px]"
                     maxLength={80}
                   />
-                  <button onClick={confirmRename} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Save">
+                  <button onClick={confirmRename} className="p-1 text-green-600 hover:bg-green-50 rounded touch-manipulation min-w-[36px] min-h-[36px] flex items-center justify-center" title="Save">
                     <Check className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={cancelRename} className="p-1 text-gray-400 hover:bg-gray-100 rounded" title="Cancel">
+                  <button onClick={cancelRename} className="p-1 text-gray-400 hover:bg-gray-100 rounded touch-manipulation min-w-[36px] min-h-[36px] flex items-center justify-center" title="Cancel">
                     <XIcon className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -149,7 +151,7 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
                 <button
                   onClick={() => onSelectConversation?.(conv.id)}
                   className={cn(
-                    'flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm text-left transition-colors',
+                    'flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm text-left transition-colors touch-manipulation min-h-[44px]',
                     activeConversationId === conv.id
                       ? 'bg-gray-100 text-gray-900 font-medium'
                       : 'text-gray-600 hover:bg-gray-50'
@@ -157,11 +159,14 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
                 >
                   <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 text-gray-400" />
                   <span className="truncate flex-1">{conv.title}</span>
-                  {/* 3-dot menu trigger */}
+                  {/* 3-dot menu trigger — always visible on mobile */}
                   <span
                     role="button"
                     onClick={(e) => { e.stopPropagation(); setMenuOpenId(menuOpenId === conv.id ? null : conv.id); }}
-                    className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-gray-200 transition-opacity"
+                    className={cn(
+                      'p-1 rounded hover:bg-gray-200 transition-opacity touch-manipulation min-w-[32px] min-h-[32px] flex items-center justify-center',
+                      isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    )}
                   >
                     <MoreHorizontal className="w-3.5 h-3.5 text-gray-400" />
                   </span>
@@ -173,14 +178,14 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
                 <div ref={menuRef} className="absolute right-2 top-full z-20 mt-0.5 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1">
                   <button
                     onClick={() => startRename(conv)}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors touch-manipulation min-h-[44px]"
                   >
                     <Pencil className="w-3.5 h-3.5" />
                     Rename
                   </button>
                   <button
                     onClick={() => handleDelete(conv.id)}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors touch-manipulation min-h-[44px]"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     Delete
@@ -203,12 +208,12 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
         {isCollapsed ? (
           <>
             <Link href="/login">
-              <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors" title="Sign in">
+              <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center" title="Sign in">
                 <LogIn className="w-4 h-4" />
               </button>
             </Link>
             <Link href="/signup">
-              <button className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors" title="Sign up">
+              <button className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors touch-manipulation min-w-[44px] min-h-[44px] flex items-center justify-center" title="Sign up">
                 <UserPlus className="w-4 h-4" />
               </button>
             </Link>

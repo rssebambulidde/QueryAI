@@ -338,7 +338,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
 
       {/* Password Change */}
       <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Password</h3>
             <p className="text-sm text-gray-500 mt-1">Change your account password</p>
@@ -346,6 +346,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
           <Button
             variant="outline"
             onClick={() => setIsChangingPassword(!isChangingPassword)}
+            className="w-full sm:w-auto min-h-[44px] touch-manipulation"
           >
             {isChangingPassword ? 'Cancel' : 'Change Password'}
           </Button>

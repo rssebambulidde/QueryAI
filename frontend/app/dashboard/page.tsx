@@ -235,7 +235,7 @@ function DashboardContent() {
               <ChatInterface ragSettings={ragSettings} />
             </div>
           ) : activeTab === 'collections' ? (
-             <div className="flex-1 overflow-y-auto p-6">
+             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                <CollectionManager 
                  onConversationSelect={(conversationId) => {
                    // Switch to chat tab and select the conversation

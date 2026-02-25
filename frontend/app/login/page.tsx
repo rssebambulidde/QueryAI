@@ -107,8 +107,8 @@ function LoginPageContent() {
 
   const { isMobile } = useMobile();
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-6 sm:py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-6 sm:space-y-8">
         <div>
           <h2 className={cn(
             "mt-6 text-center font-extrabold text-gray-900",
@@ -116,10 +116,7 @@ function LoginPageContent() {
           )}>
             Sign in to QueryAI
           </h2>
-          <p className={cn(
-            "mt-2 text-center text-gray-600",
-            isMobile ? "text-sm" : "text-sm"
-          )}>
+          <p className="mt-2 text-center text-gray-600 text-sm">
             Or{' '}
             <Link
               href="/signup"

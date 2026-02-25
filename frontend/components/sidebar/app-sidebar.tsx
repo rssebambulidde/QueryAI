@@ -458,7 +458,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         <div className="flex items-center gap-0.5">
           <button
             onClick={handleNewConversation}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
             title="New conversation (⌘N)"
           >
             <SquarePen className="w-4 h-4 text-gray-500" />
@@ -467,7 +467,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           {!isMobile && (
             <button
               onClick={() => setIsCollapsed(true)}
-              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
               title="Collapse sidebar"
             >
               <PanelLeftClose className="w-4 h-4 text-gray-500" />
@@ -482,7 +482,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           <button
             onClick={() => onTabChange('chat')}
             className={cn(
-              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px]',
               activeTab === 'chat'
                 ? 'bg-gray-100 text-gray-900'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -494,7 +494,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           <button
             onClick={() => onTabChange('collections')}
             className={cn(
-              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px]',
               activeTab === 'collections'
                 ? 'bg-gray-100 text-gray-900'
                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -506,7 +506,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           {user?.role === 'super_admin' && (
             <button
               onClick={() => router.push('/dashboard/settings/super-admin')}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors min-h-[44px]"
             >
               <ShieldCheck className="w-[18px] h-[18px]" />
               Super Admin
@@ -539,7 +539,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   }
                 }}
                 className={cn(
-                  'p-1 rounded-md transition-colors',
+                  'p-1 rounded-md transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center',
                   isSearchOpen ? 'bg-gray-100 text-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
                 )}
                 title="Search conversations (⌘K)"
@@ -686,7 +686,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     if (isCollectionSearchOpen) setCollectionSearchQuery('');
                   }}
                   className={cn(
-                    'p-1 rounded-md transition-colors',
+                    'p-1 rounded-md transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center',
                     isCollectionSearchOpen ? 'bg-gray-100 text-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
                   )}
                   title="Search collections (⌘K)"
@@ -703,7 +703,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     }
                   }}
                   className={cn(
-                    'p-1 rounded-md transition-colors',
+                    'p-1 rounded-md transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center',
                     showInlineCollectionForm ? 'bg-gray-100 text-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
                   )}
                   title="New Collection"
@@ -736,13 +736,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   <button
                     onClick={handleInlineCreateCollection}
                     disabled={!newCollectionName.trim() || isCreatingCollection}
-                    className="p-1.5 text-green-600 hover:bg-green-50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="p-1.5 text-green-600 hover:bg-green-50 rounded-md disabled:opacity-40 disabled:cursor-not-allowed min-w-[36px] min-h-[36px] flex items-center justify-center"
                   >
                     {isCreatingCollection ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                   </button>
                   <button
                     onClick={() => { setNewCollectionName(''); setShowInlineCollectionForm(false); }}
-                    className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-md"
+                    className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-md min-w-[36px] min-h-[36px] flex items-center justify-center"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -878,7 +878,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           ref={accountButtonRef}
           onClick={() => setIsAccountDropdownOpen(!isAccountDropdownOpen)}
           className={cn(
-            'w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors',
+            'w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors min-h-[44px]',
             isAccountDropdownOpen ? 'bg-gray-50' : 'hover:bg-gray-50'
           )}
         >

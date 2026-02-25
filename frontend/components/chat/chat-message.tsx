@@ -253,7 +253,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={cn('flex flex-col w-full', isUser ? 'items-end max-w-[85%]' : 'items-stretch max-w-full')}>
+      <div className={cn('flex flex-col w-full', isUser ? 'items-end max-w-[92%] sm:max-w-[85%]' : 'items-stretch max-w-full')}>
         {/* Message Bubble */}
         <div
           className={cn(
@@ -385,7 +385,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
           )}
 
           {/* Timestamp, Response Time, and Actions */}
-          <div className="flex items-center justify-between mt-2 flex-wrap gap-2">
+          <div className="flex items-center justify-between mt-2 flex-wrap gap-y-1 gap-x-2">
             <div className="flex items-center gap-2 flex-wrap">
               <div
                 className={cn(
@@ -420,7 +420,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
             </div>
             <div
               className={cn(
-                'flex items-center gap-1 transition-opacity',
+                'flex items-center gap-0.5 sm:gap-1 flex-wrap transition-opacity',
                 isMobile ? 'opacity-100' : (isHovered ? 'opacity-100' : 'opacity-0')
               )}
             >
@@ -471,14 +471,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   <span className="text-xs text-red-600 mr-1">Delete?</span>
                   <button
                     onClick={() => { onDelete?.(message.id); setShowDeleteConfirm(false); }}
-                    className="p-1 rounded hover:bg-red-100 text-red-600 touch-manipulation min-w-[28px] min-h-[28px] flex items-center justify-center"
+                    className="p-1 rounded hover:bg-red-100 text-red-600 touch-manipulation min-w-[36px] min-h-[36px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center"
                     title="Confirm delete"
                   >
                     <Check className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => setShowDeleteConfirm(false)}
-                    className="p-1 rounded hover:bg-gray-100 text-gray-500 touch-manipulation min-w-[28px] min-h-[28px] flex items-center justify-center"
+                    className="p-1 rounded hover:bg-gray-100 text-gray-500 touch-manipulation min-w-[36px] min-h-[36px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center"
                     title="Cancel"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -642,7 +642,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                     <Flag className="w-3.5 h-3.5" />
                   </button>
                   {showFlagMenu && (
-                    <div className="absolute bottom-full left-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[240px] max-w-[320px] max-h-[200px] overflow-y-auto">
+                    <div className="absolute bottom-full left-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-50 min-w-[200px] sm:min-w-[240px] max-w-[calc(100vw-2rem)] sm:max-w-[320px] max-h-[200px] overflow-y-auto">
                       <div className="px-3 py-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide border-b border-gray-100">Flag citations</div>
                       {message.sources.map((src, idx) => {
                         const isFlagged = flaggedCitations.some(c => c.sourceUrl === (src.url || ''));

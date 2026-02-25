@@ -4,7 +4,7 @@ import { SubscriptionManager } from '@/components/subscription/subscription-mana
 
 export default function SubscriptionSettingsPage() {
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-0 sm:p-6">
       <SubscriptionManager />
     </div>
   );

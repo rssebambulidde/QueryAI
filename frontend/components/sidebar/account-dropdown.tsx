@@ -130,8 +130,8 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
         )}
         style={{
           bottom: '100%',
-          left: isMobile ? '50%' : '0',
-          transform: isMobile ? 'translateX(-50%)' : 'none',
+          left: isMobile ? '0' : '0',
+          right: isMobile ? '0' : 'auto',
           marginBottom: '8px',
         }}
       >
