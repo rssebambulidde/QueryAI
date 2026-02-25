@@ -384,7 +384,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
             }
             if (typeof chunk === 'object' && 'extractionStatus' in chunk) {
               // Update the user message's attachments with per-file extraction status
-              const statuses = (chunk as { extractionStatus: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string }> }).extractionStatus;
+              const statuses = (chunk as { extractionStatus: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }> }).extractionStatus;
               if (statuses && statuses.length > 0) {
                 setMessages((prev) => {
                   const updated = [...prev];
@@ -394,7 +394,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
                       const updatedAtts = updated[i].attachments!.map((att) => {
                         const match = statuses.find((s) => s.name === att.name);
                         return match
-                          ? { ...att, extractionStatus: match.status, extractionChars: match.chars, extractionReason: match.reason }
+                          ? { ...att, extractionStatus: match.status, extractionChars: match.chars, extractionReason: match.reason, ocrApplied: match.ocrApplied }
                           : att;
                       });
                       updated[i] = { ...updated[i], attachments: updatedAtts };

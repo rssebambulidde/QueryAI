@@ -44,6 +44,7 @@
     "@tavily/core": "^0.6.4",
     "@types/pdfkit": "^0.17.4",
     "bullmq": "^5.25.0",
+    "canvas": "^3.2.1",
     "cohere-ai": "^7.20.0",
     "cors": "^2.8.5",
     "docx": "^9.5.3",

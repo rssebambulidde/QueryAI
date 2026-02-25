@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, FileText, File, Image as ImageIcon, ZoomIn, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { X, FileText, File, Image as ImageIcon, ZoomIn, CheckCircle, AlertTriangle, XCircle, ScanLine } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatAttachment } from './chat-types';
 
@@ -25,6 +25,17 @@ function getDocIcon(name: string) {
 /** Small status badge shown on document chips inside message bubbles. */
 function ExtractionBadge({ attachment }: { attachment: ChatAttachment }) {
   if (!attachment.extractionStatus || attachment.type === 'image') return null;
+
+  // OCR-applied badge takes priority for scanned PDFs
+  if (attachment.ocrApplied && attachment.extractionStatus !== 'failed') {
+    const tooltip = attachment.extractionReason || 'Scanned PDF — text extracted via OCR (may contain errors)';
+    return (
+      <span className={cn('flex-shrink-0 flex items-center gap-0.5 text-blue-400')} title={tooltip}>
+        <ScanLine className="w-3 h-3" />
+        <span className="text-[9px] leading-none font-medium">OCR</span>
+      </span>
+    );
+  }
 
   const config = {
     success: {

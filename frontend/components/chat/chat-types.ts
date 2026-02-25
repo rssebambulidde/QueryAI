@@ -37,6 +37,8 @@ export interface ChatAttachment {
   extractionChars?: number;
   /** Human-readable reason (populated for truncated/failed) */
   extractionReason?: string;
+  /** True when text was recovered via OCR (scanned PDF) */
+  ocrApplied?: boolean;
 }
 
 /** Per-file extraction status item received via SSE. */
@@ -45,6 +47,7 @@ export interface ExtractionStatusItem {
   status: 'success' | 'truncated' | 'failed';
   chars: number;
   reason?: string;
+  ocrApplied?: boolean;
 }
 
 // ─── Shared regex / helpers ──────────────────────────────────────────────────

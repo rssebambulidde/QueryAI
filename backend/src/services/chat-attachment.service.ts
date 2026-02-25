@@ -114,21 +114,32 @@ export class ChatAttachmentService {
           data: dataUri,
         });
 
+        // Check if OCR was applied (set by extractText for scanned PDFs)
+        const ocrMethod = (AttachmentExtractorService as any)._lastOcrMethod as string | undefined;
+        (AttachmentExtractorService as any)._lastOcrMethod = undefined;
+        const wasOcr = !!ocrMethod;
+
         if (rawText && rawText.length > 0) {
+          const ocrNote = wasOcr ? ' (via OCR — scanned PDF)' : '';
           if (rawText.length > MAX_EXTRACTED_TEXT) {
             // Smart truncation — keep the most relevant portions
             extractedText = AttachmentExtractorService.smartTruncate(rawText, '', MAX_EXTRACTED_TEXT);
             extractionStatus = 'truncated';
             extractionChars = extractedText.length;
-            extractionReason = `Truncated from ${rawText.length} to ${extractedText.length} chars`;
+            extractionReason = `Truncated from ${rawText.length} to ${extractedText.length} chars${ocrNote}`;
           } else {
             extractedText = rawText;
             extractionStatus = 'success';
             extractionChars = rawText.length;
+            if (wasOcr) {
+              extractionReason = `Text extracted via OCR — scanned PDF detected`;
+            }
           }
         } else {
           extractionStatus = 'failed';
-          extractionReason = 'No text content extracted';
+          extractionReason = wasOcr
+            ? 'OCR was attempted but could not extract readable text from this scanned PDF'
+            : 'No text content extracted';
         }
       } else {
         // Images don't have extracted text — they use vision

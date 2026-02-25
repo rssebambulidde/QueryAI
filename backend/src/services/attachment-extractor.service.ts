@@ -33,9 +33,18 @@ export interface ExtractionStatusItem {
   chars: number;
   /** Human-readable reason (populated for truncated/failed) */
   reason?: string;
+  /** True when text was recovered via OCR (scanned PDF fallback) */
+  ocrApplied?: boolean;
 }
 
 export class AttachmentExtractorService {
+  /** Minimum chars from pdf-parse before we consider a PDF "scanned" */
+  private static readonly SCANNED_PDF_THRESHOLD = 50;
+  /** Max PDF pages to OCR (limit cost and time) */
+  private static readonly MAX_OCR_PAGES = 5;
+  /** DPI scale for PDF page rendering (higher = better OCR, slower) */
+  private static readonly PDF_RENDER_SCALE = 2.0;
+
   /**
    * Strip the data-URI prefix and return raw base64 bytes as a Buffer.
    */
@@ -45,11 +54,199 @@ export class AttachmentExtractorService {
     return Buffer.from(base64, 'base64');
   }
 
+  // ── PDF → PNG page rendering (for OCR) ────────────────────────────
+
+  /**
+   * Render the first N pages of a PDF to PNG buffers using pdfjs-dist + canvas.
+   * Returns an array of PNG Buffers (one per page).
+   */
+  private static async renderPdfPagesToImages(
+    pdfBuffer: Buffer,
+    maxPages?: number,
+  ): Promise<Buffer[]> {
+    const limit = maxPages ?? this.MAX_OCR_PAGES;
+    const { createCanvas } = require('canvas') as typeof import('canvas');
+    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.mjs');
+
+    // Custom canvas factory for pdfjs-dist Node.js rendering
+    const canvasFactory = {
+      create(width: number, height: number) {
+        const canvas = createCanvas(width, height);
+        return { canvas, context: canvas.getContext('2d') };
+      },
+      reset(canvasAndContext: any, width: number, height: number) {
+        canvasAndContext.canvas.width = width;
+        canvasAndContext.canvas.height = height;
+      },
+      destroy(canvasAndContext: any) {
+        // node-canvas doesn't need explicit cleanup
+        canvasAndContext.canvas.width = 0;
+        canvasAndContext.canvas.height = 0;
+      },
+    };
+
+    const doc = await pdfjsLib.getDocument({
+      data: new Uint8Array(pdfBuffer),
+      canvasFactory,
+      isEvalSupported: false,
+      useSystemFonts: true,
+    }).promise;
+
+    const pageCount = Math.min(doc.numPages, limit);
+    const images: Buffer[] = [];
+
+    for (let i = 1; i <= pageCount; i++) {
+      try {
+        const page = await doc.getPage(i);
+        const viewport = page.getViewport({ scale: this.PDF_RENDER_SCALE });
+        const { canvas, context } = canvasFactory.create(
+          Math.floor(viewport.width),
+          Math.floor(viewport.height),
+        );
+
+        await page.render({ canvasContext: context, viewport }).promise;
+        images.push(canvas.toBuffer('image/png'));
+      } catch (pageErr: any) {
+        logger.warn('Failed to render PDF page for OCR', { page: i, error: pageErr.message });
+      }
+    }
+
+    await doc.destroy();
+    return images;
+  }
+
+  // ── Tesseract.js OCR (Fallback 1 — free, local) ──────────────────
+
+  /**
+   * Run tesseract.js OCR on an array of PNG image buffers.
+   * Returns concatenated text from all pages.
+   */
+  private static async ocrWithTesseract(imageBuffers: Buffer[]): Promise<string> {
+    const { recognize } = require('tesseract.js') as typeof import('tesseract.js');
+    const pageTexts: string[] = [];
+
+    for (const buf of imageBuffers) {
+      try {
+        const result = await recognize(buf, 'eng', {
+          logger: () => {}, // suppress progress logs
+        });
+        const text = result.data.text?.trim();
+        if (text) pageTexts.push(text);
+      } catch (ocrErr: any) {
+        logger.warn('Tesseract OCR failed for page', { error: ocrErr.message });
+      }
+    }
+
+    return pageTexts.join('\n\n');
+  }
+
+  // ── OpenAI Vision OCR (Fallback 2 — higher quality, costs money) ──
+
+  /**
+   * Send rendered page images to OpenAI vision model for text extraction.
+   * Used when tesseract.js yields poor results.
+   */
+  private static async ocrWithVision(imageBuffers: Buffer[]): Promise<string> {
+    try {
+      const { OpenAIPool } = await import('../config/openai.config');
+      const client = OpenAIPool.getClient();
+
+      // Build multi-image content parts
+      const imageParts = imageBuffers.map((buf) => ({
+        type: 'image_url' as const,
+        image_url: {
+          url: `data:image/png;base64,${buf.toString('base64')}`,
+          detail: 'high' as const,
+        },
+      }));
+
+      const response = await client.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Extract ALL text from these scanned document pages. Preserve the original formatting, paragraph breaks, headings, and lists as closely as possible. Output only the extracted text — no commentary.',
+              },
+              ...imageParts,
+            ],
+          },
+        ],
+        temperature: 0,
+        max_tokens: 4096,
+      });
+
+      return response.choices?.[0]?.message?.content?.trim() || '';
+    } catch (visionErr: any) {
+      logger.warn('OpenAI vision OCR failed', { error: visionErr.message });
+      return '';
+    }
+  }
+
+  // ── PDF OCR orchestrator ──────────────────────────────────────────
+
+  /**
+   * Attempt OCR on a scanned PDF buffer.
+   * Tries tesseract.js first (free); falls back to OpenAI vision if text is poor.
+   * Returns `{ text, method }` where method indicates which OCR path succeeded.
+   */
+  private static async ocrFallbackForPdf(
+    pdfBuffer: Buffer,
+  ): Promise<{ text: string; method: 'tesseract' | 'vision' | 'none' }> {
+    // Step 1: render PDF pages to images
+    let images: Buffer[];
+    try {
+      images = await this.renderPdfPagesToImages(pdfBuffer);
+    } catch (renderErr: any) {
+      logger.error('Failed to render PDF pages for OCR', { error: renderErr.message });
+      return { text: '', method: 'none' };
+    }
+
+    if (images.length === 0) {
+      return { text: '', method: 'none' };
+    }
+
+    // Step 2: Fallback 1 — tesseract.js (free, local)
+    try {
+      const tesseractText = await this.ocrWithTesseract(images);
+      if (tesseractText.length >= this.SCANNED_PDF_THRESHOLD) {
+        logger.info('Tesseract OCR succeeded for scanned PDF', { chars: tesseractText.length });
+        return { text: tesseractText, method: 'tesseract' };
+      }
+      logger.info('Tesseract OCR returned minimal text, trying OpenAI vision', {
+        chars: tesseractText.length,
+      });
+    } catch (tessErr: any) {
+      logger.warn('Tesseract OCR threw error, trying OpenAI vision', { error: tessErr.message });
+    }
+
+    // Step 3: Fallback 2 — OpenAI vision (better quality, costs money)
+    try {
+      const visionText = await this.ocrWithVision(images);
+      if (visionText.length >= this.SCANNED_PDF_THRESHOLD) {
+        logger.info('OpenAI vision OCR succeeded for scanned PDF', { chars: visionText.length });
+        return { text: visionText, method: 'vision' };
+      }
+    } catch (visErr: any) {
+      logger.warn('OpenAI vision OCR failed', { error: visErr.message });
+    }
+
+    return { text: '', method: 'none' };
+  }
+
   /**
    * Extract text from a single document attachment.
    * Returns empty string for images (handled separately as vision input).
+   *
+   * For PDFs: if pdf-parse returns minimal text (< 50 chars), assumes a scanned
+   * document and tries OCR fallbacks (tesseract.js → OpenAI vision).
+   * Sets `_ocrApplied` on the returned object when OCR was used.
    */
-  static async extractText(attachment: AttachmentInput): Promise<string> {
+  static async extractText(
+    attachment: AttachmentInput,
+  ): Promise<string> {
     if (attachment.type === 'image') return '';
 
     const buffer = this.toBuffer(attachment.data);
@@ -63,7 +260,27 @@ export class AttachmentExtractorService {
         const { PDFParse } = require('pdf-parse');
         const parser = new PDFParse({ data: buffer });
         const textData = await parser.getText();
-        return textData.text?.trim() || '';
+        const pdfText = textData.text?.trim() || '';
+
+        // Check for scanned/image-based PDF
+        if (pdfText.length < this.SCANNED_PDF_THRESHOLD) {
+          logger.info('PDF text extraction returned minimal text — attempting OCR fallback', {
+            name: attachment.name,
+            pdfParseChars: pdfText.length,
+          });
+
+          const { text: ocrText, method } = await this.ocrFallbackForPdf(buffer);
+          if (ocrText && method !== 'none') {
+            // Tag the result so callers know OCR was applied
+            (this as any)._lastOcrMethod = method;
+            return ocrText;
+          }
+
+          // OCR also failed — return whatever pdf-parse got (may be empty)
+          logger.warn('All OCR fallbacks failed for scanned PDF', { name: attachment.name });
+        }
+
+        return pdfText;
       }
 
       // ── DOCX ──────────────────────────────────────────────────────
@@ -109,6 +326,23 @@ export class AttachmentExtractorService {
   }
 
   /**
+   * Internal extraction that returns both text and OCR metadata.
+   */
+  private static async extractTextWithMeta(
+    attachment: AttachmentInput,
+  ): Promise<{ text: string; ocrApplied: boolean; ocrMethod?: 'tesseract' | 'vision' }> {
+    const text = await this.extractText(attachment);
+    const ocrMethod = (this as any)._lastOcrMethod as 'tesseract' | 'vision' | undefined;
+    // Reset the flag after reading
+    (this as any)._lastOcrMethod = undefined;
+    return {
+      text,
+      ocrApplied: !!ocrMethod,
+      ocrMethod,
+    };
+  }
+
+  /**
    * Extract text from all document attachments in a request.
    * Returns an array of { name, text, mimeType } for non-empty extractions.
    */
@@ -144,31 +378,42 @@ export class AttachmentExtractorService {
 
     await Promise.all(
       docs.map(async (att) => {
-        const text = await this.extractText(att);
+        const { text, ocrApplied, ocrMethod } = await this.extractTextWithMeta(att);
         if (!text) {
           statuses.push({
             name: att.name,
             status: 'failed',
             chars: 0,
-            reason: 'Could not extract text from this file',
+            reason: ocrApplied
+              ? 'OCR was attempted but could not extract readable text'
+              : 'Could not extract text from this file',
           });
           return;
         }
 
         extracted.push({ name: att.name, text, mimeType: att.mimeType });
 
+        const ocrNote = ocrApplied
+          ? ` (OCR via ${ocrMethod === 'vision' ? 'AI vision' : 'tesseract'} — scanned PDF)`
+          : '';
+
         if (text.length > this.MAX_CHARS_PER_DOC) {
           statuses.push({
             name: att.name,
             status: 'truncated',
             chars: text.length,
-            reason: `Document was ${text.length.toLocaleString()} chars — smart-truncated to ${this.MAX_CHARS_PER_DOC.toLocaleString()}`,
+            reason: `Document was ${text.length.toLocaleString()} chars — smart-truncated to ${this.MAX_CHARS_PER_DOC.toLocaleString()}${ocrNote}`,
+            ocrApplied,
           });
         } else {
           statuses.push({
             name: att.name,
             status: 'success',
             chars: text.length,
+            ...(ocrApplied && {
+              reason: `Text extracted via OCR${ocrNote}`,
+              ocrApplied: true,
+            }),
           });
         }
       }),
