@@ -185,25 +185,22 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await authApi.signup({ email, password, fullName });
           if (response.success && response.data) {
-            const { user, session } = response.data;
+            const { session } = response.data;
             // Check if session tokens are valid (not empty)
             // If empty, email confirmation is required
             const hasValidSession = !!(session.accessToken && session.refreshToken);
             
+            // Never auto-login after signup — user must log in explicitly.
+            // Clear any tokens so user is redirected to the login page.
             set({
-              user: hasValidSession ? user : null, // Only set user if authenticated
-              accessToken: session.accessToken || null,
-              refreshToken: session.refreshToken || null,
-              isAuthenticated: hasValidSession, // Only true if we have valid tokens
+              user: null,
+              accessToken: null,
+              refreshToken: null,
+              isAuthenticated: false,
               isLoading: false,
             });
             
-            // Store tokens in localStorage only if valid
-            if (typeof window !== 'undefined' && hasValidSession) {
-              localStorage.setItem('accessToken', session.accessToken);
-              localStorage.setItem('refreshToken', session.refreshToken);
-            } else if (typeof window !== 'undefined') {
-              // Clear tokens if email confirmation required
+            if (typeof window !== 'undefined') {
               localStorage.removeItem('accessToken');
               localStorage.removeItem('refreshToken');
             }

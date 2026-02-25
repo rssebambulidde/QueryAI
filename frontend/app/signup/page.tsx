@@ -90,7 +90,7 @@ export default function SignupPage() {
     setSuccessMessage(null);
     try {
       await signup(data.email, data.password, data.fullName);
-      router.push('/dashboard');
+      router.push('/login?registered=true');
     } catch (err: any) {
       // Check if email confirmation is required
       if (err.message === 'EMAIL_CONFIRMATION_REQUIRED') {

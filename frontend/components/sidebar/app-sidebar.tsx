@@ -187,7 +187,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
   const handleLogout = async () => {
     await logout();
-    router.push('/login');
+    router.push('/');
   };
 
   const handleUpgrade = () => {

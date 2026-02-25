@@ -88,7 +88,7 @@ export const AccountDropdown: React.FC<AccountDropdownProps> = ({
 
   const handleLogout = async () => {
     await logout();
-    router.push('/login');
+    router.push('/');
     onClose();
   };
 

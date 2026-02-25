@@ -254,7 +254,7 @@ function DashboardContent() {
         subscriptionTier={user?.subscriptionTier || 'free'}
         onSignOut={async () => {
           await logout();
-          router.push('/login');
+          router.push('/');
         }}
       />
     </div>

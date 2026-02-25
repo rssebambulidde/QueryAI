@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -24,8 +24,10 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justRegistered = searchParams.get('registered') === 'true';
   const { login, isAuthenticated, isLoading, error, clearError } =
     useAuthStore();
   const [showAlert, setShowAlert] = useState(false);
@@ -127,6 +129,10 @@ export default function LoginPage() {
             </Link>
           </p>
         </div>
+
+        {justRegistered && (
+          <Alert variant="success">Account created successfully! Please sign in.</Alert>
+        )}
 
         {showAlert && error && (
           <Alert variant="error">{error}</Alert>
@@ -259,5 +265,13 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginPageContent />
+    </Suspense>
   );
 }
