@@ -655,6 +655,49 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           documents: extracted.length,
           images: images.length,
         });
+
+        // ── Persist extracted document text to conversation metadata ─────
+        // So follow-up messages (even across sessions) can reference the documents.
+        if (extracted.length > 0 && request.conversationId && userId) {
+          try {
+            const { ConversationService } = await import('./conversation.service');
+            const savedAttachments = extracted.map((doc) => ({
+              name: doc.name,
+              mimeType: doc.mimeType,
+              extractedText: doc.text.substring(0, 12000), // cap storage (~12k chars)
+            }));
+            await ConversationService.updateConversation(
+              request.conversationId,
+              userId,
+              { metadata: { savedAttachments } },
+            );
+            logger.info('Saved attachment context to conversation metadata', {
+              conversationId: request.conversationId,
+              documentCount: savedAttachments.length,
+            });
+          } catch (saveErr: any) {
+            logger.warn('Failed to save attachment context to conversation', { error: saveErr.message });
+          }
+        }
+      } else if (request.conversationId && userId) {
+        // ── No new attachments — check conversation for previously saved context ─
+        try {
+          const { ConversationService } = await import('./conversation.service');
+          const conversation = await ConversationService.getConversation(request.conversationId, userId);
+          const saved = (conversation as any)?.metadata?.savedAttachments;
+          if (saved && Array.isArray(saved) && saved.length > 0) {
+            const { AttachmentExtractorService } = await import('./attachment-extractor.service');
+            attachmentContext = AttachmentExtractorService.formatAsContext(
+              saved.map((s: any) => ({ name: s.name, text: s.extractedText, mimeType: s.mimeType })),
+            );
+            logger.info('Loaded saved attachment context from conversation metadata', {
+              conversationId: request.conversationId,
+              documentCount: saved.length,
+            });
+          }
+        } catch (loadErr: any) {
+          logger.warn('Failed to load saved attachment context', { error: loadErr.message });
+        }
       }
 
       // Prepend attachment context to the question if documents were extracted

@@ -274,6 +274,20 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
                 country: oldFilters.country,
               });
             }
+            // Restore persisted document attachments as lightweight indicators
+            const saved = conversation.metadata?.savedAttachments;
+            if (!isStale() && saved && Array.isArray(saved) && saved.length > 0) {
+              setConversationAttachments(
+                saved.map((s: any, i: number) => ({
+                  id: `saved-${i}-${s.name}`,
+                  type: 'document' as const,
+                  name: s.name,
+                  mimeType: s.mimeType || 'application/octet-stream',
+                  size: 0,
+                  data: '', // no base64 — backend has the extracted text in metadata
+                })),
+              );
+            }
           }
         } catch (err: any) {
           if (!isStale()) {
@@ -485,7 +499,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       prev.forEach((a) => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
       return [];
     });
-  }, []);
+    // Also clear saved attachment context from backend conversation metadata
+    if (currentConversationId) {
+      conversationApi.update(currentConversationId, { metadata: { savedAttachments: null } }).catch((err) => {
+        console.error('Failed to clear saved attachments from conversation:', err);
+      });
+    }
+  }, [currentConversationId]);
 
   // Research mode retired in v2
 
