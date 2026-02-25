@@ -167,7 +167,8 @@ Guidelines:
     topicDescription?: string,
     topicScopeConfig?: Record<string, any> | null,
     fewShotExamples?: string,
-    conversationState?: string
+    conversationState?: string,
+    attachmentDocumentContext?: string,
   ): string {
     // v2: Web-only mode — topics and document search retired
     const modeInstruction = `IMPORTANT: You are in WEB-ONLY mode. You MUST ONLY use information from the provided web search results.`;
@@ -232,8 +233,15 @@ Guidelines:
       });
     }
 
+    // When the user has attached documents, switch from web-only to hybrid mode:
+    // the attached document is the PRIMARY source, web results are supplementary.
+    const hasAttachedDocs = !!attachmentDocumentContext;
+    const effectiveModeInstruction = hasAttachedDocs
+      ? `IMPORTANT: The user has attached document(s) to this conversation. Treat the attached document content as your PRIMARY source of truth. Web search results are SUPPLEMENTARY — use them to add context, verify, or expand on what the document says, but NEVER contradict the document unless the web source is clearly more authoritative and recent. When the document and web sources agree, prefer quoting the document. When they conflict, acknowledge both and explain the discrepancy.`
+      : modeInstruction;
+
     const basePrompt = `You are a helpful AI assistant. Answer using the provided sources (documents and/or web results).
-${modeInstruction}${timeFilterInstruction}${topicScopeInstruction}
+${effectiveModeInstruction}${timeFilterInstruction}${topicScopeInstruction}
 
 CITATION RULE: Every factual claim must include an inline markdown link.
 - Web sources: [Web Source N](exact-url-from-context)
@@ -258,8 +266,16 @@ General guidelines:
       fullContext += `\n\n## Conversation Context\nUse the following conversation context to understand entity references and maintain consistency.\n${conversationState}\n`;
     }
 
-    // Add RAG context (documents + web search)
+    // ── Attached documents go FIRST (highest priority) ──────────────
+    if (attachmentDocumentContext) {
+      fullContext += `\n\n## PRIMARY SOURCE — User-Attached Documents\nThe following document(s) were uploaded by the user. This is your primary source of information. Base your answer on this content first, then supplement with web results below.\n${attachmentDocumentContext}\n`;
+    }
+
+    // Add RAG context (web search results — supplementary when docs are attached)
     if (ragContext) {
+      if (attachmentDocumentContext) {
+        fullContext += `\n\n## SUPPLEMENTARY — Web Search Results\nUse the following web results to add context, verify claims, or provide additional information beyond what the attached documents cover.\n`;
+      }
       fullContext += ragContext;
     }
 
@@ -308,13 +324,14 @@ ${this.getOutputFormatBlock()}`;
     fewShotExamples?: string,
     conversationState?: string,
     imageAttachments?: Array<{ name: string; mimeType: string; data: string }>,
+    attachmentDocumentContext?: string,
   ): ChatMessage[] {
     const messages: ChatMessage[] = [];
 
     // Add system prompt with RAG context and few-shot examples
     messages.push({
       role: 'system',
-      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter, topicName, topicDescription, topicScopeConfig, fewShotExamples, conversationState),
+      content: this.buildSystemPrompt(ragContext, additionalContext, enableDocumentSearch, enableWebSearch, timeFilter, topicName, topicDescription, topicScopeConfig, fewShotExamples, conversationState, attachmentDocumentContext),
     });
 
     // Add conversation history if provided

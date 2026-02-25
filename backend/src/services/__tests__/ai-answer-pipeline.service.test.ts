@@ -304,6 +304,7 @@ describe('AIAnswerPipelineService', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         undefined
       );
     });

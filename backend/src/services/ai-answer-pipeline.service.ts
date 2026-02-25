@@ -100,6 +100,8 @@ export interface PreparedContext {
   contextDegradationLevel: DegradationLevel | undefined;
   contextDegradationMessage: string | undefined;
   contextPartial: boolean;
+  /** Extracted text from user-attached documents (used for prompt hierarchy in deep search). */
+  attachmentDocumentContext?: string;
 }
 
 export interface PostProcessStreamParams {
@@ -530,6 +532,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     fewShotExamples?: string,
     conversationState?: string,
     imageAttachments?: Array<{ name: string; mimeType: string; data: string }>,
+    attachmentDocumentContext?: string,
   ): ChatMessage[] {
     return PromptBuilderService.buildMessages(
       question,
@@ -545,6 +548,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       fewShotExamples,
       conversationState,
       imageAttachments,
+      attachmentDocumentContext,
     );
   }
 
@@ -1142,9 +1146,10 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       }
     }
 
-    const enrichedContext = researchAttachmentContext
-      ? (request.context || '') + researchAttachmentContext
-      : request.context;
+    // Pass document attachment context separately so the prompt builder
+    // can position it ABOVE web results with primary-source hierarchy.
+    // Only plain `additionalContext` (non-attachment) goes into enrichedContext.
+    const enrichedContext = request.context || undefined;
 
     const messages = this.buildMessages(
       request.question,
@@ -1160,6 +1165,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       fewShotExamplesText,
       conversationStateText,
       researchImageAttachments,
+      researchAttachmentContext || undefined,
     );
 
     return {
@@ -1180,6 +1186,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       contextDegradationLevel,
       contextDegradationMessage,
       contextPartial,
+      attachmentDocumentContext: researchAttachmentContext || undefined,
     };
   }
 
@@ -2073,6 +2080,10 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             // Extract few-shot examples from the original message construction if possible,
             // or re-select if needed. Since we can't easily extract, we'll accept
             // that the messages are rebuilt below.
+          undefined, // fewShotExamples
+          undefined, // conversationState
+          undefined, // imageAttachments
+          context.attachmentDocumentContext,
         );
         logger.info('Using pre-retrieved RAG context for streaming', {
           userId,
