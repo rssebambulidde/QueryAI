@@ -256,37 +256,48 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         setConversationAttachments([]);
         try {
           const messagesResponse = await conversationApi.getMessages(currentConversationId);
-          if (!isStale() && messagesResponse.success && messagesResponse.data) {
-            setMessages(mapApiMessagesToUi(messagesResponse.data as ApiMessage[]));
-          }
           const conversationResponse = await conversationApi.get(currentConversationId);
-          if (!isStale() && conversationResponse.success && conversationResponse.data) {
-            const conversation = conversationResponse.data;
-            // Set conversation mode from DB
-            if (!isStale()) { setConversationMode(conversation.mode || 'chat'); }
-            // Topic hydration retired in Phase 2
-            const oldFilters = conversation.metadata?.filters || {};
-            if (!isStale()) {
-              setUnifiedFilters({
-                timeRange: oldFilters.timeRange,
-                startDate: oldFilters.startDate,
-                endDate: oldFilters.endDate,
-                country: oldFilters.country,
-              });
-            }
-            // Restore persisted document attachments as lightweight indicators
-            const saved = conversation.metadata?.savedAttachments;
-            if (!isStale() && saved && Array.isArray(saved) && saved.length > 0) {
-              setConversationAttachments(
-                saved.map((s: any, i: number) => ({
-                  id: `saved-${i}-${s.name}`,
-                  type: 'document' as const,
-                  name: s.name,
-                  mimeType: s.mimeType || 'application/octet-stream',
-                  size: 0,
-                  data: '', // no base64 — backend has the extracted text in metadata
-                })),
+
+          if (!isStale() && messagesResponse.success && messagesResponse.data) {
+            let loadedMessages = mapApiMessagesToUi(messagesResponse.data as ApiMessage[]);
+
+            // Restore persisted document attachments and inject into user messages
+            const conversation = conversationResponse.success ? conversationResponse.data : null;
+            const saved = conversation?.metadata?.savedAttachments;
+            if (saved && Array.isArray(saved) && saved.length > 0) {
+              const restoredAttachments: ChatAttachment[] = saved.map((s: any, i: number) => ({
+                id: `saved-${i}-${s.name}`,
+                type: 'document' as const,
+                name: s.name,
+                mimeType: s.mimeType || 'application/octet-stream',
+                size: 0,
+                data: '', // no base64 — backend has the extracted text in metadata
+              }));
+              setConversationAttachments(restoredAttachments);
+
+              // Inject attachment indicators into user message bubbles
+              loadedMessages = loadedMessages.map((m) =>
+                m.role === 'user' && !m.attachments?.length
+                  ? { ...m, attachments: restoredAttachments }
+                  : m
               );
+            }
+
+            setMessages(loadedMessages);
+
+            if (conversation) {
+              // Set conversation mode from DB
+              if (!isStale()) { setConversationMode(conversation.mode || 'chat'); }
+              // Topic hydration retired in Phase 2
+              const oldFilters = conversation.metadata?.filters || {};
+              if (!isStale()) {
+                setUnifiedFilters({
+                  timeRange: oldFilters.timeRange,
+                  startDate: oldFilters.startDate,
+                  endDate: oldFilters.endDate,
+                  country: oldFilters.country,
+                });
+              }
             }
           }
         } catch (err: any) {
@@ -486,26 +497,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     await handleSend(content, undefined, undefined, attachments);
   };
 
-  const handleClearConversationAttachment = useCallback((attachmentId: string) => {
-    setConversationAttachments((prev) => {
-      const removed = prev.find((a) => a.id === attachmentId);
-      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
-      return prev.filter((a) => a.id !== attachmentId);
-    });
-  }, []);
 
-  const handleClearAllConversationAttachments = useCallback(() => {
-    setConversationAttachments((prev) => {
-      prev.forEach((a) => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
-      return [];
-    });
-    // Also clear saved attachment context from backend conversation metadata
-    if (currentConversationId) {
-      conversationApi.update(currentConversationId, { metadata: { savedAttachments: null } }).catch((err) => {
-        console.error('Failed to clear saved attachments from conversation:', err);
-      });
-    }
-  }, [currentConversationId]);
 
   // Research mode retired in v2
 
@@ -592,8 +584,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           ragSettings={ragSettings}
           onRagSettingsChange={setRagSettings}
           activeConversationAttachments={conversationAttachments}
-          onClearConversationAttachment={handleClearConversationAttachment}
-          onClearAllConversationAttachments={handleClearAllConversationAttachments}
         />
       )}
 
@@ -677,8 +667,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             onCancelQueueJob={handleCancelQueueJob}          ragSettings={ragSettings}
           onRagSettingsChange={setRagSettings}
           activeConversationAttachments={conversationAttachments}
-          onClearConversationAttachment={handleClearConversationAttachment}
-          onClearAllConversationAttachments={handleClearAllConversationAttachments}
           />
         </>
       )}

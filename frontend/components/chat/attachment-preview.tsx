@@ -127,9 +127,9 @@ export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
           ) : (
             <div
               key={att.id}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/10 border border-white/20 max-w-[160px]"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/10 border border-white/20 max-w-[200px]"
             >
-              <ImageIcon className="w-3.5 h-3.5 text-white/70 flex-shrink-0" />
+              <FileText className="w-3.5 h-3.5 text-white/70 flex-shrink-0" />
               <span className="text-xs text-white/90 truncate">{att.name}</span>
             </div>
           )

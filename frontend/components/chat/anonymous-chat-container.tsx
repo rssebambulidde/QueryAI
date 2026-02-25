@@ -203,20 +203,7 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
     await sendMessage(content, attachments);
   };
 
-  const handleClearConversationAttachment = useCallback((attachmentId: string) => {
-    setConversationAttachments((prev) => {
-      const removed = prev.find((a) => a.id === attachmentId);
-      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
-      return prev.filter((a) => a.id !== attachmentId);
-    });
-  }, []);
 
-  const handleClearAllConversationAttachments = useCallback(() => {
-    setConversationAttachments((prev) => {
-      prev.forEach((a) => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
-      return [];
-    });
-  }, []);
 
   // ─── Render ─────────────────────────────────────────────────────────────
 
@@ -263,8 +250,6 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
           ragSettings={{ enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 0, minScore: 0.5, maxWebResults: 3 }}
           onRagSettingsChange={NOOP}
           activeConversationAttachments={conversationAttachments}
-          onClearConversationAttachment={handleClearConversationAttachment}
-          onClearAllConversationAttachments={handleClearAllConversationAttachments}
         />
       )}
 
@@ -342,8 +327,6 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
                 ragSettings={{ enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 0, minScore: 0.5, maxWebResults: 3 }}
                 onRagSettingsChange={NOOP}
                 activeConversationAttachments={conversationAttachments}
-                onClearConversationAttachment={handleClearConversationAttachment}
-                onClearAllConversationAttachments={handleClearAllConversationAttachments}
               />
             </>
           )}

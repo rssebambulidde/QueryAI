@@ -164,8 +164,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   mode,
   onModeChange,
   activeConversationAttachments,
-  onClearConversationAttachment,
-  onClearAllConversationAttachments,
 }) => {
   const isChatMode = mode === 'chat';
   const { isMobile } = useMobile();
@@ -647,30 +645,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             'focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-transparent'
           )}
         >
-          {/* Active conversation-level attachments indicator */}
-          {(activeConversationAttachments?.length ?? 0) > 0 && inlineAttachments.length === 0 && (
-            <div className="flex items-center gap-2 px-3 pt-2 pb-1 border-b border-gray-100">
-              <div className="flex items-center gap-1.5 text-xs text-purple-600 bg-purple-50 rounded-full px-2.5 py-1">
-                <Paperclip className="w-3 h-3" />
-                <span className="font-medium">
-                  {activeConversationAttachments!.length === 1
-                    ? activeConversationAttachments![0].name
-                    : `${activeConversationAttachments!.length} files active`}
-                </span>
-              </div>
-              <span className="text-xs text-gray-400">Context included in follow-ups</span>
-              <button
-                type="button"
-                onClick={onClearAllConversationAttachments}
-                className="ml-auto text-xs text-gray-400 hover:text-gray-600 flex items-center gap-0.5 transition-colors"
-                aria-label="Clear active attachments"
-              >
-                <X className="w-3 h-3" />
-                <span>Clear</span>
-              </button>
-            </div>
-          )}
-
           {/* Text input */}
           <textarea
             ref={textInputRef}
