@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, FileText, File, Image as ImageIcon, ZoomIn } from 'lucide-react';
+import { X, FileText, File, Image as ImageIcon, ZoomIn, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatAttachment } from './chat-types';
 
@@ -20,6 +20,35 @@ function getDocIcon(name: string) {
   if (ext === 'txt') return <FileText className="w-5 h-5 text-gray-500" />;
   if (ext === 'doc' || ext === 'docx') return <FileText className="w-5 h-5 text-blue-500" />;
   return <File className="w-5 h-5 text-gray-400" />;
+}
+
+/** Small status badge shown on document chips inside message bubbles. */
+function ExtractionBadge({ attachment }: { attachment: ChatAttachment }) {
+  if (!attachment.extractionStatus || attachment.type === 'image') return null;
+
+  const config = {
+    success: {
+      icon: <CheckCircle className="w-3 h-3" />,
+      className: 'text-emerald-400',
+      tooltip: `Extracted ${attachment.extractionChars?.toLocaleString() ?? '?'} chars`,
+    },
+    truncated: {
+      icon: <AlertTriangle className="w-3 h-3" />,
+      className: 'text-amber-400',
+      tooltip: attachment.extractionReason || 'Document was truncated to fit context budget',
+    },
+    failed: {
+      icon: <XCircle className="w-3 h-3" />,
+      className: 'text-red-400',
+      tooltip: attachment.extractionReason || 'Could not extract text from this file',
+    },
+  }[attachment.extractionStatus];
+
+  return (
+    <span className={cn('flex-shrink-0', config.className)} title={config.tooltip}>
+      {config.icon}
+    </span>
+  );
 }
 
 // ─── Attachment preview strip (shown in chat input) ──────────────────────────
@@ -131,6 +160,7 @@ export const MessageAttachments: React.FC<MessageAttachmentsProps> = ({
             >
               <FileText className="w-3.5 h-3.5 text-white/70 flex-shrink-0" />
               <span className="text-xs text-white/90 truncate">{att.name}</span>
+              <ExtractionBadge attachment={att} />
             </div>
           )
         )}

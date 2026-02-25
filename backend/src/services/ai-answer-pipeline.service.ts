@@ -102,6 +102,8 @@ export interface PreparedContext {
   contextPartial: boolean;
   /** Extracted text from user-attached documents (used for prompt hierarchy in deep search). */
   attachmentDocumentContext?: string;
+  /** Per-file extraction status for SSE feedback to the frontend. */
+  extractionStatuses?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string }>;
 }
 
 export interface PostProcessStreamParams {
@@ -640,10 +642,15 @@ Is this question clearly within the topic? Answer only YES or NO.`;
 
       if (request.attachments && request.attachments.length > 0) {
         const { AttachmentExtractorService } = await import('./attachment-extractor.service');
-        // Extract text from document attachments
-        const extracted = await AttachmentExtractorService.extractAll(request.attachments);
+        // Extract text from document attachments (with per-file status)
+        const { extracted, statuses: extractionStatuses } = await AttachmentExtractorService.extractAllWithStatus(request.attachments);
         if (extracted.length > 0) {
           attachmentContext = AttachmentExtractorService.formatAsContext(extracted, request.question);
+        }
+        // Store extraction statuses so the route can emit them via SSE
+        if (extractionStatuses.length > 0) {
+          // We'll store them on the request so the route/stream can access them
+          (request as any)._extractionStatuses = extractionStatuses;
         }
         // Collect image attachments for multi-part vision message
         const images = request.attachments.filter((a) => a.type === 'image');
@@ -736,6 +743,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         contextDegradationLevel: undefined,
         contextDegradationMessage: undefined,
         contextPartial: false,
+        extractionStatuses: (request as any)._extractionStatuses,
       };
     }
 
@@ -1137,9 +1145,12 @@ Is this question clearly within the topic? Answer only YES or NO.`;
 
     if (request.attachments && request.attachments.length > 0) {
       const { AttachmentExtractorService } = await import('./attachment-extractor.service');
-      const extracted = await AttachmentExtractorService.extractAll(request.attachments);
+      const { extracted, statuses: researchExtractionStatuses } = await AttachmentExtractorService.extractAllWithStatus(request.attachments);
       if (extracted.length > 0) {
         researchAttachmentContext = AttachmentExtractorService.formatAsContext(extracted, request.question);
+      }
+      if (researchExtractionStatuses.length > 0) {
+        (request as any)._extractionStatuses = researchExtractionStatuses;
       }
       const images = request.attachments.filter((a) => a.type === 'image');
       if (images.length > 0) {
@@ -1192,6 +1203,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       contextDegradationMessage,
       contextPartial,
       attachmentDocumentContext: researchAttachmentContext || undefined,
+      extractionStatuses: (request as any)._extractionStatuses,
     };
   }
 
@@ -2066,6 +2078,12 @@ Is this question clearly within the topic? Answer only YES or NO.`;
 
       // Use shared pipeline preparation
       const context = await this.prepareRequestContext(request, userId, preloadedTopic);
+
+      // Yield extraction status metadata before streaming begins so the route
+      // can emit it as an SSE event (similar to the __structured sentinel)
+      if (context.extractionStatuses && context.extractionStatuses.length > 0) {
+        yield JSON.stringify({ __extractionStatus: true, statuses: context.extractionStatuses });
+      }
       
       // Override RAG context if pre-retrieved (handling the legacy/route-level optimization)
       if (request._preRetrievedRagContext) {

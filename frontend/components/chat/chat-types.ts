@@ -29,6 +29,20 @@ export interface ChatAttachment {
   data: string;
   /** Object URL for local preview — only valid in the browser session */
   previewUrl?: string;
+  /** Extraction result from the backend (set after SSE extractionStatus event) */
+  extractionStatus?: 'success' | 'truncated' | 'failed';
+  /** Number of characters extracted (0 for failed) */
+  extractionChars?: number;
+  /** Human-readable reason (populated for truncated/failed) */
+  extractionReason?: string;
+}
+
+/** Per-file extraction status item received via SSE. */
+export interface ExtractionStatusItem {
+  name: string;
+  status: 'success' | 'truncated' | 'failed';
+  chars: number;
+  reason?: string;
 }
 
 // ─── Shared regex / helpers ──────────────────────────────────────────────────

@@ -370,6 +370,30 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
               }
               continue;
             }
+            if (typeof chunk === 'object' && 'extractionStatus' in chunk) {
+              // Update the user message's attachments with per-file extraction status
+              const statuses = (chunk as { extractionStatus: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string }> }).extractionStatus;
+              if (statuses && statuses.length > 0) {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  // Find the last user message (the one we just sent)
+                  for (let i = updated.length - 1; i >= 0; i--) {
+                    if (updated[i].role === 'user' && updated[i].attachments?.length) {
+                      const updatedAtts = updated[i].attachments!.map((att) => {
+                        const match = statuses.find((s) => s.name === att.name);
+                        return match
+                          ? { ...att, extractionStatus: match.status, extractionChars: match.chars, extractionReason: match.reason }
+                          : att;
+                      });
+                      updated[i] = { ...updated[i], attachments: updatedAtts };
+                      break;
+                    }
+                  }
+                  return updated;
+                });
+              }
+              continue;
+            }
             if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
               followUpQuestions = chunk.followUpQuestions;
               if ((chunk as { refusal?: boolean }).refusal) isRefusal = true;

@@ -23,6 +23,18 @@ interface ExtractedText {
   mimeType: string;
 }
 
+/** Per-file extraction status. Emitted via SSE so the frontend can show badges. */
+export interface ExtractionStatusItem {
+  /** Original filename */
+  name: string;
+  /** 'success' = fully extracted, 'truncated' = smart-truncated to fit budget, 'failed' = extraction error */
+  status: 'success' | 'truncated' | 'failed';
+  /** Number of characters after extraction (0 for failed) */
+  chars: number;
+  /** Human-readable reason (populated for truncated/failed) */
+  reason?: string;
+}
+
 export class AttachmentExtractorService {
   /**
    * Strip the data-URI prefix and return raw base64 bytes as a Buffer.
@@ -112,6 +124,57 @@ export class AttachmentExtractorService {
     );
 
     return results.filter((r): r is ExtractedText => r !== null);
+  }
+
+  /** Max chars per document used in formatAsContext */
+  static readonly MAX_CHARS_PER_DOC = 8000;
+
+  /**
+   * Extract text from all document attachments and return per-file status.
+   * Unlike `extractAll`, this preserves information about failures and truncation.
+   */
+  static async extractAllWithStatus(
+    attachments: AttachmentInput[],
+  ): Promise<{ extracted: ExtractedText[]; statuses: ExtractionStatusItem[] }> {
+    const docs = attachments.filter((a) => a.type === 'document');
+    if (docs.length === 0) return { extracted: [], statuses: [] };
+
+    const extracted: ExtractedText[] = [];
+    const statuses: ExtractionStatusItem[] = [];
+
+    await Promise.all(
+      docs.map(async (att) => {
+        const text = await this.extractText(att);
+        if (!text) {
+          statuses.push({
+            name: att.name,
+            status: 'failed',
+            chars: 0,
+            reason: 'Could not extract text from this file',
+          });
+          return;
+        }
+
+        extracted.push({ name: att.name, text, mimeType: att.mimeType });
+
+        if (text.length > this.MAX_CHARS_PER_DOC) {
+          statuses.push({
+            name: att.name,
+            status: 'truncated',
+            chars: text.length,
+            reason: `Document was ${text.length.toLocaleString()} chars — smart-truncated to ${this.MAX_CHARS_PER_DOC.toLocaleString()}`,
+          });
+        } else {
+          statuses.push({
+            name: att.name,
+            status: 'success',
+            chars: text.length,
+          });
+        }
+      }),
+    );
+
+    return { extracted, statuses };
   }
 
   /**

@@ -528,7 +528,7 @@ export const aiApi = {
       maxRetries?: number;
       retryDelay?: number;
     }
-  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[] }, void, unknown> {
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string }> }, void, unknown> {
     const maxRetries = options?.maxRetries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000;
     let retryCount = 0;
@@ -635,6 +635,11 @@ export const aiApi = {
                       yield { qualityScore: qs.score };
                     } catch { /* skip malformed */ }
                     break;
+                  case 'extractionStatus':
+                    try {
+                      yield { extractionStatus: JSON.parse(payload) };
+                    } catch { /* skip malformed */ }
+                    break;
                   case 'done':
                     return;
                   case 'error':
@@ -701,7 +706,7 @@ export const aiApi = {
       signal?: AbortSignal;
       onError?: (error: Error) => void;
     }
-  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[] }, void, unknown> {
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string }> }, void, unknown> {
     try {
       const response = await fetch(`${API_URL}/api/ai/ask/anonymous`, {
         method: 'POST',
@@ -773,6 +778,11 @@ export const aiApi = {
                     const qs = JSON.parse(payload);
                     yield { qualityScore: qs.score };
                   } catch { /* skip */ }
+                  break;
+                case 'extractionStatus':
+                  try {
+                    yield { extractionStatus: JSON.parse(payload) };
+                  } catch { /* skip malformed */ }
                   break;
                 case 'done':
                   return;
@@ -907,7 +917,7 @@ export const aiApi = {
     },
     signal?: AbortSignal,
   ): AsyncGenerator<
-    string | { sources?: Source[]; followUpQuestions?: string[]; qualityScore?: number; version?: { version: number; messageId: string; versions: Array<{ id: string; version: number; content: string; sources?: Source[]; metadata?: Record<string, any>; created_at: string }> } },
+    string | { sources?: Source[]; followUpQuestions?: string[]; qualityScore?: number; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string }>; version?: { version: number; messageId: string; versions: Array<{ id: string; version: number; content: string; sources?: Source[]; metadata?: Record<string, any>; created_at: string }> } },
     void,
     unknown
   > {
@@ -969,6 +979,9 @@ export const aiApi = {
                 break;
               case 'qualityScore':
                 try { const qs = JSON.parse(payload); yield { qualityScore: qs.score }; } catch { /* skip */ }
+                break;
+              case 'extractionStatus':
+                try { yield { extractionStatus: JSON.parse(payload) }; } catch { /* skip */ }
                 break;
               case 'version':
                 try { yield { version: JSON.parse(payload) }; } catch { /* skip */ }
