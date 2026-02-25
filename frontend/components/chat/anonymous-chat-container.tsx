@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { Message } from './chat-message';
 import type { Source } from '@/lib/api';
 import type { StreamingState } from './streaming-controls';
 import type { QueryExpansionSettings } from '@/components/advanced/query-expansion-display';
 import type { RerankingSettings } from '@/components/advanced/reranking-controls';
+import type { ChatAttachment } from './chat-types';
 import { ChatMessageList } from './chat-message-list';
 import { ChatInputArea } from './chat-input-area';
 import { SourcesSidebar } from './sources-sidebar';
@@ -104,6 +105,8 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
   const [showSignInBanner, setShowSignInBanner] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [showDeepResearchGate, setShowDeepResearchGate] = useState(false);
+  /** Conversation-level attachments — re-sent with every follow-up message. */
+  const [conversationAttachments, setConversationAttachments] = useState<ChatAttachment[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
@@ -176,7 +179,7 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
     }
   };
 
-  const handleSend = async (content: string, _attachments?: any) => {
+  const handleSend = async (content: string, attachments?: ChatAttachment[]) => {
     // Block send in Deep Research mode
     if (isDeepResearch) {
       setShowDeepResearchGate(true);
@@ -187,8 +190,33 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
       toast.error('Hourly message limit reached. Please wait or sign up for unlimited access.');
       return;
     }
-    await sendMessage(content);
+
+    // Store any new inline attachments at the conversation level for follow-ups
+    if (attachments && attachments.length > 0) {
+      setConversationAttachments((prev) => {
+        const existingIds = new Set(prev.map((a) => a.id));
+        const newOnes = attachments.filter((a) => !existingIds.has(a.id));
+        return [...prev, ...newOnes].slice(0, 5);
+      });
+    }
+
+    await sendMessage(content, attachments);
   };
+
+  const handleClearConversationAttachment = useCallback((attachmentId: string) => {
+    setConversationAttachments((prev) => {
+      const removed = prev.find((a) => a.id === attachmentId);
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((a) => a.id !== attachmentId);
+    });
+  }, []);
+
+  const handleClearAllConversationAttachments = useCallback(() => {
+    setConversationAttachments((prev) => {
+      prev.forEach((a) => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
+      return [];
+    });
+  }, []);
 
   // ─── Render ─────────────────────────────────────────────────────────────
 
@@ -234,6 +262,9 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
           welcomeGreeting={welcomeGreeting}
           ragSettings={{ enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 0, minScore: 0.5, maxWebResults: 3 }}
           onRagSettingsChange={NOOP}
+          activeConversationAttachments={conversationAttachments}
+          onClearConversationAttachment={handleClearConversationAttachment}
+          onClearAllConversationAttachments={handleClearAllConversationAttachments}
         />
       )}
 
@@ -310,6 +341,9 @@ export const AnonymousChatContainer: React.FC<AnonymousChatContainerProps> = ({
                 onOpenCitationSettings={NOOP}
                 ragSettings={{ enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 0, minScore: 0.5, maxWebResults: 3 }}
                 onRagSettingsChange={NOOP}
+                activeConversationAttachments={conversationAttachments}
+                onClearConversationAttachment={handleClearConversationAttachment}
+                onClearAllConversationAttachments={handleClearAllConversationAttachments}
               />
             </>
           )}

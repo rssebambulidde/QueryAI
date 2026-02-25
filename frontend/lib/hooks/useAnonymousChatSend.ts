@@ -5,6 +5,7 @@ import type { Message } from '@/components/chat/chat-message';
 import { aiApi, QuestionRequest, Source } from '@/lib/api';
 import type { StreamingState } from '@/components/chat/streaming-controls';
 import { parseFollowUpQuestions } from '@/components/chat/chat-types';
+import type { ChatAttachment } from '@/components/chat/chat-types';
 
 // ─── Dependencies ─────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ export interface UseAnonymousChatSendDeps {
 // ─── Return ─────────────────────────────────────────────────────────────────
 
 export interface UseAnonymousChatSendReturn {
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, attachments?: ChatAttachment[]) => Promise<void>;
   cancelStream: () => void;
 }
 
@@ -55,8 +56,8 @@ export function useAnonymousChatSend(deps: UseAnonymousChatSendDeps): UseAnonymo
   const responseTimeStartRef = useRef<number | null>(null);
 
   const sendMessage = useCallback(
-    async (content: string) => {
-      if (!content.trim()) return;
+    async (content: string, attachments?: ChatAttachment[]) => {
+      if (!content.trim() && (!attachments || attachments.length === 0)) return;
 
       const liveMode = conversationModeRef.current;
 
@@ -64,8 +65,9 @@ export function useAnonymousChatSend(deps: UseAnonymousChatSendDeps): UseAnonymo
       const userMessage: Message = {
         id: `anon-${Date.now()}`,
         role: 'user',
-        content,
+        content: content || (attachments?.length ? `[Sent ${attachments.length} attachment(s)]` : ''),
         timestamp: new Date(),
+        attachments,
       };
       setMessages((prev) => [...prev, userMessage]);
 
@@ -123,12 +125,21 @@ export function useAnonymousChatSend(deps: UseAnonymousChatSendDeps): UseAnonymo
         }));
 
         const request: QuestionRequest = {
-          question: content,
+          question: content || (attachments?.length ? `Describe / analyze the attached file(s).` : ''),
           conversationHistory,
           mode: liveMode,
           enableWebSearch: liveMode !== 'chat',
           enableSearch: liveMode !== 'chat',
           maxSearchResults: 3,
+          // Inline attachments — ephemeral base64 payloads
+          ...(attachments && attachments.length > 0 && {
+            attachments: attachments.map((a) => ({
+              type: a.type,
+              name: a.name,
+              mimeType: a.mimeType,
+              data: a.data,
+            })),
+          }),
         };
 
         let followUpQuestions: string[] | undefined;

@@ -164,6 +164,8 @@ router.post(
       enableWebSearch: body.enableWebSearch !== false,
       maxDocumentChunks: 0,
       mode: body.mode || 'research',
+      // Inline attachments (images + documents) — ephemeral, not stored
+      attachments: body.attachments,
     };
 
     logger.info('Anonymous AI streaming request', {
