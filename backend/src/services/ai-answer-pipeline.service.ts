@@ -643,7 +643,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         // Extract text from document attachments
         const extracted = await AttachmentExtractorService.extractAll(request.attachments);
         if (extracted.length > 0) {
-          attachmentContext = AttachmentExtractorService.formatAsContext(extracted);
+          attachmentContext = AttachmentExtractorService.formatAsContext(extracted, request.question);
         }
         // Collect image attachments for multi-part vision message
         const images = request.attachments.filter((a) => a.type === 'image');
@@ -668,7 +668,11 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             const savedAttachments = extracted.map((doc) => ({
               name: doc.name,
               mimeType: doc.mimeType,
-              extractedText: doc.text.substring(0, 12000), // cap storage (~12k chars)
+              // Store up to 12K chars — use smart truncation so follow-ups
+              // get the most relevant portions rather than just the first N chars.
+              extractedText: doc.text.length > 12000
+                ? AttachmentExtractorService.smartTruncate(doc.text, request.question, 12000)
+                : doc.text,
             }));
             await ConversationService.updateConversation(
               request.conversationId,
@@ -693,6 +697,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             const { AttachmentExtractorService } = await import('./attachment-extractor.service');
             attachmentContext = AttachmentExtractorService.formatAsContext(
               saved.map((s: any) => ({ name: s.name, text: s.extractedText, mimeType: s.mimeType })),
+              request.question,
             );
             logger.info('Loaded saved attachment context from conversation metadata', {
               conversationId: request.conversationId,
@@ -1134,7 +1139,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       const { AttachmentExtractorService } = await import('./attachment-extractor.service');
       const extracted = await AttachmentExtractorService.extractAll(request.attachments);
       if (extracted.length > 0) {
-        researchAttachmentContext = AttachmentExtractorService.formatAsContext(extracted);
+        researchAttachmentContext = AttachmentExtractorService.formatAsContext(extracted, request.question);
       }
       const images = request.attachments.filter((a) => a.type === 'image');
       if (images.length > 0) {

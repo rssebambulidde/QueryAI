@@ -116,20 +116,170 @@ export class AttachmentExtractorService {
 
   /**
    * Format extracted document texts into a context block for the prompt.
-   * Truncates each document to ~8000 chars to manage token budget.
+   *
+   * When a `question` is provided, uses smart truncation: splits each document
+   * into ~500-char paragraphs, scores them by keyword overlap with the question,
+   * and keeps the highest-scoring paragraphs (in document order) up to the char
+   * budget.  This is a lightweight heuristic (no API call / no embeddings).
+   *
+   * When no question is provided, falls back to naive first-N-chars truncation.
    */
-  static formatAsContext(extracted: ExtractedText[]): string {
+  static formatAsContext(
+    extracted: ExtractedText[],
+    question?: string,
+  ): string {
     if (extracted.length === 0) return '';
 
     const MAX_CHARS_PER_DOC = 8000;
     const sections = extracted.map((doc, i) => {
       let text = doc.text;
       if (text.length > MAX_CHARS_PER_DOC) {
-        text = text.substring(0, MAX_CHARS_PER_DOC) + '\n... [truncated]';
+        text = question
+          ? this.smartTruncate(text, question, MAX_CHARS_PER_DOC)
+          : text.substring(0, MAX_CHARS_PER_DOC) + '\n... [truncated]';
       }
       return `=== Attached Document ${i + 1}: ${doc.name} ===\n${text}`;
     });
 
     return `\n\n## User-Attached Documents\nThe user has attached the following document(s) to their message. Use this content to answer their question.\n\n${sections.join('\n\n')}`;
+  }
+
+  // ── Smart truncation ────────────────────────────────────────────────
+
+  /**
+   * Split text into paragraph-sized chunks (~500 chars each).
+   * Prefers splitting on double-newlines, then single newlines, then
+   * sentence boundaries, and finally at the hard limit.
+   */
+  private static splitIntoParagraphs(text: string, targetSize = 500): Array<{ text: string; index: number }> {
+    // First split on double-newline (real paragraph breaks)
+    const rawBlocks = text.split(/\n{2,}/);
+    const chunks: Array<{ text: string; index: number }> = [];
+    let globalIdx = 0;
+
+    for (const block of rawBlocks) {
+      const trimmed = block.trim();
+      if (!trimmed) {
+        globalIdx++; // account for the split separator
+        continue;
+      }
+
+      if (trimmed.length <= targetSize) {
+        chunks.push({ text: trimmed, index: globalIdx });
+      } else {
+        // Sub-split long blocks on single newlines or sentence boundaries
+        const subParts = trimmed.split(/(?<=\.)\s+|\n/);
+        let buffer = '';
+        for (const part of subParts) {
+          if (buffer.length + part.length + 1 > targetSize && buffer.length > 0) {
+            chunks.push({ text: buffer.trim(), index: globalIdx });
+            globalIdx++;
+            buffer = part;
+          } else {
+            buffer += (buffer ? ' ' : '') + part;
+          }
+        }
+        if (buffer.trim()) {
+          chunks.push({ text: buffer.trim(), index: globalIdx });
+        }
+      }
+      globalIdx++;
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Extract lowercased keywords from a string.
+   * Strips common stop-words so scoring focuses on meaningful terms.
+   */
+  private static extractKeywords(text: string): Set<string> {
+    const STOP_WORDS = new Set([
+      'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+      'should', 'may', 'might', 'shall', 'can', 'need', 'dare', 'ought',
+      'used', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from',
+      'as', 'into', 'through', 'during', 'before', 'after', 'above', 'below',
+      'between', 'out', 'off', 'over', 'under', 'again', 'further', 'then',
+      'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'each',
+      'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no',
+      'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very',
+      'just', 'because', 'but', 'and', 'or', 'if', 'while', 'about', 'up',
+      'its', 'it', 'this', 'that', 'these', 'those', 'i', 'me', 'my', 'we',
+      'our', 'you', 'your', 'he', 'him', 'his', 'she', 'her', 'they', 'them',
+      'their', 'what', 'which', 'who', 'whom', 'whose', 'tell', 'give',
+      'show', 'find', 'get', 'make', 'also', 'like', 'many',
+    ]);
+
+    const words = text.toLowerCase().match(/[a-z0-9]{2,}/g) || [];
+    return new Set(words.filter((w) => !STOP_WORDS.has(w)));
+  }
+
+  /**
+   * Score a paragraph by keyword overlap with the question.
+   * Returns a value between 0 and 1.
+   */
+  private static scoreChunk(chunkText: string, questionKeywords: Set<string>): number {
+    if (questionKeywords.size === 0) return 0;
+    const chunkWords = this.extractKeywords(chunkText);
+    let hits = 0;
+    for (const kw of questionKeywords) {
+      if (chunkWords.has(kw)) hits++;
+    }
+    return hits / questionKeywords.size;
+  }
+
+  /**
+   * Smart-truncate a document to fit within `maxChars` by keeping the
+   * paragraphs most relevant to the user's question, in their original
+   * document order.
+   *
+   * Algorithm:
+   *  1. Split the document into ~500-char paragraphs.
+   *  2. Score each paragraph by keyword overlap with the question.
+   *  3. Always include the first paragraph (document intro / context).
+   *  4. Sort remaining by score descending; pick top-K that fit the budget.
+   *  5. Re-sort selected paragraphs by their original document order.
+   *  6. Join and return.
+   */
+  static smartTruncate(text: string, question: string, maxChars: number): string {
+    const chunks = this.splitIntoParagraphs(text);
+    if (chunks.length === 0) return text.substring(0, maxChars);
+    if (chunks.length === 1) return chunks[0].text.substring(0, maxChars);
+
+    const questionKeywords = this.extractKeywords(question);
+
+    // Always keep the first paragraph for document context
+    const first = chunks[0];
+    const scored = chunks.slice(1).map((c) => ({
+      ...c,
+      score: this.scoreChunk(c.text, questionKeywords),
+    }));
+
+    // Sort by score descending (ties broken by earlier position)
+    scored.sort((a, b) => b.score - a.score || a.index - b.index);
+
+    // Greedily pick chunks that fit
+    const selected: Array<{ text: string; index: number }> = [first];
+    let budget = maxChars - first.text.length;
+
+    for (const chunk of scored) {
+      const needed = chunk.text.length + 2; // +2 for join separator
+      if (needed <= budget) {
+        selected.push(chunk);
+        budget -= needed;
+      }
+      if (budget <= 0) break;
+    }
+
+    // Re-sort by original document order
+    selected.sort((a, b) => a.index - b.index);
+
+    const result = selected.map((c) => c.text).join('\n\n');
+    const suffix = selected.length < chunks.length
+      ? '\n... [less relevant sections omitted]'
+      : '';
+
+    return result + suffix;
   }
 }
