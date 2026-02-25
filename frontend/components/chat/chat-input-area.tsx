@@ -40,6 +40,9 @@ export const ChatInputArea: React.FC<
   onRagSettingsChange,
   mode,
   onModeChange,
+  activeConversationAttachments,
+  onClearConversationAttachment,
+  onClearAllConversationAttachments,
 }) => {
   const isChatMode = mode === 'chat';
   const webEnabled = ragSettings?.enableWebSearch !== false;
@@ -101,6 +104,9 @@ export const ChatInputArea: React.FC<
             onWebToggle={isChatMode ? undefined : handleWebToggle}
             mode={mode}
             onModeChange={onModeChange}
+            activeConversationAttachments={activeConversationAttachments}
+            onClearConversationAttachment={onClearConversationAttachment}
+            onClearAllConversationAttachments={onClearAllConversationAttachments}
           />
         </div>
       </div>
@@ -129,6 +135,9 @@ export const ChatInputArea: React.FC<
           onWebToggle={isChatMode ? undefined : handleWebToggle}
           mode={mode}
           onModeChange={onModeChange}
+          activeConversationAttachments={activeConversationAttachments}
+          onClearConversationAttachment={onClearConversationAttachment}
+          onClearAllConversationAttachments={onClearAllConversationAttachments}
         />
       </div>
     </div>

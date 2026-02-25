@@ -112,6 +112,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   const [inlineUploadStatus, setInlineUploadStatus] = useState<UploadStatus | null>(null);
   const [lastUploadFile, setLastUploadFile] = useState<File | null>(null);
   const conversationLoadRequestRef = useRef(0);
+  /** Conversation-level attachments — re-sent with every follow-up message. */
+  const [conversationAttachments, setConversationAttachments] = useState<ChatAttachment[]>([]);
 
   // ── Document drag-and-drop upload (retired in Phase 2) ────────────────
 
@@ -251,6 +253,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         }
 
         setSourcePanelContext(null);
+        setConversationAttachments([]);
         try {
           const messagesResponse = await conversationApi.getMessages(currentConversationId);
           if (!isStale() && messagesResponse.success && messagesResponse.data) {
@@ -293,6 +296,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         setConversationMode('chat');
         setUnifiedFilters({});
         setSourcePanelContext(null);
+        setConversationAttachments([]);
       }
     };
     loadConversationData();
@@ -455,8 +459,33 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       await handleQueueSend(queueMatch[1].trim());
       return;
     }
+
+    // Store any new inline attachments at the conversation level for follow-ups
+    if (attachments && attachments.length > 0) {
+      setConversationAttachments((prev) => {
+        const existingIds = new Set(prev.map((a) => a.id));
+        const newOnes = attachments.filter((a) => !existingIds.has(a.id));
+        return [...prev, ...newOnes].slice(0, 5); // cap at INLINE_MAX_COUNT
+      });
+    }
+
     await handleSend(content, undefined, undefined, attachments);
   };
+
+  const handleClearConversationAttachment = useCallback((attachmentId: string) => {
+    setConversationAttachments((prev) => {
+      const removed = prev.find((a) => a.id === attachmentId);
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return prev.filter((a) => a.id !== attachmentId);
+    });
+  }, []);
+
+  const handleClearAllConversationAttachments = useCallback(() => {
+    setConversationAttachments((prev) => {
+      prev.forEach((a) => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
+      return [];
+    });
+  }, []);
 
   // Research mode retired in v2
 
@@ -542,6 +571,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           onCancelQueueJob={handleCancelQueueJob}
           ragSettings={ragSettings}
           onRagSettingsChange={setRagSettings}
+          activeConversationAttachments={conversationAttachments}
+          onClearConversationAttachment={handleClearConversationAttachment}
+          onClearAllConversationAttachments={handleClearAllConversationAttachments}
         />
       )}
 
@@ -624,6 +656,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             activeQueueJobId={activeQueueJobId}
             onCancelQueueJob={handleCancelQueueJob}          ragSettings={ragSettings}
           onRagSettingsChange={setRagSettings}
+          activeConversationAttachments={conversationAttachments}
+          onClearConversationAttachment={handleClearConversationAttachment}
+          onClearAllConversationAttachments={handleClearAllConversationAttachments}
           />
         </>
       )}

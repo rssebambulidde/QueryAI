@@ -137,6 +137,12 @@ interface ChatInputProps {
   mode?: 'research' | 'chat';
   /** Callback to change the conversation mode via inline dropup. */
   onModeChange?: (mode: 'research' | 'chat') => void;
+  /** Attachments active for the whole conversation (re-sent with every message). */
+  activeConversationAttachments?: ChatAttachment[];
+  /** Remove a single conversation-level attachment. */
+  onClearConversationAttachment?: (id: string) => void;
+  /** Clear all conversation-level attachments. */
+  onClearAllConversationAttachments?: () => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -157,6 +163,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onWebToggle,
   mode,
   onModeChange,
+  activeConversationAttachments,
+  onClearConversationAttachment,
+  onClearAllConversationAttachments,
 }) => {
   const isChatMode = mode === 'chat';
   const { isMobile } = useMobile();
@@ -197,8 +206,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   }, [showModeMenu]);
 
   const handleSend = () => {
-    if ((message.trim() || inlineAttachments.length > 0) && !disabled) {
-      onSend(message.trim(), inlineAttachments.length > 0 ? inlineAttachments : undefined);
+    const hasInline = inlineAttachments.length > 0;
+    const hasConversation = (activeConversationAttachments?.length ?? 0) > 0;
+    if ((message.trim() || hasInline || hasConversation) && !disabled) {
+      // Merge: new inline attachments + active conversation-level attachments (deduplicated)
+      const inlineIds = new Set(inlineAttachments.map((a) => a.id));
+      const merged = [
+        ...inlineAttachments,
+        ...(activeConversationAttachments ?? []).filter((a) => !inlineIds.has(a.id)),
+      ];
+      onSend(message.trim(), merged.length > 0 ? merged : undefined);
       setMessage('');
       // Revoke object URLs to free memory
       inlineAttachments.forEach((att) => { if (att.previewUrl) URL.revokeObjectURL(att.previewUrl); });
@@ -630,6 +647,30 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             'focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-transparent'
           )}
         >
+          {/* Active conversation-level attachments indicator */}
+          {(activeConversationAttachments?.length ?? 0) > 0 && inlineAttachments.length === 0 && (
+            <div className="flex items-center gap-2 px-3 pt-2 pb-1 border-b border-gray-100">
+              <div className="flex items-center gap-1.5 text-xs text-purple-600 bg-purple-50 rounded-full px-2.5 py-1">
+                <Paperclip className="w-3 h-3" />
+                <span className="font-medium">
+                  {activeConversationAttachments!.length === 1
+                    ? activeConversationAttachments![0].name
+                    : `${activeConversationAttachments!.length} files active`}
+                </span>
+              </div>
+              <span className="text-xs text-gray-400">Context included in follow-ups</span>
+              <button
+                type="button"
+                onClick={onClearAllConversationAttachments}
+                className="ml-auto text-xs text-gray-400 hover:text-gray-600 flex items-center gap-0.5 transition-colors"
+                aria-label="Clear active attachments"
+              >
+                <X className="w-3 h-3" />
+                <span>Clear</span>
+              </button>
+            </div>
+          )}
+
           {/* Text input */}
           <textarea
             ref={textInputRef}
@@ -778,7 +819,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         ) : (
           <Button
             onClick={handleSend}
-            disabled={disabled || (!message.trim() && inlineAttachments.length === 0)}
+            disabled={disabled || (!message.trim() && inlineAttachments.length === 0 && (activeConversationAttachments?.length ?? 0) === 0)}
             className="px-4 sm:px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-2xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 touch-manipulation min-h-[52px] ml-1 sm:ml-2"
             aria-label="Send message"
           >

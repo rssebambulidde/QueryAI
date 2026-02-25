@@ -250,6 +250,12 @@ export interface ChatInputAreaProps {
   mode?: 'research' | 'chat';
   /** Callback to change the conversation mode. */
   onModeChange?: (mode: 'research' | 'chat') => void;
+  /** Attachments that are active for the entire conversation (persisted across messages). */
+  activeConversationAttachments?: ChatAttachment[];
+  /** Remove a single conversation-level attachment by ID. */
+  onClearConversationAttachment?: (attachmentId: string) => void;
+  /** Clear all conversation-level attachments. */
+  onClearAllConversationAttachments?: () => void;
 }
 
 export interface SourcesSidebarProps {
