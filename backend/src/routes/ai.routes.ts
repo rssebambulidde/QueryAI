@@ -237,6 +237,14 @@ router.post(
       let structuredMeta: { followUpQuestions?: string[]; citedSources?: any[] } | null = null;
 
       for await (const chunk of stream) {
+        // The pipeline may yield an extraction-in-progress sentinel
+        if (typeof chunk === 'string' && chunk.startsWith('{"__extracting":')) {
+          try {
+            const meta = JSON.parse(chunk);
+            res.write(StreamingService.formatSSEMessage('extracting', { extracting: meta.__extracting, files: meta.files }));
+          } catch { /* skip malformed */ }
+          continue;
+        }
         // The pipeline may yield extraction status metadata at the start
         if (typeof chunk === 'string' && chunk.startsWith('{"__extractionStatus":true')) {
           try {
@@ -437,6 +445,14 @@ router.post(
       let structuredMeta: { followUpQuestions?: string[]; citedSources?: any[] } | null = null;
       
       for await (const chunk of stream) {
+        // The pipeline may yield an extraction-in-progress sentinel
+        if (typeof chunk === 'string' && chunk.startsWith('{"__extracting":')) {
+          try {
+            const meta = JSON.parse(chunk);
+            res.write(StreamingService.formatSSEMessage('extracting', { extracting: meta.__extracting, files: meta.files }));
+          } catch { /* skip malformed */ }
+          continue;
+        }
         // The pipeline may yield extraction status metadata at the start
         if (typeof chunk === 'string' && chunk.startsWith('{"__extractionStatus":true')) {
           try {

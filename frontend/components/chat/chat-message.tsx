@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
-import { Copy, Edit2, Check, X, Trash2, BookOpen, RefreshCw, ChevronDown, History, GitCompare, ThumbsUp, ThumbsDown, MessageSquare, Flag } from 'lucide-react';
+import { Copy, Edit2, Check, X, Trash2, BookOpen, RefreshCw, ChevronDown, History, GitCompare, ThumbsUp, ThumbsDown, MessageSquare, Flag, FileText } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
@@ -45,6 +45,8 @@ export interface ChatMessageType {
   searchResults?: SearchResult[]; // Results from /search command
   /** Ephemeral inline attachments (images / docs) — display only, not persisted */
   attachments?: import('./chat-types').ChatAttachment[];
+  /** File names currently being extracted (set during extraction phase, cleared when done) */
+  extractingFiles?: string[];
   // Version history
   version?: number;
   parentMessageId?: string | null;
@@ -319,7 +321,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               </div>
             ) : !isUser && (isStreaming || message.isStreaming) && !(message.content || '').trim() ? (
               <div className="flex items-center gap-1.5 text-gray-500">
-                <span className="text-sm">Query assistant, thinking.</span>
+                {message.extractingFiles && message.extractingFiles.length > 0 ? (
+                  <>
+                    <FileText className="w-4 h-4 text-orange-400 animate-pulse" />
+                    <span className="text-sm">
+                      Extracting text from{' '}
+                      <span className="font-medium text-gray-700">
+                        {message.extractingFiles.length === 1
+                          ? message.extractingFiles[0]
+                          : `${message.extractingFiles.length} files`}
+                      </span>
+                      ...
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-sm">Query assistant, thinking.</span>
+                )}
                 <span className="flex gap-0.5" aria-hidden>
                   <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                   <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />

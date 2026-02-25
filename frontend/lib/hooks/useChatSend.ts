@@ -394,10 +394,19 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
               }
               continue;
             }
-            if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
-              followUpQuestions = chunk.followUpQuestions;
-              if ((chunk as { refusal?: boolean }).refusal) isRefusal = true;
+            if (typeof chunk === 'object' && 'extracting' in chunk) {
+              // Show/hide extraction progress on the assistant message
+              const { extracting, extractingFiles } = chunk as { extracting?: boolean; extractingFiles?: string[] };
+              if (extracting) {
+                assistantMessage = { ...assistantMessage, extractingFiles: extractingFiles || [] };
+              } else {
+                assistantMessage = { ...assistantMessage, extractingFiles: undefined };
+              }
+              assistantMsgRef.current = assistantMessage;
+              setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
               continue;
+            }
+            if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
             }
             if (typeof chunk === 'object' && 'qualityScore' in chunk) {
               qualityScore = (chunk as { qualityScore?: number }).qualityScore;

@@ -2076,8 +2076,20 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       // v2: Topic fetch skipped (topics retired)
       const preloadedTopic = undefined;
 
-      // Use shared pipeline preparation
+      // If request includes document attachments, emit an "extracting" sentinel
+      // so the route can send an SSE event and the frontend shows a progress hint.
+      const docAttachments = request.attachments?.filter((a) => a.type === 'document') ?? [];
+      if (docAttachments.length > 0) {
+        yield JSON.stringify({ __extracting: true, files: docAttachments.map((a) => a.name) });
+      }
+
+      // Use shared pipeline preparation (includes extraction)
       const context = await this.prepareRequestContext(request, userId, preloadedTopic);
+
+      // Signal that extraction is done so the frontend can drop the extraction indicator
+      if (docAttachments.length > 0) {
+        yield JSON.stringify({ __extracting: false });
+      }
 
       // Yield extraction status metadata before streaming begins so the route
       // can emit it as an SSE event (similar to the __structured sentinel)

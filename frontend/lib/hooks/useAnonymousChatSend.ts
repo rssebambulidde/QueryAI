@@ -198,6 +198,17 @@ export function useAnonymousChatSend(deps: UseAnonymousChatSendDeps): UseAnonymo
             }
             continue;
           }
+          if (typeof chunk === 'object' && 'extracting' in chunk) {
+            const { extracting, extractingFiles } = chunk as { extracting?: boolean; extractingFiles?: string[] };
+            if (extracting) {
+              assistantMessage = { ...assistantMessage, extractingFiles: extractingFiles || [] };
+            } else {
+              assistantMessage = { ...assistantMessage, extractingFiles: undefined };
+            }
+            assistantMsgRef.current = assistantMessage;
+            setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+            continue;
+          }
           if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
             followUpQuestions = chunk.followUpQuestions;
             if ((chunk as { refusal?: boolean }).refusal) isRefusal = true;
