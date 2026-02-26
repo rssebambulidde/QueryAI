@@ -335,6 +335,25 @@ export class ConversationService {
         throw new AppError('Conversation not found', 404, 'CONVERSATION_NOT_FOUND');
       }
 
+      // Clean up chat attachments BEFORE deleting the conversation row.
+      // The chat_attachments FK is ON DELETE SET NULL, so after the conversation
+      // row is gone the conversation_id becomes NULL — making cleanup impossible.
+      try {
+        const { ChatAttachmentService } = await import('./chat-attachment.service');
+        const removed = await ChatAttachmentService.deleteByConversation(conversationId, userId);
+        if (removed > 0) {
+          logger.info('Cleaned up chat attachments before conversation delete', {
+            conversationId, userId, removed,
+          });
+        }
+      } catch (attachErr: any) {
+        // Non-fatal — proceed with conversation deletion even if attachment
+        // cleanup fails (the rows become orphans but won't break anything).
+        logger.warn('Attachment cleanup failed during conversation delete', {
+          conversationId, error: attachErr.message,
+        });
+      }
+
       // Delete conversation (messages will be cascade deleted)
       const { error } = await supabaseAdmin
         .from('conversations')

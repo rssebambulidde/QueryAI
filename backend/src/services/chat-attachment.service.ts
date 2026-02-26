@@ -304,4 +304,68 @@ export class ChatAttachmentService {
 
     return data || [];
   }
+
+  /**
+   * Delete ALL attachments for a conversation (storage files + DB rows).
+   * Called when a conversation is deleted so attachments don't become orphans.
+   */
+  static async deleteByConversation(conversationId: string, userId: string): Promise<number> {
+    // 1. Fetch all attachment rows for this conversation (need storage_path for cleanup)
+    const { data: rows, error: fetchErr } = await supabaseAdmin
+      .from('chat_attachments')
+      .select('id, storage_path')
+      .eq('conversation_id', conversationId)
+      .eq('user_id', userId);
+
+    if (fetchErr) {
+      logger.error('Failed to fetch attachments for conversation cleanup', {
+        conversationId,
+        error: fetchErr.message,
+      });
+      return 0;
+    }
+
+    if (!rows || rows.length === 0) return 0;
+
+    // 2. Delete storage files (batch remove)
+    const storagePaths = rows
+      .map((r: any) => r.storage_path)
+      .filter((p: string | null): p is string => !!p);
+
+    if (storagePaths.length > 0) {
+      try {
+        await supabaseAdmin.storage.from(STORAGE_BUCKET).remove(storagePaths);
+      } catch (storageErr: any) {
+        logger.warn('Failed to delete some storage files during conversation cleanup', {
+          conversationId,
+          count: storagePaths.length,
+          error: storageErr.message,
+        });
+      }
+    }
+
+    // 3. Delete DB rows
+    const { error: deleteErr } = await supabaseAdmin
+      .from('chat_attachments')
+      .delete()
+      .eq('conversation_id', conversationId)
+      .eq('user_id', userId);
+
+    if (deleteErr) {
+      logger.error('Failed to delete attachment DB rows during conversation cleanup', {
+        conversationId,
+        error: deleteErr.message,
+      });
+      return 0;
+    }
+
+    logger.info('Cleaned up attachments for deleted conversation', {
+      conversationId,
+      userId,
+      attachmentCount: rows.length,
+      storageFilesRemoved: storagePaths.length,
+    });
+
+    return rows.length;
+  }
 }
