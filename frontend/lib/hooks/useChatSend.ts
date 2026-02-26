@@ -309,7 +309,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           mode: liveMode,
           enableWebSearch: liveMode === 'chat' ? false : ragSettings.enableWebSearch,
           enableSearch: liveMode === 'chat' ? false : ragSettings.enableWebSearch,
-          ...(researchMyDocumentRef.current && { researchMyDocument: true }),
+          ...(liveMode !== 'chat' && researchMyDocumentRef.current && { researchMyDocument: true }),
           topic: activeFilters.keyword,
           timeRange: activeFilters.timeRange,
           startDate: activeFilters.startDate,

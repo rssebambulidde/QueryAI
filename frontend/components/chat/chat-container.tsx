@@ -570,6 +570,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   const handleModeChange = useCallback((newMode: 'research' | 'chat') => {
     setConversationMode(newMode);
+    // Reset research-my-document when switching to chat (express) mode
+    if (newMode === 'chat') {
+      setResearchMyDocument(false);
+    }
     // Persist mode to DB for the active conversation so it survives reloads
     if (currentConversationId) {
       conversationApi.update(currentConversationId, { mode: newMode }).catch((err) => {

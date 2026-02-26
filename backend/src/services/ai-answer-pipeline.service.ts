@@ -2368,7 +2368,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         hasAttachmentContext: !!context.attachmentDocumentContext,
         attachmentContextLen: context.attachmentDocumentContext?.length ?? 0,
       });
-      if (request.researchMyDocument && context.attachmentDocumentContext) {
+      if (request.researchMyDocument && request.mode !== 'chat' && context.attachmentDocumentContext) {
         try {
           const { DocumentResearchService } = await import('./document-research.service');
           let docResearchContext = '';
