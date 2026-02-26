@@ -338,9 +338,23 @@ export class ConversationService {
       // Clean up chat attachments BEFORE deleting the conversation row.
       // The chat_attachments FK is ON DELETE SET NULL, so after the conversation
       // row is gone the conversation_id becomes NULL — making cleanup impossible.
+      // Attachments may have been uploaded before the conversation existed, so
+      // conversation_id can still be NULL. We fall back to fileIds saved in
+      // the conversation's metadata to catch those orphaned rows.
       try {
         const { ChatAttachmentService } = await import('./chat-attachment.service');
-        const removed = await ChatAttachmentService.deleteByConversation(conversationId, userId);
+
+        // Extract fileIds from conversation metadata for fallback lookup
+        const savedAttachments = (conversation as any)?.metadata?.savedAttachments || [];
+        const metadataFileIds: string[] = savedAttachments
+          .map((att: any) => att.fileId)
+          .filter(Boolean);
+
+        const removed = await ChatAttachmentService.deleteByConversation(
+          conversationId,
+          userId,
+          metadataFileIds.length > 0 ? metadataFileIds : undefined,
+        );
         if (removed > 0) {
           logger.info('Cleaned up chat attachments before conversation delete', {
             conversationId, userId, removed,

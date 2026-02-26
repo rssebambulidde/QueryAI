@@ -306,29 +306,85 @@ export class ChatAttachmentService {
   }
 
   /**
+   * Link one or more attachments to a conversation.
+   * Attachments are uploaded before the conversation exists, so conversation_id
+   * is initially NULL. This method is called by the pipeline when it first
+   * processes the attachments and knows the conversationId.
+   */
+  static async linkToConversation(
+    attachmentIds: string[],
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    if (attachmentIds.length === 0) return;
+
+    const { error } = await supabaseAdmin
+      .from('chat_attachments')
+      .update({ conversation_id: conversationId })
+      .in('id', attachmentIds)
+      .eq('user_id', userId)
+      .is('conversation_id', null); // only update unlinked rows
+
+    if (error) {
+      logger.warn('Failed to link attachments to conversation', {
+        conversationId,
+        attachmentIds,
+        error: error.message,
+      });
+    } else {
+      logger.info('Linked attachments to conversation', {
+        conversationId,
+        count: attachmentIds.length,
+      });
+    }
+  }
+
+  /**
    * Delete ALL attachments for a conversation (storage files + DB rows).
    * Called when a conversation is deleted so attachments don't become orphans.
    */
-  static async deleteByConversation(conversationId: string, userId: string): Promise<number> {
-    // 1. Fetch all attachment rows for this conversation (need storage_path for cleanup)
+  static async deleteByConversation(conversationId: string, userId: string, metadataFileIds?: string[]): Promise<number> {
+    // 1. Fetch all attachment rows linked to this conversation
     const { data: rows, error: fetchErr } = await supabaseAdmin
       .from('chat_attachments')
       .select('id, storage_path')
       .eq('conversation_id', conversationId)
       .eq('user_id', userId);
 
+    // 2. Also fetch any unlinked rows referenced by fileId in conversation metadata
+    //    (attachments uploaded before conversation_id was linked)
+    let metadataRows: typeof rows = [];
+    if (metadataFileIds && metadataFileIds.length > 0) {
+      const { data: mRows } = await supabaseAdmin
+        .from('chat_attachments')
+        .select('id, storage_path')
+        .in('id', metadataFileIds)
+        .eq('user_id', userId);
+      metadataRows = mRows || [];
+    }
+
+    // Merge and deduplicate
+    const allRows = [...(rows || []), ...(metadataRows || [])];
+    const seen = new Set<string>();
+    const uniqueRows = allRows.filter((r: any) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+
     if (fetchErr) {
       logger.error('Failed to fetch attachments for conversation cleanup', {
         conversationId,
         error: fetchErr.message,
       });
-      return 0;
+      // Still try metadata rows if we have them
+      if (uniqueRows.length === 0) return 0;
     }
 
-    if (!rows || rows.length === 0) return 0;
+    if (uniqueRows.length === 0) return 0;
 
-    // 2. Delete storage files (batch remove)
-    const storagePaths = rows
+    // 3. Delete storage files (batch remove)
+    const storagePaths = uniqueRows
       .map((r: any) => r.storage_path)
       .filter((p: string | null): p is string => !!p);
 
@@ -344,11 +400,12 @@ export class ChatAttachmentService {
       }
     }
 
-    // 3. Delete DB rows
+    // 4. Delete DB rows by IDs
+    const idsToDelete = uniqueRows.map((r: any) => r.id);
     const { error: deleteErr } = await supabaseAdmin
       .from('chat_attachments')
       .delete()
-      .eq('conversation_id', conversationId)
+      .in('id', idsToDelete)
       .eq('user_id', userId);
 
     if (deleteErr) {
@@ -362,10 +419,10 @@ export class ChatAttachmentService {
     logger.info('Cleaned up attachments for deleted conversation', {
       conversationId,
       userId,
-      attachmentCount: rows.length,
+      attachmentCount: uniqueRows.length,
       storageFilesRemoved: storagePaths.length,
     });
 
-    return rows.length;
+    return uniqueRows.length;
   }
 }

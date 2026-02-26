@@ -681,6 +681,18 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             // Persist fileId doc references into conversation metadata so
             // attachments survive cross-session reloads.
             if (request.conversationId) {
+              // Link attachments to this conversation (they were uploaded with
+              // conversation_id=NULL since the conversation may not have existed yet)
+              try {
+                await ChatAttachmentService.linkToConversation(
+                  (request as any).attachmentIds,
+                  request.conversationId,
+                  userId,
+                );
+              } catch (linkErr: any) {
+                logger.warn('Failed to link attachmentIds to conversation', { error: linkErr.message });
+              }
+
               try {
                 const { ConversationService } = await import('./conversation.service');
                 const savedAttachments = resolved.map((r) => ({
@@ -757,6 +769,19 @@ Is this question clearly within the topic? Answer only YES or NO.`;
               ];
             }
             logger.info('Resolved fileId attachments', { count: resolved.length });
+
+            // Link these fileId attachments to the conversation
+            if (request.conversationId) {
+              try {
+                await ChatAttachmentService.linkToConversation(
+                  fileIds,
+                  request.conversationId,
+                  userId,
+                );
+              } catch (linkErr: any) {
+                logger.warn('Failed to link fileId attachments to conversation', { error: linkErr.message });
+              }
+            }
           } catch (resolveErr: any) {
             logger.warn('Failed to resolve fileId attachments', { error: resolveErr.message });
           }
