@@ -190,7 +190,9 @@ Respond with ONLY a JSON array:
     const tasks: Array<{ claim: DocumentClaim; query: string }> = [];
     for (const [claim, queries] of queryMap) {
       for (const query of queries) {
-        tasks.push({ claim, query });
+        // Truncate overly long queries to stay within SearchService limits
+        const safeQuery = query.length > 400 ? query.slice(0, 400) : query;
+        tasks.push({ claim, query: safeQuery });
       }
     }
 
@@ -395,39 +397,56 @@ ${c.evidence || '(no web results found)'}`;
     void,
     unknown
   > {
-    yield { type: 'status', message: 'Extracting key claims from your document…' };
+    try {
+      yield { type: 'status', message: 'Extracting key claims from your document…' };
 
-    // Step 1: Extract claims
-    const claims = await this.extractClaims(documentText, userQuestion);
-    if (claims.length === 0) {
+      // Step 1: Extract claims
+      const claims = await this.extractClaims(documentText, userQuestion);
+      if (claims.length === 0) {
+        logger.warn('Document research: no claims extracted');
+        yield {
+          type: 'result',
+          data: { claims: [], results: [], formattedContext: '', allSources: [] },
+        };
+        return;
+      }
+
+      yield { type: 'claims', claims };
+      yield { type: 'status', message: `Found ${claims.length} claims. Searching the web for evidence…` };
+
+      // Step 2: Generate queries
+      const queryMap = this.generateSearchQueries(claims);
+
+      // Step 3: Search web
+      let webResultsMap: Map<DocumentClaim, SearchResult[]>;
+      try {
+        webResultsMap = await this.searchClaims(queryMap, options);
+      } catch (searchErr: any) {
+        logger.error('Document research: web search phase failed', { error: searchErr.message });
+        yield { type: 'status', message: 'Web search encountered an error. Providing partial results…' };
+        webResultsMap = new Map();
+      }
+
+      yield { type: 'status', message: 'Analysing web evidence against document claims…' };
+
+      // Step 4: Synthesise verdicts
+      const results = await this.synthesiseVerdicts(claims, webResultsMap);
+
+      // Step 5: Format
+      const formattedContext = this.formatAsContext(results);
+      const allSources = this.collectSources(results);
+
+      yield {
+        type: 'result',
+        data: { claims, results, formattedContext, allSources },
+      };
+    } catch (err: any) {
+      logger.error('Document research pipeline failed', { error: err.message, stack: err.stack });
+      // Yield empty result so the caller can still proceed with a normal answer
       yield {
         type: 'result',
         data: { claims: [], results: [], formattedContext: '', allSources: [] },
       };
-      return;
     }
-
-    yield { type: 'claims', claims };
-    yield { type: 'status', message: `Found ${claims.length} claims. Searching the web for evidence…` };
-
-    // Step 2: Generate queries
-    const queryMap = this.generateSearchQueries(claims);
-
-    // Step 3: Search web
-    const webResultsMap = await this.searchClaims(queryMap, options);
-
-    yield { type: 'status', message: 'Analysing web evidence against document claims…' };
-
-    // Step 4: Synthesise verdicts
-    const results = await this.synthesiseVerdicts(claims, webResultsMap);
-
-    // Step 5: Format
-    const formattedContext = this.formatAsContext(results);
-    const allSources = this.collectSources(results);
-
-    yield {
-      type: 'result',
-      data: { claims, results, formattedContext, allSources },
-    };
   }
 }
