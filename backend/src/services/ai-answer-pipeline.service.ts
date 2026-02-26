@@ -1311,16 +1311,107 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     let researchAttachmentContext = '';
     let researchImageAttachments: Array<{ name: string; mimeType: string; data: string }> | undefined;
 
+    // ── Resolve pre-uploaded attachment IDs (conversation-level attachments) ──
+    if ((request as any).attachmentIds && (request as any).attachmentIds.length > 0 && userId) {
+      try {
+        const { ChatAttachmentService } = await import('./chat-attachment.service');
+        const { AttachmentExtractorService } = await import('./attachment-extractor.service');
+        const resolved = await ChatAttachmentService.resolveByIds((request as any).attachmentIds, userId);
+        if (resolved.length > 0) {
+          const docsWithText = resolved
+            .filter((r) => r.extractedText)
+            .map((r) => ({ name: r.fileName, text: r.extractedText!, mimeType: r.mimeType }));
+          if (docsWithText.length > 0) {
+            researchAttachmentContext = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
+          }
+          const resolvedStatuses = resolved.map((r) => ({
+            name: r.fileName,
+            status: r.extractedText ? 'success' as const : 'failed' as const,
+            chars: r.extractedText?.length ?? 0,
+          }));
+          if (resolvedStatuses.length > 0) {
+            (request as any)._extractionStatuses = [
+              ...((request as any)._extractionStatuses || []),
+              ...resolvedStatuses,
+            ];
+          }
+
+          // Link to conversation if applicable
+          if (request.conversationId) {
+            try {
+              await ChatAttachmentService.linkToConversation(
+                (request as any).attachmentIds,
+                request.conversationId,
+                userId,
+              );
+            } catch (linkErr: any) {
+              logger.warn('Failed to link attachmentIds to conversation (research)', { error: linkErr.message });
+            }
+          }
+
+          logger.info('Resolved attachmentIds for research mode', {
+            ids: (request as any).attachmentIds,
+            resolved: resolved.length,
+            withText: docsWithText.length,
+          });
+        }
+      } catch (resolveErr: any) {
+        logger.warn('Failed to resolve attachmentIds in research mode', { error: resolveErr.message });
+      }
+    }
+
     if (request.attachments && request.attachments.length > 0) {
       const { AttachmentExtractorService } = await import('./attachment-extractor.service');
-      const { extracted, statuses: researchExtractionStatuses } = await AttachmentExtractorService.extractAllWithStatus(request.attachments);
-      if (extracted.length > 0) {
-        researchAttachmentContext = AttachmentExtractorService.formatAsContext(extracted, request.question);
-      }
-      if (researchExtractionStatuses.length > 0) {
-        (request as any)._extractionStatuses = researchExtractionStatuses;
-      }
+
+      // Separate: fileId-only (pre-uploaded) vs base64 documents vs images
+      const withFileId = request.attachments.filter((a: any) => a.fileId && !a.data);
+      const withBase64 = request.attachments.filter((a: any) => !a.fileId || a.data).filter((a) => a.type === 'document');
       const images = request.attachments.filter((a) => a.type === 'image');
+
+      // Resolve fileId attachments from DB
+      if (withFileId.length > 0 && userId) {
+        try {
+          const { ChatAttachmentService } = await import('./chat-attachment.service');
+          const fileIds = withFileId.map((a: any) => a.fileId);
+          const resolved = await ChatAttachmentService.resolveByIds(fileIds, userId);
+          const docsWithText = resolved
+            .filter((r) => r.extractedText)
+            .map((r) => ({ name: r.fileName, text: r.extractedText!, mimeType: r.mimeType }));
+          if (docsWithText.length > 0) {
+            const ctx = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
+            researchAttachmentContext = researchAttachmentContext ? researchAttachmentContext + '\n\n' + ctx : ctx;
+          }
+          const resolvedStatuses = resolved.map((r) => ({
+            name: r.fileName,
+            status: r.extractedText ? 'success' as const : 'failed' as const,
+            chars: r.extractedText?.length ?? 0,
+          }));
+          if (resolvedStatuses.length > 0) {
+            (request as any)._extractionStatuses = [
+              ...((request as any)._extractionStatuses || []),
+              ...resolvedStatuses,
+            ];
+          }
+        } catch (resolveErr: any) {
+          logger.warn('Failed to resolve fileId attachments in research mode', { error: resolveErr.message });
+        }
+      }
+
+      // Extract text from base64 document attachments
+      if (withBase64.length > 0) {
+        const { extracted, statuses: researchExtractionStatuses } = await AttachmentExtractorService.extractAllWithStatus(withBase64);
+        if (extracted.length > 0) {
+          const ctx = AttachmentExtractorService.formatAsContext(extracted, request.question);
+          researchAttachmentContext = researchAttachmentContext ? researchAttachmentContext + '\n\n' + ctx : ctx;
+        }
+        if (researchExtractionStatuses.length > 0) {
+          (request as any)._extractionStatuses = [
+            ...((request as any)._extractionStatuses || []),
+            ...researchExtractionStatuses,
+          ];
+        }
+      }
+
       if (images.length > 0) {
         researchImageAttachments = images.map((img) => ({
           name: img.name,
@@ -2272,6 +2363,11 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       // ── Document Research mode ──────────────────────────────────────
       // When the user enables "Research my document" (researchMyDocument=true)
       // and there is attachment text, extract claims and verify via web search.
+      logger.debug('Document research check', {
+        researchMyDocument: !!request.researchMyDocument,
+        hasAttachmentContext: !!context.attachmentDocumentContext,
+        attachmentContextLen: context.attachmentDocumentContext?.length ?? 0,
+      });
       if (request.researchMyDocument && context.attachmentDocumentContext) {
         const { DocumentResearchService } = await import('./document-research.service');
         let docResearchContext = '';
