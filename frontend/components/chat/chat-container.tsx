@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Download } from 'lucide-react';
 import type { Message, MessageVersionSummary } from './chat-message';
 import type { RAGSettings } from './rag-source-selector';
-import { aiApi, conversationApi, queueApi, QuestionRequest, Source } from '@/lib/api';
+import { aiApi, conversationApi, queueApi, attachmentApi, QuestionRequest, Source } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { useFilterStore } from '@/lib/store/filter-store';
@@ -488,14 +488,33 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   // handleDocumentDelete retired in Phase 2
 
-  /** Remove a single conversation-level attachment (local state + DB metadata). */
+  /** Remove a single conversation-level attachment (local state + DB metadata + storage).
+   *  Accepts an ID or a fileId — the inline strip may pass an ID that differs from the
+   *  conversation-level copy, so we fall back to fileId or name matching.
+   */
   const removeConversationAttachment = useCallback(async (id: string) => {
-    // Find the attachment being removed (needed for backend name match)
-    const removed = conversationAttachments.find((a) => a.id === id);
-    // Update local state immediately
-    setConversationAttachments((prev) => prev.filter((a) => a.id !== id));
+    // Find by id first, then fall back to fileId match
+    const removed = conversationAttachments.find((a) => a.id === id)
+      || conversationAttachments.find((a) => a.fileId && a.fileId === id);
 
-    // Persist removal to backend metadata if we have a conversation
+    // Update local state immediately — remove by id OR by fileId/name
+    setConversationAttachments((prev) => {
+      if (removed) {
+        return prev.filter((a) => a.id !== removed.id);
+      }
+      return prev.filter((a) => a.id !== id);
+    });
+
+    // Delete from Supabase Storage + chat_attachments DB row
+    if (removed?.fileId) {
+      try {
+        await attachmentApi.delete(removed.fileId);
+      } catch (err) {
+        console.warn('[ChatContainer] Failed to delete attachment from server:', err);
+      }
+    }
+
+    // Persist removal to backend conversation metadata
     if (currentConversationId && removed) {
       try {
         const conversation = await conversationApi.get(currentConversationId);

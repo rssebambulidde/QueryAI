@@ -408,14 +408,32 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [inlineAttachments.length]);
 
-  /** Remove an inline attachment by ID */
+  /** Remove an inline attachment by ID.
+   *  Also cleans up: conversation-level state, backend storage + DB row.
+   */
   const removeInlineAttachment = useCallback((id: string) => {
-    setInlineAttachments((prev) => {
-      const att = prev.find((a) => a.id === id);
-      if (att?.previewUrl) URL.revokeObjectURL(att.previewUrl);
-      return prev.filter((a) => a.id !== id);
-    });
-  }, []);
+    // Find the attachment before removing from state
+    const att = inlineAttachments.find((a) => a.id === id);
+
+    // Remove from inline state
+    setInlineAttachments((prev) => prev.filter((a) => a.id !== id));
+
+    if (att) {
+      if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+
+      // Delete from backend storage + DB if it was pre-uploaded
+      if (att.fileId) {
+        attachmentApi.delete(att.fileId).catch((err) =>
+          console.warn('[ChatInput] Failed to delete attachment from server:', err?.message || err),
+        );
+      }
+
+      // Also remove from conversation-level attachments so it isn't re-sent on follow-ups
+      if (onClearConversationAttachment) {
+        onClearConversationAttachment(id);
+      }
+    }
+  }, [inlineAttachments, onClearConversationAttachment]);
 
   /** Handle the inline (paperclip) file input change */
   const handleInlineFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
