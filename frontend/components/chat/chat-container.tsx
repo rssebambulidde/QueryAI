@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import type { Message, MessageVersionSummary } from './chat-message';
 import type { RAGSettings } from './rag-source-selector';
 import { aiApi, conversationApi, queueApi, attachmentApi, QuestionRequest, Source } from '@/lib/api';
@@ -48,6 +48,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationMode, setConversationMode] = useState<'research' | 'chat'>('chat');
   const [researchMyDocument, setResearchMyDocument] = useState(false);
+  const [conversationLoading, setConversationLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingState, setStreamingState] = useState<StreamingState>('completed');
@@ -247,11 +248,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
     const loadConversationData = async () => {
       if (currentConversationId) {
+        setConversationLoading(true);
         // Guard: if conversations are loaded and the persisted ID isn't among them,
         // it's stale (e.g. from a previous session/user). Clear it instead of fetching.
         if (conversations.length > 0 && !conversations.some(c => c.id === currentConversationId)) {
           console.warn('[ChatContainer] Stale conversationId detected, clearing:', currentConversationId);
           selectConversation(null);
+          setConversationLoading(false);
           return;
         }
 
@@ -296,6 +299,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             }
 
             setMessages(loadedMessages);
+            setConversationLoading(false);
 
             if (conversation) {
               // Set conversation mode from DB
@@ -319,12 +323,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
             if (status === 404 || status === 403) {
               console.warn('[ChatContainer] Conversation not found/forbidden, clearing:', currentConversationId);
               selectConversation(null);
+              setConversationLoading(false);
               return;
             }
             console.error('Failed to load conversation:', err);
             toast.error('Failed to load conversation data');
             setMessages([]);
             setUnifiedFilters({});
+            setConversationLoading(false);
           }
         }
       } else {
@@ -335,6 +341,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
         setSourcePanelContext(null);
         setConversationAttachments([]);
         conversationLoadPrevIdRef.current = null;
+        setConversationLoading(false);
       }
     };
     loadConversationData();
@@ -615,6 +622,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   return (
     <div className="flex flex-col h-full bg-white">
       {/* ResearchModeBanner retired in Phase 2 */}
+
+      {/* Loading state: conversation selected but messages not yet loaded */}
+      {isEmpty && currentConversationId && conversationLoading && (
+        <div className="flex flex-1 min-h-0 items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-gray-400">
+            <Loader2 className="w-8 h-8 animate-spin" />
+            <p className="text-sm">Loading conversation…</p>
+          </div>
+        </div>
+      )}
 
       {/* Empty state: input area with inline mode dropup */}
       {isEmpty && !currentConversationId && (
