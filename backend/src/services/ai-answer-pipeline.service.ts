@@ -636,6 +636,15 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         } catch { /* ignore */ }
       }
 
+      // When the user sends attachments, the conversation state may contain
+      // topics/entities from a DIFFERENT (now-removed) document. Clear it so
+      // stale topics don't bias the LLM toward the old document.
+      const hasNewAttachments = !!((request as any).attachmentIds?.length)
+        || !!(request.attachments?.length);
+      if (hasNewAttachments && conversationStateText) {
+        conversationStateText = undefined;
+      }
+
       // ── Inline attachment processing ──────────────────────────────────
       let attachmentContext = '';
       let imageAttachments: Array<{ name: string; mimeType: string; data: string }> | undefined;
@@ -1380,7 +1389,11 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       });
 
       // Check LLM response cache
-      const shouldCache = !context.conversationHistory || context.conversationHistory.length <= 10;
+      // Skip caching when inline attachments are present — the cache key doesn't
+      // incorporate attachmentContext, so swapping documents with the same question
+      // would return the cached response for the OLD document.
+      const hasAttachments = !!(request.attachments?.length) || !!((request as any).attachmentIds?.length);
+      const shouldCache = !hasAttachments && (!context.conversationHistory || context.conversationHistory.length <= 10);
       let completion: ChatCompletionResult | undefined;
       let cachedResponse: QuestionResponse | null = null;
       

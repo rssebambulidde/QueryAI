@@ -68,6 +68,7 @@ CRITICAL RULES FOR ATTACHED DOCUMENTS:
 - If the user asks a question and the answer is in the attached documents, quote or reference the relevant parts.
 - If the answer is NOT found in the attached documents, clearly say "Based on the attached document(s), I could not find information about [topic]." — do NOT guess or use general knowledge to fill gaps.
 - When referencing content, mention the document name (e.g., "According to [filename]...").
+- IMPORTANT: If the conversation history discusses a DIFFERENT document that is no longer attached, COMPLETELY IGNORE those previous document discussions. The document content provided below is the ONLY active document — treat it as the sole source of truth.
 - Structure your response with clear markdown formatting:
   - Use **bold** for key terms and important concepts
   - Use numbered lists (1. 2. 3.) or bullet points (- ) for multiple items
@@ -134,6 +135,15 @@ Guidelines:
           content = content.replace(/\n\n## User-Attached Documents[\s\S]*$/, '').trim();
         }
         messages.push({ role: msg.role, content });
+      }
+
+      // When documents are attached, inject a separator note so the LLM knows
+      // the active document may differ from what was discussed earlier.
+      if (attachmentContext && recentHistory.length > 0) {
+        messages.push({
+          role: 'system',
+          content: '[Note: The user may have changed or replaced the attached document since the preceding messages. Base your next response ONLY on the document content provided in the system prompt above, not on any previous document discussions.]',
+        });
       }
     }
 
