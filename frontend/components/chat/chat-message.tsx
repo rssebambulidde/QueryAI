@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
-import { Copy, Edit2, Check, X, Trash2, BookOpen, RefreshCw, ChevronDown, History, GitCompare, ThumbsUp, ThumbsDown, MessageSquare, Flag, FileText } from 'lucide-react';
+import { Copy, Edit2, Check, X, Trash2, BookOpen, RefreshCw, ChevronDown, History, GitCompare, ThumbsUp, ThumbsDown, MessageSquare, Flag, FileText, Search } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
@@ -47,6 +47,8 @@ export interface ChatMessageType {
   attachments?: import('./chat-types').ChatAttachment[];
   /** File names currently being extracted (set during extraction phase, cleared when done) */
   extractingFiles?: string[];
+  /** Document research status message (shown while research pipeline runs) */
+  docResearchStatus?: string;
   // Version history
   version?: number;
   parentMessageId?: string | null;
@@ -333,6 +335,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                       </span>
                       ...
                     </span>
+                  </>
+                ) : message.docResearchStatus ? (
+                  <>
+                    <Search className="w-4 h-4 text-blue-500 animate-pulse" />
+                    <span className="text-sm text-blue-700">{message.docResearchStatus}</span>
                   </>
                 ) : (
                   <span className="text-sm">Query assistant, thinking.</span>

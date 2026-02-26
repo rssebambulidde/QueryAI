@@ -265,6 +265,11 @@ export const QuestionRequestSchema = z.object({
   // ── Resend / edit support ───────────────────────────
   resendUserMessageId: uuid.optional(),
 
+  // ── Document research mode ──────────────────────────
+  /** When true in research mode, extracts claims from attached document(s)
+   *  and auto-generates web searches to verify/expand them. */
+  researchMyDocument: z.boolean().optional(),
+
   // ── Inline attachments (ephemeral images & docs) ───
   attachments: z.array(z.object({
     type: z.enum(['image', 'document']),

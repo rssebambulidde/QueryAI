@@ -47,6 +47,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationMode, setConversationMode] = useState<'research' | 'chat'>('chat');
+  const [researchMyDocument, setResearchMyDocument] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingState, setStreamingState] = useState<StreamingState>('completed');
@@ -162,6 +163,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     unifiedFilters,
     ragSettings,
     conversationMode: conversationMode || 'chat',
+    researchMyDocument,
     queryExpansionEnabled,
     queryExpansionSettings,
     rerankingEnabled,
@@ -641,6 +643,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           onRagSettingsChange={setRagSettings}
           activeConversationAttachments={conversationAttachments}
           onClearConversationAttachment={removeConversationAttachment}
+          researchMyDocument={researchMyDocument}
+          onResearchMyDocumentToggle={setResearchMyDocument}
         />
       )}
 
@@ -725,6 +729,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           onRagSettingsChange={setRagSettings}
           activeConversationAttachments={conversationAttachments}
           onClearConversationAttachment={removeConversationAttachment}
+          researchMyDocument={researchMyDocument}
+          onResearchMyDocumentToggle={setResearchMyDocument}
           />
         </>
       )}

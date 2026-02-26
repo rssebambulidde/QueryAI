@@ -205,6 +205,10 @@ interface ChatInputProps {
   onClearConversationAttachment?: (id: string) => void;
   /** Clear all conversation-level attachments. */
   onClearAllConversationAttachments?: () => void;
+  /** Whether "Research my document" is enabled. */
+  researchMyDocument?: boolean;
+  /** Toggle "Research my document" on/off. */
+  onResearchMyDocumentToggle?: (enabled: boolean) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -228,6 +232,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   activeConversationAttachments,
   onClearConversationAttachment,
   onClearAllConversationAttachments,
+  researchMyDocument,
+  onResearchMyDocumentToggle,
 }) => {
   const isChatMode = mode === 'chat';
   const { isMobile } = useMobile();
@@ -937,6 +943,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               </div>
             )}
 
+            {/* "Research my document" toggle — visible in research mode when attachments exist */}
+            {!isChatMode && onResearchMyDocumentToggle && (inlineAttachments.length > 0 || (activeConversationAttachments?.length ?? 0) > 0) && (
+              <button
+                type="button"
+                onClick={() => onResearchMyDocumentToggle(!researchMyDocument)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
+                  researchMyDocument
+                    ? 'border-green-300 bg-green-50 text-green-700'
+                    : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                )}
+                aria-label="Toggle document research"
+                title="Extract claims from your document and verify them against web sources"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>{isMobile ? 'Research doc' : 'Research my document'}</span>
+              </button>
+            )}
 
 
           </div>

@@ -911,6 +911,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         contextDegradationMessage: undefined,
         contextPartial: false,
         extractionStatuses: (request as any)._extractionStatuses,
+        attachmentDocumentContext: attachmentContext || undefined,
       };
     }
 
@@ -2266,6 +2267,70 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       // can emit it as an SSE event (similar to the __structured sentinel)
       if (context.extractionStatuses && context.extractionStatuses.length > 0) {
         yield JSON.stringify({ __extractionStatus: true, statuses: context.extractionStatuses });
+      }
+
+      // ── Document Research mode ──────────────────────────────────────
+      // When the user enables "Research my document" (researchMyDocument=true)
+      // and there is attachment text, extract claims and verify via web search.
+      if (request.researchMyDocument && context.attachmentDocumentContext) {
+        const { DocumentResearchService } = await import('./document-research.service');
+        let docResearchContext = '';
+
+        for await (const event of DocumentResearchService.research(
+          context.attachmentDocumentContext,
+          request.question,
+          { timeRange: request.timeRange, country: request.country },
+        )) {
+          if (event.type === 'status') {
+            yield JSON.stringify({ __docResearch: true, status: event.message });
+          } else if (event.type === 'claims') {
+            yield JSON.stringify({ __docResearch: true, claims: event.claims });
+          } else if (event.type === 'result') {
+            docResearchContext = event.data.formattedContext;
+            // Emit research sources alongside existing sources
+            if (event.data.allSources.length > 0) {
+              const researchSources = event.data.allSources.map((s) => ({
+                type: 'web' as const,
+                title: s.title,
+                url: s.url,
+                snippet: s.content?.slice(0, 200),
+                score: s.score,
+              }));
+              yield JSON.stringify({ __docResearch: true, sources: researchSources });
+            }
+          }
+        }
+
+        // Inject document research context into the messages / RAG context
+        if (docResearchContext) {
+          const researchPreamble = '\n\n--- DOCUMENT RESEARCH RESULTS ---\n' +
+            'The following are the results of web-searching key claims from the user\'s document.\n' +
+            'Use these to compare what the document says with what web sources report.\n\n';
+
+          if (context.ragContext) {
+            context.ragContext = context.ragContext + researchPreamble + docResearchContext;
+          } else {
+            context.ragContext = researchPreamble + docResearchContext;
+          }
+
+          // Rebuild messages with the enriched RAG context
+          context.messages = this.buildMessages(
+            request.question,
+            context.ragContext,
+            request.context,
+            context.conversationHistory,
+            request.enableDocumentSearch,
+            request.enableWebSearch,
+            context.timeFilter,
+            context.topicName,
+            context.topicDescription,
+            context.topicScopeConfig,
+            undefined, // fewShotExamples
+            undefined, // conversationState
+            undefined, // imageAttachments
+            context.attachmentDocumentContext,
+          );
+        }
       }
       
       // Override RAG context if pre-retrieved (handling the legacy/route-level optimization)

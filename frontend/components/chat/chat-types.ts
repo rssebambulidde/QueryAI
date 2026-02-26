@@ -273,6 +273,10 @@ export interface ChatInputAreaProps {
   activeConversationAttachments?: ChatAttachment[];
   /** Remove a single conversation-level attachment by ID. */
   onClearConversationAttachment?: (id: string) => void;
+  /** Whether "Research my document" is enabled. */
+  researchMyDocument?: boolean;
+  /** Toggle "Research my document" on/off. */
+  onResearchMyDocumentToggle?: (enabled: boolean) => void;
 }
 
 export interface SourcesSidebarProps {

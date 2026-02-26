@@ -253,6 +253,14 @@ router.post(
           } catch { /* skip malformed */ }
           continue;
         }
+        // Document research status updates
+        if (typeof chunk === 'string' && chunk.startsWith('{"__docResearch":')) {
+          try {
+            const meta = JSON.parse(chunk);
+            res.write(StreamingService.formatSSEMessage('docResearchStatus', meta));
+          } catch { /* skip malformed */ }
+          continue;
+        }
         if (typeof chunk === 'string' && chunk.startsWith('{"__structured":true')) {
           try {
             structuredMeta = JSON.parse(chunk);
@@ -458,6 +466,14 @@ router.post(
           try {
             const meta = JSON.parse(chunk);
             res.write(StreamingService.formatSSEMessage('extractionStatus', meta.statuses));
+          } catch { /* skip malformed */ }
+          continue;
+        }
+        // Document research status updates
+        if (typeof chunk === 'string' && chunk.startsWith('{"__docResearch":')) {
+          try {
+            const meta = JSON.parse(chunk);
+            res.write(StreamingService.formatSSEMessage('docResearchStatus', meta));
           } catch { /* skip malformed */ }
           continue;
         }

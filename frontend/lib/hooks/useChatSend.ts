@@ -26,6 +26,8 @@ export interface UseChatSendDeps {
   unifiedFilters: UnifiedFilters;
   ragSettings: RAGSettings;
   conversationMode: 'research' | 'chat';
+  /** When true, document research pipeline is active (extract claims + web verify) */
+  researchMyDocument: boolean;
   queryExpansionEnabled: boolean;
   queryExpansionSettings: QueryExpansionSettings;
   rerankingEnabled: boolean;
@@ -77,6 +79,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
     unifiedFilters,
     ragSettings,
     conversationMode,
+    researchMyDocument,
     queryExpansionEnabled,
     queryExpansionSettings,
     rerankingEnabled,
@@ -107,6 +110,10 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
   // Always-fresh ref for conversationMode so sendMessage never uses a stale closure value.
   const conversationModeRef = useRef(conversationMode);
   conversationModeRef.current = conversationMode;
+
+  // Always-fresh ref for researchMyDocument toggle.
+  const researchMyDocumentRef = useRef(researchMyDocument);
+  researchMyDocumentRef.current = researchMyDocument;
 
   // ── rAF-batched chunk accumulator ────────────────────────────────────────
   // Instead of calling setMessages on every token, we accumulate chunks and
@@ -302,6 +309,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           mode: liveMode,
           enableWebSearch: liveMode === 'chat' ? false : ragSettings.enableWebSearch,
           enableSearch: liveMode === 'chat' ? false : ragSettings.enableWebSearch,
+          ...(researchMyDocumentRef.current && { researchMyDocument: true }),
           topic: activeFilters.keyword,
           timeRange: activeFilters.timeRange,
           startDate: activeFilters.startDate,
@@ -413,6 +421,25 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
                 assistantMessage = { ...assistantMessage, extractingFiles: extractingFiles || [] };
               } else {
                 assistantMessage = { ...assistantMessage, extractingFiles: undefined };
+              }
+              assistantMsgRef.current = assistantMessage;
+              setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+              continue;
+            }
+            if (typeof chunk === 'object' && 'docResearchStatus' in chunk) {
+              // Document research status — show progress on the assistant message
+              const meta = (chunk as { docResearchStatus: any }).docResearchStatus;
+              if (meta.status) {
+                assistantMessage = { ...assistantMessage, docResearchStatus: meta.status };
+              }
+              if (meta.sources) {
+                // Merge doc-research sources with any existing stream sources
+                const existing = streamSources || [];
+                streamSources = [...existing, ...meta.sources];
+                assistantMessage = { ...assistantMessage, sources: streamSources };
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('sourcesUpdated'));
+                }
               }
               assistantMsgRef.current = assistantMessage;
               setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
