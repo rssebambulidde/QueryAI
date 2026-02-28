@@ -795,8 +795,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       <div
         ref={inputContainerRef}
         className={cn(
-          'w-full relative border rounded-3xl bg-white/85 backdrop-blur-sm transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]',
-          isDragging ? 'border-orange-400 ring-2 ring-orange-200' : 'border-white/20',
+          'w-full relative border rounded-3xl bg-white/95 backdrop-blur-sm transition-all shadow-[0_1px_3px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.8)]',
+          isDragging ? 'border-orange-400 ring-2 ring-orange-200' : 'border-gray-300',
           'focus-within:ring-2 focus-within:ring-orange-400/60 focus-within:border-orange-200'
         )}
       >
@@ -920,7 +920,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 'w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center touch-manipulation shrink-0 mb-1 transition-all duration-200',
                 canSend
                   ? 'bg-orange-600 text-white shadow-md hover:bg-orange-700 hover:scale-105'
-                  : 'bg-white/10 text-white/30 cursor-not-allowed scale-95'
+                  : 'bg-gray-100 text-gray-500 border border-gray-300 cursor-not-allowed'
               )}
               aria-label="Send message"
             >
