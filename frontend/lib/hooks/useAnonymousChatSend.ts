@@ -6,12 +6,16 @@ import { aiApi, QuestionRequest, Source } from '@/lib/api';
 import type { StreamingState } from '@/components/chat/streaming-controls';
 import { parseFollowUpQuestions } from '@/components/chat/chat-types';
 import type { ChatAttachment } from '@/components/chat/chat-types';
+import {
+  getModeSearchFlags,
+  type ConversationMode,
+} from '@/lib/chat/mode-config';
 
 // ─── Dependencies ─────────────────────────────────────────────────────────
 
 export interface UseAnonymousChatSendDeps {
   messages: Message[];
-  conversationMode: 'research' | 'chat';
+  conversationMode: ConversationMode;
 
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   setIsLoading: (v: boolean) => void;
@@ -124,12 +128,13 @@ export function useAnonymousChatSend(deps: UseAnonymousChatSendDeps): UseAnonymo
           content: msg.content,
         }));
 
+        const modeFlags = getModeSearchFlags(liveMode);
         const request: QuestionRequest = {
           question: content || (attachments?.length ? `Describe / analyze the attached file(s).` : ''),
           conversationHistory,
-          mode: liveMode,
-          enableWebSearch: liveMode !== 'chat',
-          enableSearch: liveMode !== 'chat',
+          mode: modeFlags.mode,
+          enableWebSearch: modeFlags.enableWebSearch,
+          enableSearch: modeFlags.enableSearch,
           maxSearchResults: 3,
           // Inline attachments — base64 payloads (anonymous users have no server upload)
           ...(attachments && attachments.length > 0 && {

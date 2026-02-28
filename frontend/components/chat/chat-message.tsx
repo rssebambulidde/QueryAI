@@ -8,18 +8,20 @@ import { cn } from '@/lib/utils';
 import { Copy, Edit2, Check, X, Trash2, BookOpen, RefreshCw, ChevronDown, History, GitCompare, ThumbsUp, ThumbsDown, MessageSquare, Flag, FileText } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
-import { FollowUpQuestions } from './follow-up-questions';
+import { FollowUpQuestions } from './research/follow-up-questions';
 import { EnhancedContentProcessor } from './enhanced-content-processor';
 import { ChatErrorBoundary } from './chat-error-boundary';
-import { SourceBreakdown } from './source-breakdown';
+import { SourceBreakdown } from './research/source-breakdown';
 import { Source } from '@/lib/api';
 import { MessageAttachments } from './attachment-preview';
 import { analyticsApi, feedbackApi } from '@/lib/api';
 import type { FlaggedCitation } from '@/lib/api';
 import { ResponseTimeIndicator } from '@/components/health/response-time-indicator';
-import { ConfidenceBadge } from './confidence-badge';
+import { ConfidenceBadge } from './research/confidence-badge';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { formatRelativeTime } from '@/lib/utils/relative-time';
+import { QuickAssistActions } from './express/quick-assist-actions';
+import type { ConversationMode } from '@/lib/chat/mode-config';
 import 'highlight.js/styles/github-dark.css';
 
 export interface SearchResult {
@@ -95,13 +97,13 @@ interface ChatMessageProps {
   /** Called when user flags a citation from within the message. */
   onFlagCitation?: (messageId: string, sourceUrl: string, sourceTitle: string) => void;
   /** Conversation mode — chat mode hides citations, sources, regenerate. */
-  mode?: 'research' | 'chat';
+  mode?: ConversationMode;
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onOpenSources, isStreaming = false, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, onFlagCitation, mode }) => {
   const { isMobile } = useMobile();
   const isUser = message.role === 'user';
-  const isChatMode = mode === 'chat';
+  const isChatMode = mode !== 'research';
   const hasSources = !isChatMode && message.sources && message.sources.length > 0;
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
@@ -430,7 +432,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   size="sm"
                 />
               )}
-              {!isUser && !isStreaming && !message.isStreaming && message.qualityScore !== undefined && (
+              {!isUser && !isStreaming && !message.isStreaming && !isChatMode && message.qualityScore !== undefined && (
                 <ConfidenceBadge score={message.qualityScore} />
               )}
               {!isUser && !isStreaming && !message.isStreaming && citationCount > 0 && !isChatMode && (
@@ -733,11 +735,21 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
         )}
 
         {/* Follow-up Questions for Assistant Messages - Show AI-generated questions */}
-        {!isUser && onFollowUpClick && message.followUpQuestions && message.followUpQuestions.length > 0 && !message.isActionResponse && (
+        {!isUser && !isChatMode && onFollowUpClick && message.followUpQuestions && message.followUpQuestions.length > 0 && !message.isActionResponse && (
           <FollowUpQuestions
             questions={message.followUpQuestions}
             onQuestionClick={onFollowUpClick}
             className="mt-3"
+          />
+        )}
+
+        {/* Express mode: always provide 4 quick continuation actions */}
+        {!isUser && isChatMode && onFollowUpClick && !message.isActionResponse && !isStreaming && !message.isStreaming && message.content.trim() && (
+          <QuickAssistActions
+            onActionClick={onFollowUpClick}
+            userQuestion={userQuestion}
+            assistantAnswer={message.content}
+            className="mt-2"
           />
         )}
 

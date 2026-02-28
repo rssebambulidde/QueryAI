@@ -16,6 +16,10 @@ import type { RAGSettings } from '@/components/chat/rag-source-selector';
 import type { StreamingState } from '@/components/chat/streaming-controls';
 import type { QueryExpansionSettings } from '@/components/advanced/query-expansion-display';
 import type { RerankingSettings } from '@/components/advanced/reranking-controls';
+import {
+  getModeSearchFlags,
+  type ConversationMode,
+} from '@/lib/chat/mode-config';
 
 // ─── Config passed by the host component ────────────────────────────────────
 
@@ -25,7 +29,7 @@ export interface UseChatSendDeps {
   currentConversationId: string | null;
   unifiedFilters: UnifiedFilters;
   ragSettings: RAGSettings;
-  conversationMode: 'research' | 'chat';
+  conversationMode: ConversationMode;
   queryExpansionEnabled: boolean;
   queryExpansionSettings: QueryExpansionSettings;
   rerankingEnabled: boolean;
@@ -43,7 +47,7 @@ export interface UseChatSendDeps {
   setPreviousCost: (c: { total: number } | null) => void;
 
   // Store actions
-  createConversation: (title?: string, options?: { autoSelect?: boolean; mode?: 'research' | 'chat' }) => Promise<{ id: string }>;
+  createConversation: (title?: string, options?: { autoSelect?: boolean; mode?: ConversationMode }) => Promise<{ id: string }>;
   selectConversation: (id: string | null) => void;
   updateConversationFilters: (id: string, filters: Record<string, any>) => Promise<void>;
   updateConversation: (id: string, title: string) => Promise<void>;
@@ -305,13 +309,14 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
         responseTimeStartRef.current = Date.now();
         setMessages((prev) => [...prev, assistantMessage]);
 
+        const modeFlags = getModeSearchFlags(liveMode);
         const request: QuestionRequest = {
           question: content || (attachments?.length ? `Describe / analyze the attached file(s).` : ''),
           conversationHistory,
           conversationId: conversationId ?? undefined,
-          mode: liveMode,
-          enableWebSearch: liveMode === 'chat' ? false : ragSettings.enableWebSearch,
-          enableSearch: liveMode === 'chat' ? false : ragSettings.enableWebSearch,
+          mode: modeFlags.mode,
+          enableWebSearch: modeFlags.enableWebSearch,
+          enableSearch: modeFlags.enableSearch,
           topic: activeFilters.keyword,
           timeRange: activeFilters.timeRange,
           startDate: activeFilters.startDate,
@@ -429,6 +434,8 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
               continue;
             }
             if (typeof chunk === 'object' && 'followUpQuestions' in chunk) {
+              followUpQuestions = (chunk as { followUpQuestions?: string[] }).followUpQuestions;
+              if ((chunk as { refusal?: boolean }).refusal) isRefusal = true;
             }
             if (typeof chunk === 'object' && 'qualityScore' in chunk) {
               qualityScore = (chunk as { qualityScore?: number }).qualityScore;

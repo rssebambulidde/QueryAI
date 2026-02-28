@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import type { ChatAttachment } from './chat-types';
 import { AttachmentPreviewStrip } from './attachment-preview';
 import { attachmentApi } from '@/lib/api';
+import { MODE_DESCRIPTIONS, MODE_LABELS, type ConversationMode } from '@/lib/chat/mode-config';
 
 /** Accepted MIME types for document upload */
 const ACCEPTED_TYPES = [
@@ -194,9 +195,9 @@ interface ChatInputProps {
   /** Toggle web search on/off */
   onWebToggle?: (enabled: boolean) => void;
   /** Conversation mode — chat mode hides pills/attach. */
-  mode?: 'research' | 'chat';
+  mode?: ConversationMode;
   /** Callback to change the conversation mode via inline dropup. */
-  onModeChange?: (mode: 'research' | 'chat') => void;
+  onModeChange?: (mode: ConversationMode) => void;
   /** Attachments active for the whole conversation (re-sent with every message). */
   activeConversationAttachments?: ChatAttachment[];
   /** Remove a single conversation-level attachment. */
@@ -228,7 +229,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [showModeMenu, setShowModeMenu] = useState(false);
-  const [dismissedResearchHintMode, setDismissedResearchHintMode] = useState<'chat' | 'research' | null>(null);
+  const [dismissedResearchHintMode, setDismissedResearchHintMode] = useState<ConversationMode | null>(null);
   const [inlineAttachments, setInlineAttachments] = useState<ChatAttachment[]>([]);
   const [dismissedSuggestionKey, setDismissedSuggestionKey] = useState('');
   
@@ -840,7 +841,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   ) : (
                     <Search className="w-3.5 h-3.5" />
                   )}
-                  <span>{isChatMode ? 'Express' : 'Deep Research'}</span>
+                  <span>{isChatMode ? MODE_LABELS.chat : MODE_LABELS.research}</span>
                   <ChevronUp className={cn('w-3 h-3 transition-transform', showModeMenu ? 'rotate-180' : '')} />
                 </button>
 
@@ -859,8 +860,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     >
                       <MessageCircle className="w-4 h-4 mt-0.5 text-purple-500 shrink-0" />
                       <div>
-                        <div className="text-sm font-medium text-gray-900">Express</div>
-                        <div className="text-xs text-gray-500">Quick answers and conversation</div>
+                        <div className="text-sm font-medium text-gray-900">{MODE_LABELS.chat}</div>
+                        <div className="text-xs text-gray-500">{MODE_DESCRIPTIONS.chat}</div>
                       </div>
                     </button>
                     <button
@@ -875,8 +876,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     >
                       <Search className="w-4 h-4 mt-0.5 text-blue-500 shrink-0" />
                       <div>
-                        <div className="text-sm font-medium text-gray-900">Deep Research</div>
-                        <div className="text-xs text-gray-500">Sources, citations & web search</div>
+                        <div className="text-sm font-medium text-gray-900">{MODE_LABELS.research}</div>
+                        <div className="text-xs text-gray-500">{MODE_DESCRIPTIONS.research}</div>
                       </div>
                     </button>
                   </div>

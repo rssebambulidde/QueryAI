@@ -4,6 +4,12 @@ import { CitationValidatorService } from './citation-validator.service';
 import { AnswerQualityService } from './answer-quality.service';
 import { ConflictResolutionService } from './conflict-resolution.service';
 import { JSON_OUTPUT_INSTRUCTIONS } from '../schemas/ai-response.schema';
+import { EXPRESS_CODE_FORMAT_GUIDELINES } from './express/prompt-guidelines';
+import {
+  RESEARCH_ANSWER_STYLE_REQUIREMENTS,
+  RESEARCH_ATTACHMENT_PRIMARY_MODE_INSTRUCTION,
+  RESEARCH_WEB_ONLY_MODE_INSTRUCTION,
+} from './research/prompt-guidelines';
 
 /**
  * Prompt Builder Service
@@ -73,6 +79,7 @@ CRITICAL RULES FOR ATTACHED DOCUMENTS:
   - Use **bold** for key terms and important concepts
   - Use numbered lists (1. 2. 3.) or bullet points (- ) for multiple items
   - Use ### headings to organise longer answers into sections
+${EXPRESS_CODE_FORMAT_GUIDELINES}
 - Be professional and precise.
 - Keep paragraphs short (2-4 sentences each).
 
@@ -88,6 +95,7 @@ Guidelines:
   - Separate distinct ideas into short paragraphs with blank lines between them
   - Use ### headings to organise longer answers into sections
   - Use tables when comparing items or presenting structured data
+${EXPRESS_CODE_FORMAT_GUIDELINES}
 - Be professional but friendly
 - Keep paragraphs short (2-4 sentences each)`;
 
@@ -181,7 +189,7 @@ Guidelines:
     attachmentDocumentContext?: string,
   ): string {
     // v2: Web-only mode — topics and document search retired
-    const modeInstruction = `IMPORTANT: You are in WEB-ONLY mode. You MUST ONLY use information from the provided web search results.`;
+    const modeInstruction = RESEARCH_WEB_ONLY_MODE_INSTRUCTION;
 
     // Add time filter context if applicable
     let timeFilterInstruction = '';
@@ -247,7 +255,7 @@ Guidelines:
     // the attached document is the PRIMARY source, web results are supplementary.
     const hasAttachedDocs = !!attachmentDocumentContext;
     const effectiveModeInstruction = hasAttachedDocs
-      ? `IMPORTANT: The user has attached document(s) to this conversation. Treat the attached document content as your PRIMARY source of truth. Web search results are SUPPLEMENTARY — use them to add context, verify, or expand on what the document says, but NEVER contradict the document unless the web source is clearly more authoritative and recent. When the document and web sources agree, prefer quoting the document. When they conflict, acknowledge both and explain the discrepancy.`
+      ? RESEARCH_ATTACHMENT_PRIMARY_MODE_INSTRUCTION
       : modeInstruction;
 
     const basePrompt = `You are a helpful AI assistant. Answer using the provided sources (documents and/or web results).
@@ -307,7 +315,7 @@ ${fullContext}
 
 Use the provided sources to answer the question.
 
-Write 3-5 short paragraphs in the "answer" field. Each paragraph: one idea, 2-4 sentences, at least one inline citation, separated by blank lines. Distribute sources across paragraphs. Use **bold** for key terms. No standalone "Sources" section.
+${RESEARCH_ANSWER_STYLE_REQUIREMENTS}
 
 ${this.getOutputFormatBlock()}`;
     }

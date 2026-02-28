@@ -8,6 +8,7 @@ import { useConversationStore } from '@/lib/store/conversation-store';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useMobile } from '@/lib/hooks/use-mobile';
+import { MODE_LABELS, normalizeConversationMode } from '@/lib/chat/mode-config';
 
 interface ConversationItemProps {
   conversation: Conversation;
@@ -38,6 +39,8 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const { updateConversation } = useConversationStore();
   const { toast } = useToast();
   const { isMobile } = useMobile();
+  const conversationMode = normalizeConversationMode(conversation.mode);
+  const isChatMode = conversationMode === 'chat';
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
@@ -145,16 +148,16 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
           )}
 
           {/* Mode indicator — text badge on hover */}
-          {conversation.mode === 'chat' ? (
-            <span title="Express" className="flex items-center gap-0.5 flex-shrink-0">
+          {isChatMode ? (
+            <span title={MODE_LABELS.chat} className="flex items-center gap-0.5 flex-shrink-0">
               <MessageCircle className="w-3 h-3 text-purple-400" />
               <span className={cn(
                 'text-xs font-medium text-purple-400 transition-all overflow-hidden whitespace-nowrap',
                 isHovered ? 'max-w-[50px] opacity-100' : 'max-w-0 opacity-0'
-              )}>Express</span>
+              )}>{MODE_LABELS.chat}</span>
             </span>
           ) : (
-            <span title="Deep Research" className="flex items-center gap-0.5 flex-shrink-0">
+            <span title={MODE_LABELS.research} className="flex items-center gap-0.5 flex-shrink-0">
               <Search className="w-3 h-3 text-blue-400" />
               <span className={cn(
                 'text-xs font-medium text-blue-400 transition-all overflow-hidden whitespace-nowrap',

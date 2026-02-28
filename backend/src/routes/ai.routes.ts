@@ -2,13 +2,14 @@ import { Router, Request, Response } from 'express';
 import { AIService, QuestionRequest } from '../services/ai.service';
 import { RequestQueueService, QueuePriority } from '../services/request-queue.service';
 import { asyncHandler } from '../middleware/errorHandler';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
 import { apiLimiter } from '../middleware/rateLimiter';
 import { enforceQueryLimit } from '../middleware/subscription.middleware';
 import { logQueryUsage } from '../middleware/usageCounter.middleware';
 import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
 import { ValidationError } from '../types/error';
-import { assertUUID, validateUUIDArray, isValidUUID } from '../validation/uuid';
+import { assertUUID, validateUUIDArray } from '../validation/uuid';
+import { normalizeModeAndSearchFlags } from '../services/modes/request-normalizer';
 import logger from '../config/logger';
 
 const router = Router();
@@ -72,6 +73,12 @@ router.post(
       throw new ValidationError('User not authenticated');
     }
 
+    const normalizedMode = normalizeModeAndSearchFlags({
+      mode,
+      enableSearch,
+      enableWebSearch,
+    });
+
     const request: QuestionRequest = {
       question: question.trim(),
       context: context?.trim(),
@@ -79,7 +86,7 @@ router.post(
       model,
       temperature,
       maxTokens,
-      enableSearch: enableSearch !== false, // Default to true
+      enableSearch: normalizedMode.enableSearch,
       topic: topic?.trim(),
       maxSearchResults: maxSearchResults ?? 5,
       timeRange,
@@ -88,7 +95,7 @@ router.post(
       country,
       // RAG options
       enableDocumentSearch: enableDocumentSearch !== false, // Default to true
-      enableWebSearch: enableWebSearch !== false, // Default to true
+      enableWebSearch: normalizedMode.enableWebSearch,
       topicId: topicId,
       documentIds: documentIds,
       maxDocumentChunks: maxDocumentChunks ?? 5,
@@ -96,7 +103,7 @@ router.post(
       // Conversation management
       conversationId: conversationId,
       // Mode & document research
-      mode,
+      mode: normalizedMode.mode,
       // Inline attachments & pre-uploaded attachment IDs
       attachments,
       attachmentIds,
@@ -236,6 +243,12 @@ router.post(
       throw new ValidationError('User not authenticated');
     }
 
+    const normalizedMode = normalizeModeAndSearchFlags({
+      mode,
+      enableSearch,
+      enableWebSearch,
+    });
+
     const request: QuestionRequest = {
       question: question.trim(),
       context: context?.trim(),
@@ -243,7 +256,7 @@ router.post(
       model,
       temperature,
       maxTokens,
-      enableSearch: enableSearch !== false, // Default to true
+      enableSearch: normalizedMode.enableSearch,
       topic: topic?.trim(),
       maxSearchResults: maxSearchResults ?? 5,
       timeRange,
@@ -252,7 +265,7 @@ router.post(
       country,
       // RAG options
       enableDocumentSearch: enableDocumentSearch !== false, // Default to true
-      enableWebSearch: enableWebSearch !== false, // Default to true
+      enableWebSearch: normalizedMode.enableWebSearch,
       topicId: topicId,
       documentIds: documentIds,
       maxDocumentChunks: maxDocumentChunks ?? 5,
@@ -260,7 +273,7 @@ router.post(
       // Conversation management
       conversationId: conversationId,
       // Mode & document research
-      mode,
+      mode: normalizedMode.mode,
       // Inline attachments & pre-uploaded attachment IDs
       attachments,
       attachmentIds,
@@ -372,41 +385,9 @@ router.post(
         }
       }
 
-      // Retrieve RAG context first to get sources
+      const isChatMode = request.mode === 'chat';
       let sources: any[] | undefined = undefined;
-      let ragContext: any = null;
-      
-      if (userId) {
-        try {
-          const { RAGService } = await import('../services/rag.service');
-          const ragOptions: any = {
-            userId,
-            topicId: request.topicId,
-            documentIds: request.documentIds,
-            enableDocumentSearch: request.enableDocumentSearch !== false,
-            enableWebSearch: request.enableWebSearch !== false,
-            maxDocumentChunks: request.maxDocumentChunks ?? 5,
-            maxWebResults: request.maxSearchResults ?? 5,
-            minScore: request.minScore ?? 0.5,
-            topic: request.topic,
-            timeRange: request.timeRange,
-            startDate: request.startDate,
-            endDate: request.endDate,
-            country: request.country,
-          };
-          
-          if (request.enableSearch === false) {
-            ragOptions.enableWebSearch = false;
-          }
-          
-          ragContext = await RAGService.retrieveContext(request.question, ragOptions);
-          sources = RAGService.extractSources(ragContext);
-        } catch (ragError: any) {
-          logger.warn('Failed to retrieve RAG context for sources in streaming', {
-            error: ragError.message,
-          });
-        }
-      }
+      let sourcesSent = false;
       
       // Stream the response and collect full answer.
       // The pipeline yields two kinds of chunks:
@@ -431,7 +412,15 @@ router.post(
               continue;
             }
             if ('__extracting' in parsed) {
-              res.write(`data: ${JSON.stringify({ extracting: parsed.extracting, extractingFiles: parsed.extractingFiles })}\n\n`);
+              res.write(`data: ${JSON.stringify({ extracting: !!parsed.__extracting, extractingFiles: parsed.extractingFiles ?? parsed.files })}\n\n`);
+              continue;
+            }
+            if (parsed.__sources) {
+              sources = parsed.sources;
+              if (sources && sources.length > 0) {
+                res.write(`data: ${JSON.stringify({ sources })}\n\n`);
+                sourcesSent = true;
+              }
               continue;
             }
             if (parsed.__structured) {
@@ -447,9 +436,9 @@ router.post(
       }
 
       // Use structured follow-ups from the pipeline (research mode) when available;
-      // otherwise extract them from the raw answer text (chat mode / fallback).
+      // otherwise extract them from the raw answer text.
       let followUpQuestions: string[] | undefined = structuredFollowUps;
-      if (!followUpQuestions) {
+      if (!isChatMode && !followUpQuestions) {
         try {
           const { ResponseProcessorService } = await import('../services/response-processor.service');
           const followUpResult = await ResponseProcessorService.processFollowUpQuestions(
@@ -464,31 +453,33 @@ router.post(
         }
       }
       
-      // Calculate answer quality score
+      // Calculate answer quality score (Deep Research only)
       let qualityScore: number | undefined;
-      try {
-        const { ResponseProcessorService } = await import('../services/response-processor.service');
-        qualityScore = ResponseProcessorService.calculateAnswerQualityScore(
-          fullAnswer,
-          sources || [],
-          followUpQuestions || []
-        );
-      } catch (qualityErr: any) {
-        logger.warn('Quality score calculation failed', { error: qualityErr?.message });
+      if (!isChatMode) {
+        try {
+          const { ResponseProcessorService } = await import('../services/response-processor.service');
+          qualityScore = ResponseProcessorService.calculateAnswerQualityScore(
+            fullAnswer,
+            sources || [],
+            followUpQuestions || []
+          );
+        } catch (qualityErr: any) {
+          logger.warn('Quality score calculation failed', { error: qualityErr?.message });
+        }
       }
 
       // Send RAG + doc-research sources accumulated during the stream
-      if (sources && sources.length > 0) {
+      if (!sourcesSent && sources && sources.length > 0) {
         res.write(`data: ${JSON.stringify({ sources })}\n\n`);
       }
 
-      // Send follow-up questions (required on every response)
-      if (followUpQuestions && followUpQuestions.length > 0) {
+      // Send follow-up questions (Deep Research only)
+      if (!isChatMode && followUpQuestions && followUpQuestions.length > 0) {
         res.write(`data: ${JSON.stringify({ followUpQuestions })}\n\n`);
       }
 
-      // Send quality score
-      if (qualityScore !== undefined) {
+      // Send quality score (Deep Research only)
+      if (!isChatMode && qualityScore !== undefined) {
         res.write(`data: ${JSON.stringify({ qualityScore })}\n\n`);
       }
 
@@ -515,8 +506,8 @@ router.post(
           const msgMetadata: Record<string, any> = {
             model: request.model || 'gpt-4o-mini',
             streaming: true,
-            ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
-            ...(qualityScore !== undefined && { qualityScore }),
+            ...(!isChatMode && followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
+            ...(!isChatMode && qualityScore !== undefined && { qualityScore }),
             ...(structuredCitedSources && structuredCitedSources.length > 0 && { citedSources: structuredCitedSources }),
           };
 
@@ -580,6 +571,176 @@ router.post(
           message: error.message || 'Failed to generate response',
           code: error.code || 'STREAM_ERROR',
         }
+      })}\n\n`);
+      res.end();
+    }
+  })
+);
+
+/**
+ * POST /api/ai/ask/anonymous
+ * Anonymous streaming endpoint (optional auth, no conversation persistence)
+ */
+router.post(
+  '/ask/anonymous',
+  optionalAuthenticate,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const {
+      question,
+      context,
+      conversationHistory,
+      model,
+      temperature,
+      maxTokens,
+      enableSearch,
+      topic,
+      maxSearchResults,
+      timeRange,
+      startDate,
+      endDate,
+      country,
+      enableDocumentSearch,
+      enableWebSearch,
+      mode,
+      attachments,
+      attachmentIds,
+    } = req.body;
+
+    if (!question) {
+      throw new ValidationError('Question is required');
+    }
+
+    const userId = req.user?.id;
+    const normalizedMode = normalizeModeAndSearchFlags({
+      mode,
+      enableSearch,
+      enableWebSearch,
+    });
+
+    const request: QuestionRequest = {
+      question: question.trim(),
+      context: context?.trim(),
+      conversationHistory: conversationHistory || [],
+      model,
+      temperature,
+      maxTokens,
+      enableSearch: normalizedMode.enableSearch,
+      topic: topic?.trim(),
+      maxSearchResults: maxSearchResults ?? 5,
+      timeRange,
+      startDate,
+      endDate,
+      country,
+      enableDocumentSearch: enableDocumentSearch !== false,
+      enableWebSearch: normalizedMode.enableWebSearch,
+      mode: normalizedMode.mode,
+      attachments,
+      attachmentIds,
+      // Anonymous endpoint never persists to conversations.
+      conversationId: undefined,
+    };
+
+    logger.info('Anonymous AI streaming request', {
+      hasUser: !!userId,
+      mode: request.mode,
+      questionLength: request.question.length,
+      enableWebSearch: request.enableWebSearch,
+      attachmentCount: request.attachments?.length ?? 0,
+    });
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.flushHeaders();
+
+    req.on('close', () => {
+      logger.info('Client disconnected from anonymous streaming endpoint');
+      res.end();
+    });
+
+    try {
+      const isChatMode = request.mode === 'chat';
+      let fullAnswer = '';
+      let sources: any[] | undefined;
+      let followUpQuestions: string[] | undefined;
+      let qualityScore: number | undefined;
+
+      const stream = AIService.answerQuestionStream(request, userId);
+      for await (const chunk of stream) {
+        if (chunk.length > 0 && chunk.charCodeAt(0) === 123 /* '{' */) {
+          let parsed: any;
+          try { parsed = JSON.parse(chunk); } catch { /* not JSON */ }
+          if (parsed) {
+            if (parsed.__extractionStatus) {
+              res.write(`data: ${JSON.stringify({ extractionStatus: parsed.statuses })}\n\n`);
+              continue;
+            }
+            if ('__extracting' in parsed) {
+              res.write(`data: ${JSON.stringify({ extracting: !!parsed.__extracting, extractingFiles: parsed.extractingFiles ?? parsed.files })}\n\n`);
+              continue;
+            }
+            if (parsed.__sources) {
+              sources = parsed.sources;
+              if (sources && sources.length > 0) {
+                res.write(`data: ${JSON.stringify({ sources })}\n\n`);
+              }
+              continue;
+            }
+            if (parsed.__structured) {
+              followUpQuestions = parsed.followUpQuestions;
+              continue;
+            }
+          }
+        }
+
+        fullAnswer += chunk;
+        res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+      }
+
+      if (!isChatMode && !followUpQuestions) {
+        try {
+          const { ResponseProcessorService } = await import('../services/response-processor.service');
+          const followUpResult = await ResponseProcessorService.processFollowUpQuestions(fullAnswer, request.question);
+          followUpQuestions = followUpResult.questions.length > 0 ? followUpResult.questions : undefined;
+          fullAnswer = followUpResult.answer;
+        } catch (followUpErr: any) {
+          logger.warn('Anonymous follow-up processing failed', { error: followUpErr?.message });
+        }
+      }
+
+      if (!isChatMode) {
+        try {
+          const { ResponseProcessorService } = await import('../services/response-processor.service');
+          qualityScore = ResponseProcessorService.calculateAnswerQualityScore(
+            fullAnswer,
+            sources || [],
+            followUpQuestions || []
+          );
+        } catch (qualityErr: any) {
+          logger.warn('Anonymous quality score calculation failed', { error: qualityErr?.message });
+        }
+      }
+
+      if (!isChatMode && followUpQuestions && followUpQuestions.length > 0) {
+        res.write(`data: ${JSON.stringify({ followUpQuestions })}\n\n`);
+      }
+      if (!isChatMode && qualityScore !== undefined) {
+        res.write(`data: ${JSON.stringify({ qualityScore })}\n\n`);
+      }
+
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
+    } catch (error: any) {
+      logger.error('Error in anonymous streaming endpoint:', error);
+      res.write(`data: ${JSON.stringify({
+        error: {
+          message: error.message || 'Failed to generate response',
+          code: error.code || 'STREAM_ERROR',
+        },
       })}\n\n`);
       res.end();
     }
@@ -776,6 +937,12 @@ router.post(
       throw new ValidationError('User not authenticated');
     }
 
+    const normalizedMode = normalizeModeAndSearchFlags({
+      mode,
+      enableSearch,
+      enableWebSearch,
+    });
+
     const request: QuestionRequest = {
       question: question.trim(),
       context: context?.trim(),
@@ -783,7 +950,7 @@ router.post(
       model,
       temperature,
       maxTokens,
-      enableSearch: enableSearch !== false,
+      enableSearch: normalizedMode.enableSearch,
       topic: topic?.trim(),
       maxSearchResults: maxSearchResults ?? 5,
       timeRange,
@@ -791,14 +958,14 @@ router.post(
       endDate,
       country,
       enableDocumentSearch: enableDocumentSearch !== false,
-      enableWebSearch: enableWebSearch !== false,
+      enableWebSearch: normalizedMode.enableWebSearch,
       topicId: topicId,
       documentIds: documentIds,
       maxDocumentChunks: maxDocumentChunks ?? 5,
       minScore: minScore ?? 0.5,
       conversationId: conversationId,
       // Mode & document research
-      mode,
+      mode: normalizedMode.mode,
       // Inline attachments & pre-uploaded attachment IDs
       attachments,
       attachmentIds,

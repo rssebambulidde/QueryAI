@@ -13,6 +13,7 @@ import type { QueryExpansionSettings } from '@/components/advanced/query-expansi
 import type { RerankingSettings } from '@/components/advanced/reranking-controls';
 import type { UnifiedFilters } from './unified-filter-panel';
 import type { RAGSettings } from './rag-source-selector';
+import type { ConversationMode } from '@/lib/chat/mode-config';
 
 // ─── Inline chat attachment ──────────────────────────────────────────────────
 
@@ -180,7 +181,7 @@ export interface ChatMessageListProps {
   /** Current conversation ID for citation click-through tracking. */
   conversationId?: string;
   /** Conversation mode — controls which UI elements are shown per message. */
-  mode?: 'research' | 'chat';
+  mode?: ConversationMode;
   // Advanced features
   lastResponseData: LastResponseData | null;
   queryExpansionEnabled: boolean;
@@ -266,9 +267,9 @@ export interface ChatInputAreaProps {
   /** Callback to update RAG settings */
   onRagSettingsChange?: (settings: RAGSettings) => void;
   /** Conversation mode — controls which input controls are shown. */
-  mode?: 'research' | 'chat';
+  mode?: ConversationMode;
   /** Callback to change the conversation mode. */
-  onModeChange?: (mode: 'research' | 'chat') => void;
+  onModeChange?: (mode: ConversationMode) => void;
   /** Attachments that are active for the entire conversation (persisted across messages). */
   activeConversationAttachments?: ChatAttachment[];
   /** Remove a single conversation-level attachment by ID. */

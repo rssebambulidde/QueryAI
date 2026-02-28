@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import type { ConversationMode } from '@/lib/chat/mode-config';
 
 // API Base URL
 // Note: NEXT_PUBLIC_ variables are embedded at BUILD TIME in Next.js
@@ -177,7 +178,7 @@ export interface QuestionRequest {
     role: 'user' | 'assistant';
     content: string;
   }>;
-  mode?: 'research' | 'chat';
+  mode?: ConversationMode;
   model?: string;
   temperature?: number;
   maxTokens?: number;
@@ -310,7 +311,7 @@ export interface Conversation {
   id: string;
   user_id: string;
   title?: string;
-  mode?: 'research' | 'chat';
+  mode?: ConversationMode;
   metadata?: {
     filters?: {
       timeRange?: TimeRange;
@@ -1137,12 +1138,12 @@ export const conversationApi = {
     return response.data;
   },
 
-  create: async (data: { title?: string; mode?: 'research' | 'chat' }): Promise<ApiResponse<Conversation>> => {
+  create: async (data: { title?: string; mode?: ConversationMode }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.post('/api/conversations', data);
     return response.data;
   },
 
-  update: async (id: string, data: { title?: string; metadata?: any; filters?: any; mode?: 'research' | 'chat' }): Promise<ApiResponse<Conversation>> => {
+  update: async (id: string, data: { title?: string; metadata?: any; filters?: any; mode?: ConversationMode }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.put(`/api/conversations/${id}`, data);
     return response.data;
   },
@@ -2293,7 +2294,7 @@ export const adminApi = {
 
   /** Update provider + model for a mode. */
   updateLLMSettings: async (
-    mode: 'chat' | 'research',
+    mode: ConversationMode,
     providerId: string,
     modelId: string,
   ): Promise<ApiResponse<{ mode: string; providerId: string; modelId: string }>> => {

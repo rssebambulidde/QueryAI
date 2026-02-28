@@ -7,6 +7,73 @@
 
 import React from 'react';
 
+function extractText(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join('');
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+    return extractText(node.props.children);
+  }
+  return '';
+}
+
+function MarkdownCodeBlock({
+  className,
+  children,
+  codeProps,
+}: {
+  className?: string;
+  children: React.ReactNode;
+  codeProps: Record<string, any>;
+}) {
+  const [copied, setCopied] = React.useState(false);
+  const codeText = React.useMemo(
+    () => extractText(children).replace(/\n$/, ''),
+    [children],
+  );
+  const language = (className || '').replace('language-', '').trim() || 'code';
+
+  const handleCopy = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(codeText);
+      } else if (typeof document !== 'undefined') {
+        const ta = document.createElement('textarea');
+        ta.value = codeText;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // no-op: avoid breaking rendering for clipboard failures
+    }
+  };
+
+  return (
+    <div className="relative my-3 group/code">
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="absolute right-2 top-2 z-10 px-2 py-1 text-[11px] font-medium rounded-md border border-gray-500/40 bg-gray-800/90 text-gray-100 hover:bg-gray-700 transition-colors"
+        aria-label={`Copy ${language} code`}
+        title={copied ? 'Copied' : `Copy ${language} code`}
+      >
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+      <pre className="overflow-x-auto max-w-full pr-16 rounded-lg">
+        <code className={`block p-3 rounded-lg text-sm font-mono bg-gray-900 text-gray-100 whitespace-pre min-w-max ${className || ''}`} {...codeProps}>
+          {children}
+        </code>
+      </pre>
+    </div>
+  );
+}
+
 export const getMarkdownComponents = (isUser: boolean) => ({
   h1: ({ node, ...props }: any) => (
     <h1 className="text-xl font-bold mt-5 mb-2.5 first:mt-0 text-gray-900 text-left" {...props} />
@@ -40,13 +107,7 @@ export const getMarkdownComponents = (isUser: boolean) => ({
         </code>
       );
     }
-    return (
-      <pre className="overflow-x-auto max-w-full my-3">
-        <code className={`block p-3 rounded-lg text-sm font-mono bg-gray-900 text-gray-100 ${className || ''}`} {...props}>
-          {children}
-        </code>
-      </pre>
-    );
+    return <MarkdownCodeBlock className={className} children={children} codeProps={props} />;
   },
   blockquote: ({ node, ...props }: any) => (
     <blockquote className="border-l-4 border-gray-300 pl-4 my-3 italic text-gray-600 text-left" {...props} />

@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { conversationApi, Conversation, Message } from '../api';
+import type { ConversationMode } from '@/lib/chat/mode-config';
 
 interface ConversationState {
   conversations: Conversation[];
@@ -13,7 +14,7 @@ interface ConversationState {
 
   // Actions
   loadConversations: () => Promise<void>;
-  createConversation: (title?: string, options?: { autoSelect?: boolean; mode?: 'research' | 'chat' }) => Promise<Conversation>;
+  createConversation: (title?: string, options?: { autoSelect?: boolean; mode?: ConversationMode }) => Promise<Conversation>;
   selectConversation: (id: string | null) => void;
   updateConversation: (id: string, title: string) => Promise<void>;
   updateConversationFilters: (id: string, filters: any) => Promise<void>;
@@ -48,7 +49,7 @@ export const useConversationStore = create<ConversationState>()(
         }
       },
 
-      createConversation: async (title?: string, options?: { autoSelect?: boolean; mode?: 'research' | 'chat' }) => {
+      createConversation: async (title?: string, options?: { autoSelect?: boolean; mode?: ConversationMode }) => {
         const autoSelect = options?.autoSelect ?? true;
         try {
           const response = await conversationApi.create({ title, mode: options?.mode });

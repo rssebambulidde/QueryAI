@@ -27,6 +27,11 @@ import { ChatErrorBoundary } from './chat-error-boundary';
 import { ConversationExportDialog } from './conversation-export-dialog';
 // Chat shortcut UI removed from this component
 import { useChatSend } from '@/lib/hooks/useChatSend';
+import {
+  DEFAULT_CONVERSATION_MODE,
+  getModeSearchFlags,
+  type ConversationMode,
+} from '@/lib/chat/mode-config';
 // Document upload retired in Phase 2 (v2 migration)
 // import { useDocumentUpload } from '@/lib/hooks/use-document-upload';
 import type { UploadStatus } from './chat-types';
@@ -85,7 +90,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   // ═══════════════════════════════════════════════════════════════════════════
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversationMode, setConversationMode] = useState<'research' | 'chat'>('chat');
+  const [conversationMode, setConversationMode] = useState<ConversationMode>(DEFAULT_CONVERSATION_MODE);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -203,7 +208,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     currentConversationId,
     unifiedFilters,
     ragSettings,
-    conversationMode: conversationMode || 'chat',
+    conversationMode,
     queryExpansionEnabled,
     queryExpansionSettings,
     rerankingEnabled,
@@ -342,7 +347,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
             if (conversation) {
               // Set conversation mode from DB
-              if (!isStale()) { setConversationMode(conversation.mode || 'chat'); }
+              if (!isStale()) { setConversationMode(conversation.mode || DEFAULT_CONVERSATION_MODE); }
               // Topic hydration retired in Phase 2
               const oldFilters = conversation.metadata?.filters || {};
               if (!isStale()) {
@@ -375,7 +380,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       } else {
         if (isStale()) return;
         setMessages([]);
-        setConversationMode('chat');
+        setConversationMode(DEFAULT_CONVERSATION_MODE);
         setUnifiedFilters({});
         setSourcePanelContext(null);
         setConversationAttachments([]);
@@ -427,12 +432,20 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     setMessages((prev) => [...prev, assistantMsg]);
 
     try {
+      const modeFlags = getModeSearchFlags(conversationMode);
       const request: QuestionRequest = {
         question: content,
         conversationHistory: messages.map((m) => ({ role: m.role, content: m.content })),
         conversationId: currentConversationId ?? undefined,
-        enableWebSearch: ragSettings.enableWebSearch,
+        mode: modeFlags.mode,
+        enableSearch: modeFlags.enableSearch,
+        enableWebSearch: modeFlags.enableWebSearch,
         topic: unifiedFilters.keyword,
+        timeRange: unifiedFilters.timeRange,
+        startDate: unifiedFilters.startDate,
+        endDate: unifiedFilters.endDate,
+        country: unifiedFilters.country,
+        maxSearchResults: ragSettings.maxWebResults,
       };
 
       const response = await queueApi.submit(request, 'normal');
@@ -613,7 +626,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   // ── Mode change with DB persistence ────────────────────────────────────
 
-  const handleModeChange = useCallback((newMode: 'research' | 'chat') => {
+  const handleModeChange = useCallback((newMode: ConversationMode) => {
     setConversationMode(newMode);
     // Persist mode to DB for the active conversation so it survives reloads
     if (currentConversationId) {
@@ -731,7 +744,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
                 streamingState={streamingState}
                 error={error}
                 isMobile={isMobile}
-                mode={conversationMode || 'chat'}
+                mode={conversationMode}
                 conversationId={currentConversationId ?? undefined}
                 lastResponseData={lastResponseData}
                 queryExpansionEnabled={queryExpansionEnabled}
@@ -768,7 +781,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
           <ChatInputArea
             variant="conversation"
-            mode={conversationMode || 'chat'}
+            mode={conversationMode}
             onModeChange={handleModeChange}
             onSend={(msg, attachments) => handleUserInput(msg, attachments)}
             disabled={isLoading || isStreaming}

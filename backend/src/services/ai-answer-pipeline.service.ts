@@ -2385,6 +2385,11 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       if (context.extractionStatuses && context.extractionStatuses.length > 0) {
         yield JSON.stringify({ __extractionStatus: true, statuses: context.extractionStatuses });
       }
+      // Emit retrieved sources once so the route can forward them via SSE
+      // without performing a second retrieval pass.
+      if (context.sources && context.sources.length > 0) {
+        yield JSON.stringify({ __sources: true, sources: context.sources });
+      }
       // Override RAG context if pre-retrieved (handling the legacy/route-level optimization)
       if (request._preRetrievedRagContext) {
         context.ragContext = request._preRetrievedRagContext;
