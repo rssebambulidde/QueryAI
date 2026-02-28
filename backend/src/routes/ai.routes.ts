@@ -26,12 +26,12 @@ router.post(
   apiLimiter,
   logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
-    const { 
-      question, 
-      context, 
-      conversationHistory, 
-      model, 
-      temperature, 
+    const {
+      question,
+      context,
+      conversationHistory,
+      model,
+      temperature,
       maxTokens,
       enableSearch,
       topic,
@@ -51,6 +51,12 @@ router.post(
       // Queue options
       useQueue,
       priority,
+      // Mode & document research
+      mode,
+      researchMyDocument,
+      // Inline attachments & pre-uploaded attachment IDs
+      attachments,
+      attachmentIds,
     } = req.body;
 
     if (!question) {
@@ -90,6 +96,12 @@ router.post(
       minScore: minScore ?? 0.5,
       // Conversation management
       conversationId: conversationId,
+      // Mode & document research
+      mode,
+      researchMyDocument,
+      // Inline attachments & pre-uploaded attachment IDs
+      attachments,
+      attachmentIds,
     };
 
     logger.info('AI question request with RAG', {
@@ -182,12 +194,12 @@ router.post(
   apiLimiter,
   logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
-    const { 
-      question, 
-      context, 
-      conversationHistory, 
-      model, 
-      temperature, 
+    const {
+      question,
+      context,
+      conversationHistory,
+      model,
+      temperature,
       maxTokens,
       enableSearch,
       topic,
@@ -205,6 +217,12 @@ router.post(
       minScore,
       conversationId,
       resendUserMessageId,
+      // Mode & document research
+      mode,
+      researchMyDocument,
+      // Inline attachments & pre-uploaded attachment IDs
+      attachments,
+      attachmentIds,
     } = req.body;
 
     if (!question) {
@@ -244,6 +262,12 @@ router.post(
       minScore: minScore ?? 0.5,
       // Conversation management
       conversationId: conversationId,
+      // Mode & document research
+      mode,
+      researchMyDocument,
+      // Inline attachments & pre-uploaded attachment IDs
+      attachments,
+      attachmentIds,
     };
 
     logger.info('AI streaming question request with RAG', {
@@ -720,12 +744,12 @@ router.post(
   enforceQueryLimit,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const { 
-      question, 
-      context, 
-      conversationHistory, 
-      model, 
-      temperature, 
+    const {
+      question,
+      context,
+      conversationHistory,
+      model,
+      temperature,
       maxTokens,
       enableSearch,
       topic,
@@ -743,6 +767,12 @@ router.post(
       minScore,
       conversationId,
       priority,
+      // Mode & document research
+      mode,
+      researchMyDocument,
+      // Inline attachments & pre-uploaded attachment IDs
+      attachments,
+      attachmentIds,
     } = req.body;
 
     if (!question) {
@@ -780,6 +810,12 @@ router.post(
       maxDocumentChunks: maxDocumentChunks ?? 5,
       minScore: minScore ?? 0.5,
       conversationId: conversationId,
+      // Mode & document research
+      mode,
+      researchMyDocument,
+      // Inline attachments & pre-uploaded attachment IDs
+      attachments,
+      attachmentIds,
     };
 
     if (!RequestQueueService.isAvailable()) {
