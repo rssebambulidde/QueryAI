@@ -7,6 +7,10 @@
 
 import React from 'react';
 
+const COLLAPSE_THRESHOLD = 30;
+const COLLAPSE_VISIBLE_LINES = 15;
+const LINE_NUMBER_THRESHOLD = 10;
+
 function extractText(node: React.ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') return String(node);
   if (Array.isArray(node)) return node.map(extractText).join('');
@@ -26,11 +30,17 @@ function MarkdownCodeBlock({
   codeProps: Record<string, any>;
 }) {
   const [copied, setCopied] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(true);
   const codeText = React.useMemo(
     () => extractText(children).replace(/\n$/, ''),
     [children],
   );
   const language = (className || '').replace('language-', '').trim() || 'code';
+  const lines = codeText.split('\n');
+  const lineCount = lines.length;
+  const showLineNumbers = lineCount > LINE_NUMBER_THRESHOLD;
+  const isCollapsible = lineCount > COLLAPSE_THRESHOLD;
+  const isCollapsed = isCollapsible && collapsed;
 
   const handleCopy = async () => {
     try {
@@ -55,21 +65,57 @@ function MarkdownCodeBlock({
   };
 
   return (
-    <div className="relative my-3 group/code">
-      <button
-        type="button"
-        onClick={handleCopy}
-        className="absolute right-2 top-2 z-10 px-2 py-1 text-[11px] font-medium rounded-md border border-gray-500/40 bg-gray-800/90 text-gray-100 hover:bg-gray-700 transition-colors"
-        aria-label={`Copy ${language} code`}
-        title={copied ? 'Copied' : `Copy ${language} code`}
-      >
-        {copied ? 'Copied' : 'Copy'}
-      </button>
-      <pre className="overflow-x-auto max-w-full pr-16 rounded-lg">
-        <code className={`block p-3 rounded-lg text-sm font-mono bg-gray-900 text-gray-100 whitespace-pre min-w-max ${className || ''}`} {...codeProps}>
-          {children}
-        </code>
-      </pre>
+    <div className="my-3 rounded-lg overflow-hidden border border-gray-700/50">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800 border-b border-gray-700/50">
+        <span className="text-xs font-mono text-gray-400 select-none">{language}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="px-2 py-0.5 text-[11px] font-medium rounded border border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+          aria-label={`Copy ${language} code`}
+          title={copied ? 'Copied' : `Copy ${language} code`}
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      {/* Code area */}
+      <div className={`relative ${isCollapsed ? 'max-h-[360px] overflow-hidden' : ''}`}>
+        <div className="overflow-x-auto">
+          <pre className="max-w-full m-0">
+            <code className={`block text-sm font-mono bg-gray-900 text-gray-100 whitespace-pre ${showLineNumbers ? 'pl-0' : 'p-4'} ${className || ''}`} {...codeProps}>
+              {showLineNumbers ? (
+                <table className="border-collapse w-full">
+                  <tbody>
+                    {lines.map((line, i) => (
+                      <tr key={i} className="leading-relaxed">
+                        <td className="select-none text-right pr-4 pl-3 text-gray-500 text-xs font-mono align-top w-[1%] whitespace-nowrap border-r border-gray-700/50">{i + 1}</td>
+                        <td className="pl-4 pr-4 whitespace-pre">{line || '\n'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <span className="block p-4">{children}</span>
+              )}
+            </code>
+          </pre>
+        </div>
+        {/* Collapse gradient overlay */}
+        {isCollapsed && (
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-900 to-transparent pointer-events-none" />
+        )}
+      </div>
+      {/* Collapse/expand toggle */}
+      {isCollapsible && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(!collapsed)}
+          className="w-full px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-200 bg-gray-800/80 border-t border-gray-700/50 transition-colors text-center"
+        >
+          {collapsed ? `Show ${lineCount - COLLAPSE_VISIBLE_LINES} more lines` : 'Collapse'}
+        </button>
+      )}
     </div>
   );
 }
@@ -102,7 +148,7 @@ export const getMarkdownComponents = (isUser: boolean) => ({
   code: ({ node, inline, className, children, ...props }: any) => {
     if (inline) {
       return (
-        <code className="bg-gray-100 text-orange-600 px-1.5 py-0.5 rounded text-sm font-mono align-baseline break-words" {...props}>
+        <code className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded text-sm font-mono align-baseline break-words" {...props}>
           {children}
         </code>
       );
@@ -111,6 +157,26 @@ export const getMarkdownComponents = (isUser: boolean) => ({
   },
   blockquote: ({ node, ...props }: any) => (
     <blockquote className="border-l-4 border-gray-300 pl-4 my-3 italic text-gray-600 text-left" {...props} />
+  ),
+  table: ({ node, ...props }: any) => (
+    <div className="overflow-x-auto my-4">
+      <table className="min-w-full border-collapse text-sm" {...props} />
+    </div>
+  ),
+  thead: ({ node, ...props }: any) => (
+    <thead className="bg-gray-50" {...props} />
+  ),
+  tbody: ({ node, ...props }: any) => (
+    <tbody className="divide-y divide-gray-200" {...props} />
+  ),
+  tr: ({ node, ...props }: any) => (
+    <tr className="hover:bg-gray-50/50" {...props} />
+  ),
+  th: ({ node, ...props }: any) => (
+    <th className="px-3 py-2 text-left font-semibold text-gray-900 border-b-2 border-gray-200 whitespace-nowrap" {...props} />
+  ),
+  td: ({ node, ...props }: any) => (
+    <td className="px-3 py-2 text-gray-700 border-b border-gray-100" {...props} />
   ),
   a: ({ node, href, title, children, ...props }: any) => (
     <a

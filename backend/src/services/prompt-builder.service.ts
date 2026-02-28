@@ -4,7 +4,7 @@ import { CitationValidatorService } from './citation-validator.service';
 import { AnswerQualityService } from './answer-quality.service';
 import { ConflictResolutionService } from './conflict-resolution.service';
 import { JSON_OUTPUT_INSTRUCTIONS } from '../schemas/ai-response.schema';
-import { EXPRESS_CODE_FORMAT_GUIDELINES } from './express/prompt-guidelines';
+import { SHARED_BASE_FORMAT_GUIDELINES } from './shared/format-guidelines';
 import {
   RESEARCH_ANSWER_STYLE_REQUIREMENTS,
   RESEARCH_ATTACHMENT_PRIMARY_MODE_INSTRUCTION,
@@ -75,13 +75,9 @@ CRITICAL RULES FOR ATTACHED DOCUMENTS:
 - If the answer is NOT found in the attached documents, clearly say "Based on the attached document(s), I could not find information about [topic]." — do NOT guess or use general knowledge to fill gaps.
 - When referencing content, mention the document name (e.g., "According to [filename]...").
 - IMPORTANT: If the conversation history discusses a DIFFERENT document that is no longer attached, COMPLETELY IGNORE those previous document discussions. The document content provided below is the ONLY active document — treat it as the sole source of truth.
-- Structure your response with clear markdown formatting:
-  - Use **bold** for key terms and important concepts
-  - Use numbered lists (1. 2. 3.) or bullet points (- ) for multiple items
-  - Use ### headings to organise longer answers into sections
-${EXPRESS_CODE_FORMAT_GUIDELINES}
 - Be professional and precise.
-- Keep paragraphs short (2-4 sentences each).
+
+${SHARED_BASE_FORMAT_GUIDELINES}
 
 ${attachmentContext}`
       : `You are a helpful AI assistant. Be concise, accurate, and conversational.
@@ -89,15 +85,9 @@ ${attachmentContext}`
 Guidelines:
 - Answer questions directly using your general knowledge
 - Admit uncertainty rather than guessing
-- Structure your response with clear markdown formatting:
-  - Use **bold** for key terms and important concepts
-  - Use numbered lists (1. 2. 3.) or bullet points (- ) for multiple items
-  - Separate distinct ideas into short paragraphs with blank lines between them
-  - Use ### headings to organise longer answers into sections
-  - Use tables when comparing items or presenting structured data
-${EXPRESS_CODE_FORMAT_GUIDELINES}
 - Be professional but friendly
-- Keep paragraphs short (2-4 sentences each)`;
+
+${SHARED_BASE_FORMAT_GUIDELINES}`;
 
     if (conversationState) {
       prompt += `\n\n## Conversation Context\n${conversationState}`;
@@ -274,7 +264,6 @@ ${conflictResolutionGuidelines}
 
 General guidelines:
 - Admit uncertainty rather than guessing
-- Use paragraphs for main points, bold for key terms
 - Be concise, accurate, and professional`;
 
     let fullContext = '';
