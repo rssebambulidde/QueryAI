@@ -152,17 +152,27 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
         // document/image indicators stay visible on user message bubbles
         // after the post-stream DB reload.
         setMessages((prev) => {
-          // Build a map of user-message attachments from the current state
+          // Build a map of user-message attachments keyed by content
           const attachmentsByContent = new Map<string, typeof prev[0]['attachments']>();
+          // Also build position-based fallback for content-mismatch cases
+          const userMsgAttachments: Array<typeof prev[0]['attachments'] | undefined> = [];
           for (const m of prev) {
-            if (m.role === 'user' && m.attachments?.length) {
-              attachmentsByContent.set(m.content, m.attachments);
+            if (m.role === 'user') {
+              userMsgAttachments.push(m.attachments?.length ? m.attachments : undefined);
+              if (m.attachments?.length) {
+                attachmentsByContent.set(m.content, m.attachments);
+              }
             }
           }
+          let dbUserIdx = 0;
           return dbMessages.map((m) => {
-            if (m.role === 'user' && !m.attachments?.length) {
-              const existing = attachmentsByContent.get(m.content);
-              if (existing) return { ...m, attachments: existing };
+            if (m.role === 'user') {
+              const idx = dbUserIdx++;
+              if (!m.attachments?.length) {
+                // Try content match first, then position-based fallback
+                const existing = attachmentsByContent.get(m.content) || userMsgAttachments[idx];
+                if (existing) return { ...m, attachments: existing };
+              }
             }
             return m;
           });
@@ -235,7 +245,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
         const userMessage: Message = {
           id: Date.now().toString(),
           role: 'user',
-          content: content || (attachments?.length ? `[Sent ${attachments.length} attachment(s)]` : ''),
+          content: content || (attachments?.length ? `Describe / analyze the attached file(s).` : ''),
           timestamp: new Date(),
           attachments,
         };
