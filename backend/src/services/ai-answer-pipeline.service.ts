@@ -648,6 +648,10 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       // ── Inline attachment processing ──────────────────────────────────
       let attachmentContext = '';
       let imageAttachments: Array<{ name: string; mimeType: string; data: string }> | undefined;
+      // Tracks resolved entries from the attachmentIds path so they are included
+      // in the combined allDocsToSave written by the request.attachments block,
+      // preventing the second metadata save from overwriting the first.
+      let resolvedFromAttachmentIds: Array<{ name: string; mimeType: string; extractedText: string; extractionStatus: string; fileId: string }> = [];
 
       // ── Resolve pre-uploaded attachment IDs (follow-up messages) ────────
       // When the frontend sends attachmentIds, load extracted text from the
@@ -678,6 +682,21 @@ Is this question clearly within the topic? Answer only YES or NO.`;
               ];
             }
 
+            // Build the metadata entries for these attachments.
+            // Store them in the outer scope so the combined allDocsToSave in the
+            // request.attachments block can include them, avoiding an overwrite.
+            resolvedFromAttachmentIds = resolved.map((r) => ({
+              name: r.fileName,
+              mimeType: r.mimeType,
+              extractedText: r.extractedText
+                ? r.extractedText.length > 12000
+                  ? (AttachmentExtractorService as any).smartTruncate(r.extractedText, request.question, 12000)
+                  : r.extractedText
+                : '',
+              extractionStatus: r.extractedText ? 'success' : 'failed',
+              fileId: r.id,
+            }));
+
             // Persist fileId doc references into conversation metadata so
             // attachments survive cross-session reloads.
             if (request.conversationId) {
@@ -693,26 +712,19 @@ Is this question clearly within the topic? Answer only YES or NO.`;
                 logger.warn('Failed to link attachmentIds to conversation', { error: linkErr.message });
               }
 
-              try {
-                const { ConversationService } = await import('./conversation.service');
-                const savedAttachments = resolved.map((r) => ({
-                  name: r.fileName,
-                  mimeType: r.mimeType,
-                  extractedText: r.extractedText
-                    ? r.extractedText.length > 12000
-                      ? AttachmentExtractorService.smartTruncate(r.extractedText, request.question, 12000)
-                      : r.extractedText
-                    : '',
-                  extractionStatus: r.extractedText ? 'success' : 'failed',
-                  fileId: r.id,
-                }));
-                await ConversationService.updateConversation(
-                  request.conversationId,
-                  userId,
-                  { metadata: { savedAttachments } },
-                );
-              } catch (saveErr: any) {
-                logger.warn('Failed to persist attachmentIds to metadata', { error: saveErr.message });
+              // Save to metadata now only when there are NO request.attachments;
+              // if request.attachments is also present, the combined save below handles it.
+              if (!request.attachments || request.attachments.length === 0) {
+                try {
+                  const { ConversationService } = await import('./conversation.service');
+                  await ConversationService.updateConversation(
+                    request.conversationId,
+                    userId,
+                    { metadata: { savedAttachments: resolvedFromAttachmentIds } },
+                  );
+                } catch (saveErr: any) {
+                  logger.warn('Failed to persist attachmentIds to metadata', { error: saveErr.message });
+                }
               }
             }
 
@@ -822,9 +834,19 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         });
 
         // ── Persist extracted document text to conversation metadata ─────
-        // Save both fileId (pre-uploaded) and base64 doc references so that
-        // loadConversationData can restore attachment indicators on reload.
+        // Save all file references so deleteByConversation can find and clean
+        // them up when the conversation is deleted.  Includes:
+        //   - resolvedFromAttachmentIds: files sent via the attachmentIds field
+        //   - fileIdResolvedDocs: inline attachments that had a fileId
+        //   - base64ExtractedDocs: inline base64 attachments (no fileId / storage)
+        // Dedup by fileId to avoid duplicates when the same file appears in both paths.
+        const seenFileIds = new Set<string>();
         const allDocsToSave = [
+          ...resolvedFromAttachmentIds.filter((doc) => {
+            if (seenFileIds.has(doc.fileId)) return false;
+            seenFileIds.add(doc.fileId);
+            return true;
+          }),
           ...fileIdResolvedDocs.map((doc) => ({
             name: doc.name,
             mimeType: doc.mimeType,
@@ -833,7 +855,11 @@ Is this question clearly within the topic? Answer only YES or NO.`;
               : doc.text,
             extractionStatus: doc.extractionStatus,
             fileId: doc.fileId,
-          })),
+          })).filter((doc) => {
+            if (seenFileIds.has(doc.fileId)) return false;
+            seenFileIds.add(doc.fileId);
+            return true;
+          }),
           ...base64ExtractedDocs.map((doc) => ({
             name: doc.name,
             mimeType: doc.mimeType,

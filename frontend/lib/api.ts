@@ -14,7 +14,7 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   }
 }
 
-// Create axios instance (exported for use by api-health)
+// Create axios instance (exported for use by api-health, api-validation, api-ab-testing)
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
   headers: {
@@ -151,8 +151,8 @@ export interface User {
   email: string;
   full_name?: string;
   avatar_url?: string;
-  role?: 'user' | 'super_admin';
-  subscriptionTier?: 'free' | 'pro' | 'enterprise';
+  role?: 'user' | 'admin' | 'super_admin';
+  subscriptionTier?: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
 }
 
 export interface Session {
@@ -177,7 +177,6 @@ export interface QuestionRequest {
     role: 'user' | 'assistant';
     content: string;
   }>;
-  mode?: 'research' | 'chat';
   model?: string;
   temperature?: number;
   maxTokens?: number;
@@ -189,7 +188,12 @@ export interface QuestionRequest {
   endDate?: string;
   country?: string;
   // RAG options
+  enableDocumentSearch?: boolean;
   enableWebSearch?: boolean;
+  topicId?: string;
+  documentIds?: string[];
+  maxDocumentChunks?: number;
+  minScore?: number;
   // Conversation management
   conversationId?: string;
   resendUserMessageId?: string; // When editing: update this user message and replace following assistant
@@ -206,18 +210,6 @@ export interface QuestionRequest {
     topK?: number;
     diversityWeight?: number;
   };
-  // Inline attachments (ephemeral — images & docs base64)
-  attachments?: Array<{
-    type: 'image' | 'document';
-    name: string;
-    mimeType: string;
-    data: string;
-    fileId?: string; // Server-side attachment ID (upload-then-reference)
-  }>;
-  // Pre-uploaded attachment IDs (follow-up messages — no base64 payload)
-  attachmentIds?: string[];
-  // Document research mode — extract claims from attachments and verify via web search
-  researchMyDocument?: boolean;
 }
 
 export interface QuestionResponse {
@@ -288,8 +280,6 @@ export interface Source {
   documentId?: string;
   snippet?: string;
   score?: number;
-  pageNumber?: number;
-  sectionTitle?: string;
 }
 
 export interface DocumentItem {
@@ -308,13 +298,24 @@ export interface DocumentItem {
   metadata?: Record<string, unknown>;
 }
 
+export interface Topic {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  scope_config?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Conversation {
   id: string;
   user_id: string;
+  topic_id?: string;
   title?: string;
-  mode?: 'research' | 'chat';
   metadata?: {
     filters?: {
+      topic?: string;
       timeRange?: TimeRange;
       startDate?: string;
       endDate?: string;
@@ -333,18 +334,6 @@ export interface Message {
   id: string;
   conversation_id: string;
   role: 'user' | 'assistant';
-  content: string;
-  sources?: Source[];
-  metadata?: Record<string, any>;
-  version: number;
-  parent_message_id?: string | null;
-  created_at: string;
-}
-
-/** Lightweight version summary for UI version indicators. */
-export interface MessageVersion {
-  id: string;
-  version: number;
   content: string;
   sources?: Source[];
   metadata?: Record<string, any>;
@@ -446,78 +435,6 @@ export const authApi = {
   },
 };
 
-/**
- * Internal SSE streaming helper for generation endpoints (summarize, essay, report).
- * Yields plain text chunks. Throws on HTTP or stream errors.
- */
-async function* _streamGeneration(
-  path: string,
-  body: Record<string, unknown>,
-  signal?: AbortSignal
-): AsyncGenerator<string, void, unknown> {
-  const response = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: typeof window !== 'undefined' ? `Bearer ${localStorage.getItem('accessToken') || ''}` : '',
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('No reader available');
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      if (signal?.aborted) { reader.cancel(); return; }
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      let currentEvent = '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) { currentEvent = line.slice(7).trim(); continue; }
-        if (line.startsWith('data: ')) {
-          const payload = line.slice(6);
-          switch (currentEvent) {
-            case 'chunk':
-              try { yield JSON.parse(payload); } catch { yield payload; }
-              break;
-            case 'done':
-              return;
-            case 'error':
-              try { const err = JSON.parse(payload); throw new Error(err.message || 'Stream error'); } catch (e) { if (e instanceof Error && e.message !== 'Stream error') throw e; }
-              break;
-            default:
-              // Legacy fallback
-              try {
-                const data = JSON.parse(payload);
-                if (data.chunk) yield data.chunk;
-                if (data.done) return;
-                if (data.error) throw new Error(data.error.message || 'Stream error');
-              } catch { /* skip */ }
-              break;
-          }
-          currentEvent = '';
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 // AI API
 export const aiApi = {
   ask: async (request: QuestionRequest): Promise<ApiResponse<QuestionResponse>> => {
@@ -533,7 +450,7 @@ export const aiApi = {
       maxRetries?: number;
       retryDelay?: number;
     }
-  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[]; docResearchStatus?: Record<string, unknown> }, void, unknown> {
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[]; docResearchStatus?: any; extractionStatus?: any[]; extracting?: boolean; extractingFiles?: string[] }, void, unknown> {
     const maxRetries = options?.maxRetries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000;
     let retryCount = 0;
@@ -551,21 +468,9 @@ export const aiApi = {
         });
 
         if (!response.ok) {
-          // Parse error body for human-readable messages
-          const errorBody = await response.text().catch(() => '');
-          let parsedError: any = null;
-          try { parsedError = JSON.parse(errorBody); } catch { /* ignore */ }
-
           // Don't retry on client errors (4xx) except 429
           if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-            const err: any = new Error(
-              parsedError?.error?.message || `HTTP error! status: ${response.status}`
-            );
-            err.response = {
-              status: response.status,
-              data: parsedError,
-            };
-            throw err;
+            throw new Error(`HTTP error! status: ${response.status}`);
           }
           // Retry on server errors (5xx) and rate limits (429)
           if (retryCount < maxRetries) {
@@ -573,14 +478,7 @@ export const aiApi = {
             await new Promise((resolve) => setTimeout(resolve, retryDelay * retryCount));
             continue;
           }
-          const err: any = new Error(
-            parsedError?.error?.message || `HTTP error! status: ${response.status}`
-          );
-          err.response = {
-            status: response.status,
-            data: parsedError,
-          };
-          throw err;
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const reader = response.body?.getReader();
@@ -607,79 +505,40 @@ export const aiApi = {
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
 
-            let currentEvent = '';
-
             for (const line of lines) {
-              if (line.startsWith('event: ')) {
-                currentEvent = line.slice(7).trim();
-                continue;
-              }
-
               if (line.startsWith('data: ')) {
-                const payload = line.slice(6);
-
-                switch (currentEvent) {
-                  case 'chunk':
-                    // Payload is JSON-encoded (newlines escaped) — decode it
-                    try { yield JSON.parse(payload); } catch { yield payload; }
-                    break;
-                  case 'sources':
-                    try {
-                      yield { sources: JSON.parse(payload) as Source[] };
-                    } catch { /* skip malformed */ }
-                    break;
-                  case 'followUpQuestions':
-                    try {
-                      const fup = JSON.parse(payload);
-                      yield { followUpQuestions: fup.questions, refusal: fup.refusal };
-                    } catch { /* skip malformed */ }
-                    break;
-                  case 'qualityScore':
-                    try {
-                      const qs = JSON.parse(payload);
-                      yield { qualityScore: qs.score };
-                    } catch { /* skip malformed */ }
-                    break;
-                  case 'extractionStatus':
-                    try {
-                      yield { extractionStatus: JSON.parse(payload) };
-                    } catch { /* skip malformed */ }
-                    break;
-                  case 'extracting':
-                    try {
-                      const ex = JSON.parse(payload);
-                      yield { extracting: ex.extracting, extractingFiles: ex.files };
-                    } catch { /* skip malformed */ }
-                    break;
-                  case 'docResearchStatus':
-                    try {
-                      yield { docResearchStatus: JSON.parse(payload) };
-                    } catch { /* skip malformed */ }
-                    break;
-                  case 'done':
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (data.sources) {
+                    yield { sources: data.sources };
+                  }
+                  if (data.chunk) {
+                    yield data.chunk;
+                  }
+                  if (data.docResearchStatus) {
+                    yield { docResearchStatus: data.docResearchStatus };
+                  }
+                  if (data.extractionStatus) {
+                    yield { extractionStatus: data.extractionStatus };
+                  }
+                  if ('extracting' in data) {
+                    yield { extracting: data.extracting, extractingFiles: data.extractingFiles };
+                  }
+                  if (data.followUpQuestions) {
+                    yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal };
+                  }
+                  if (data.qualityScore !== undefined) {
+                    yield { qualityScore: data.qualityScore };
+                  }
+                  if (data.done) {
                     return;
-                  case 'error':
-                    try {
-                      const err = JSON.parse(payload);
-                      throw new Error(err.message || 'Stream error');
-                    } catch (e) {
-                      if (e instanceof Error && e.message !== 'Stream error') throw e;
-                    }
-                    break;
-                  default:
-                    // Legacy fallback: unnamed data-only lines (backwards compat)
-                    try {
-                      const data = JSON.parse(payload);
-                      if (data.sources) { yield { sources: data.sources }; }
-                      if (data.chunk) { yield data.chunk; }
-                      if (data.followUpQuestions) { yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal }; }
-                      if (data.qualityScore !== undefined) { yield { qualityScore: data.qualityScore }; }
-                      if (data.done) { return; }
-                      if (data.error) { throw new Error(data.error.message || 'Stream error'); }
-                    } catch { /* skip */ }
-                    break;
+                  }
+                  if (data.error) {
+                    throw new Error(data.error.message || 'Stream error');
+                  }
+                } catch (e) {
+                  // Skip invalid JSON
                 }
-                currentEvent = '';
               }
             }
           }
@@ -711,142 +570,6 @@ export const aiApi = {
     }
   },
 
-  /**
-   * Anonymous streaming — same SSE protocol as askStream but hits the
-   * unauthenticated `/api/ai/ask/anonymous` endpoint. No conversation
-   * persistence. Used by the anonymous chat page.
-   */
-  askAnonymousStream: async function* (
-    request: QuestionRequest,
-    options?: {
-      signal?: AbortSignal;
-      onError?: (error: Error) => void;
-    }
-  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[]; docResearchStatus?: Record<string, unknown> }, void, unknown> {
-    try {
-      const response = await fetch(`${API_URL}/api/ai/ask/anonymous`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Include token if available (optionalAuthenticate)
-          ...(typeof window !== 'undefined' && localStorage.getItem('accessToken')
-            ? { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
-            : {}),
-        },
-        body: JSON.stringify(request),
-        signal: options?.signal,
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text().catch(() => '');
-        let parsedError: any = null;
-        try { parsedError = JSON.parse(errorBody); } catch { /* ignore */ }
-        const err: any = new Error(
-          parsedError?.error?.message || `HTTP error! status: ${response.status}`
-        );
-        err.response = { status: response.status, data: parsedError };
-        throw err;
-      }
-
-      if (!response.body) {
-        throw new Error('Response body is null');
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let currentEvent = '';
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-
-            if (line.startsWith('event: ')) {
-              currentEvent = line.slice(7).trim();
-              continue;
-            }
-
-            if (line.startsWith('data: ')) {
-              const payload = line.slice(6);
-              switch (currentEvent) {
-                case 'chunk':
-                  try { yield JSON.parse(payload); } catch { yield payload; }
-                  break;
-                case 'sources':
-                  try { yield { sources: JSON.parse(payload) as Source[] }; } catch { /* skip */ }
-                  break;
-                case 'followUpQuestions':
-                  try {
-                    const fup = JSON.parse(payload);
-                    yield { followUpQuestions: fup.questions, refusal: fup.refusal };
-                  } catch { /* skip */ }
-                  break;
-                case 'qualityScore':
-                  try {
-                    const qs = JSON.parse(payload);
-                    yield { qualityScore: qs.score };
-                  } catch { /* skip */ }
-                  break;
-                case 'extractionStatus':
-                  try {
-                    yield { extractionStatus: JSON.parse(payload) };
-                  } catch { /* skip malformed */ }
-                  break;
-                case 'extracting':
-                  try {
-                    const ex = JSON.parse(payload);
-                    yield { extracting: ex.extracting, extractingFiles: ex.files };
-                  } catch { /* skip malformed */ }
-                  break;
-                case 'docResearchStatus':
-                  try {
-                    yield { docResearchStatus: JSON.parse(payload) };
-                  } catch { /* skip malformed */ }
-                  break;
-                case 'done':
-                  return;
-                case 'error':
-                  try {
-                    const err = JSON.parse(payload);
-                    throw new Error(err.message || 'Stream error');
-                  } catch (e) {
-                    if (e instanceof Error && e.message !== 'Stream error') throw e;
-                  }
-                  break;
-                default:
-                  // Legacy fallback
-                  try {
-                    const data = JSON.parse(payload);
-                    if (data.sources) { yield { sources: data.sources }; }
-                    if (data.chunk) { yield data.chunk; }
-                    if (data.followUpQuestions) { yield { followUpQuestions: data.followUpQuestions }; }
-                    if (data.done) { return; }
-                    if (data.error) { throw new Error(data.error.message || 'Stream error'); }
-                  } catch { /* skip */ }
-                  break;
-              }
-              currentEvent = '';
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-    } catch (error: any) {
-      if (options?.signal?.aborted || error.name === 'AbortError') return;
-      if (options?.onError) options.onError(error);
-      throw error;
-    }
-  },
-
   summarize: async (originalResponse: string, keyword: string, sources?: Source[]): Promise<ApiResponse<{ summary: string }>> => {
     const response = await apiClient.post('/api/ai/summarize', { originalResponse, keyword, sources });
     return response.data;
@@ -862,184 +585,13 @@ export const aiApi = {
     return response.data;
   },
 
-  // ── Streaming generation variants ────────────────────────────────────
-
-  summarizeStream: async function* (
-    originalResponse: string,
-    keyword: string,
-    sources?: Source[],
-    signal?: AbortSignal
-  ): AsyncGenerator<string, void, unknown> {
-    yield* _streamGeneration('/api/ai/summarize/stream', { originalResponse, keyword, sources }, signal);
-  },
-
-  writeEssayStream: async function* (
-    originalResponse: string,
-    keyword: string,
-    sources?: Source[],
-    signal?: AbortSignal
-  ): AsyncGenerator<string, void, unknown> {
-    yield* _streamGeneration('/api/ai/essay/stream', { originalResponse, keyword, sources }, signal);
-  },
-
-  generateReportStream: async function* (
-    originalResponse: string,
-    keyword: string,
-    sources?: Source[],
-    signal?: AbortSignal
-  ): AsyncGenerator<string, void, unknown> {
-    yield* _streamGeneration('/api/ai/report/stream', { originalResponse, keyword, sources }, signal);
-  },
-
   researchSessionSummary: async (conversationId: string, topicName: string): Promise<ApiResponse<{ summary: string }>> => {
     const response = await apiClient.post('/api/ai/research-session-summary', { conversationId, topicName });
     return response.data;
   },
 
-  regenerate: async (
-    messageId: string,
-    conversationId: string,
-    options?: {
-      model?: string;
-      maxDocumentChunks?: number;
-      maxSearchResults?: number;
-      enableWebSearch?: boolean;
-      enableDocumentSearch?: boolean;
-      temperature?: number;
-      maxTokens?: number;
-    }
-  ): Promise<ApiResponse<{
-    newMessage: Message;
-    versions: Message[];
-    answer: string;
-    model: string;
-    sources?: Source[];
-    followUpQuestions?: string[];
-    usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
-    responseVersion: number;
-  }>> => {
-    const response = await apiClient.post('/api/ai/regenerate', {
-      messageId,
-      conversationId,
-      options,
-    });
-    return response.data;
-  },
-
-  /**
-   * Streaming regeneration — same SSE protocol as askStream with an additional
-   * `version` event emitted at the end containing the new version info.
-   */
-  regenerateStream: async function* (
-    messageId: string,
-    conversationId: string,
-    options?: {
-      model?: string;
-      maxDocumentChunks?: number;
-      maxSearchResults?: number;
-      enableWebSearch?: boolean;
-      enableDocumentSearch?: boolean;
-      temperature?: number;
-      maxTokens?: number;
-    },
-    signal?: AbortSignal,
-  ): AsyncGenerator<
-    string | { sources?: Source[]; followUpQuestions?: string[]; qualityScore?: number; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[]; version?: { version: number; messageId: string; versions: Array<{ id: string; version: number; content: string; sources?: Source[]; metadata?: Record<string, any>; created_at: string }> }; docResearchStatus?: Record<string, unknown> },
-    void,
-    unknown
-  > {
-    const response = await fetch(`${API_URL}/api/ai/regenerate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: typeof window !== 'undefined' ? `Bearer ${localStorage.getItem('accessToken') || ''}` : '',
-      },
-      body: JSON.stringify({ messageId, conversationId, options }),
-      signal,
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text().catch(() => '');
-      let parsedError: any = null;
-      try { parsedError = JSON.parse(errorBody); } catch { /* ignore */ }
-      const errorMessage = parsedError?.error?.message || `HTTP error! status: ${response.status}`;
-      const err: any = new Error(errorMessage);
-      err.response = {
-        status: response.status,
-        data: parsedError,
-      };
-      throw err;
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No reader available');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-      while (true) {
-        if (signal?.aborted) { reader.cancel(); return; }
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        let currentEvent = '';
-
-        for (const line of lines) {
-          if (line.startsWith('event: ')) { currentEvent = line.slice(7).trim(); continue; }
-          if (line.startsWith('data: ')) {
-            const payload = line.slice(6);
-
-            switch (currentEvent) {
-              case 'chunk':
-                try { yield JSON.parse(payload); } catch { yield payload; }
-                break;
-              case 'sources':
-                try { yield { sources: JSON.parse(payload) as Source[] }; } catch { /* skip */ }
-                break;
-              case 'followUpQuestions':
-                try { const fup = JSON.parse(payload); yield { followUpQuestions: fup.questions }; } catch { /* skip */ }
-                break;
-              case 'qualityScore':
-                try { const qs = JSON.parse(payload); yield { qualityScore: qs.score }; } catch { /* skip */ }
-                break;
-              case 'extractionStatus':
-                try { yield { extractionStatus: JSON.parse(payload) }; } catch { /* skip */ }
-                break;
-              case 'extracting':
-                try { const ex = JSON.parse(payload); yield { extracting: ex.extracting, extractingFiles: ex.files }; } catch { /* skip */ }
-                break;
-              case 'docResearchStatus':
-                try { yield { docResearchStatus: JSON.parse(payload) }; } catch { /* skip */ }
-                break;
-              case 'version':
-                try { yield { version: JSON.parse(payload) }; } catch { /* skip */ }
-                break;
-              case 'done':
-                return;
-              case 'error':
-                try { const err = JSON.parse(payload); throw new Error(err.message || 'Regeneration stream error'); } catch (e) { if (e instanceof Error && e.message !== 'Regeneration stream error') throw e; }
-                break;
-              default:
-                break;
-            }
-            currentEvent = '';
-          }
-        }
-      }
-    } finally {
-      reader.releaseLock();
-    }
-  },
-
-  getMessageVersions: async (
-    messageId: string,
-  ): Promise<ApiResponse<{ versions: Message[] }>> => {
-    const response = await apiClient.get(`/api/ai/messages/${messageId}/versions`);
+  suggestedStarters: async (topicId: string): Promise<ApiResponse<{ starters: string[] }>> => {
+    const response = await apiClient.get('/api/ai/suggested-starters', { params: { topicId } });
     return response.data;
   },
 };
@@ -1055,7 +607,12 @@ export interface SemanticSearchResult {
   metadata?: Record<string, any>;
 }
 
-// searchApi.semantic retired in v2 (document search removed)
+export const searchApi = {
+  semantic: async (query: string, options?: { topK?: number; topicId?: string; documentIds?: string[]; minScore?: number }): Promise<ApiResponse<{ query: string; results: SemanticSearchResult[]; count: number }>> => {
+    const response = await apiClient.post('/api/search/semantic', { query, ...options });
+    return response.data;
+  },
+};
 
 // ─── Queue API ───────────────────────────────────────────────────────────────
 
@@ -1096,42 +653,64 @@ export const queueApi = {
   },
 };
 
-// Document processing progress types
-export type ProcessingStage =
-  | 'queued'
-  | 'downloading'
-  | 'extracting'
-  | 'chunking'
-  | 'embedding'
-  | 'indexing'
-  | 'completed'
-  | 'failed';
-
-export interface ProcessingStageRecord {
-  name: ProcessingStage;
-  startedAt: string;
-  completedAt?: string;
-  error?: string;
-}
-
-export interface DocumentProcessingStatus {
-  documentId: string;
-  status: string;
-  processing: {
-    stage: ProcessingStage;
-    progressPercent: number;
-    stageLabel: string;
-    startedAt: string;
-    error?: string;
-    failedStage?: ProcessingStage;
-    stages: ProcessingStageRecord[];
-  } | null;
-  extractionError: string | null;
-  embeddingError: string | null;
-}
-
-// Document API — trimmed to getText only (used by source-panel for preview)
+// Document API
 export const documentApi = {
+  list: async (): Promise<ApiResponse<DocumentItem[]>> => {
+    const response = await apiClient.get('/api/documents');
+    return response.data;
+  },
+
+  upload: async (file: File, onProgress?: (progress: number) => void, topicId?: string): Promise<ApiResponse<DocumentItem>> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (topicId) {
+      formData.append('topicId', topicId);
+    }
+
+    // Auto-extract text and auto-embed for RAG search
+    const response = await apiClient.post('/api/documents/upload?autoExtract=true&autoEmbed=true', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(progress);
+        }
+      },
+    });
+    return response.data;
+  },
+
+  delete: async (pathOrId: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete('/api/documents', {
+      data: { id: pathOrId, path: pathOrId },
+    });
+    return response.data;
+  },
+
+  download: async (path: string): Promise<Blob> => {
+    const response = await apiClient.get(`/api/documents/download?path=${encodeURIComponent(path)}`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+
+  process: async (documentId: string, options?: { maxChunkSize?: number; overlapSize?: number }): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post(`/api/documents/${documentId}/process`, options || {});
+    return response.data;
+  },
+
+  clearProcessing: async (documentId: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post(`/api/documents/${documentId}/clear-processing`);
+    return response.data;
+  },
+
+  update: async (documentId: string, data: { metadata?: Record<string, unknown>; filename?: string }): Promise<ApiResponse<{ id: string; filename?: string; metadata?: Record<string, unknown> }>> => {
+    const response = await apiClient.patch(`/api/documents/${documentId}`, data);
+    return response.data;
+  },
+
   getText: async (documentId: string): Promise<ApiResponse<{ documentId: string; text: string; stats: { length: number; wordCount: number; pageCount?: number; paragraphCount?: number }; extractedAt: string }>> => {
     const response = await apiClient.get(`/api/documents/${documentId}/text`);
     return response.data;
@@ -1152,12 +731,12 @@ export const conversationApi = {
     return response.data;
   },
 
-  create: async (data: { title?: string; mode?: 'research' | 'chat' }): Promise<ApiResponse<Conversation>> => {
+  create: async (data: { title?: string; topicId?: string }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.post('/api/conversations', data);
     return response.data;
   },
 
-  update: async (id: string, data: { title?: string; metadata?: any; filters?: any; mode?: 'research' | 'chat' }): Promise<ApiResponse<Conversation>> => {
+  update: async (id: string, data: { title?: string; topicId?: string | null; metadata?: any; filters?: any }): Promise<ApiResponse<Conversation>> => {
     const response = await apiClient.put(`/api/conversations/${id}`, data);
     return response.data;
   },
@@ -1183,21 +762,35 @@ export const conversationApi = {
     const response = await apiClient.delete(`/api/conversations/${conversationId}/messages/${messageId}`);
     return response.data;
   },
+};
 
-  exportConversation: async (
-    id: string,
-    format: 'pdf' | 'markdown' | 'docx',
-    options?: { includeSources?: boolean; includeBibliography?: boolean }
-  ): Promise<Blob> => {
-    const response = await apiClient.get(`/api/conversations/${id}/export`, {
-      params: { format, ...options },
-      responseType: 'blob',
-    });
+// Topic API
+export const topicApi = {
+  list: async (): Promise<ApiResponse<Topic[]>> => {
+    const response = await apiClient.get('/api/topics');
+    return response.data;
+  },
+
+  get: async (id: string): Promise<ApiResponse<Topic>> => {
+    const response = await apiClient.get(`/api/topics/${id}`);
+    return response.data;
+  },
+
+  create: async (data: { name: string; description?: string; scopeConfig?: Record<string, any> }): Promise<ApiResponse<Topic>> => {
+    const response = await apiClient.post('/api/topics', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: { name?: string; description?: string; scopeConfig?: Record<string, any> }): Promise<ApiResponse<Topic>> => {
+    const response = await apiClient.put(`/api/topics/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.delete(`/api/topics/${id}`);
     return response.data;
   },
 };
-
-// topicApi retired in v2
 
 // Collection types
 export interface Collection {
@@ -1371,100 +964,14 @@ export const analyticsApi = {
     });
     return response.data;
   },
-
-  trackCitationClick: async (params: {
-    messageId?: string;
-    conversationId?: string;
-    sourceIndex: number;
-    sourceUrl?: string;
-    sourceType: 'document' | 'web';
-  }): Promise<ApiResponse<{ id: string | null }>> => {
-    const response = await apiClient.post('/api/analytics/citation-click', params);
-    return response.data;
-  },
-
-  getCitationClickStats: async (
-    days: number = 30
-  ): Promise<ApiResponse<{
-    period: string;
-    totalClicks: number;
-    uniqueUsers: number;
-    clicksByType: Record<string, number>;
-    topDomains: { domain: string; clicks: number; unique_users: number }[];
-    avgClicksPerMessage: number;
-  }>> => {
-    const response = await apiClient.get('/api/analytics/citation-clicks', {
-      params: { days },
-    });
-    return response.data;
-  },
-
-  getCitationDomainRates: async (
-    days: number = 30
-  ): Promise<ApiResponse<{
-    period: string;
-    domains: { domain: string; totalClicked: number; uniqueClickers: number }[];
-  }>> => {
-    const response = await apiClient.get('/api/analytics/citation-clicks/domains', {
-      params: { days },
-    });
-    return response.data;
-  },
-
-  // ── Cross-conversation cited sources ──────────────────────────────
-
-  getCitedSources: async (options?: {
-    startDate?: string;
-    endDate?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<ApiResponse<{ sources: CitedSource[] }>> => {
-    const response = await apiClient.get('/api/analytics/cited-sources', {
-      params: options,
-    });
-    return response.data;
-  },
-
-  getSourceConversations: async (
-    citedSourceId: string,
-    options?: { limit?: number; offset?: number }
-  ): Promise<ApiResponse<{ conversations: SourceConversation[] }>> => {
-    const response = await apiClient.get(`/api/analytics/cited-sources/${citedSourceId}/conversations`, {
-      params: options,
-    });
-    return response.data;
-  },
-
 };
-
-// Cited Sources Types
-export interface CitedSource {
-  id: string;
-  source_url: string | null;
-  source_type: 'document' | 'web';
-  document_id: string | null;
-  source_title: string;
-  source_domain: string | null;
-  first_cited_at: string;
-  last_cited_at: string;
-  citation_count: number;
-  conversation_count: number;
-}
-
-export interface SourceConversation {
-  conversation_id: string;
-  conversation_title: string | null;
-  message_id: string;
-  snippet: string | null;
-  cited_at: string;
-}
 
 // Subscription API Types
 export interface Subscription {
   id: string;
   user_id: string;
-  tier: 'free' | 'pro' | 'enterprise';
-  status: 'active' | 'cancelled' | 'expired' | 'suspended';
+  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
+  status: 'active' | 'cancelled' | 'expired';
   current_period_start?: string;
   current_period_end?: string;
   cancel_at_period_end: boolean;
@@ -1472,18 +979,21 @@ export interface Subscription {
   billing_period?: 'monthly' | 'annual';
   annual_discount?: number;
   grace_period_end?: string;
-  paused_at?: string | null;
-  pause_expires_at?: string | null;
-  pause_reason?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface TierLimits {
   queriesPerMonth: number | null;
-  tavilySearchesPerMonth: number | null;
-  maxCollections: number | null;
-  allowResearchMode: boolean;
+  documentUploads: number | null;
+  maxTopics: number | null;
+  features: {
+    documentUpload: boolean;
+    embedding: boolean;
+    analytics: boolean;
+    apiAccess: boolean;
+    whiteLabel: boolean;
+  };
 }
 
 export interface UsageLimit {
@@ -1498,6 +1008,8 @@ export interface SubscriptionData {
   limits: TierLimits;
   usage: {
     queries: UsageLimit;
+    documentUploads: UsageLimit;
+    topics: UsageLimit;
     tavilySearches?: UsageLimit;
   };
 }
@@ -1515,6 +1027,18 @@ export interface UsageStats {
     remaining: number | null;
     percentage: number; // 0-100, or -1 for unlimited
   };
+  documentUploads: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
+  topics: {
+    used: number;
+    limit: number | null;
+    remaining: number | null;
+    percentage: number;
+  };
   tavilySearches: {
     used: number;
     limit: number | null;
@@ -1529,7 +1053,7 @@ export interface UsageStats {
   };
   periodStart: string;
   periodEnd: string;
-  tier: 'free' | 'pro' | 'enterprise';
+  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
 }
 
 export interface UsageHistory {
@@ -1541,11 +1065,11 @@ export interface UsageHistory {
 
 export interface UsageWarnings {
   approaching: boolean;
-  warnings: Array<{ type: 'queries' | 'tavilySearches'; percentage: number }>;
+  warnings: Array<{ type: 'queries' | 'documentUploads' | 'topics' | 'tavilySearches'; percentage: number }>;
 }
 
 export interface OverageRecord {
-  metric_type: 'queries' | 'tavily_searches';
+  metric_type: 'queries' | 'document_upload' | 'tavily_searches';
   limit_value: number;
   usage_value: number;
   overage_units: number;
@@ -1586,7 +1110,7 @@ export const billingApi = {
   getOverage: async (params?: {
     periodStart?: string;
     periodEnd?: string;
-    currency?: 'USD';
+    currency?: 'USD' | 'UGX';
   }): Promise<ApiResponse<OverageSummary>> => {
     const response = await apiClient.get('/api/billing/overage', { params: params ?? {} });
     return response.data;
@@ -1595,7 +1119,7 @@ export const billingApi = {
   initiateOveragePayment: async (params: {
     periodStart: string;
     periodEnd: string;
-    currency?: 'USD';
+    currency?: 'USD' | 'UGX';
   }): Promise<
     ApiResponse<
       | { noOverage: true; message: string }
@@ -1670,13 +1194,14 @@ export const subscriptionApi = {
 
   getLimits: async (): Promise<ApiResponse<{
     queries: UsageLimit;
-    tavilySearches: UsageLimit;
+    documentUploads: UsageLimit;
+    topics: UsageLimit;
   }>> => {
     const response = await apiClient.get('/api/subscription/limits');
     return response.data;
   },
 
-  upgrade: async (tier: 'free' | 'pro'): Promise<ApiResponse<{ subscription: Subscription }>> => {
+  upgrade: async (tier: 'free' | 'starter' | 'premium' | 'pro'): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.put('/api/subscription/upgrade', { tier });
     return response.data;
   },
@@ -1686,23 +1211,13 @@ export const subscriptionApi = {
     return response.data;
   },
 
-  downgrade: async (tier: 'free' | 'pro', immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
+  downgrade: async (tier: 'free' | 'starter' | 'premium' | 'pro', immediate: boolean = false): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.put('/api/subscription/downgrade', { tier, immediate });
     return response.data;
   },
 
   reactivate: async (): Promise<ApiResponse<{ subscription: Subscription }>> => {
     const response = await apiClient.post('/api/subscription/reactivate');
-    return response.data;
-  },
-
-  pause: async (days?: number, reason?: string): Promise<ApiResponse<{ subscription: Subscription }>> => {
-    const response = await apiClient.post('/api/subscription/pause', { days, reason });
-    return response.data;
-  },
-
-  resume: async (): Promise<ApiResponse<{ subscription: Subscription }>> => {
-    const response = await apiClient.post('/api/subscription/resume');
     return response.data;
   },
 
@@ -1724,16 +1239,17 @@ export const subscriptionApi = {
   },
 
   getProratedPricing: async (
-    toTier: 'free' | 'pro',
+    toTier: 'free' | 'starter' | 'premium' | 'pro',
+    currency: 'UGX' | 'USD' = 'UGX',
     toBillingPeriod?: 'monthly' | 'annual'
   ): Promise<ApiResponse<{ proratedPricing: any }>> => {
-    const params: { toTier: string; currency: string; toBillingPeriod?: string } = { toTier, currency: 'USD' };
+    const params: { toTier: string; currency: string; toBillingPeriod?: string } = { toTier, currency };
     if (toBillingPeriod) params.toBillingPeriod = toBillingPeriod;
     const response = await apiClient.get('/api/subscription/prorated-pricing', { params });
     return response.data;
   },
 
-  startTrial: async (tier: 'pro', trialDays: number = 7): Promise<ApiResponse<{ subscription: Subscription; trial_end: string }>> => {
+  startTrial: async (tier: 'starter' | 'premium' | 'pro', trialDays: number = 7): Promise<ApiResponse<{ subscription: Subscription; trial_end: string }>> => {
     const response = await apiClient.post('/api/subscription/start-trial', { tier, trialDays });
     return response.data;
   },
@@ -1757,7 +1273,7 @@ export interface Payment {
   paypal_payment_id?: string;
   paypal_subscription_id?: string;
   payment_provider?: 'paypal';
-  tier: 'free' | 'pro' | 'enterprise';
+  tier: 'free' | 'starter' | 'premium' | 'pro' | 'enterprise';
   amount: number;
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'cancelled';
@@ -1771,8 +1287,8 @@ export interface Payment {
 }
 
 export interface PaymentInitiateRequest {
-  tier: 'pro' | 'enterprise';
-  currency?: 'USD';
+  tier: 'starter' | 'premium' | 'pro' | 'enterprise';
+  currency: 'UGX' | 'USD';
   firstName: string;
   lastName: string;
   email: string;
@@ -1780,13 +1296,12 @@ export interface PaymentInitiateRequest {
   billing_period?: 'monthly' | 'annual';
   return_url?: string; // URL to redirect to after payment completion
   prefer_card?: boolean; // If true, PayPal checkout will prefer card payment form
-  promo_code?: string; // Optional promo/coupon code for discount
 }
 
 export interface PaymentInitiateResponse {
   payment: {
     id: string;
-    tier: 'pro' | 'enterprise';
+    tier: 'starter' | 'premium' | 'pro' | 'enterprise';
     amount: number;
     currency: string;
     status: string;
@@ -1843,25 +1358,10 @@ export const paymentApi = {
     return response.data;
   },
 
-  validatePromo: async (data: { promo_code: string; tier: string; billing_period: string }): Promise<ApiResponse<{
-    discount_percent: number;
-    original_amount: number;
-    discounted_amount: number;
-    savings: number;
-  }>> => {
-    const response = await apiClient.post('/api/payment/validate-promo', data);
-    return response.data;
-  },
-
   syncSubscription: async (subscriptionId?: string): Promise<ApiResponse<{ synced: boolean; message: string }>> => {
     const response = await apiClient.post('/api/payment/sync-subscription', {
       subscription_id: subscriptionId,
     });
-    return response.data;
-  },
-
-  cancelPendingPayment: async (paymentId: string): Promise<ApiResponse<{ message: string }>> => {
-    const response = await apiClient.post(`/api/payment/${paymentId}/cancel`);
     return response.data;
   },
 };
@@ -2033,6 +1533,7 @@ export const metricsApi = {
   getRetrievalMetrics: async (options?: {
     startDate?: string;
     endDate?: string;
+    topicId?: string;
     limit?: number;
     offset?: number;
   }): Promise<ApiResponse<RetrievalMetrics>> => {
@@ -2166,369 +1667,29 @@ export const metricsApi = {
   },
 };
 
-// ═══════════════════════════════════════════════════════════════════════
-// Feedback API — thumbs up/down, comments, citation flagging
-// ═══════════════════════════════════════════════════════════════════════
+// Export A/B Testing API
+export { abTestingApi } from './api-ab-testing';
+export type {
+  ABTest,
+  ABTestMetrics,
+  CreateABTestInput,
+  UpdateABTestInput,
+  VariantConfig,
+  StatisticalSignificance,
+} from './api-ab-testing';
 
-export interface FlaggedCitation {
-  sourceUrl: string;
-  sourceTitle: string;
-  reason?: string;
-}
-
-export interface FeedbackSubmission {
-  messageId: string;
-  conversationId?: string;
-  rating: -1 | 1;
-  comment?: string;
-  flaggedCitations?: FlaggedCitation[];
-  model?: string;
-  /** Context for evaluator routing on negative feedback */
-  question?: string;
-  answer?: string;
-  sources?: Array<{ type?: string; title?: string; url?: string; snippet?: string }>;
-}
-
-export interface MessageFeedback {
-  id: string;
-  user_id: string;
-  message_id: string;
-  conversation_id: string | null;
-  rating: -1 | 1;
-  comment: string | null;
-  flagged_citations: FlaggedCitation[];
-  model: string | null;
-  created_at: string;
-}
-
-export const feedbackApi = {
-  /** Submit or update feedback for a message. */
-  submitFeedback: async (
-    feedback: FeedbackSubmission,
-  ): Promise<ApiResponse<{ feedbackId: string }>> => {
-    const response = await apiClient.post('/api/feedback', feedback);
-    return response.data;
-  },
-
-  /** Get current user's feedback for a specific message. */
-  getFeedback: async (
-    messageId: string,
-  ): Promise<ApiResponse<{ feedback: MessageFeedback | null }>> => {
-    const response = await apiClient.get(`/api/feedback/message/${messageId}`);
-    return response.data;
-  },
-
-  /** Remove feedback for a message. */
-  deleteFeedback: async (
-    messageId: string,
-  ): Promise<ApiResponse<{ deleted: boolean }>> => {
-    const response = await apiClient.delete(`/api/feedback/message/${messageId}`);
-    return response.data;
-  },
-};
-
-// ═══════════════════════════════════════════════════════════════════
-// Workspace API
-// ═══════════════════════════════════════════════════════════════════
-
-export interface WorkspaceDocumentNode {
-  id: string;
-  filename: string;
-  fileType: string;
-  fileSize: number;
-  status: string;
-  createdAt: string;
-}
-
-export interface WorkspaceGraphData {
-  documents: WorkspaceDocumentNode[];
-}
-
-export const workspaceApi = {
-  /** Get the full research workspace graph data. */
-  getGraph: async (): Promise<ApiResponse<WorkspaceGraphData>> => {
-    const response = await apiClient.get('/api/workspace');
-    return response.data;
-  },
-};
-
-// ── Admin LLM Settings API ───────────────────────────────────────────────────
-
-export interface LLMProviderModel {
-  id: string;
-  displayName: string;
-  contextWindow: number;
-  maxOutputTokens: number;
-  inputCostPer1M: number;
-  outputCostPer1M: number;
-  capabilities: string[];
-  isDefault?: boolean;
-}
-
-export interface LLMProviderInfo {
-  id: string;
-  displayName: string;
-  models: LLMProviderModel[];
-  configured: boolean;
-}
-
-export interface LLMModeConfig {
-  providerId: string;
-  modelId: string;
-}
-
-export interface LLMDefaults {
-  temperature: number;
-  maxTokens: number;
-}
-
-export interface LLMSettingsResponse {
-  chatConfig: LLMModeConfig;
-  researchConfig: LLMModeConfig;
-  providers: LLMProviderInfo[];
-  apiKeyStatus: Record<string, boolean>;
-  defaults: LLMDefaults;
-  featureFlags: Record<string, boolean>;
-}
-
-export interface LLMTestResult {
-  status: string;
-  response: string;
-  model: string;
-  latencyMs: number;
-  tokensUsed: number;
-}
-
-export const adminApi = {
-  /** Get current LLM settings, providers, models. */
-  getLLMSettings: async (): Promise<ApiResponse<LLMSettingsResponse>> => {
-    const response = await apiClient.get('/api/admin/settings/llm');
-    return response.data;
-  },
-
-  /** Update provider + model for a mode. */
-  updateLLMSettings: async (
-    mode: 'chat' | 'research',
-    providerId: string,
-    modelId: string,
-  ): Promise<ApiResponse<{ mode: string; providerId: string; modelId: string }>> => {
-    const response = await apiClient.put('/api/admin/settings/llm', { mode, providerId, modelId });
-    return response.data;
-  },
-
-  /** Update API keys per provider (redacted on server). */
-  updateLLMApiKeys: async (
-    keys: Record<string, string>,
-  ): Promise<ApiResponse<{ providers: string[] }>> => {
-    const response = await apiClient.put('/api/admin/settings/llm/api-keys', { keys });
-    return response.data;
-  },
-
-  /** Test a provider + model connection. */
-  testLLMConnection: async (
-    providerId: string,
-    modelId: string,
-  ): Promise<ApiResponse<LLMTestResult>> => {
-    const response = await apiClient.post('/api/admin/settings/llm/test', { providerId, modelId });
-    return response.data;
-  },
-
-  /** Update default temperature / max tokens. */
-  updateLLMDefaults: async (
-    defaults: Partial<LLMDefaults>,
-  ): Promise<ApiResponse<LLMDefaults>> => {
-    const response = await apiClient.put('/api/admin/settings/llm/defaults', defaults);
-    return response.data;
-  },
-
-  /** Get platform-wide LLM usage / cost stats. */
-  getLLMUsageStats: async (
-    days: number = 30,
-  ): Promise<ApiResponse<LLMUsageStats>> => {
-    const response = await apiClient.get('/api/admin/settings/llm/usage', { params: { days } });
-    return response.data;
-  },
-
-  /** Get the current pricing config (superadmin). */
-  getPricingConfig: async (): Promise<ApiResponse<PricingConfigResponse>> => {
-    const response = await apiClient.get('/api/admin/settings/pricing');
-    return response.data;
-  },
-
-  /** Update the pricing config (superadmin). */
-  updatePricingConfig: async (
-    config: PricingConfigResponse,
-  ): Promise<ApiResponse<PricingConfigResponse>> => {
-    const response = await apiClient.put('/api/admin/settings/pricing', config);
-    return response.data;
-  },
-
-  /** Get the current tier limits (superadmin). */
-  getTierLimits: async (): Promise<ApiResponse<AllTierLimitsResponse>> => {
-    const response = await apiClient.get('/api/admin/settings/tier-limits');
-    return response.data;
-  },
-
-  /** Update limits for a specific tier (superadmin). */
-  updateTierLimits: async (
-    tier: string,
-    limits: SingleTierLimitsResponse,
-  ): Promise<ApiResponse<AllTierLimitsResponse>> => {
-    const response = await apiClient.put(`/api/admin/settings/tier-limits/${tier}`, limits);
-    return response.data;
-  },
-
-  /** Get usage-alert threshold configuration (superadmin). */
-  getUsageAlertThresholds: async (): Promise<ApiResponse<UsageAlertThresholdConfig>> => {
-    const response = await apiClient.get('/api/admin/settings/usage-alert-thresholds');
-    return response.data;
-  },
-
-  /** Update usage-alert threshold configuration (superadmin). */
-  updateUsageAlertThresholds: async (
-    config: UsageAlertThresholdConfig,
-  ): Promise<ApiResponse<UsageAlertThresholdConfig>> => {
-    const response = await apiClient.put('/api/admin/settings/usage-alert-thresholds', config);
-    return response.data;
-  },
-
-  /** Get usage alert history — users who received alerts (superadmin). */
-  getUsageAlertHistory: async (
-    params?: { limit?: number; offset?: number; type?: string },
-  ): Promise<ApiResponse<{ alerts: AlertHistoryRow[]; total: number }>> => {
-    const response = await apiClient.get('/api/admin/settings/usage-alert-history', { params });
-    return response.data;
-  },
-
-};
-
-// ── Usage Alert Threshold types ──────────────────────────────────────────────
-
-export interface UsageAlertThresholdConfig {
-  thresholds: number[];
-  enabled: boolean;
-  metrics: ('queries' | 'tavilySearches' | 'collections')[];
-}
-
-export interface AlertHistoryRow {
-  id: string;
-  userId: string;
-  email: string;
-  fullName: string | null;
-  type: string;
-  title: string;
-  message: string;
-  metric: string | null;
-  threshold: number | null;
-  percentage: number | null;
-  tier: string | null;
-  isRead: boolean;
-  createdAt: string;
-}
-
-// ── Notification types ───────────────────────────────────────────────────────
-
-export interface UserNotification {
-  id: string;
-  user_id: string;
-  type: string;
-  title: string;
-  message: string;
-  metadata: Record<string, unknown> | null;
-  read: boolean;
-  created_at: string;
-}
-
-export const notificationApi = {
-  /** Get notifications for the current user. */
-  getAll: async (params?: { unreadOnly?: boolean; limit?: number }): Promise<ApiResponse<{ notifications: UserNotification[]; unreadCount: number }>> => {
-    const response = await apiClient.get('/api/notifications', { params });
-    return response.data;
-  },
-
-  /** Get count of unread notifications. */
-  getUnreadCount: async (): Promise<ApiResponse<{ unreadCount: number }>> => {
-    const response = await apiClient.get('/api/notifications/unread-count');
-    return response.data;
-  },
-
-  /** Mark a single notification as read. */
-  markRead: async (id: string): Promise<ApiResponse<{ success: boolean }>> => {
-    const response = await apiClient.patch(`/api/notifications/${id}/read`);
-    return response.data;
-  },
-
-  /** Mark all notifications as read. */
-  markAllRead: async (): Promise<ApiResponse<{ success: boolean }>> => {
-    const response = await apiClient.post('/api/notifications/read-all');
-    return response.data;
-  },
-};
-
-// ── Config API (public, no auth) ─────────────────────────────────────────────
-
-export interface TierPricing {
-  monthly: number;
-  annual: number;
-}
-
-export interface PricingConfigResponse {
-  tiers: {
-    free: TierPricing;
-    pro: TierPricing;
-    enterprise: TierPricing;
-  };
-  overage: {
-    queries: number;
-    document_upload: number;
-    tavily_searches: number;
-  };
-}
-
-export const configApi = {
-  /** Fetch the current pricing config (public, no auth required). */
-  getPricing: async (): Promise<ApiResponse<PricingConfigResponse>> => {
-    const response = await apiClient.get('/api/config/pricing');
-    return response.data;
-  },
-
-  /** Fetch per-tier quotas & feature flags (public, no auth required). */
-  getTierLimits: async (): Promise<ApiResponse<AllTierLimitsResponse>> => {
-    const response = await apiClient.get('/api/config/tier-limits');
-    return response.data;
-  },
-};
-
-// ── Tier Limits types ────────────────────────────────────────────────────────
-
-export interface SingleTierLimitsResponse {
-  queriesPerMonth: number | null;
-  tavilySearchesPerMonth: number | null;
-  maxCollections: number | null;
-  allowResearchMode: boolean;
-}
-
-export interface AllTierLimitsResponse {
-  free: SingleTierLimitsResponse;
-  pro: SingleTierLimitsResponse;
-  enterprise: SingleTierLimitsResponse;
-}
-
-export interface LLMUsageStats {
-  period: { start: string; end: string };
-  totalCost: number;
-  totalQueries: number;
-  totalTokens: number;
-  averageCostPerQuery: number;
-  modelBreakdown: Array<{
-    model: string;
-    queries: number;
-    totalCost: number;
-    totalTokens: number;
-    avgCostPerQuery: number;
-  }>;
-  dailyTrend: Array<{ date: string; cost: number; queries: number }>;
-}
+// Export Validation API
+export { validationApi } from './api-validation';
+export type {
+  ValidationTestSuite,
+  ValidationTestCase,
+  ValidationTestResult,
+  ValidationRun,
+  ValidationReport,
+  CreateTestSuiteInput,
+  UpdateTestSuiteInput,
+  RunTestSuiteInput,
+} from './api-validation';
 
 // Export Health Monitoring API
 export { healthApi } from './api-health';
@@ -2545,46 +1706,3 @@ export type {
   SystemStatus,
   ComponentStatus,
 } from './api-health';
-
-// ── Attachment Upload API (upload-then-reference pattern) ─────────────────────
-
-export interface AttachmentUploadResult {
-  id: string;
-  fileName: string;
-  mimeType: string;
-  fileSize: number;
-  extractionStatus: 'success' | 'truncated' | 'failed';
-  extractionChars: number;
-  extractionReason?: string;
-}
-
-export const attachmentApi = {
-  /**
-   * Upload a file for chat attachment. Returns server-side ID + extraction result.
-   * Subsequent messages can reference this ID instead of re-sending base64.
-   */
-  upload: async (file: File, conversationId?: string): Promise<ApiResponse<AttachmentUploadResult>> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (conversationId) {
-      formData.append('conversationId', conversationId);
-    }
-    const response = await apiClient.post('/api/attachments/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120_000, // 2 min for large files
-    });
-    return response.data;
-  },
-
-  /** Get attachment metadata by ID. */
-  get: async (id: string): Promise<ApiResponse<{ id: string; fileName: string; mimeType: string }>> => {
-    const response = await apiClient.get(`/api/attachments/${id}`);
-    return response.data;
-  },
-
-  /** Delete an attachment. */
-  delete: async (id: string): Promise<ApiResponse<{ deleted: boolean }>> => {
-    const response = await apiClient.delete(`/api/attachments/${id}`);
-    return response.data;
-  },
-};
