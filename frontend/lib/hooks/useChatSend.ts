@@ -441,6 +441,9 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
                   window.dispatchEvent(new CustomEvent('sourcesUpdated'));
                 }
               }
+              if (meta.claimResults) {
+                assistantMessage = { ...assistantMessage, docResearchResults: meta.claimResults };
+              }
               assistantMsgRef.current = assistantMessage;
               setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
               continue;

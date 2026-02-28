@@ -2398,28 +2398,94 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         try {
           const { DocumentResearchService } = await import('./document-research.service');
           let docResearchContext = '';
+          let docResearchResults: any[] = [];
 
-          for await (const event of DocumentResearchService.research(
-            context.attachmentDocumentContext,
-            request.question,
-            { timeRange: request.timeRange, country: request.country },
-          )) {
-            if (event.type === 'status') {
-              yield JSON.stringify({ __docResearch: true, status: event.message });
-            } else if (event.type === 'claims') {
-              yield JSON.stringify({ __docResearch: true, claims: event.claims });
-            } else if (event.type === 'result') {
-              docResearchContext = event.data.formattedContext;
-              // Emit research sources alongside existing sources
-              if (event.data.allSources.length > 0) {
-                const researchSources = event.data.allSources.map((s) => ({
-                  type: 'web' as const,
-                  title: s.title,
-                  url: s.url,
-                  snippet: s.content?.slice(0, 200),
-                  score: s.score,
-                }));
-                yield JSON.stringify({ __docResearch: true, sources: researchSources });
+          // Check for cached research results from a previous turn
+          let usedCache = false;
+          if (request.conversationId && userId) {
+            try {
+              const { ConversationService } = await import('./conversation.service');
+              const conv = await ConversationService.getConversation(request.conversationId, userId);
+              const cache = (conv as any)?.metadata?.documentResearchCache;
+              if (cache && Array.isArray(cache.claimResults) && cache.claimResults.length > 0) {
+                logger.info('Using cached document research results', {
+                  conversationId: request.conversationId,
+                  cachedClaims: cache.claimResults.length,
+                });
+                usedCache = true;
+                yield JSON.stringify({ __docResearch: true, status: 'Restoring previous document research…' });
+                docResearchContext = DocumentResearchService.formatAsContext(
+                  cache.claimResults.map((cr: any) => ({
+                    claim: cr.claim || { claim: cr.claimText || '', excerpt: cr.excerpt || '', category: cr.category || 'other' },
+                    queries: cr.queries || [],
+                    webResults: (cr.sources || []).map((s: any) => ({ title: s.title, url: s.url, content: '', score: 0 })),
+                    verdict: cr.verdict,
+                    confidence: cr.confidence,
+                  })),
+                );
+                docResearchResults = cache.claimResults;
+                // Re-emit cached results so the frontend can display claim cards
+                yield JSON.stringify({ __docResearch: true, claimResults: cache.claimResults });
+              }
+            } catch (cacheErr: any) {
+              logger.debug('No cached document research found', { error: cacheErr.message });
+            }
+          }
+
+          if (!usedCache) {
+            for await (const event of DocumentResearchService.research(
+              context.attachmentDocumentContext,
+              request.question,
+              { timeRange: request.timeRange, country: request.country },
+            )) {
+              if (event.type === 'status') {
+                yield JSON.stringify({ __docResearch: true, status: event.message });
+              } else if (event.type === 'claims') {
+                yield JSON.stringify({ __docResearch: true, claims: event.claims });
+              } else if (event.type === 'result') {
+                docResearchContext = event.data.formattedContext;
+                // Emit research sources alongside existing sources
+                if (event.data.allSources.length > 0) {
+                  const researchSources = event.data.allSources.map((s) => ({
+                    type: 'web' as const,
+                    title: s.title,
+                    url: s.url,
+                    snippet: s.content?.slice(0, 200),
+                    score: s.score,
+                  }));
+                  yield JSON.stringify({ __docResearch: true, sources: researchSources });
+                }
+                // Emit full claim results for frontend claim cards
+                if (event.data.results.length > 0) {
+                  const claimResults = event.data.results.map((r) => ({
+                    claim: r.claim.claim,
+                    excerpt: r.claim.excerpt,
+                    category: r.claim.category,
+                    verdict: r.verdict,
+                    confidence: r.confidence,
+                    sources: r.webResults.slice(0, 3).map((s) => ({ title: s.title, url: s.url })),
+                  }));
+                  docResearchResults = claimResults;
+                  yield JSON.stringify({ __docResearch: true, claimResults });
+                }
+              }
+            }
+
+            // Cache research results in conversation metadata for follow-up reuse
+            if (docResearchResults.length > 0 && request.conversationId && userId) {
+              try {
+                const { ConversationService } = await import('./conversation.service');
+                await ConversationService.updateConversation(
+                  request.conversationId,
+                  userId,
+                  { metadata: { documentResearchCache: { claimResults: docResearchResults, timestamp: Date.now() } } },
+                );
+                logger.info('Cached document research results', {
+                  conversationId: request.conversationId,
+                  claimCount: docResearchResults.length,
+                });
+              } catch (cacheErr: any) {
+                logger.warn('Failed to cache document research results', { error: cacheErr.message });
               }
             }
           }

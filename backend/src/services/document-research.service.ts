@@ -18,6 +18,7 @@ import logger from '../config/logger';
 import { SearchService, SearchResult, SearchRequest } from './search.service';
 import { ProviderRegistry } from '../providers/provider-registry';
 import { SubscriptionService } from './subscription.service';
+import { AttachmentExtractorService } from './attachment-extractor.service';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Types
@@ -60,14 +61,23 @@ export interface DocumentResearchResult {
 // ═══════════════════════════════════════════════════════════════════════
 
 export class DocumentResearchService {
-  /** Maximum claims to extract from a single document */
-  private static readonly MAX_CLAIMS = 8;
-  /** Maximum web searches to run in total (across all claims) */
-  private static readonly MAX_SEARCHES = 12;
   /** Max results per individual search */
   private static readonly RESULTS_PER_SEARCH = 3;
   /** Max document text to send to claim extraction (chars) */
-  private static readonly MAX_DOC_CHARS = 15_000;
+  private static readonly MAX_DOC_CHARS = 30_000;
+
+  /** Adaptive claim count based on document length */
+  static getMaxClaims(docLength: number): number {
+    if (docLength < 2_000) return 4;
+    if (docLength <= 8_000) return 6;
+    if (docLength <= 20_000) return 8;
+    return 10;
+  }
+
+  /** Adaptive search budget: 2 searches per claim, capped at 16 */
+  static getMaxSearches(maxClaims: number): number {
+    return Math.min(maxClaims * 2, 16);
+  }
 
   // ─────────────────────────────────────────────────────────────────────
   // 1. Extract claims from document text
@@ -77,17 +87,31 @@ export class DocumentResearchService {
     documentText: string,
     userQuestion?: string,
   ): Promise<DocumentClaim[]> {
-    const truncated = documentText.length > this.MAX_DOC_CHARS
-      ? documentText.slice(0, this.MAX_DOC_CHARS) + '\n[…truncated]'
-      : documentText;
+    // Use question-aware smart truncation when a question is provided
+    let truncated: string;
+    if (documentText.length > this.MAX_DOC_CHARS) {
+      if (userQuestion) {
+        truncated = AttachmentExtractorService.smartTruncate(documentText, userQuestion, this.MAX_DOC_CHARS);
+      } else {
+        truncated = documentText.slice(0, this.MAX_DOC_CHARS) + '\n[…truncated]';
+      }
+    } else {
+      truncated = documentText;
+    }
+
+    const maxClaims = this.getMaxClaims(truncated.length);
+
+    const questionInstruction = userQuestion
+      ? `\n- The user's question is: "${userQuestion}"\n- PRIORITISE claims that are most relevant to answering this question. Extract relevant claims FIRST (~60%), then include additional noteworthy verifiable claims (~40%).\n- Order claims by relevance to the user's question (most relevant first).`
+      : '';
 
     const systemPrompt = `You are a claim-extraction expert. Given a document, extract the most important verifiable claims, stated facts, statistics, dates, and named entities.
 
 RULES:
-- Extract up to ${this.MAX_CLAIMS} claims.
+- Extract up to ${maxClaims} claims.
 - Each claim should be independently verifiable via web search.
 - Prefer concrete, specific claims over vague statements.
-- Include the exact excerpt from the document.${userQuestion ? `\n- Prioritise claims relevant to the user's question: "${userQuestion}"` : ''}
+- Include the exact excerpt from the document.${questionInstruction}
 
 Respond with ONLY a JSON array:
 [
@@ -99,9 +123,9 @@ Respond with ONLY a JSON array:
 ]`;
 
     try {
-      const { provider } = ProviderRegistry.getForMode('research');
+      const { provider, model } = ProviderRegistry.getForMode('research');
       const result = await provider.chatCompletion({
-        model: 'gpt-4o-mini',
+        model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: truncated },
@@ -113,7 +137,7 @@ Respond with ONLY a JSON array:
 
       const parsed = JSON.parse(result.content);
       const claims: DocumentClaim[] = (Array.isArray(parsed) ? parsed : parsed.claims ?? [])
-        .slice(0, this.MAX_CLAIMS)
+        .slice(0, maxClaims)
         .map((c: any) => ({
           claim: String(c.claim || '').slice(0, 200),
           excerpt: String(c.excerpt || '').slice(0, 500),
@@ -122,7 +146,7 @@ Respond with ONLY a JSON array:
             : 'other',
         }));
 
-      logger.info('Extracted claims from document', { count: claims.length });
+      logger.info('Extracted claims from document', { count: claims.length, maxClaims, docLength: truncated.length });
       return claims;
     } catch (err: any) {
       logger.error('Failed to extract claims from document', { error: err.message });
@@ -134,12 +158,13 @@ Respond with ONLY a JSON array:
   // 2. Generate web search queries for each claim
   // ─────────────────────────────────────────────────────────────────────
 
-  static generateSearchQueries(claims: DocumentClaim[]): Map<DocumentClaim, string[]> {
+  static generateSearchQueries(claims: DocumentClaim[], maxSearches?: number): Map<DocumentClaim, string[]> {
+    const searchBudget = maxSearches ?? this.getMaxSearches(claims.length);
     const map = new Map<DocumentClaim, string[]>();
     let totalQueries = 0;
 
     for (const claim of claims) {
-      if (totalQueries >= this.MAX_SEARCHES) break;
+      if (totalQueries >= searchBudget) break;
 
       const queries: string[] = [];
 
@@ -147,7 +172,7 @@ Respond with ONLY a JSON array:
       queries.push(claim.claim);
 
       // Secondary query varies by category
-      if (totalQueries + 2 <= this.MAX_SEARCHES) {
+      if (totalQueries + 2 <= searchBudget) {
         switch (claim.category) {
           case 'statistic':
             queries.push(`${claim.claim} source data evidence`);
@@ -283,9 +308,9 @@ ${c.evidence || '(no web results found)'}`;
     }).join('\n\n---\n\n');
 
     try {
-      const { provider } = ProviderRegistry.getForMode('research');
+      const { provider, model } = ProviderRegistry.getForMode('research');
       const result = await provider.chatCompletion({
-        model: 'gpt-4o-mini',
+        model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },
