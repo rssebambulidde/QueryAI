@@ -38,7 +38,6 @@ const mockExecutePayment = jest.fn();
 const mockGetSubscription = jest.fn();
 const mockGetPaymentDetails = jest.fn();
 const mockVerifyWebhookSignature = jest.fn();
-const mockProcessWebhook = jest.fn();
 const mockRefundPayment = jest.fn();
 
 jest.mock('../services/paypal.service', () => ({
@@ -48,7 +47,6 @@ jest.mock('../services/paypal.service', () => ({
   getSubscription: (...args: unknown[]) => mockGetSubscription(...args),
   getPaymentDetails: (...args: unknown[]) => mockGetPaymentDetails(...args),
   verifyWebhookSignature: (...args: unknown[]) => mockVerifyWebhookSignature(...args),
-  processWebhook: (...args: unknown[]) => mockProcessWebhook(...args),
   refundPayment: (...args: unknown[]) => mockRefundPayment(...args),
 }));
 
@@ -115,7 +113,7 @@ beforeEach(async () => {
     subscriptionId: 'SUB-123',
     approvalUrl: 'https://www.sandbox.paypal.com/checkoutnow?token=SUB-123',
   });
-  mockProcessWebhook.mockReturnValue({ handled: true });
+  /* mockProcessWebhook is removed — processWebhook no-op was deleted from paypal.service */
 
   const paymentRoutes = (await import('../routes/payment.routes')).default;
   const { errorHandler } = await import('../middleware/errorHandler');
@@ -140,7 +138,7 @@ afterEach(() => {
 
 const authHeaders = { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' };
 const validInitiateBody = {
-  tier: 'starter',
+  tier: 'pro',
   currency: 'USD',
   firstName: 'Jane',
   lastName: 'Doe',
@@ -190,7 +188,7 @@ describe('Payment routes – one-time payment', () => {
     const res = await fetch(`${baseUrl}/api/payment/initiate`, {
       method: 'POST',
       headers: authHeaders,
-      body: JSON.stringify({ tier: 'starter', currency: 'USD' }),
+      body: JSON.stringify({ tier: 'pro', currency: 'USD' }),
     });
     expect(res.status).toBe(400);
   });
@@ -203,6 +201,21 @@ describe('Payment routes – one-time payment', () => {
       body: JSON.stringify(validInitiateBody),
     });
     expect(res.status).toBe(400);
+  });
+
+  it('POST /api/payment/initiate rejects duplicate pending payment for same tier', async () => {
+    const { DatabaseService } = await import('../services/database.service');
+    (DatabaseService.getUserPayments as jest.Mock).mockResolvedValueOnce([
+      { id: 'pay-dup', user_id: 'user-1', tier: 'pro', status: 'pending' },
+    ]);
+    const res = await fetch(`${baseUrl}/api/payment/initiate`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify(validInitiateBody),
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { success: boolean; error?: { message?: string } };
+    expect(data.success).toBe(false);
   });
 });
 
@@ -266,7 +279,7 @@ describe('Payment routes – webhook', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as { success: boolean; data?: Record<string, unknown>; message?: string };
     expect(data.success).toBe(true);
-    expect(mockProcessWebhook).toHaveBeenCalled();
+    expect(mockVerifyWebhookSignature).toHaveBeenCalled();
   });
 
   it('POST /api/payment/webhook returns 200 with success false when verification fails', async () => {
@@ -301,7 +314,7 @@ describe('Payment routes – status and history', () => {
       user_id: 'user-1',
       paypal_order_id: 'ORDER-123',
       status: 'pending',
-      tier: 'starter',
+      tier: 'pro',
       amount: 9,
       currency: 'USD',
     });
@@ -335,7 +348,7 @@ describe('Payment routes – status and history', () => {
   it('GET /api/payment/history returns payments array', async () => {
     const { DatabaseService } = await import('../services/database.service');
     (DatabaseService.getUserPayments as jest.Mock).mockResolvedValueOnce([
-      { id: 'pay-1', tier: 'starter', amount: 9, currency: 'USD', status: 'completed' },
+      { id: 'pay-1', tier: 'pro', amount: 9, currency: 'USD', status: 'completed' },
     ]);
     const res = await fetch(`${baseUrl}/api/payment/history`, { headers: authHeaders });
     expect(res.status).toBe(200);
@@ -346,19 +359,21 @@ describe('Payment routes – status and history', () => {
 });
 
 describe('Payment routes – refund', () => {
+  const validPaymentId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+
   it('POST /api/payment/refund rejects when payment not found', async () => {
     mockGetPaymentById.mockResolvedValueOnce(null);
     const res = await fetch(`${baseUrl}/api/payment/refund`, {
       method: 'POST',
       headers: authHeaders,
-      body: JSON.stringify({ paymentId: 'pay-unknown' }),
+      body: JSON.stringify({ paymentId: validPaymentId }),
     });
     expect(res.status).toBe(400);
   });
 
   it('POST /api/payment/refund rejects when payment not completed', async () => {
     mockGetPaymentById.mockResolvedValueOnce({
-      id: 'pay-1',
+      id: validPaymentId,
       user_id: 'user-1',
       status: 'pending',
       amount: 9,
@@ -367,24 +382,25 @@ describe('Payment routes – refund', () => {
     const res = await fetch(`${baseUrl}/api/payment/refund`, {
       method: 'POST',
       headers: authHeaders,
-      body: JSON.stringify({ paymentId: 'pay-1' }),
+      body: JSON.stringify({ paymentId: validPaymentId }),
     });
     expect(res.status).toBe(400);
   });
 
   it('POST /api/payment/refund succeeds and returns refund when payment completed', async () => {
     mockGetPaymentById.mockResolvedValue({
-      id: 'pay-1',
+      id: validPaymentId,
       user_id: 'user-1',
       status: 'completed',
       amount: 9,
       currency: 'USD',
       paypal_payment_id: 'CAP-123',
+      completed_at: new Date().toISOString(),
     });
     mockRefundPayment.mockResolvedValueOnce({ refundId: 'REF-123', status: 'COMPLETED' });
     mockCreateRefund.mockResolvedValueOnce({
       id: 'ref-1',
-      payment_id: 'pay-1',
+      payment_id: validPaymentId,
       amount: 9,
       currency: 'USD',
       status: 'completed',
@@ -392,7 +408,7 @@ describe('Payment routes – refund', () => {
     const res = await fetch(`${baseUrl}/api/payment/refund`, {
       method: 'POST',
       headers: authHeaders,
-      body: JSON.stringify({ paymentId: 'pay-1' }),
+      body: JSON.stringify({ paymentId: validPaymentId }),
     });
     expect(res.status).toBe(200);
     const data = (await res.json()) as { success: boolean; data?: { refund?: unknown; refund_status?: string }; message?: string };
@@ -402,5 +418,57 @@ describe('Payment routes – refund', () => {
     expect(mockRefundPayment).toHaveBeenCalledWith(
       expect.objectContaining({ captureId: 'CAP-123', amount: 9, currency: 'USD' })
     );
+  });
+
+  it('POST /api/payment/refund rejects refund beyond 30-day window', async () => {
+    const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+    mockGetPaymentById.mockResolvedValueOnce({
+      id: validPaymentId,
+      user_id: 'user-1',
+      status: 'completed',
+      amount: 9,
+      currency: 'USD',
+      paypal_payment_id: 'CAP-123',
+      completed_at: oldDate,
+    });
+    const res = await fetch(`${baseUrl}/api/payment/refund`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ paymentId: validPaymentId }),
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { success: boolean; error?: { message?: string } };
+    expect(data.success).toBe(false);
+  });
+
+  it('POST /api/payment/refund rejects refund within 24h cooldown', async () => {
+    mockGetPaymentById.mockResolvedValueOnce({
+      id: validPaymentId,
+      user_id: 'user-1',
+      status: 'completed',
+      amount: 18,
+      currency: 'USD',
+      paypal_payment_id: 'CAP-123',
+      completed_at: new Date().toISOString(),
+      refund_amount: 9,
+      refunded_at: new Date().toISOString(),
+    });
+    const res = await fetch(`${baseUrl}/api/payment/refund`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ paymentId: validPaymentId, amount: 5 }),
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { success: boolean; error?: { message?: string } };
+    expect(data.success).toBe(false);
+  });
+
+  it('POST /api/payment/refund rejects non-UUID paymentId', async () => {
+    const res = await fetch(`${baseUrl}/api/payment/refund`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ paymentId: 'not-a-uuid' }),
+    });
+    expect(res.status).toBe(400);
   });
 });

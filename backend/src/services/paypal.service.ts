@@ -524,16 +524,242 @@ export async function refundPayment(
   }, 'refundPayment');
 }
 
+// --- Dynamic Plan Management (9.6.6) ---
+
+/**
+ * Key in system_settings where dynamic plan IDs are stored.
+ * Value shape: { pro_monthly?: string, pro_annual?: string, enterprise_monthly?: string, enterprise_annual?: string }
+ */
+const PAYPAL_PLAN_IDS_KEY = 'paypal_plan_ids';
+
+export interface DynamicPlanIds {
+  pro_monthly?: string;
+  pro_annual?: string;
+  enterprise_monthly?: string;
+  enterprise_annual?: string;
+}
+
+/**
+ * Create a PayPal catalog product (needed once before creating plans).
+ * Returns the product ID.  Safe to call multiple times — idempotent via product_id param.
+ */
+export async function createProduct(
+  productId: string = 'QUERYAI-SUBSCRIPTION',
+  name: string = 'QueryAI Subscription',
+  description: string = 'QueryAI AI-powered research assistant subscription'
+): Promise<string> {
+  const token = await getAccessToken();
+  const baseUrl = getBaseUrl();
+
+  const res = await fetch(`${baseUrl}/v1/catalogs/products`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'PayPal-Request-Id': `product-${productId}`, // idempotency key
+    },
+    body: JSON.stringify({
+      id: productId,
+      name,
+      description,
+      type: 'SERVICE',
+      category: 'SOFTWARE',
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    // 422 = already exists — that's fine, return the requested ID
+    if (res.status === 422 && text.includes('DUPLICATE_RESOURCE_IDENTIFIER')) {
+      logger.info('PayPal product already exists', { productId });
+      return productId;
+    }
+    logger.error('PayPal createProduct failed', { status: res.status, body: text });
+    throw new Error(`PayPal createProduct failed: ${res.status} ${text}`);
+  }
+
+  const data = (await res.json()) as { id: string };
+  logger.info('PayPal product created', { productId: data.id });
+  return data.id;
+}
+
+export interface CreatePlanParams {
+  productId: string;
+  name: string;
+  description?: string;
+  price: number;       // USD
+  currency?: string;
+  intervalUnit: 'MONTH' | 'YEAR';
+  intervalCount?: number; // default 1
+}
+
+export interface CreatePlanResult {
+  planId: string;
+  status: string;
+}
+
+/**
+ * Create a PayPal billing plan under an existing product.
+ * Uses the PayPal REST v1 Billing Plans API (not SDK — SDK doesn't expose plan creation).
+ */
+export async function createPlan(
+  params: CreatePlanParams
+): Promise<CreatePlanResult> {
+  const token = await getAccessToken();
+  const baseUrl = getBaseUrl();
+  const currency = params.currency ?? 'USD';
+  const intervalCount = params.intervalCount ?? 1;
+
+  const body = {
+    product_id: params.productId,
+    name: params.name,
+    description: params.description ?? `${params.name} subscription`,
+    status: 'ACTIVE',
+    billing_cycles: [
+      {
+        frequency: {
+          interval_unit: params.intervalUnit,
+          interval_count: intervalCount,
+        },
+        tenure_type: 'REGULAR',
+        sequence: 1,
+        total_cycles: 0, // infinite
+        pricing_scheme: {
+          fixed_price: {
+            value: params.price.toFixed(2),
+            currency_code: currency,
+          },
+        },
+      },
+    ],
+    payment_preferences: {
+      auto_bill_outstanding: true,
+      payment_failure_threshold: 3,
+    },
+  };
+
+  const res = await fetch(`${baseUrl}/v1/billing/plans`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    logger.error('PayPal createPlan failed', { status: res.status, body: text, params });
+    throw new Error(`PayPal createPlan failed: ${res.status} ${text}`);
+  }
+
+  const data = (await res.json()) as { id: string; status: string };
+  logger.info('PayPal plan created', {
+    planId: data.id,
+    name: params.name,
+    price: params.price,
+    interval: params.intervalUnit,
+  });
+
+  return { planId: data.id, status: data.status };
+}
+
+/**
+ * Create all required PayPal plans for the given pricing config and
+ * persist the plan IDs to system_settings.
+ *
+ * Called by PricingConfigService.update() when admin changes prices.
+ * Existing subscribers stay on their old plan (PayPal handles this natively).
+ *
+ * Returns the map of new plan IDs.
+ */
+export async function createPlansForPricing(
+  tiers: {
+    pro: { monthly: number; annual: number };
+    enterprise: { monthly: number; annual: number };
+  },
+  updatedBy: string
+): Promise<DynamicPlanIds> {
+  // Ensure product exists
+  const productId = await createProduct();
+
+  const newPlanIds: DynamicPlanIds = {};
+
+  // Create plans for each tier / billing period combination
+  const combos: {
+    key: keyof DynamicPlanIds;
+    tier: string;
+    price: number;
+    interval: 'MONTH' | 'YEAR';
+  }[] = [];
+
+  if (tiers.pro.monthly > 0) {
+    combos.push({ key: 'pro_monthly', tier: 'Pro', price: tiers.pro.monthly, interval: 'MONTH' });
+  }
+  if (tiers.pro.annual > 0) {
+    combos.push({ key: 'pro_annual', tier: 'Pro', price: tiers.pro.annual, interval: 'YEAR' });
+  }
+  if (tiers.enterprise.monthly > 0) {
+    combos.push({ key: 'enterprise_monthly', tier: 'Enterprise', price: tiers.enterprise.monthly, interval: 'MONTH' });
+  }
+  if (tiers.enterprise.annual > 0) {
+    combos.push({ key: 'enterprise_annual', tier: 'Enterprise', price: tiers.enterprise.annual, interval: 'YEAR' });
+  }
+
+  for (const combo of combos) {
+    try {
+      const result = await createPlan({
+        productId,
+        name: `QueryAI ${combo.tier} — ${combo.interval === 'YEAR' ? 'Annual' : 'Monthly'}`,
+        price: combo.price,
+        intervalUnit: combo.interval,
+      });
+      newPlanIds[combo.key] = result.planId;
+    } catch (err) {
+      logger.error('createPlansForPricing: plan creation failed', {
+        combo: combo.key,
+        error: (err as Error).message,
+      });
+      // Continue with remaining combos — partial success is better than none
+    }
+  }
+
+  // Persist to system_settings (merge with any existing IDs)
+  if (Object.keys(newPlanIds).length > 0) {
+    const { SystemSettingsService } = await import('./system-settings.service');
+    const existing = (await SystemSettingsService.get<DynamicPlanIds>(PAYPAL_PLAN_IDS_KEY)) ?? {};
+    const merged: DynamicPlanIds = { ...existing, ...newPlanIds };
+    await SystemSettingsService.set(PAYPAL_PLAN_IDS_KEY, merged, updatedBy);
+    logger.info('Dynamic PayPal plan IDs saved', { merged });
+  }
+
+  return newPlanIds;
+}
+
+/**
+ * Get dynamic plan IDs from system_settings.
+ */
+export async function getDynamicPlanIds(): Promise<DynamicPlanIds> {
+  const { SystemSettingsService } = await import('./system-settings.service');
+  return (await SystemSettingsService.get<DynamicPlanIds>(PAYPAL_PLAN_IDS_KEY)) ?? {};
+}
+
 // --- Subscriptions ---
 
 function getPlanIdForTier(
-  tier: 'starter' | 'premium' | 'pro' | 'enterprise',
+  tier: 'pro' | 'enterprise',
   billingPeriod: 'monthly' | 'annual' = 'monthly'
 ): string | undefined {
+  // 1. Check dynamic plan IDs from system_settings cache (sync)
+  //    These are set when admin changes pricing via 9.6.6 createPlansForPricing()
+  const dynamicKey = `${tier}_${billingPeriod}` as keyof DynamicPlanIds;
+  const dynamicId = cachedDynamicPlanIds[dynamicKey]?.trim();
+  if (dynamicId) return dynamicId;
+
+  // 2. Fall back to env-var plan IDs
   if (billingPeriod === 'annual') {
     const annualMap = {
-      starter: config.PAYPAL_PLAN_ID_STARTER_ANNUAL,
-      premium: config.PAYPAL_PLAN_ID_PREMIUM_ANNUAL,
       pro: config.PAYPAL_PLAN_ID_PRO_ANNUAL,
       enterprise: config.PAYPAL_PLAN_ID_ENTERPRISE_ANNUAL,
     };
@@ -542,16 +768,30 @@ function getPlanIdForTier(
     // Fall back to monthly plan if no annual plan configured
   }
   const monthlyMap = {
-    starter: config.PAYPAL_PLAN_ID_STARTER,
-    premium: config.PAYPAL_PLAN_ID_PREMIUM,
     pro: config.PAYPAL_PLAN_ID_PRO,
     enterprise: config.PAYPAL_PLAN_ID_ENTERPRISE,
   };
   return monthlyMap[tier]?.trim() || undefined;
 }
 
+/**
+ * Warm the in-memory dynamic plan ID cache.
+ * Called at startup and after createPlansForPricing().
+ */
+let cachedDynamicPlanIds: DynamicPlanIds = {};
+
+export async function refreshDynamicPlanIdCache(): Promise<void> {
+  try {
+    cachedDynamicPlanIds = await getDynamicPlanIds();
+  } catch (err) {
+    logger.warn('refreshDynamicPlanIdCache: failed, using empty cache', {
+      error: (err as Error).message,
+    });
+  }
+}
+
 export interface CreateSubscriptionParams {
-  tier: 'starter' | 'premium' | 'pro' | 'enterprise';
+  tier: 'pro' | 'enterprise';
   returnUrl: string;
   cancelUrl: string;
   customId?: string;
@@ -711,6 +951,37 @@ export async function cancelSubscription(
 }
 
 /**
+ * Suspend (pause) a subscription in PayPal.
+ * The subscription remains in SUSPENDED state until activated again.
+ */
+export async function suspendSubscription(
+  subscriptionId: string,
+  reason: string = 'User requested pause'
+): Promise<void> {
+  await subscriptions().suspendSubscription({
+    id: subscriptionId,
+    body: { reason },
+  });
+
+  logger.info('PayPal subscription suspended', { subscriptionId, reason });
+}
+
+/**
+ * Activate (resume) a previously suspended subscription in PayPal.
+ */
+export async function activateSubscription(
+  subscriptionId: string,
+  reason?: string
+): Promise<void> {
+  await subscriptions().activateSubscription({
+    id: subscriptionId,
+    body: reason ? { reason } : undefined,
+  });
+
+  logger.info('PayPal subscription activated', { subscriptionId, reason });
+}
+
+/**
  * Update subscription (e.g. custom_id). Plan changes typically use revise API.
  */
 export async function updateSubscription(
@@ -804,45 +1075,14 @@ export async function verifyWebhookSignature(
 export type WebhookEventType =
   | 'PAYMENT.SALE.COMPLETED'
   | 'BILLING.SUBSCRIPTION.CREATED'
+  | 'BILLING.SUBSCRIPTION.ACTIVATED'
   | 'BILLING.SUBSCRIPTION.UPDATED'
   | 'BILLING.SUBSCRIPTION.CANCELLED'
+  | 'BILLING.SUBSCRIPTION.SUSPENDED'
+  | 'BILLING.SUBSCRIPTION.EXPIRED'
   | 'BILLING.SUBSCRIPTION.PAYMENT.FAILED'
-  | 'PAYMENT.CAPTURE.REFUNDED';
-
-export interface ProcessWebhookResult {
-  handled: boolean;
-  error?: string;
-}
-
-/**
- * Process webhook event. Parses event type and payload; does not update DB.
- * Route layer should verify signature first, then call this and persist state.
- */
-export function processWebhook(
-  eventType: string,
-  payload: Record<string, unknown>
-): ProcessWebhookResult {
-  const type = eventType as WebhookEventType;
-  logger.info('PayPal webhook received', { event_type: type, id: payload.id });
-
-  switch (type) {
-    case 'PAYMENT.SALE.COMPLETED':
-      return { handled: true };
-    case 'BILLING.SUBSCRIPTION.CREATED':
-      return { handled: true };
-    case 'BILLING.SUBSCRIPTION.UPDATED':
-      return { handled: true };
-    case 'BILLING.SUBSCRIPTION.CANCELLED':
-      return { handled: true };
-    case 'BILLING.SUBSCRIPTION.PAYMENT.FAILED':
-      return { handled: true };
-    case 'PAYMENT.CAPTURE.REFUNDED':
-      return { handled: true };
-    default:
-      logger.warn('PayPal webhook unhandled event type', { event_type: type });
-      return { handled: false };
-  }
-}
+  | 'PAYMENT.CAPTURE.REFUNDED'
+  | 'PAYMENT.CAPTURE.COMPLETED';
 
 /**
  * PayPalService class – static API matching spec.
@@ -855,7 +1095,14 @@ export class PayPalService {
   static createSubscription = createSubscription;
   static getSubscription = getSubscription;
   static cancelSubscription = cancelSubscription;
+  static suspendSubscription = suspendSubscription;
+  static activateSubscription = activateSubscription;
   static updateSubscription = updateSubscription;
   static verifyWebhookSignature = verifyWebhookSignature;
-  static processWebhook = processWebhook;
+  // 9.6.6 Dynamic plan management
+  static createProduct = createProduct;
+  static createPlan = createPlan;
+  static createPlansForPricing = createPlansForPricing;
+  static getDynamicPlanIds = getDynamicPlanIds;
+  static refreshDynamicPlanIdCache = refreshDynamicPlanIdCache;
 }

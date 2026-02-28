@@ -2,99 +2,31 @@ import { DatabaseService } from './database.service';
 import * as PayPalService from './paypal.service';
 import { Database } from '../types/database';
 import logger from '../config/logger';
+import { TierConfigService } from './tier-config.service';
+import type { SingleTierLimits, TierName } from './tier-config.service';
 
 /**
- * Subscription tier limits configuration
- * Based on PROJECT_SPECIFICATION.md pricing tiers
+ * Re-export the TierLimits type from TierConfigService for backward
+ * compatibility — existing consumers import it from here.
  */
-export interface TierLimits {
-  queriesPerMonth: number | null;
-  documentUploads: number | null;
-  maxTopics: number | null;
-  tavilySearchesPerMonth: number | null;
-  features: {
-    documentUpload: boolean;
-    embedding: boolean;
-    analytics: boolean;
-    apiAccess: boolean;
-    whiteLabel: boolean;
-    teamCollaboration?: boolean;
-  };
-  maxTeamMembers?: number | null;
+export type TierLimits = SingleTierLimits;
+
+/**
+ * Backward-compatible TIER_LIMITS constant.
+ *
+ * Returns a snapshot from the TierConfigService cache (DB-driven).
+ * Callers that need always-fresh values should use
+ * `TierConfigService.getCachedTier(tier)` directly.
+ */
+export function getTierLimits(): Record<TierName, TierLimits> {
+  return TierConfigService.getCached();
 }
 
-/**
- * Subscription tier limits map
- */
-export const TIER_LIMITS: Record<'free' | 'starter' | 'premium' | 'pro' | 'enterprise', TierLimits> = {
-  free: {
-    queriesPerMonth: 50,
-    documentUploads: 0, // No document upload
-    maxTopics: 0, // No topics
-    tavilySearchesPerMonth: 5, // 5 searches per month for free tier
-    features: {
-      documentUpload: false,
-      embedding: false,
-      analytics: false,
-      apiAccess: false,
-      whiteLabel: false,
-    },
-  },
-  starter: {
-    queriesPerMonth: 100,
-    documentUploads: 3, // 3 documents for starter tier
-    maxTopics: 1,
-    tavilySearchesPerMonth: 10, // 10 searches per month for starter tier
-    features: {
-      documentUpload: true, // Enabled for starter tier
-      embedding: false,
-      analytics: false,
-      apiAccess: false,
-      whiteLabel: false,
-    },
-  },
-  premium: {
-    queriesPerMonth: 500,
-    documentUploads: 10,
-    maxTopics: 3,
-    tavilySearchesPerMonth: 50, // 50 searches per month for premium tier
-    features: {
-      documentUpload: true,
-      embedding: true,
-      analytics: true,
-      apiAccess: false,
-      whiteLabel: false,
-    },
-  },
-  pro: {
-    queriesPerMonth: null,
-    documentUploads: null,
-    maxTopics: null,
-    tavilySearchesPerMonth: 200,
-    features: {
-      documentUpload: true,
-      embedding: true,
-      analytics: true,
-      apiAccess: true,
-      whiteLabel: true,
-    },
-  },
-  enterprise: {
-    queriesPerMonth: null,
-    documentUploads: null,
-    maxTopics: null,
-    tavilySearchesPerMonth: null,
-    features: {
-      documentUpload: true,
-      embedding: true,
-      analytics: true,
-      apiAccess: true,
-      whiteLabel: true,
-      teamCollaboration: true,
-    },
-    maxTeamMembers: 50,
-  },
-};
+/** @deprecated Use TierConfigService.getCachedTier(tier) or getTierLimits() */
+export const TIER_LIMITS: Record<TierName, TierLimits> = new Proxy(
+  {} as Record<TierName, TierLimits>,
+  { get: (_target, prop: string) => TierConfigService.getCachedTier(prop as TierName) },
+);
 
 /**
  * Subscription Service
@@ -213,27 +145,6 @@ export class SubscriptionService {
   }
 
   /**
-   * Check if user has access to a feature
-   */
-  static async hasFeatureAccess(
-    userId: string,
-    feature: keyof TierLimits['features']
-  ): Promise<boolean> {
-    try {
-      const subscriptionData = await this.getUserSubscriptionWithLimits(userId);
-      
-      if (!subscriptionData) {
-        return false;
-      }
-
-      return subscriptionData.limits.features[feature] ?? false;
-    } catch (error) {
-      logger.error('Failed to check feature access:', error);
-      return false;
-    }
-  }
-
-  /**
    * Check if user has reached query limit
    */
   static async checkQueryLimit(userId: string): Promise<{
@@ -302,9 +213,9 @@ export class SubscriptionService {
   }
 
   /**
-   * Check if user has reached document upload limit
+   * Check if user has reached the collections limit
    */
-  static async checkDocumentUploadLimit(userId: string): Promise<{
+  static async checkCollectionLimit(userId: string): Promise<{
     allowed: boolean;
     used: number;
     limit: number | null;
@@ -312,118 +223,45 @@ export class SubscriptionService {
   }> {
     try {
       const subscriptionData = await this.getUserSubscriptionWithLimits(userId);
-      
+
       if (!subscriptionData) {
-        return {
-          allowed: false,
-          used: 0,
-          limit: 0,
-          remaining: 0,
-        };
+        // Fail-open: allow creation when subscription lookup fails
+        logger.warn('Subscription lookup returned null during collection limit check, allowing by default', { userId });
+        return { allowed: true, used: 0, limit: null, remaining: null };
       }
 
       const { limits } = subscriptionData;
-      
-      // Pro tier has unlimited document uploads
-      if (limits.documentUploads === null) {
-        return {
-          allowed: true,
-          used: 0,
-          limit: null,
-          remaining: null,
-        };
+
+      // Unlimited collections
+      if (limits.maxCollections === null) {
+        return { allowed: true, used: 0, limit: null, remaining: null };
       }
 
-      // Calculate current period (monthly)
-      const now = new Date();
-      const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      periodStart.setHours(0, 0, 0, 0);
-      const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      periodEnd.setHours(23, 59, 59, 999);
+      const { supabaseAdmin } = await import('../config/database');
+      const { count, error } = await supabaseAdmin
+        .from('collections')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId);
 
-      // Get usage count for current month
-      const used = await DatabaseService.getUserUsageCount(
-        userId,
-        'document_upload',
-        periodStart,
-        periodEnd
-      );
+      if (error) {
+        // Fail-open: allow creation if we can't count existing collections
+        logger.error('Error counting user collections, allowing by default:', error);
+        return { allowed: true, used: 0, limit: limits.maxCollections, remaining: limits.maxCollections };
+      }
 
-      const remaining = limits.documentUploads - used;
-      const allowed = used < limits.documentUploads;
+      const used = count ?? 0;
+      const remaining = Math.max(0, limits.maxCollections - used);
 
       return {
-        allowed,
+        allowed: used < limits.maxCollections,
         used,
-        limit: limits.documentUploads,
-        remaining: Math.max(0, remaining),
+        limit: limits.maxCollections,
+        remaining,
       };
     } catch (error) {
-      logger.error('Failed to check document upload limit:', error);
-      return {
-        allowed: false,
-        used: 0,
-        limit: 0,
-        remaining: 0,
-      };
-    }
-  }
-
-  /**
-   * Check if user has reached topic limit
-   */
-  static async checkTopicLimit(userId: string): Promise<{
-    allowed: boolean;
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-  }> {
-    try {
-      const subscriptionData = await this.getUserSubscriptionWithLimits(userId);
-      
-      if (!subscriptionData) {
-        return {
-          allowed: false,
-          used: 0,
-          limit: 0,
-          remaining: 0,
-        };
-      }
-
-      const { limits } = subscriptionData;
-      
-      // Pro tier has unlimited topics
-      if (limits.maxTopics === null) {
-        return {
-          allowed: true,
-          used: 0,
-          limit: null,
-          remaining: null,
-        };
-      }
-
-      // Get current topic count
-      const { TopicService } = await import('./topic.service');
-      const topics = await TopicService.getUserTopics(userId);
-      const used = topics.length;
-
-      const remaining = limits.maxTopics - used;
-      const allowed = used < limits.maxTopics;
-
-      return {
-        allowed,
-        used,
-        limit: limits.maxTopics,
-        remaining: Math.max(0, remaining),
-      };
-    } catch (error) {
-      logger.error('Failed to check topic limit:', error);
-      return {
-        allowed: false,
-        used: 0,
-        limit: 0,
-        remaining: 0,
-      };
+      // Fail-open: don't block collection creation on transient errors
+      logger.error('Failed to check collection limit, allowing by default:', error);
+      return { allowed: true, used: 0, limit: null, remaining: null };
     }
   }
 
@@ -565,12 +403,19 @@ export class SubscriptionService {
   /**
    * Update subscription tier with optional prorating
    * @param billingPeriod - Optional billing period from payment (for one-time payments where subscription may lack it)
+   * @param priceLock - Optional locked prices + promo data from payment callback_data (9.6.2 / 9.6.3)
    */
   static async updateSubscriptionTier(
     userId: string,
     tier: Database.SubscriptionTier,
     shouldProrate: boolean = false,
-    billingPeriod?: 'monthly' | 'annual'
+    billingPeriod?: 'monthly' | 'annual',
+    priceLock?: {
+      locked_price_monthly?: number;
+      locked_price_annual?: number;
+      promo_code_id?: string;
+      promo_discount_percent?: number;
+    },
   ): Promise<Database.Subscription | null> {
     try {
       const subscription = await DatabaseService.getUserSubscription(userId);
@@ -601,14 +446,30 @@ export class SubscriptionService {
         periodEnd.setDate(periodEnd.getDate() + days);
       }
 
-      const updated = await DatabaseService.updateSubscription(userId, {
+      const updateData: Record<string, unknown> = {
         tier,
         status: 'active',
         current_period_start: periodStart.toISOString(),
         current_period_end: periodEnd.toISOString(),
         cancel_at_period_end: false,
         pending_tier: undefined, // Clear any pending tier
-      });
+      };
+
+      // Write locked prices if provided (9.6.2)
+      if (priceLock?.locked_price_monthly !== undefined) {
+        updateData.locked_price_monthly = priceLock.locked_price_monthly;
+      }
+      if (priceLock?.locked_price_annual !== undefined) {
+        updateData.locked_price_annual = priceLock.locked_price_annual;
+      }
+
+      // Write promo code info if provided (9.6.3)
+      if (priceLock?.promo_code_id) {
+        updateData.promo_code_id = priceLock.promo_code_id;
+        updateData.promo_discount_percent = priceLock.promo_discount_percent ?? null;
+      }
+
+      const updated = await DatabaseService.updateSubscription(userId, updateData);
 
       // Log subscription history
       if (updated && oldTier !== tier) {
@@ -688,7 +549,7 @@ export class SubscriptionService {
    * User must complete approval via approvalUrl; then sync in payment callback.
    */
   static async createPayPalSubscription(
-    tier: 'starter' | 'premium' | 'pro',
+    tier: 'pro',
     returnUrl: string,
     cancelUrl: string,
     customId?: string,
@@ -772,7 +633,7 @@ export class SubscriptionService {
         paypal_payment_id: saleId,
         tier: subscription.tier,
         amount: amount ? parseFloat(amount) : 0,
-        currency: currency as 'UGX' | 'USD',
+        currency: 'USD',
         status: 'completed',
         payment_description: `QueryAI ${subscription.tier} subscription renewal (${billingPeriod})`,
         callback_data: saleResource,
@@ -791,12 +652,18 @@ export class SubscriptionService {
       try {
         const { EmailService } = await import('./email.service');
         const { getPricing } = await import('../constants/pricing');
+        type Tier = import('../constants/pricing').Tier;
         const user = await DatabaseService.getUserProfile(subscription.user_id);
         if (user) {
-          const amt = amount ? parseFloat(amount) : getPricing(
-            subscription.tier as 'starter' | 'premium' | 'pro',
-            currency as 'UGX' | 'USD',
-            billingPeriod as 'monthly' | 'annual'
+          // Use locked price if available (9.6.2), fall back to catalog price
+          const lockedPrice = billingPeriod === 'annual'
+            ? (subscription as Database.Subscription).locked_price_annual
+            : (subscription as Database.Subscription).locked_price_monthly;
+          const amt = amount ? parseFloat(amount) : (
+            lockedPrice ?? getPricing(
+              subscription.tier as Tier,
+              billingPeriod as 'monthly' | 'annual'
+            )
           );
           await EmailService.sendRenewalConfirmationEmail(
             user.email,
@@ -805,7 +672,7 @@ export class SubscriptionService {
             now,
             periodEnd,
             amt,
-            currency as 'UGX' | 'USD'
+            'USD'
           );
         }
       } catch (emailError) {
@@ -931,7 +798,7 @@ export class SubscriptionService {
    */
   static async downgradeSubscription(
     userId: string,
-    targetTier: 'free' | 'starter' | 'premium' | 'pro',
+    targetTier: 'free' | 'pro',
     immediate: boolean = false
   ): Promise<Database.Subscription | null> {
     try {
@@ -1013,17 +880,14 @@ export class SubscriptionService {
           const user = await DatabaseService.getUserProfile(sub.user_id);
           if (!user) continue;
 
-          let currency: 'UGX' | 'USD' = 'UGX';
-          const payments = await DatabaseService.getUserPayments(sub.user_id, 20);
-          const lastForTier = payments.find(
-            (p) => p.tier === sub.tier && p.status === 'completed' && (p.currency === 'UGX' || p.currency === 'USD')
-          );
-          if (lastForTier?.currency === 'USD' || lastForTier?.currency === 'UGX') {
-            currency = lastForTier.currency;
-          }
-
+          const currency = 'USD' as const;
           const bp = (sub as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
-          const amount = getPricing(sub.tier as 'starter' | 'premium' | 'pro', currency, bp as 'monthly' | 'annual');
+          type Tier = import('../constants/pricing').Tier;
+          const amount = getPricing(sub.tier as Tier, bp as 'monthly' | 'annual');
+          const payments = await DatabaseService.getUserPayments(sub.user_id, 5);
+          const lastForTier = payments.find(
+            (p) => p.tier === sub.tier && p.status === 'completed'
+          );
           const paymentMethod = lastForTier?.payment_method?.trim() || undefined;
           await EmailService.sendRenewalReminderEmail(
             user.email,
@@ -1139,20 +1003,14 @@ export class SubscriptionService {
               const { EmailService } = await import('./email.service');
               const user = await DatabaseService.getUserProfile(subscription.user_id);
               if (user) {
-                let currency: 'UGX' | 'USD' = 'UGX';
-                const payments = await DatabaseService.getUserPayments(subscription.user_id, 20);
-                const lastForTier = payments.find(
-                  (p: Database.Payment) =>
-                    p.tier === subscription.tier &&
-                    p.status === 'completed' &&
-                    (p.currency === 'UGX' || p.currency === 'USD')
-                );
-                if (lastForTier?.currency === 'USD' || lastForTier?.currency === 'UGX') {
-                  currency = lastForTier.currency as 'UGX' | 'USD';
-                }
-                const amount = getPricing(
-                  subscription.tier as 'starter' | 'premium' | 'pro',
-                  currency,
+                const currency = 'USD';
+                type Tier = import('../constants/pricing').Tier;
+                // Use locked price if available (9.6.2), fall back to catalog price
+                const lockedPrice = bp === 'annual'
+                  ? (subscription as Database.Subscription).locked_price_annual
+                  : (subscription as Database.Subscription).locked_price_monthly;
+                const amount = lockedPrice ?? getPricing(
+                  subscription.tier as Tier,
                   bp as 'monthly' | 'annual'
                 );
                 await EmailService.sendRenewalConfirmationEmail(
@@ -1286,6 +1144,285 @@ export class SubscriptionService {
     } catch (error) {
       logger.error('Failed to reactivate subscription:', error);
       return null;
+    }
+  }
+
+  // ── 9.6.12 Subscription Pause / Resume ─────────────────────────
+
+  /** Maximum pause duration in days. */
+  private static MAX_PAUSE_DAYS = 30;
+  /** Default pause duration in days when none specified. */
+  private static DEFAULT_PAUSE_DAYS = 14;
+
+  /**
+   * Pause a subscription.
+   * Suspends at PayPal (if applicable) and sets status to 'suspended'.
+   * After `days` days (max 30), a cron will auto-downgrade to free.
+   */
+  static async pauseSubscription(
+    userId: string,
+    days?: number,
+    reason?: string
+  ): Promise<Database.Subscription | null> {
+    try {
+      const subscription = await DatabaseService.getUserSubscription(userId);
+      if (!subscription) {
+        throw new Error('Subscription not found');
+      }
+      if (subscription.tier === 'free') {
+        throw new Error('Cannot pause a free subscription');
+      }
+      if (subscription.status === 'suspended') {
+        throw new Error('Subscription is already paused');
+      }
+      if (subscription.status !== 'active') {
+        throw new Error('Only active subscriptions can be paused');
+      }
+
+      const pauseDays = Math.min(
+        Math.max(days ?? SubscriptionService.DEFAULT_PAUSE_DAYS, 1),
+        SubscriptionService.MAX_PAUSE_DAYS
+      );
+
+      // Suspend at PayPal if applicable
+      if (subscription.paypal_subscription_id) {
+        try {
+          await PayPalService.suspendSubscription(
+            subscription.paypal_subscription_id,
+            reason || 'User requested pause'
+          );
+          logger.info('PayPal subscription suspended', {
+            userId,
+            paypalSubscriptionId: subscription.paypal_subscription_id,
+          });
+        } catch (paypalError) {
+          logger.error('Failed to suspend PayPal subscription, updating DB only', {
+            userId,
+            paypalSubscriptionId: subscription.paypal_subscription_id,
+            error: paypalError,
+          });
+        }
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + pauseDays * 24 * 60 * 60 * 1000);
+
+      const updated = await DatabaseService.updateSubscription(userId, {
+        status: 'suspended',
+        paused_at: now.toISOString(),
+        pause_expires_at: expiresAt.toISOString(),
+        pause_reason: reason || null,
+      } as Partial<Database.Subscription>);
+
+      await DatabaseService.logSubscriptionHistory(
+        subscription.id,
+        userId,
+        'status_change',
+        { status: 'active', tier: subscription.tier },
+        { status: 'suspended', pause_expires_at: expiresAt.toISOString() },
+        reason || `User paused subscription for ${pauseDays} days`
+      );
+
+      logger.info('Subscription paused', {
+        userId,
+        pauseDays,
+        pauseExpiresAt: expiresAt.toISOString(),
+      });
+
+      return updated;
+    } catch (error) {
+      logger.error('Failed to pause subscription:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Resume a paused subscription.
+   * Reactivates at PayPal (if applicable) and sets status back to 'active'.
+   */
+  static async resumeSubscription(
+    userId: string
+  ): Promise<Database.Subscription | null> {
+    try {
+      const subscription = await DatabaseService.getUserSubscription(userId);
+      if (!subscription) {
+        throw new Error('Subscription not found');
+      }
+      if (subscription.status !== 'suspended') {
+        throw new Error('Subscription is not paused');
+      }
+
+      // Reactivate at PayPal if applicable
+      if (subscription.paypal_subscription_id) {
+        try {
+          await PayPalService.activateSubscription(
+            subscription.paypal_subscription_id,
+            'User resumed subscription'
+          );
+          logger.info('PayPal subscription reactivated', {
+            userId,
+            paypalSubscriptionId: subscription.paypal_subscription_id,
+          });
+        } catch (paypalError) {
+          logger.error('Failed to reactivate PayPal subscription, updating DB only', {
+            userId,
+            paypalSubscriptionId: subscription.paypal_subscription_id,
+            error: paypalError,
+          });
+        }
+      }
+
+      const updated = await DatabaseService.updateSubscription(userId, {
+        status: 'active',
+        paused_at: null,
+        pause_expires_at: null,
+        pause_reason: null,
+      } as Partial<Database.Subscription>);
+
+      await DatabaseService.logSubscriptionHistory(
+        subscription.id,
+        userId,
+        'status_change',
+        { status: 'suspended', tier: subscription.tier },
+        { status: 'active' },
+        'User resumed subscription'
+      );
+
+      logger.info('Subscription resumed', { userId });
+      return updated;
+    } catch (error) {
+      logger.error('Failed to resume subscription:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle PayPal BILLING.SUBSCRIPTION.SUSPENDED webhook.
+   * Sets local status to 'suspended' if not already.
+   */
+  static async handlePayPalSubscriptionSuspended(
+    paypalSubscriptionId: string,
+    reason?: string
+  ): Promise<void> {
+    try {
+      const subscription = await DatabaseService.getSubscriptionByPayPalSubscriptionId(
+        paypalSubscriptionId
+      );
+      if (!subscription) {
+        logger.warn('Subscription not found for PayPal suspended event', { paypalSubscriptionId });
+        return;
+      }
+      if (subscription.status === 'suspended') {
+        logger.info('Subscription already suspended, skipping', { paypalSubscriptionId });
+        return;
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + SubscriptionService.MAX_PAUSE_DAYS * 24 * 60 * 60 * 1000);
+
+      await DatabaseService.updateSubscription(subscription.user_id, {
+        status: 'suspended',
+        paused_at: now.toISOString(),
+        pause_expires_at: expiresAt.toISOString(),
+        pause_reason: reason || 'Suspended via PayPal',
+      } as Partial<Database.Subscription>);
+
+      await DatabaseService.logSubscriptionHistory(
+        subscription.id,
+        subscription.user_id,
+        'status_change',
+        { status: subscription.status, tier: subscription.tier },
+        { status: 'suspended' },
+        reason || `PayPal subscription suspended`
+      );
+
+      logger.info('PayPal subscription suspended processed', {
+        userId: subscription.user_id,
+        paypalSubscriptionId,
+      });
+    } catch (error) {
+      logger.error('Failed to handle PayPal subscription suspended', { paypalSubscriptionId, error });
+    }
+  }
+
+  /**
+   * Cron: Process expired pauses.
+   * Subscriptions that have been suspended past pause_expires_at get downgraded to free.
+   */
+  static async processExpiredPauses(): Promise<{ processed: number; downgraded: number }> {
+    const stats = { processed: 0, downgraded: 0 };
+    try {
+      const { supabaseAdmin } = await import('../config/database');
+      const now = new Date().toISOString();
+
+      const { data: expired, error } = await supabaseAdmin
+        .from('subscriptions')
+        .select('*')
+        .eq('status', 'suspended')
+        .not('pause_expires_at', 'is', null)
+        .lte('pause_expires_at', now);
+
+      if (error) {
+        logger.error('Failed to fetch expired pauses:', error);
+        return stats;
+      }
+      if (!expired || expired.length === 0) return stats;
+
+      stats.processed = expired.length;
+      for (const sub of expired) {
+        try {
+          // Cancel at PayPal if still connected
+          if (sub.paypal_subscription_id) {
+            try {
+              await PayPalService.cancelSubscription(
+                sub.paypal_subscription_id,
+                'Pause period expired — auto-downgrade'
+              );
+            } catch (ppErr) {
+              logger.warn('PayPal cancel during pause expiry failed', {
+                userId: sub.user_id,
+                error: ppErr,
+              });
+            }
+          }
+
+          await DatabaseService.updateSubscription(sub.user_id, {
+            tier: 'free',
+            status: 'active',
+            paused_at: null,
+            pause_expires_at: null,
+            pause_reason: null,
+            paypal_subscription_id: undefined,
+            cancel_at_period_end: false,
+          } as Partial<Database.Subscription>);
+
+          await DatabaseService.logSubscriptionHistory(
+            sub.id,
+            sub.user_id,
+            'status_change',
+            { status: 'suspended', tier: sub.tier },
+            { status: 'active', tier: 'free' },
+            'Pause period expired — auto-downgraded to free'
+          );
+
+          stats.downgraded++;
+          logger.info('Expired pause downgraded to free', {
+            userId: sub.user_id,
+            previousTier: sub.tier,
+          });
+        } catch (subErr) {
+          logger.error('Failed to process expired pause for user', {
+            userId: sub.user_id,
+            error: subErr,
+          });
+        }
+      }
+
+      logger.info('Expired pauses processed', stats);
+      return stats;
+    } catch (error) {
+      logger.error('processExpiredPauses failed:', error);
+      return stats;
     }
   }
 }

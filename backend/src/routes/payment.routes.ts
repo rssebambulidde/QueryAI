@@ -3,10 +3,14 @@ import * as PayPalService from '../services/paypal.service';
 import { DatabaseService } from '../services/database.service';
 import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/errorHandler';
+import { validateRequest } from '../middleware/validate';
 import { ValidationError } from '../types/error';
+import { PaymentInitiateSchema, PaymentRefundSchema } from '../schemas/payment.schema';
+import { webhookLimiter } from '../middleware/rateLimiter';
 import logger from '../config/logger';
 import config from '../config/env';
 import type { Database } from '../types/database';
+import type { Tier } from '../constants/pricing';
 
 const router = Router();
 
@@ -49,11 +53,33 @@ function mapPayPalOrderStatusToPaymentStatus(
 }
 
 /**
+ * Extract locked-price + promo data from payment callback_data.
+ * Returns undefined when no lock data is present (backward-compatible).
+ */
+function extractPriceLock(callbackData: unknown): {
+  locked_price_monthly?: number;
+  locked_price_annual?: number;
+  promo_code_id?: string;
+  promo_discount_percent?: number;
+} | undefined {
+  if (!callbackData || typeof callbackData !== 'object') return undefined;
+  const d = callbackData as Record<string, unknown>;
+  if (d.locked_price_monthly == null && d.locked_price_annual == null) return undefined;
+  return {
+    locked_price_monthly: typeof d.locked_price_monthly === 'number' ? d.locked_price_monthly : undefined,
+    locked_price_annual: typeof d.locked_price_annual === 'number' ? d.locked_price_annual : undefined,
+    promo_code_id: typeof d.promo_code_id === 'string' ? d.promo_code_id : undefined,
+    promo_discount_percent: typeof d.promo_discount_percent === 'number' ? d.promo_discount_percent : undefined,
+  };
+}
+
+/**
  * POST /api/payment/initiate
  * Initiate a PayPal payment for subscription upgrade (account or card via PayPal)
  */
 router.post(
   '/initiate',
+  validateRequest(PaymentInitiateSchema),
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     // Log incoming request for debugging
@@ -73,7 +99,7 @@ router.post(
       throw new ValidationError('User not authenticated');
     }
 
-    const { tier, firstName, lastName, email, recurring = false, billing_period: bp, return_url, prefer_card } = req.body;
+    const { tier, firstName, lastName, email, recurring, billing_period: bp, return_url, prefer_card, promo_code } = req.body;
     
     logger.info('Payment initiate: Parsed request body', {
       userId,
@@ -85,15 +111,8 @@ router.post(
       billing_period: bp,
       currency: req.body.currency,
       return_url: return_url ? 'provided' : 'missing',
+      promo_code: promo_code ? 'provided' : 'none',
     });
-
-    if (!tier || !['starter', 'premium', 'pro', 'enterprise'].includes(tier)) {
-      throw new ValidationError('Invalid tier. Must be "starter", "premium", "pro", or "enterprise"');
-    }
-
-    if (!firstName || !lastName || !email) {
-      throw new ValidationError('Missing required fields: firstName, lastName, email');
-    }
 
     const billingPeriod = (bp === 'annual' ? 'annual' : 'monthly') as 'monthly' | 'annual';
 
@@ -105,24 +124,88 @@ router.post(
       throw new ValidationError('User profile not found');
     }
 
-    const currency = (req.body.currency || 'USD') as string;
-    if (!['USD', 'UGX'].includes(currency.toUpperCase())) {
-      throw new ValidationError('Invalid currency. Must be "USD" or "UGX"');
-    }
-    
-    const normalizedCurrency = currency.toUpperCase() as 'UGX' | 'USD';
+    const normalizedCurrency = 'USD' as const;
 
-    const { getPricing } = await import('../constants/pricing');
-    const amount = getPricing(
-      tier as 'starter' | 'premium' | 'pro' | 'enterprise',
-      normalizedCurrency,
+    const { getPricing, getAllPricing } = await import('../constants/pricing');
+    const catalogAmount = getPricing(
+      tier as Tier,
       billingPeriod
     );
+
+    // Lock both prices at purchase time (9.6.2 — grace period)
+    const allPrices = getAllPricing(tier as Tier);
+    const lockedPriceMonthly = allPrices.monthly;
+    const lockedPriceAnnual = allPrices.annual;
+
+    // Apply promo code if provided (9.6.3)
+    let amount = catalogAmount;
+    let promoCodeId: string | null = null;
+    let promoDiscountPercent: number | null = null;
+    let promoDiscountAmount = 0;
+
+    if (promo_code) {
+      const { PromoCodeService } = await import('../services/promo-code.service');
+      const validation = await PromoCodeService.validate(
+        promo_code,
+        userId,
+        tier,
+        billingPeriod,
+        catalogAmount,
+      );
+
+      if (!validation.valid) {
+        throw new ValidationError(validation.reason);
+      }
+
+      amount = validation.discountedAmount;
+      promoCodeId = validation.promo.id;
+      promoDiscountPercent = validation.discountPercent;
+      promoDiscountAmount = catalogAmount - amount;
+
+      logger.info('Promo code applied', {
+        userId,
+        promoCode: promo_code,
+        promoCodeId,
+        discountPercent: promoDiscountPercent,
+        originalAmount: catalogAmount,
+        discountedAmount: amount,
+      });
+    }
     
     // Validate amount is greater than 0
     if (amount <= 0) {
       logger.error('Invalid payment amount', { tier, currency: normalizedCurrency, billingPeriod, amount });
       throw new ValidationError(`Invalid payment amount for tier "${tier}". Please contact support.`);
+    }
+
+    // Duplicate payment prevention — reject if user has a pending payment for the same tier
+    const recentPayments = await DatabaseService.getUserPayments(userId, 20);
+    const pendingForTier = recentPayments.filter(
+      (p) => p.status === 'pending' && p.tier === tier
+    );
+
+    // Auto-cancel stale pending payments (>30 minutes old)
+    const STALE_THRESHOLD_MS = 30 * 60 * 1000;
+    for (const p of pendingForTier) {
+      const age = Date.now() - new Date(p.created_at).getTime();
+      if (age > STALE_THRESHOLD_MS) {
+        await DatabaseService.updatePayment(p.id, { status: 'cancelled' });
+        logger.info('Auto-cancelled stale pending payment', { paymentId: p.id, ageMinutes: Math.round(age / 60000) });
+      }
+    }
+
+    // Re-check for remaining (recent) pending payments
+    const activePending = pendingForTier.filter(
+      (p) => Date.now() - new Date(p.created_at).getTime() <= STALE_THRESHOLD_MS
+    );
+    if (activePending.length > 0) {
+      const pendingId = activePending[0].id;
+      const err = new ValidationError(
+        'You already have a recent pending payment for this tier. Cancel it or wait for it to complete before starting a new one.'
+      );
+      // Attach payment ID so the frontend can offer to cancel it
+      (err as unknown as Record<string, unknown>).pendingPaymentId = pendingId;
+      throw err;
     }
     
     logger.info('Payment initiation request', {
@@ -131,11 +214,25 @@ router.post(
       currency: normalizedCurrency,
       billingPeriod,
       amount,
+      catalogAmount,
+      promoCodeId,
       recurring,
       firstName: firstName ? 'provided' : 'missing',
       lastName: lastName ? 'provided' : 'missing',
       email: email ? 'provided' : 'missing',
     });
+
+    // Build callback_data with locked prices + promo info for activation
+    const priceLockData = {
+      locked_price_monthly: lockedPriceMonthly,
+      locked_price_annual: lockedPriceAnnual,
+      ...(promoCodeId && {
+        promo_code_id: promoCodeId,
+        promo_discount_percent: promoDiscountPercent,
+        promo_discount_amount: promoDiscountAmount,
+        catalog_amount: catalogAmount,
+      }),
+    };
 
     const baseUrl = getBaseUrl();
     const returnUrl = `${baseUrl}/api/payment/callback`;
@@ -155,7 +252,7 @@ router.post(
       let subscriptionResponse;
       try {
         subscriptionResponse = await PayPalService.createSubscription({
-          tier: tier as 'starter' | 'premium' | 'pro' | 'enterprise',
+          tier: tier as 'pro' | 'enterprise',
           returnUrl,
           cancelUrl,
           customId: userId,
@@ -189,7 +286,8 @@ router.post(
         payment_description: `QueryAI ${tier} subscription (${billingPeriod}, recurring)`,
         callback_data: { 
           billing_period: billingPeriod,
-          return_url: return_url || undefined, // Store return URL for redirect after payment
+          return_url: return_url || undefined,
+          ...priceLockData,
         },
       });
 
@@ -280,8 +378,9 @@ router.post(
       status: 'pending',
       payment_description: `QueryAI ${tier} subscription (${billingPeriod})`,
       callback_data: {
-        return_url: return_url || undefined, // Store return URL for redirect after payment
-        billing_period: billingPeriod, // Store billing period for one-time payments (needed for subscription period_end calculation)
+        return_url: return_url || undefined,
+        billing_period: billingPeriod,
+        ...priceLockData,
       },
     });
 
@@ -395,7 +494,7 @@ router.get(
       try {
         const subDetails = await PayPalService.getSubscription(subscriptionLookupId);
         const status = (subDetails.status || '').toUpperCase();
-        if (['ACTIVE', 'APPROVAL_PENDING', 'APPROVED'].includes(status)) {
+        if (status === 'ACTIVE') {
           paymentStatus = 'completed';
           const periodStart = subDetails.start_time
             ? new Date(subDetails.start_time)
@@ -406,10 +505,10 @@ router.get(
 
           const storedBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
           const billingPeriod = storedBillingPeriod === 'annual' ? 'annual' : 'monthly';
-          const currency = (payment.currency || 'USD') as 'UGX' | 'USD';
+          const currency = 'USD';
           const { getAnnualDiscountPercent } = await import('../constants/pricing');
           const annualDiscount = billingPeriod === 'annual'
-            ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro', currency)
+            ? getAnnualDiscountPercent(payment.tier as Tier)
             : 0;
 
           await DatabaseService.updatePayment(payment.id, {
@@ -433,7 +532,7 @@ router.get(
           });
 
           const { SubscriptionService } = await import('../services/subscription.service');
-          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, billingPeriod);
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, billingPeriod, extractPriceLock(payment.callback_data));
           tierAlreadyUpdated = true; // Mark as already updated to avoid duplicate call
 
           logger.info('PayPal subscription activated', {
@@ -580,7 +679,17 @@ router.get(
       if (!tierAlreadyUpdated) {
         // Extract billing_period from payment callback_data if available (for one-time payments)
         const paymentBillingPeriod = (updatedPayment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
-        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod);
+        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod, extractPriceLock(updatedPayment.callback_data));
+      }
+
+      // Record promo code usage if a promo was applied (9.6.3)
+      if (!isAlreadyCompleted) {
+        const promoId = (updatedPayment.callback_data as Record<string, unknown> | null)?.promo_code_id as string | undefined;
+        const promoDiscount = (updatedPayment.callback_data as Record<string, unknown> | null)?.promo_discount_amount as number | undefined;
+        if (promoId) {
+          const { PromoCodeService } = await import('../services/promo-code.service');
+          PromoCodeService.recordUsage(promoId, payment.user_id, payment.id, promoDiscount ?? 0);
+        }
       }
       
       const subscriptionAfter = await DatabaseService.getUserSubscription(payment.user_id);
@@ -611,8 +720,8 @@ router.get(
                 newTier
               );
             } else if (
-              getTierOrder(newTier as 'free' | 'starter' | 'premium' | 'pro') >
-              getTierOrder(oldTier as 'free' | 'starter' | 'premium' | 'pro')
+              getTierOrder(newTier as Tier) >
+              getTierOrder(oldTier as Tier)
             ) {
               const periodStart = subscriptionAfter?.current_period_start
                 ? new Date(subscriptionAfter.current_period_start)
@@ -771,7 +880,7 @@ router.post(
       try {
         const subDetails = await PayPalService.getSubscription(subId);
         const status = (subDetails.status || '').toUpperCase();
-        if (!['ACTIVE', 'APPROVAL_PENDING', 'APPROVED'].includes(status)) continue;
+        if (status !== 'ACTIVE') continue;
 
         // Update payment to completed
         await DatabaseService.updatePayment(payment.id, {
@@ -792,10 +901,10 @@ router.post(
           : new Date(periodStart.getTime() + 30 * 24 * 60 * 60 * 1000);
         const storedBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
         const billingPeriod = storedBillingPeriod === 'annual' ? 'annual' : 'monthly';
-        const currency = (payment.currency || 'USD') as 'UGX' | 'USD';
+        const currency = 'USD';
         const { getAnnualDiscountPercent } = await import('../constants/pricing');
         const annualDiscount = billingPeriod === 'annual'
-          ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro', currency)
+          ? getAnnualDiscountPercent(payment.tier as Tier)
           : 0;
 
         await DatabaseService.updateSubscription(payment.user_id, {
@@ -810,7 +919,7 @@ router.post(
         });
 
         const { SubscriptionService } = await import('../services/subscription.service');
-        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+        await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, undefined, undefined, extractPriceLock(payment.callback_data));
 
         logger.info('Subscription synced via sync-subscription endpoint', {
           paymentId: payment.id,
@@ -835,6 +944,39 @@ router.post(
 );
 
 /**
+ * POST /api/payment/:paymentId/cancel
+ * Let the user cancel their own pending payment so they can start a new one.
+ */
+router.post(
+  '/:paymentId/cancel',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    const paymentId = req.params.paymentId as string;
+
+    const payment = await DatabaseService.getPaymentById(paymentId);
+    if (!payment) {
+      throw new ValidationError('Payment not found.');
+    }
+    if (payment.user_id !== userId) {
+      throw new ValidationError('Payment not found.');
+    }
+    if (payment.status !== 'pending') {
+      throw new ValidationError(`Cannot cancel a payment with status "${payment.status}".`);
+    }
+
+    await DatabaseService.updatePayment(paymentId, { status: 'cancelled' });
+
+    logger.info('User cancelled pending payment', { userId, paymentId });
+
+    return res.status(200).json({
+      success: true,
+      data: { message: 'Pending payment cancelled.' },
+    });
+  })
+);
+
+/**
  * GET /api/payment/webhook - reject GET
  */
 router.get(
@@ -853,6 +995,7 @@ router.get(
  */
 router.post(
   '/webhook',
+  webhookLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const webhookEvent = req.body as Record<string, unknown>;
     const eventType = webhookEvent.event_type as string | undefined;
@@ -1002,7 +1145,7 @@ router.post(
           const { SubscriptionService } = await import('../services/subscription.service');
           // Extract billing_period from payment callback_data if available (for one-time payments)
           const paymentBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
-          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod);
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod, extractPriceLock(payment.callback_data));
           logger.info('Payment completed via webhook', { paymentId: payment.id, captureId });
         } else if (!payment) {
           logger.warn('PayPal webhook: Payment not found for capture', {
@@ -1046,10 +1189,10 @@ router.post(
 
               const storedBillingPeriod = (payment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined;
               const billingPeriod = storedBillingPeriod === 'annual' ? 'annual' : 'monthly';
-              const currency = (payment.currency || 'USD') as 'UGX' | 'USD';
+              const currency = 'USD';
               const { getAnnualDiscountPercent } = await import('../constants/pricing');
               const annualDiscount = billingPeriod === 'annual'
-                ? getAnnualDiscountPercent(payment.tier as 'starter' | 'premium' | 'pro', currency)
+                ? getAnnualDiscountPercent(payment.tier as 'pro')
                 : 0;
 
               await DatabaseService.updateSubscription(payment.user_id, {
@@ -1064,7 +1207,7 @@ router.post(
               });
 
               const { SubscriptionService } = await import('../services/subscription.service');
-              await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier);
+              await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, undefined, undefined, extractPriceLock(payment.callback_data));
 
               logger.info('PayPal subscription activated via webhook', {
                 paymentId: payment.id,
@@ -1147,15 +1290,14 @@ router.post(
                                 'Payment method declined or insufficient funds';
           const resourceAmount = (resource as { amount?: { value?: string; currency_code?: string } }).amount;
           let amountValue = resourceAmount?.value ? parseFloat(resourceAmount.value) : undefined;
-          const currency = (resourceAmount?.currency_code || 'USD') as 'UGX' | 'USD';
+          const currency = 'USD';
 
           // If amount not in resource, calculate from subscription tier and billing period
           if (!amountValue) {
             const billingPeriod = (subscription as Database.Subscription & { billing_period?: string }).billing_period ?? 'monthly';
             const { getPricing } = await import('../constants/pricing');
             amountValue = getPricing(
-              subscription.tier as 'starter' | 'premium' | 'pro' | 'enterprise',
-              currency,
+              subscription.tier as 'pro' | 'enterprise',
               billingPeriod as 'monthly' | 'annual'
             );
           }
@@ -1262,7 +1404,7 @@ router.post(
     }
 
     if (
-      (eventType === 'BILLING.SUBSCRIPTION.CANCELLED' || eventType === 'BILLING.SUBSCRIPTION.SUSPENDED') &&
+      eventType === 'BILLING.SUBSCRIPTION.CANCELLED' &&
       resource
     ) {
       const subscriptionId = resource.id as string | undefined;
@@ -1272,7 +1414,26 @@ router.post(
           subscriptionId,
           `PayPal event: ${eventType}`
         );
-        logger.info('PayPal subscription cancel/suspend processed via webhook', {
+        logger.info('PayPal subscription cancel processed via webhook', {
+          paypalSubscriptionId: subscriptionId,
+          eventType,
+        });
+      }
+    }
+
+    // Handle subscription suspended event (9.6.12 — separate from cancel)
+    if (
+      eventType === 'BILLING.SUBSCRIPTION.SUSPENDED' &&
+      resource
+    ) {
+      const subscriptionId = resource.id as string | undefined;
+      if (subscriptionId) {
+        const { SubscriptionService } = await import('../services/subscription.service');
+        await SubscriptionService.handlePayPalSubscriptionSuspended(
+          subscriptionId,
+          `PayPal event: ${eventType}`
+        );
+        logger.info('PayPal subscription suspend processed via webhook', {
           paypalSubscriptionId: subscriptionId,
           eventType,
         });
@@ -1302,10 +1463,7 @@ router.post(
       }
     }
 
-    const result = PayPalService.processWebhook(eventType || '', resource || {});
-    if (!result.handled) {
-      logger.debug('PayPal webhook event not handled', { event_type: eventType });
-    }
+    logger.info('PayPal webhook processed', { event_type: eventType });
 
     return res.status(200).json({ success: true, message: 'Webhook received' });
   })
@@ -1355,7 +1513,7 @@ router.get(
           // Extract billing_period from payment callback_data if available (for one-time payments)
           const updatedPayment = await DatabaseService.getPaymentById(payment.id);
           const paymentBillingPeriod = updatedPayment ? (updatedPayment.callback_data as { billing_period?: string } | null)?.billing_period as 'monthly' | 'annual' | undefined : undefined;
-          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod);
+          await SubscriptionService.updateSubscriptionTier(payment.user_id, payment.tier, false, paymentBillingPeriod, extractPriceLock(updatedPayment?.callback_data));
         }
       }
 
@@ -1402,6 +1560,7 @@ router.get(
  */
 router.post(
   '/refund',
+  validateRequest(PaymentRefundSchema),
   authenticate,
   asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
@@ -1410,9 +1569,6 @@ router.post(
     }
 
     const { paymentId, amount, reason } = req.body;
-    if (!paymentId) {
-      throw new ValidationError('Payment ID is required');
-    }
 
     const payment = await DatabaseService.getPaymentById(paymentId);
     if (!payment) {
@@ -1426,6 +1582,27 @@ router.post(
     }
     if (!payment.paypal_payment_id) {
       throw new ValidationError('Payment capture ID not found (PayPal)');
+    }
+
+    // Refund cooldown: disallow refund if payment completed > 30 days ago
+    const completedAt = payment.completed_at ? new Date(payment.completed_at) : null;
+    if (completedAt) {
+      const daysSinceCompleted = (Date.now() - completedAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceCompleted > 30) {
+        throw new ValidationError(
+          'Refund window has expired. Payments can only be refunded within 30 days of completion.'
+        );
+      }
+    }
+
+    // Refund cooldown: disallow multiple refunds on the same payment within 24 hours
+    if (payment.refunded_at) {
+      const hoursSinceLastRefund = (Date.now() - new Date(payment.refunded_at).getTime()) / (1000 * 60 * 60);
+      if (hoursSinceLastRefund < 24) {
+        throw new ValidationError(
+          'A refund was already processed for this payment recently. Please wait 24 hours before requesting another partial refund.'
+        );
+      }
     }
 
     const refundAmount = amount ?? payment.amount;
@@ -1489,6 +1666,59 @@ router.post(
       data: {
         refund,
         refund_status: refundResult.status,
+      },
+    });
+  })
+);
+
+// ─── Promo Code Validation (public, auth-required) ──────────────────────────
+
+/**
+ * POST /api/payment/validate-promo
+ * Validate a promo code for a given tier + billing period.
+ * Returns discount info or error.
+ */
+router.post(
+  '/validate-promo',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) throw new ValidationError('User not authenticated');
+
+    const { promo_code, tier, billing_period } = req.body;
+    if (!promo_code || !tier) {
+      throw new ValidationError('promo_code and tier are required');
+    }
+
+    const billingPeriod = billing_period === 'annual' ? 'annual' : 'monthly';
+
+    const { getPricing } = await import('../constants/pricing');
+    const originalAmount = getPricing(tier as Tier, billingPeriod);
+
+    const { PromoCodeService } = await import('../services/promo-code.service');
+    const result = await PromoCodeService.validate(
+      promo_code,
+      userId,
+      tier,
+      billingPeriod,
+      originalAmount,
+    );
+
+    if (!result.valid) {
+      res.status(400).json({
+        success: false,
+        error: { message: result.reason },
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        discount_percent: result.discountPercent,
+        original_amount: result.originalAmount,
+        discounted_amount: result.discountedAmount,
+        savings: result.originalAmount - result.discountedAmount,
       },
     });
   })
