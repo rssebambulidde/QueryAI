@@ -35,7 +35,7 @@ function MarkdownCodeBlock({
     () => extractText(children).replace(/\n$/, ''),
     [children],
   );
-  const language = (className || '').replace('language-', '').trim() || 'code';
+  const language = (className || '').split(/\s+/).find(c => c.startsWith('language-'))?.replace('language-', '') || 'code';
   const lines = codeText.split('\n');
   const lineCount = lines.length;
   const showLineNumbers = lineCount > LINE_NUMBER_THRESHOLD;
@@ -83,7 +83,7 @@ function MarkdownCodeBlock({
       <div className={`relative ${isCollapsed ? 'max-h-[360px] overflow-hidden' : ''}`}>
         <div className="overflow-x-auto">
           <pre className="max-w-full m-0">
-            <code className={`block text-sm font-mono bg-gray-900 text-gray-100 whitespace-pre ${showLineNumbers ? 'pl-0' : 'p-4'} ${className || ''}`} {...codeProps}>
+            <code className={`block text-sm font-mono !bg-gray-900 text-gray-100 whitespace-pre ${showLineNumbers ? 'pl-0' : 'p-4'} ${className || ''}`} {...codeProps}>
               {showLineNumbers ? (
                 <table className="border-collapse w-full">
                   <tbody>

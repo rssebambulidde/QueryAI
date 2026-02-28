@@ -20,7 +20,6 @@ import { ResponseTimeIndicator } from '@/components/health/response-time-indicat
 import { ConfidenceBadge } from './research/confidence-badge';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { formatRelativeTime } from '@/lib/utils/relative-time';
-import { QuickAssistActions } from './express/quick-assist-actions';
 import type { ConversationMode } from '@/lib/chat/mode-config';
 import 'highlight.js/styles/github-dark.css';
 
@@ -743,15 +742,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
           />
         )}
 
-        {/* Express mode: always provide 4 quick continuation actions */}
-        {!isUser && isChatMode && onFollowUpClick && !message.isActionResponse && !isStreaming && !message.isStreaming && message.content.trim() && (
-          <QuickAssistActions
-            onActionClick={onFollowUpClick}
-            userQuestion={userQuestion}
-            assistantAnswer={message.content}
-            className="mt-2"
-          />
-        )}
 
       </div>
     </div>
