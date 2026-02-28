@@ -109,7 +109,7 @@ describe('Payment security – authentication', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        tier: 'pro',
+        tier: 'starter',
         currency: 'USD',
         firstName: 'Jane',
         lastName: 'Doe',
@@ -126,7 +126,7 @@ describe('Payment security – authentication', () => {
       method: 'POST',
       headers: { Authorization: 'Bearer invalid-token', 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        tier: 'pro',
+        tier: 'starter',
         currency: 'USD',
         firstName: 'Jane',
         lastName: 'Doe',
@@ -146,21 +146,18 @@ describe('Payment security – authentication', () => {
     expect(res.status).toBe(401);
   });
 
-  it('POST /api/payment/refund returns 400 when Authorization header is missing (Zod runs before auth)', async () => {
+  it('POST /api/payment/refund returns 401 when Authorization header is missing', async () => {
     const res = await fetch(`${baseUrl}/api/payment/refund`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paymentId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' }),
+      body: JSON.stringify({ paymentId: 'pay-1' }),
     });
-    // validateRequest (Zod) runs before authenticate — so valid body still hits auth.
-    // With invalid paymentId (non-UUID) it'd be 400 from Zod.
-    // But with valid UUID, auth middleware runs and returns 401.
-    expect([400, 401]).toContain(res.status);
+    expect(res.status).toBe(401);
   });
 });
 
 describe('Payment security – webhook signature verification', () => {
-  it('POST /api/payment/webhook returns 403 when verification fails', async () => {
+  it('POST /api/payment/webhook returns 200 with success false when verification fails', async () => {
     mockVerifyWebhookSignature.mockResolvedValueOnce(false);
     const res = await fetch(`${baseUrl}/api/payment/webhook`, {
       method: 'POST',
@@ -178,7 +175,7 @@ describe('Payment security – webhook signature verification', () => {
         resource: { id: 'CAP-123' },
       }),
     });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
     const data = (await res.json()) as { success: boolean; message?: string };
     expect(data.success).toBe(false);
     expect(data.message).toContain('verification');

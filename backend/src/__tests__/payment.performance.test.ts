@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach } from '@jest/globals';
 import * as PayPalService from '../services/paypal.service';
+import { processWebhook } from '../services/paypal.service';
 
 const mockCreateOrder = jest.fn();
 const mockCaptureOrder = jest.fn();
@@ -111,18 +112,11 @@ describe('Payment performance – processing speed', () => {
 });
 
 describe('Payment performance – webhook processing speed', () => {
-  it('webhook event type validation is fast (type check only)', () => {
+  it('processWebhook (sync) completes in negligible time', () => {
     const start = Date.now();
-    const validTypes = [
-      'PAYMENT.SALE.COMPLETED',
-      'BILLING.SUBSCRIPTION.CREATED',
-      'BILLING.SUBSCRIPTION.ACTIVATED',
-      'BILLING.SUBSCRIPTION.CANCELLED',
-    ];
-    for (const t of validTypes) {
-      expect(typeof t).toBe('string');
-    }
+    const result = processWebhook('PAYMENT.SALE.COMPLETED', { id: '1' });
     const elapsed = Date.now() - start;
+    expect(result.handled).toBe(true);
     expect(elapsed).toBeLessThan(50);
   });
 });
