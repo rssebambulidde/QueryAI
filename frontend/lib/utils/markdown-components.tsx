@@ -65,14 +65,14 @@ function MarkdownCodeBlock({
   };
 
   return (
-    <div className="my-3 rounded-lg overflow-hidden border border-gray-700/50">
+    <div className="my-3 rounded-lg overflow-hidden bg-[#0d1117]">
       {/* Header bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800 border-b border-gray-700/50">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700/40">
         <span className="text-xs font-mono text-gray-400 select-none">{language}</span>
         <button
           type="button"
           onClick={handleCopy}
-          className="px-2 py-0.5 text-[11px] font-medium rounded border border-gray-600 bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors"
+          className="px-2 py-0.5 text-[11px] font-medium rounded text-gray-400 hover:text-gray-200 transition-colors"
           aria-label={`Copy ${language} code`}
           title={copied ? 'Copied' : `Copy ${language} code`}
         >
@@ -83,27 +83,27 @@ function MarkdownCodeBlock({
       <div className={`relative ${isCollapsed ? 'max-h-[360px] overflow-hidden' : ''}`}>
         <div className="overflow-x-auto">
           <pre className="max-w-full m-0">
-            <code className={`block text-sm font-mono !bg-gray-900 text-gray-100 whitespace-pre ${showLineNumbers ? 'pl-0' : 'p-4'} ${className || ''}`} {...codeProps}>
+            <code className={`block text-sm font-mono !bg-[#0d1117] text-gray-100 whitespace-pre ${showLineNumbers ? 'pl-0' : 'px-4 py-3'} ${className || ''}`} {...codeProps}>
               {showLineNumbers ? (
                 <table className="border-collapse w-full">
                   <tbody>
                     {lines.map((line, i) => (
                       <tr key={i} className="leading-relaxed">
-                        <td className="select-none text-right pr-4 pl-3 text-gray-500 text-xs font-mono align-top w-[1%] whitespace-nowrap border-r border-gray-700/50">{i + 1}</td>
-                        <td className="pl-4 pr-4 whitespace-pre">{line || '\n'}</td>
+                        <td className="select-none text-right pr-4 pl-3 py-0 text-gray-500 text-xs font-mono align-top w-[1%] whitespace-nowrap">{i + 1}</td>
+                        <td className="pl-4 pr-4 py-0 whitespace-pre">{line || '\n'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <span className="block p-4">{children}</span>
+                <span className="block px-4 py-3">{children}</span>
               )}
             </code>
           </pre>
         </div>
         {/* Collapse gradient overlay */}
         {isCollapsed && (
-          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-900 to-transparent pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#0d1117] to-transparent pointer-events-none" />
         )}
       </div>
       {/* Collapse/expand toggle */}
@@ -111,7 +111,7 @@ function MarkdownCodeBlock({
         <button
           type="button"
           onClick={() => setCollapsed(!collapsed)}
-          className="w-full px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-200 bg-gray-800/80 border-t border-gray-700/50 transition-colors text-center"
+          className="w-full px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-200 border-t border-gray-700/40 transition-colors text-center"
         >
           {collapsed ? `Show ${lineCount - COLLAPSE_VISIBLE_LINES} more lines` : 'Collapse'}
         </button>
