@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
-import { Copy, Edit2, Check, X, Trash2, BookOpen, RefreshCw, ChevronDown, History, GitCompare, ThumbsUp, ThumbsDown, MessageSquare, Flag, FileText, Search } from 'lucide-react';
+import { Copy, Edit2, Check, X, Trash2, BookOpen, RefreshCw, ChevronDown, History, GitCompare, ThumbsUp, ThumbsDown, MessageSquare, Flag, FileText } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './follow-up-questions';
@@ -18,7 +18,6 @@ import { analyticsApi, feedbackApi } from '@/lib/api';
 import type { FlaggedCitation } from '@/lib/api';
 import { ResponseTimeIndicator } from '@/components/health/response-time-indicator';
 import { ConfidenceBadge } from './confidence-badge';
-import { ClaimCards } from './claim-cards';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { formatRelativeTime } from '@/lib/utils/relative-time';
 import 'highlight.js/styles/github-dark.css';
@@ -48,17 +47,6 @@ export interface ChatMessageType {
   attachments?: import('./chat-types').ChatAttachment[];
   /** File names currently being extracted (set during extraction phase, cleared when done) */
   extractingFiles?: string[];
-  /** Document research status message (shown while research pipeline runs) */
-  docResearchStatus?: string;
-  /** Full claim research results from document research pipeline */
-  docResearchResults?: Array<{
-    claim: string;
-    excerpt: string;
-    category: string;
-    verdict: string;
-    confidence: 'supported' | 'contradicted' | 'partially_supported' | 'unverifiable';
-    sources: Array<{ title: string; url: string }>;
-  }>;
   // Version history
   version?: number;
   parentMessageId?: string | null;
@@ -109,60 +97,6 @@ interface ChatMessageProps {
   /** Conversation mode — chat mode hides citations, sources, regenerate. */
   mode?: 'research' | 'chat';
 }
-
-// ── Document Research Progress Timeline ──
-const RESEARCH_STEPS = [
-  { key: 'extract', label: 'Extracting claims' },
-  { key: 'search', label: 'Searching web' },
-  { key: 'analyze', label: 'Analyzing evidence' },
-  { key: 'generate', label: 'Generating answer' },
-] as const;
-
-function getResearchStep(status: string): number {
-  const s = status.toLowerCase();
-  if (s.includes('extract')) return 0;
-  if (s.includes('found') || s.includes('search')) return 1;
-  if (s.includes('analy')) return 2;
-  if (s.includes('restor')) return 1; // cached restore
-  return 0;
-}
-
-const DocResearchTimeline: React.FC<{ status: string }> = ({ status }) => {
-  const currentStep = getResearchStep(status);
-  return (
-    <div className="flex items-center gap-1">
-      <Search className="w-4 h-4 text-blue-500 animate-pulse flex-shrink-0" />
-      <div className="flex items-center gap-0.5">
-        {RESEARCH_STEPS.map((step, idx) => {
-          const isCompleted = idx < currentStep;
-          const isCurrent = idx === currentStep;
-          return (
-            <React.Fragment key={step.key}>
-              {idx > 0 && (
-                <div className={cn(
-                  'w-3 h-0.5 rounded-full',
-                  isCompleted ? 'bg-green-400' : isCurrent ? 'bg-blue-300' : 'bg-gray-200',
-                )} />
-              )}
-              <div className="flex items-center gap-1">
-                <div className={cn(
-                  'w-2 h-2 rounded-full flex-shrink-0',
-                  isCompleted ? 'bg-green-500' : isCurrent ? 'bg-blue-500 animate-pulse' : 'bg-gray-300',
-                )} />
-                <span className={cn(
-                  'text-xs whitespace-nowrap',
-                  isCompleted ? 'text-green-600' : isCurrent ? 'text-blue-700 font-medium' : 'text-gray-400',
-                )}>
-                  {step.label}
-                </span>
-              </div>
-            </React.Fragment>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onOpenSources, isStreaming = false, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, onFlagCitation, mode }) => {
   const { isMobile } = useMobile();
@@ -400,8 +334,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                       ...
                     </span>
                   </>
-                ) : message.docResearchStatus ? (
-                  <DocResearchTimeline status={message.docResearchStatus} />
                 ) : (
                   <span className="text-sm">Query assistant, thinking.</span>
                 )}
@@ -472,11 +404,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               </ChatErrorBoundary>
             )}
           </div>
-
-          {/* Document research claim cards */}
-          {!isUser && !isStreaming && !message.isStreaming && message.docResearchResults && message.docResearchResults.length > 0 && (
-            <ClaimCards results={message.docResearchResults} className="mt-3" />
-          )}
 
           {/* Source type breakdown (documents vs web) */}
           {!isUser && !isStreaming && !message.isStreaming && hasSources && (

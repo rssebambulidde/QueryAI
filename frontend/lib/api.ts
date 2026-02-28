@@ -216,8 +216,6 @@ export interface QuestionRequest {
   }>;
   // Pre-uploaded attachment IDs (follow-up messages — no base64 payload)
   attachmentIds?: string[];
-  // Document research mode — extract claims from attachments and verify via web search
-  researchMyDocument?: boolean;
 }
 
 export interface QuestionResponse {
@@ -533,7 +531,7 @@ export const aiApi = {
       maxRetries?: number;
       retryDelay?: number;
     }
-  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[]; docResearchStatus?: Record<string, unknown> }, void, unknown> {
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[] }, void, unknown> {
     const maxRetries = options?.maxRetries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000;
     let retryCount = 0;
@@ -651,11 +649,6 @@ export const aiApi = {
                       yield { extracting: ex.extracting, extractingFiles: ex.files };
                     } catch { /* skip malformed */ }
                     break;
-                  case 'docResearchStatus':
-                    try {
-                      yield { docResearchStatus: JSON.parse(payload) };
-                    } catch { /* skip malformed */ }
-                    break;
                   case 'done':
                     return;
                   case 'error':
@@ -722,7 +715,7 @@ export const aiApi = {
       signal?: AbortSignal;
       onError?: (error: Error) => void;
     }
-  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[]; docResearchStatus?: Record<string, unknown> }, void, unknown> {
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[] }, void, unknown> {
     try {
       const response = await fetch(`${API_URL}/api/ai/ask/anonymous`, {
         method: 'POST',
@@ -804,11 +797,6 @@ export const aiApi = {
                   try {
                     const ex = JSON.parse(payload);
                     yield { extracting: ex.extracting, extractingFiles: ex.files };
-                  } catch { /* skip malformed */ }
-                  break;
-                case 'docResearchStatus':
-                  try {
-                    yield { docResearchStatus: JSON.parse(payload) };
                   } catch { /* skip malformed */ }
                   break;
                 case 'done':
@@ -944,7 +932,7 @@ export const aiApi = {
     },
     signal?: AbortSignal,
   ): AsyncGenerator<
-    string | { sources?: Source[]; followUpQuestions?: string[]; qualityScore?: number; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[]; version?: { version: number; messageId: string; versions: Array<{ id: string; version: number; content: string; sources?: Source[]; metadata?: Record<string, any>; created_at: string }> }; docResearchStatus?: Record<string, unknown> },
+    string | { sources?: Source[]; followUpQuestions?: string[]; qualityScore?: number; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[]; version?: { version: number; messageId: string; versions: Array<{ id: string; version: number; content: string; sources?: Source[]; metadata?: Record<string, any>; created_at: string }> } },
     void,
     unknown
   > {
@@ -1012,9 +1000,6 @@ export const aiApi = {
                 break;
               case 'extracting':
                 try { const ex = JSON.parse(payload); yield { extracting: ex.extracting, extractingFiles: ex.files }; } catch { /* skip */ }
-                break;
-              case 'docResearchStatus':
-                try { yield { docResearchStatus: JSON.parse(payload) }; } catch { /* skip */ }
                 break;
               case 'version':
                 try { yield { version: JSON.parse(payload) }; } catch { /* skip */ }

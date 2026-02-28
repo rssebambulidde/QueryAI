@@ -4,12 +4,11 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import type { Message, MessageVersionSummary } from './chat-message';
 import type { RAGSettings } from './rag-source-selector';
-import { aiApi, conversationApi, queueApi, attachmentApi, QuestionRequest, Source } from '@/lib/api';
+import { conversationApi, queueApi, attachmentApi, QuestionRequest, Source } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { useFilterStore } from '@/lib/store/filter-store';
 import { useAuthStore } from '@/lib/store/auth-store';
-import type { UnifiedFilters } from './unified-filter-panel';
 import { useMobile } from '@/lib/hooks/use-mobile';
 // Topic/document UI retired in Phase 2 (v2 migration)
 // import { ResearchModeBanner } from './research-mode-banner';
@@ -38,6 +37,46 @@ interface ChatContainerProps {
   ragSettings?: RAGSettings;
 }
 
+type SavedAttachmentMeta = {
+  name: string;
+  mimeType?: string;
+  fileId?: string;
+  extractionStatus?: ChatAttachment['extractionStatus'];
+  extractedText?: string;
+};
+
+type ErrorWithResponse = {
+  response?: {
+    status?: number;
+    data?: {
+      error?: {
+        message?: string;
+      };
+    };
+  };
+  status?: number;
+  message?: string;
+};
+
+const getErrorStatus = (err: unknown): number | undefined => {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const withResponse = err as ErrorWithResponse;
+  return withResponse.response?.status ?? withResponse.status;
+};
+
+const getErrorMessage = (err: unknown): string | undefined => {
+  if (err instanceof Error) return err.message;
+  if (typeof err !== 'object' || err === null) return undefined;
+  const candidate = (err as { message?: unknown }).message;
+  return typeof candidate === 'string' ? candidate : undefined;
+};
+
+const getApiErrorMessage = (err: unknown): string | undefined => {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const withResponse = err as ErrorWithResponse;
+  return withResponse.response?.data?.error?.message;
+};
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propRagSettings }) => {
@@ -47,7 +86,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationMode, setConversationMode] = useState<'research' | 'chat'>('chat');
-  const [researchMyDocument, setResearchMyDocument] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -112,7 +150,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   const [dynamicStarters, setDynamicStarters] = useState<string[] | null>(null);
   // Document state retired in Phase 2 (v2 migration)
   const [inlineUploadStatus, setInlineUploadStatus] = useState<UploadStatus | null>(null);
-  const [lastUploadFile, setLastUploadFile] = useState<File | null>(null);
+  const [, setLastUploadFile] = useState<File | null>(null);
   const conversationLoadRequestRef = useRef(0);
   const conversationLoadPrevIdRef = useRef<string | null>(null);
   /** Conversation-level attachments — re-sent with every follow-up message. */
@@ -120,12 +158,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   // ── Document drag-and-drop upload (retired in Phase 2) ────────────────
 
-  const handleFilesDrop = async (_files: File[]) => {
+  const handleFilesDrop = async (files: File[]) => {
+    void files;
     // Document upload retired in Phase 2
   };
 
   // Handle file selection from ChatInput
-  const handleFileSelect = async (_file: File) => {
+  const handleFileSelect = async (file: File) => {
+    void file;
     // Document upload retired in Phase 2
   };
 
@@ -141,7 +181,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   };
 
   // Handle multiple files selection
-  const handleFilesSelect = async (_files: File[]) => {
+  const handleFilesSelect = async (files: File[]) => {
+    void files;
     // Document upload retired in Phase 2
   };
 
@@ -157,14 +198,12 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
     retryStream: handleRetryStreaming,
     editMessage: handleEditMessage,
     regenerateMessage: handleRegenerateMessage,
-    previousResponseTimeRef,
   } = useChatSend({
     messages,
     currentConversationId,
     unifiedFilters,
     ragSettings,
     conversationMode: conversationMode || 'chat',
-    researchMyDocument,
     queryExpansionEnabled,
     queryExpansionSettings,
     rerankingEnabled,
@@ -275,9 +314,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
             // Restore persisted document attachments and inject into user messages
             const conversation = conversationResponse.success ? conversationResponse.data : null;
-            const saved = conversation?.metadata?.savedAttachments;
-            if (saved && Array.isArray(saved) && saved.length > 0) {
-              const restoredAttachments: ChatAttachment[] = saved.map((s: any, i: number) => ({
+            const saved = (conversation?.metadata?.savedAttachments ?? []) as SavedAttachmentMeta[];
+            if (saved.length > 0) {
+              const restoredAttachments: ChatAttachment[] = saved.map((s, i) => ({
                 id: `saved-${i}-${s.name}`,
                 type: 'document' as const,
                 name: s.name,
@@ -316,10 +355,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
               }
             }
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (!isStale()) {
             // If 404/403, the conversation doesn't exist or belong to this user — clear it silently
-            const status = err?.response?.status || err?.status;
+            const status = getErrorStatus(err);
             if (status === 404 || status === 403) {
               console.warn('[ChatContainer] Conversation not found/forbidden, clearing:', currentConversationId);
               selectConversation(null);
@@ -457,16 +496,18 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           return u;
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Queue send failed:', err);
-      let errorMsg = err.message || 'Failed to queue request.';
-      if (err.response?.status === 429) {
+      const baseError = getErrorMessage(err);
+      const status = getErrorStatus(err);
+      let errorMsg = baseError || 'Failed to queue request.';
+      if (status === 429) {
         errorMsg = 'Rate limit exceeded. Try again in 30s.';
-      } else if (err.response?.status === 403) {
-        errorMsg = err.response?.data?.error?.message || 'Subscription limit reached. Upgrade your plan to continue.';
-      } else if (err.message?.toLowerCase().includes('network')) {
+      } else if (status === 403) {
+        errorMsg = getApiErrorMessage(err) || 'Subscription limit reached. Upgrade your plan to continue.';
+      } else if (baseError?.toLowerCase().includes('network')) {
         errorMsg = 'Network error. Please check your connection and retry.';
-      } else if (err.message?.toLowerCase().includes('stream')) {
+      } else if (baseError?.toLowerCase().includes('stream')) {
         errorMsg = 'Streaming failure. Response interrupted.';
       }
       setError(errorMsg);
@@ -528,9 +569,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       try {
         const conversation = await conversationApi.get(currentConversationId);
         if (conversation.success && conversation.data) {
-          const meta = (conversation.data as any).metadata || {};
-          const savedAttachments = (meta.savedAttachments || []).filter(
-            (s: any) => s.name !== removed.name,
+          const dataWithMeta = conversation.data as {
+            metadata?: {
+              savedAttachments?: SavedAttachmentMeta[];
+            };
+          };
+          const savedAttachments = (dataWithMeta.metadata?.savedAttachments || []).filter(
+            (s) => s.name !== removed.name,
           );
           await conversationApi.update(currentConversationId, {
             metadata: { savedAttachments },
@@ -570,10 +615,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   const handleModeChange = useCallback((newMode: 'research' | 'chat') => {
     setConversationMode(newMode);
-    // Reset research-my-document when switching to chat (express) mode
-    if (newMode === 'chat') {
-      setResearchMyDocument(false);
-    }
     // Persist mode to DB for the active conversation so it survives reloads
     if (currentConversationId) {
       conversationApi.update(currentConversationId, { mode: newMode }).catch((err) => {
@@ -664,8 +705,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           onRagSettingsChange={setRagSettings}
           activeConversationAttachments={conversationAttachments}
           onClearConversationAttachment={removeConversationAttachment}
-          researchMyDocument={researchMyDocument}
-          onResearchMyDocumentToggle={setResearchMyDocument}
         />
       )}
 
@@ -750,8 +789,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
           onRagSettingsChange={setRagSettings}
           activeConversationAttachments={conversationAttachments}
           onClearConversationAttachment={removeConversationAttachment}
-          researchMyDocument={researchMyDocument}
-          onResearchMyDocumentToggle={setResearchMyDocument}
           />
         </>
       )}

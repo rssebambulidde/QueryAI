@@ -1,9 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback, useMemo, DragEvent, ClipboardEvent } from 'react';
-import { Button } from '@/components/ui/button';
-import { Send, Square, Loader2, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, ChevronUp, Search, MessageCircle, Paperclip, Sparkles } from 'lucide-react';
-import { useMobile } from '@/lib/hooks/use-mobile';
+import { ArrowUp, Square, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, ChevronUp, Search, MessageCircle, Paperclip, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatAttachment } from './chat-types';
 import { AttachmentPreviewStrip } from './attachment-preview';
@@ -205,18 +203,12 @@ interface ChatInputProps {
   onClearConversationAttachment?: (id: string) => void;
   /** Clear all conversation-level attachments. */
   onClearAllConversationAttachments?: () => void;
-  /** Whether "Research my document" is enabled. */
-  researchMyDocument?: boolean;
-  /** Toggle "Research my document" on/off. */
-  onResearchMyDocumentToggle?: (enabled: boolean) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   disabled = false,
   placeholder = 'Type your message...',
-  showQueueOption,
-  onSendToQueue,
   activeQueueJobId,
   onCancelQueueJob,
   onFileSelect,
@@ -225,26 +217,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onCancelUpload,
   onRetryUpload,
   onDismissUpload,
-  webEnabled,
-  onWebToggle,
   mode,
   onModeChange,
   activeConversationAttachments,
   onClearConversationAttachment,
-  onClearAllConversationAttachments,
-  researchMyDocument,
-  onResearchMyDocumentToggle,
 }) => {
   const isChatMode = mode === 'chat';
-  const { isMobile } = useMobile();
   const [message, setMessage] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [showModeMenu, setShowModeMenu] = useState(false);
-  const [researchHintDismissed, setResearchHintDismissed] = useState(false);
+  const [dismissedResearchHintMode, setDismissedResearchHintMode] = useState<'chat' | 'research' | null>(null);
   const [inlineAttachments, setInlineAttachments] = useState<ChatAttachment[]>([]);
-  const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+  const [dismissedSuggestionKey, setDismissedSuggestionKey] = useState('');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
@@ -252,15 +238,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const dragCounterRef = useRef(0);
   const modeMenuRef = useRef<HTMLDivElement>(null);
+  const modeKey = mode ?? 'chat';
 
   // Detect research-like keywords when user is in chat/Express mode
   const RESEARCH_KEYWORDS = /\b(latest|current news|recent|source|sources|evidence|study|studies|research|statistics|data|report|cite|citation|according to|fact.?check|202[4-9]|203\d)\b/i;
-  const showResearchHint = isChatMode && !researchHintDismissed && message.length >= 10 && RESEARCH_KEYWORDS.test(message);
-
-  // Reset dismissed state when mode changes
-  useEffect(() => {
-    setResearchHintDismissed(false);
-  }, [mode]);
+  const showResearchHint = isChatMode
+    && dismissedResearchHintMode !== modeKey
+    && message.length >= 10
+    && RESEARCH_KEYWORDS.test(message);
 
   // Generate contextual suggestions when attachments are present
   const allAttachments = useMemo(() => [
@@ -273,16 +258,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     [allAttachments],
   );
 
-  // Reset suggestions dismissed state when attachments change
-  useEffect(() => {
-    if (allAttachments.length > 0) setSuggestionsDismissed(false);
-  }, [allAttachments.length]);
+  const suggestionKey = useMemo(
+    () => allAttachments.map((a) => a.id).join('|'),
+    [allAttachments],
+  );
 
   const showSuggestions = allAttachments.length > 0
     && attachmentSuggestions.length > 0
     && !message.trim()
     && !disabled
-    && !suggestionsDismissed;
+    && dismissedSuggestionKey !== suggestionKey;
 
   // Close mode menu on outside click
   useEffect(() => {
@@ -383,9 +368,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               });
               continue; // Successfully uploaded — skip base64 fallback
             }
-          } catch (uploadErr: any) {
+          } catch (uploadErr: unknown) {
             // Upload failed (e.g., anonymous user, network error) — fall back to base64
-            console.warn('[ChatInput] Server upload failed, falling back to base64:', uploadErr?.message || uploadErr);
+            const uploadErrMessage = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+            console.warn('[ChatInput] Server upload failed, falling back to base64:', uploadErrMessage);
           }
         }
 
@@ -411,8 +397,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (errors.length > 0) setValidationError(errors.join('. '));
     if (newAttachments.length > 0) {
       setInlineAttachments((prev) => [...prev, ...newAttachments]);
+      // Auto-switch to Express mode when a document is attached in deep search mode
+      if (mode === 'research' && newAttachments.some((a) => a.type === 'document')) {
+        onModeChange?.('chat');
+      }
     }
-  }, [inlineAttachments.length]);
+  }, [inlineAttachments.length, mode, onModeChange]);
 
   /** Remove an inline attachment by ID.
    *  Also cleans up: conversation-level state, backend storage + DB row.
@@ -587,6 +577,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const isUploading = uploadStatus?.status === 'uploading';
   const isUploadError = uploadStatus?.status === 'error';
   const isUploadComplete = uploadStatus?.status === 'completed';
+  const hasMessage = message.trim().length > 0;
+  const hasConversationAttachments = (activeConversationAttachments?.length ?? 0) > 0;
+  const canSend = !disabled && (hasMessage || inlineAttachments.length > 0 || hasConversationAttachments);
 
   return (
     <div 
@@ -671,21 +664,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      {/* Smart mode suggestion — hint to switch to Deep Research */}
+      {/* Smart mode suggestion - hint to switch to Deep Research */}
       {showResearchHint && onModeChange && (
         <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg border border-blue-200 text-xs animate-in fade-in slide-in-from-top-1 duration-200">
           <Search className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
           <span className="text-blue-700 flex-1">This might benefit from <strong>Deep Research</strong> mode for sources &amp; citations.</span>
           <button
             type="button"
-            onClick={() => { onModeChange('research'); setResearchHintDismissed(true); }}
+            onClick={() => { setDismissedResearchHintMode(modeKey); onModeChange('research'); }}
             className="px-2.5 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium flex-shrink-0"
           >
             Switch
           </button>
           <button
             type="button"
-            onClick={() => setResearchHintDismissed(true)}
+            onClick={() => setDismissedResearchHintMode(modeKey)}
             className="text-blue-400 hover:text-blue-600 flex-shrink-0"
             aria-label="Dismiss suggestion"
           >
@@ -787,7 +780,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               type="button"
               onClick={() => {
                 setMessage(suggestion);
-                setSuggestionsDismissed(true);
+                setDismissedSuggestionKey(suggestionKey);
                 // Focus the text input so user can edit or just press Enter
                 textInputRef.current?.focus();
               }}
@@ -799,78 +792,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      <div className="flex items-center gap-2">
-        {/* Input container with source controls inside */}
-        <div 
-          ref={inputContainerRef}
-          className={cn(
-            'flex-1 relative flex flex-col border rounded-2xl bg-white transition-all',
-            isDragging ? 'border-orange-400 ring-2 ring-orange-200' : 'border-gray-300',
-            'focus-within:ring-2 focus-within:ring-orange-500 focus-within:border-transparent'
-          )}
-        >
-          {/* Text input */}
-          <textarea
-            ref={textInputRef}
-            value={message}
-            onChange={(e) => { setMessage(e.target.value); autoResize(); }}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
-            className={cn(
-              'w-full px-4 py-3 bg-transparent focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-900 placeholder-gray-400 resize-none text-base leading-6 rounded-t-2xl'
-            )}
-            style={{ minHeight: '48px', maxHeight: '200px' }}
-            aria-label="Message input"
-          />
-
-          {/* Inline attachments preview strip */}
-          {inlineAttachments.length > 0 && (
-            <AttachmentPreviewStrip
-              attachments={inlineAttachments}
-              onRemove={removeInlineAttachment}
-            />
-          )}
-
-          {/* Conversation-level (persistent) attachment chips */}
-          {(activeConversationAttachments?.length ?? 0) > 0 && inlineAttachments.length === 0 && (
-            <div className="flex items-center gap-1.5 px-3 pb-2 flex-wrap">
-              <span className="text-[10px] text-gray-400 mr-0.5">Attached:</span>
-              {activeConversationAttachments!.map((att) => (
-                <span
-                  key={att.id}
-                  className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-600 max-w-[160px]"
-                >
-                  <FileText className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                  <span className="truncate">{att.name}</span>
-                  {onClearConversationAttachment && (
-                    <button
-                      type="button"
-                      onClick={() => onClearConversationAttachment(att.id)}
-                      className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400 hover:text-red-500 transition-colors"
-                      aria-label={`Detach ${att.name}`}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Source control pills row */}
-          <div className="flex items-center gap-2 px-3 pb-2.5 flex-wrap">
-            {/* Paperclip — attach files/images for this message */}
+      <div
+        ref={inputContainerRef}
+        className={cn(
+          'w-full relative border rounded-3xl bg-white/85 backdrop-blur-sm transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]',
+          isDragging ? 'border-orange-400 ring-2 ring-orange-200' : 'border-white/20',
+          'focus-within:ring-2 focus-within:ring-orange-400/60 focus-within:border-orange-200'
+        )}
+      >
+        <div className="flex items-end gap-2 px-2 sm:px-3 pt-2">
+          <div className="flex items-center gap-1.5 pb-1 shrink-0">
+            {/* Paperclip - attach files/images for this message */}
             <button
               type="button"
               onClick={() => inlineFileInputRef.current?.click()}
               disabled={disabled || inlineAttachments.length >= INLINE_MAX_COUNT}
               className={cn(
-                'flex items-center justify-center w-8 h-8 rounded-full border transition-colors',
-                inlineAttachments.length >= INLINE_MAX_COUNT
-                  ? 'border-gray-200 text-gray-300 cursor-not-allowed'
-                  : 'border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                'flex items-center justify-center w-9 h-9 rounded-full border transition-all duration-200',
+                inlineAttachments.length >= INLINE_MAX_COUNT || disabled
+                  ? 'border-white/20 bg-white/40 text-gray-300 cursor-not-allowed'
+                  : 'border-white/40 bg-white/60 text-gray-600 hover:bg-white hover:text-gray-800'
               )}
               aria-label="Attach files or images"
               title={`Attach files or images (${inlineAttachments.length}/${INLINE_MAX_COUNT})`}
@@ -885,10 +826,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   type="button"
                   onClick={() => setShowModeMenu((v) => !v)}
                   className={cn(
-                    'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
+                    'flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full border transition-all duration-200 bg-white/60',
                     isChatMode
-                      ? 'border-purple-200 bg-purple-50 text-purple-600'
-                      : 'border-blue-200 bg-blue-50 text-blue-600'
+                      ? 'border-purple-200/80 text-purple-700 hover:bg-purple-50'
+                      : 'border-blue-200/80 text-blue-700 hover:bg-blue-50'
                   )}
                   aria-label="Select mode"
                   aria-expanded={showModeMenu}
@@ -942,73 +883,107 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 )}
               </div>
             )}
-
-            {/* "Research my document" toggle — visible in research mode when attachments exist */}
-            {!isChatMode && onResearchMyDocumentToggle && (inlineAttachments.length > 0 || (activeConversationAttachments?.length ?? 0) > 0) && (
-              <button
-                type="button"
-                onClick={() => onResearchMyDocumentToggle(!researchMyDocument)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full border transition-colors',
-                  researchMyDocument
-                    ? 'border-green-300 bg-green-50 text-green-700'
-                    : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-                )}
-                aria-label="Toggle document research"
-                title="Extract claims from your document and verify them against web sources"
-              >
-                <Search className="w-3.5 h-3.5" />
-                <span>{isMobile ? 'Research doc' : 'Research my document'}</span>
-              </button>
-            )}
-
-
           </div>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".pdf,.txt,.csv,.docx,.doc,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
-            style={{ display: 'none' }}
-            onChange={handleFileChange}
-            disabled={isUploading}
-            aria-hidden="true"
-          />
-          {/* Hidden file input for inline attachments (images + docs) */}
-          <input
-            ref={inlineFileInputRef}
-            type="file"
-            multiple
-            accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.csv,.docx,.doc,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
-            style={{ display: 'none' }}
-            onChange={handleInlineFileChange}
+          {/* Text input */}
+          <textarea
+            ref={textInputRef}
+            value={message}
+            onChange={(e) => { setMessage(e.target.value); autoResize(); }}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
             disabled={disabled}
-            aria-hidden="true"
+            rows={1}
+            className={cn(
+              'flex-1 min-w-0 py-3 px-2 bg-transparent focus:outline-none disabled:cursor-not-allowed text-gray-900 placeholder-gray-500 resize-none text-base leading-6'
+            )}
+            style={{ minHeight: '48px', maxHeight: '200px' }}
+            aria-label="Message input"
           />
+
+          {/* Circular action button (send / cancel queue) */}
+          {activeQueueJobId ? (
+            <button
+              type="button"
+              onClick={onCancelQueueJob}
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all duration-200 flex items-center justify-center touch-manipulation shrink-0 mb-1 shadow-sm"
+              aria-label="Cancel queued request"
+            >
+              <Square className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!canSend}
+              className={cn(
+                'w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center touch-manipulation shrink-0 mb-1 transition-all duration-200',
+                canSend
+                  ? 'bg-orange-600 text-white shadow-md hover:bg-orange-700 hover:scale-105'
+                  : 'bg-white/10 text-white/30 cursor-not-allowed scale-95'
+              )}
+              aria-label="Send message"
+            >
+              <ArrowUp className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        {/* Send button */}
-        {activeQueueJobId ? (
-          <Button
-            onClick={onCancelQueueJob}
-            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl shadow-sm transition-all duration-200 flex items-center gap-2 touch-manipulation min-h-[52px]"
-            aria-label="Cancel queued request"
-          >
-            <Square className="w-4 h-4" />
-            {!isMobile && <span>Cancel</span>}
-          </Button>
-        ) : (
-          <Button
-            onClick={handleSend}
-            disabled={disabled || (!message.trim() && inlineAttachments.length === 0 && (activeConversationAttachments?.length ?? 0) === 0)}
-            className="px-4 sm:px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white rounded-2xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 touch-manipulation min-h-[52px] ml-1 sm:ml-2"
-            aria-label="Send message"
-          >
-            <Send className="w-4 h-4" />
-            {!isMobile && <span>Send</span>}
-          </Button>
+        {/* Inline attachments preview strip */}
+        {inlineAttachments.length > 0 && (
+          <AttachmentPreviewStrip
+            attachments={inlineAttachments}
+            onRemove={removeInlineAttachment}
+          />
         )}
+
+        {/* Conversation-level (persistent) attachment chips */}
+        {hasConversationAttachments && inlineAttachments.length === 0 && (
+          <div className="flex items-center gap-1.5 px-3 pb-2 flex-wrap">
+            <span className="text-[10px] text-gray-400 mr-0.5">Attached:</span>
+            {activeConversationAttachments!.map((att) => (
+              <span
+                key={att.id}
+                className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-600 max-w-[160px]"
+              >
+                <FileText className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                <span className="truncate">{att.name}</span>
+                {onClearConversationAttachment && (
+                  <button
+                    type="button"
+                    onClick={() => onClearConversationAttachment(att.id)}
+                    className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200 text-gray-400 hover:text-red-500 transition-colors"
+                    aria-label={`Detach ${att.name}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.txt,.csv,.docx,.doc,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+          disabled={isUploading}
+          aria-hidden="true"
+        />
+        {/* Hidden file input for inline attachments (images + docs) */}
+        <input
+          ref={inlineFileInputRef}
+          type="file"
+          multiple
+          accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.txt,.csv,.docx,.doc,application/pdf,text/plain,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+          style={{ display: 'none' }}
+          onChange={handleInlineFileChange}
+          disabled={disabled}
+          aria-hidden="true"
+        />
       </div>
       
       {/* Screen reader announcements */}

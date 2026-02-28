@@ -53,7 +53,6 @@ router.post(
       priority,
       // Mode & document research
       mode,
-      researchMyDocument,
       // Inline attachments & pre-uploaded attachment IDs
       attachments,
       attachmentIds,
@@ -98,7 +97,6 @@ router.post(
       conversationId: conversationId,
       // Mode & document research
       mode,
-      researchMyDocument,
       // Inline attachments & pre-uploaded attachment IDs
       attachments,
       attachmentIds,
@@ -219,7 +217,6 @@ router.post(
       resendUserMessageId,
       // Mode & document research
       mode,
-      researchMyDocument,
       // Inline attachments & pre-uploaded attachment IDs
       attachments,
       attachmentIds,
@@ -264,7 +261,6 @@ router.post(
       conversationId: conversationId,
       // Mode & document research
       mode,
-      researchMyDocument,
       // Inline attachments & pre-uploaded attachment IDs
       attachments,
       attachmentIds,
@@ -416,7 +412,7 @@ router.post(
       // The pipeline yields two kinds of chunks:
       //   1. Plain text chunks — actual LLM answer tokens
       //   2. JSON sentinel strings — structured metadata emitted by the pipeline
-      //      (__docResearch, __extractionStatus, __extracting, __structured).
+      //      (__extractionStatus, __extracting, __structured).
       // Sentinels must NOT be accumulated into fullAnswer and must be forwarded
       // as their own SSE event types so the frontend handles them correctly.
       const stream = AIService.answerQuestionStream(request, userId);
@@ -430,14 +426,6 @@ router.post(
           let parsed: any;
           try { parsed = JSON.parse(chunk); } catch { /* not JSON — fall through */ }
           if (parsed) {
-            if (parsed.__docResearch) {
-              // Merge doc-research sources into main sources list
-              if (parsed.sources && Array.isArray(parsed.sources)) {
-                sources = [...(sources || []), ...parsed.sources];
-              }
-              res.write(`data: ${JSON.stringify({ docResearchStatus: parsed })}\n\n`);
-              continue;
-            }
             if (parsed.__extractionStatus) {
               res.write(`data: ${JSON.stringify({ extractionStatus: parsed.statuses })}\n\n`);
               continue;
@@ -769,7 +757,6 @@ router.post(
       priority,
       // Mode & document research
       mode,
-      researchMyDocument,
       // Inline attachments & pre-uploaded attachment IDs
       attachments,
       attachmentIds,
@@ -812,7 +799,6 @@ router.post(
       conversationId: conversationId,
       // Mode & document research
       mode,
-      researchMyDocument,
       // Inline attachments & pre-uploaded attachment IDs
       attachments,
       attachmentIds,
