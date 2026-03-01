@@ -147,30 +147,6 @@ describe('AIAnswerPipelineService', () => {
     jest.clearAllMocks();
   });
 
-  describe('isComplexQuery', () => {
-    it('should identify simple queries as not complex', () => {
-      expect(AIAnswerPipelineService.isComplexQuery('What is JavaScript?')).toBe(false);
-      expect(AIAnswerPipelineService.isComplexQuery('Hello')).toBe(false);
-    });
-
-    it('should identify complex queries with analysis keywords', () => {
-      // Complex queries need score >= 3, so need complex indicators (2) + something else
-      const longComplexQuery = 'Can you compare and contrast the differences between React and Angular, analyze their performance characteristics, and evaluate which one is better for enterprise applications? What are the pros and cons of each?';
-      expect(AIAnswerPipelineService.isComplexQuery(longComplexQuery)).toBe(true);
-    });
-
-    it('should consider math/logic queries as complex', () => {
-      const mathQuery = 'Calculate the proof that the algorithm for solving this equation is optimal given the theorem of computational complexity';
-      expect(AIAnswerPipelineService.isComplexQuery(mathQuery)).toBe(true);
-    });
-
-    it('should consider extensive context as a factor', () => {
-      const longContext = 'A'.repeat(3500); // > 3000 chars
-      const analyticQuery = 'Compare and analyze these results';
-      expect(AIAnswerPipelineService.isComplexQuery(analyticQuery, longContext)).toBe(true);
-    });
-  });
-
   describe('selectModel', () => {
     it('should return GPT-3.5 for no userId', async () => {
       const result = await AIAnswerPipelineService.selectModel(undefined, 'test');

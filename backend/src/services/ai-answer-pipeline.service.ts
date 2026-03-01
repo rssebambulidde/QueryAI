@@ -5,11 +5,9 @@
  * non-streaming paths:
  *   - answerQuestionInternal   (non-streaming: RAG → LLM → citations → quality → save)
  *   - answerQuestionStreamInternal (streaming: RAG → LLM stream → yield chunks)
- *   - postProcessStream        (post-stream: follow-ups, quality, save, usage log)
  *
  * Also houses the helper methods these pipelines depend on:
- *   - Model selection (tier-based)
- *   - Query complexity detection
+ *   - Model selection (registry-based)
  *   - Off-topic pre-check internal
  *   - LLM response caching
  *
@@ -106,31 +104,6 @@ export interface PreparedContext {
   extractionStatuses?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string }>;
 }
 
-export interface PostProcessStreamParams {
-  fullAnswer: string;
-  question: string;
-  userId: string;
-  sources?: Source[];
-  topicName?: string;
-  topicId?: string;
-  conversationId?: string;
-  model?: string;
-  isResend?: boolean;
-  structuredFollowUps?: string[];
-  /** Structured cited-source objects emitted by the LLM (used for citation badge). */
-  structuredCitedSources?: any[];
-  /** Original RAG settings so regeneration can replay the same retrieval config */
-  ragSettings?: Record<string, any>;
-}
-
-export interface PostProcessStreamResult {
-  followUpQuestions?: string[];
-  qualityScore?: number;
-  /** Final answer text (may be trimmed of follow-up markdown by ResponseProcessor) */
-  cleanedAnswer: string;
-  conversationId?: string;
-}
-
 let llmCacheStats: LLMCacheStats = {
   hits: 0,
   misses: 0,
@@ -171,91 +144,212 @@ function generateLLMCacheKey(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Shared attachment processing
+// ═══════════════════════════════════════════════════════════════════════
+
+type ExtractionStatus = { name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string };
+
+interface AttachmentProcessingResult {
+  /** Formatted document context string for system prompt injection. */
+  attachmentContext: string;
+  /** Image attachments for multi-part vision messages. */
+  imageAttachments?: Array<{ name: string; mimeType: string; data: string }>;
+  /** Per-file extraction statuses for SSE feedback. */
+  extractionStatuses: ExtractionStatus[];
+  /** Resolved metadata entries for conversation persistence (chat mode only uses this). */
+  resolvedDocs: Array<{ name: string; mimeType: string; extractedText: string; extractionStatus: string; fileId?: string }>;
+}
+
+/**
+ * Process attachments from both attachmentIds and inline attachments.
+ * Shared between chat and research modes. Returns results cleanly
+ * without mutating the request object.
+ */
+async function processAttachments(
+  request: QuestionRequest,
+  userId: string | undefined,
+  mode: 'chat' | 'research',
+): Promise<AttachmentProcessingResult> {
+  let attachmentContext = '';
+  let imageAttachments: Array<{ name: string; mimeType: string; data: string }> | undefined;
+  const extractionStatuses: ExtractionStatus[] = [];
+  const resolvedDocs: AttachmentProcessingResult['resolvedDocs'] = [];
+
+  // ── Resolve pre-uploaded attachment IDs ───────────────────────────
+  if ((request as any).attachmentIds && (request as any).attachmentIds.length > 0 && userId) {
+    try {
+      const { ChatAttachmentService } = await import('./chat-attachment.service');
+      const { AttachmentExtractorService } = await import('./attachment-extractor.service');
+      const resolved = await ChatAttachmentService.resolveByIds((request as any).attachmentIds, userId);
+      if (resolved.length > 0) {
+        const docsWithText = resolved
+          .filter((r) => r.extractedText)
+          .map((r) => ({ name: r.fileName, text: r.extractedText!, mimeType: r.mimeType }));
+        if (docsWithText.length > 0) {
+          attachmentContext = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
+        }
+
+        // Extraction statuses for SSE feedback
+        for (const r of resolved) {
+          extractionStatuses.push({
+            name: r.fileName,
+            status: r.extractedText ? 'success' : 'failed',
+            chars: r.extractedText?.length ?? 0,
+          });
+        }
+
+        // Build metadata entries
+        for (const r of resolved) {
+          resolvedDocs.push({
+            name: r.fileName,
+            mimeType: r.mimeType,
+            extractedText: r.extractedText
+              ? r.extractedText.length > 12000
+                ? (AttachmentExtractorService as any).smartTruncate(r.extractedText, request.question, 12000)
+                : r.extractedText
+              : '',
+            extractionStatus: r.extractedText ? 'success' : 'failed',
+            fileId: r.id,
+          });
+        }
+
+        // Link to conversation
+        if (request.conversationId) {
+          try {
+            await ChatAttachmentService.linkToConversation(
+              (request as any).attachmentIds,
+              request.conversationId,
+              userId,
+            );
+          } catch (linkErr: any) {
+            logger.warn(`Failed to link attachmentIds to conversation (${mode})`, { error: linkErr.message });
+          }
+        }
+
+        logger.info(`Resolved attachmentIds for ${mode} mode`, {
+          ids: (request as any).attachmentIds,
+          resolved: resolved.length,
+          withText: docsWithText.length,
+        });
+      }
+    } catch (resolveErr: any) {
+      logger.warn(`Failed to resolve attachmentIds (${mode})`, { error: resolveErr.message });
+    }
+  }
+
+  // ── Process inline attachments (fileId + base64 + images) ──────────
+  if (request.attachments && request.attachments.length > 0) {
+    const { AttachmentExtractorService } = await import('./attachment-extractor.service');
+
+    const withFileId = request.attachments.filter((a: any) => a.fileId && (mode === 'research' ? !a.data : true));
+    const withBase64 = mode === 'research'
+      ? request.attachments.filter((a: any) => !a.fileId || a.data).filter((a) => a.type === 'document')
+      : request.attachments.filter((a: any) => !a.fileId && a.type === 'document');
+    const images = request.attachments.filter((a) => a.type === 'image');
+
+    // Resolve fileId attachments from DB
+    if (withFileId.length > 0 && userId) {
+      try {
+        const { ChatAttachmentService } = await import('./chat-attachment.service');
+        const fileIds = withFileId.map((a: any) => a.fileId);
+        const resolved = await ChatAttachmentService.resolveByIds(fileIds, userId);
+        const docsWithText = resolved
+          .filter((r) => r.extractedText)
+          .map((r) => ({ name: r.fileName, text: r.extractedText!, mimeType: r.mimeType }));
+        if (docsWithText.length > 0) {
+          const ctx = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
+          attachmentContext = attachmentContext ? attachmentContext + '\n\n' + ctx : ctx;
+        }
+
+        // Extraction statuses
+        for (const r of resolved) {
+          extractionStatuses.push({
+            name: r.fileName,
+            status: r.extractedText ? 'success' : 'failed',
+            chars: r.extractedText?.length ?? 0,
+          });
+        }
+
+        // Metadata entries
+        for (const r of resolved) {
+          resolvedDocs.push({
+            name: r.fileName,
+            mimeType: r.mimeType,
+            extractedText: r.extractedText
+              ? r.extractedText.length > 12000
+                ? AttachmentExtractorService.smartTruncate(r.extractedText, request.question, 12000)
+                : r.extractedText
+              : '',
+            extractionStatus: r.extractedText ? 'success' : 'failed',
+            fileId: r.id,
+          });
+        }
+
+        // Link fileId attachments to conversation
+        if (request.conversationId) {
+          try {
+            await ChatAttachmentService.linkToConversation(fileIds, request.conversationId, userId);
+          } catch (linkErr: any) {
+            logger.warn(`Failed to link fileId attachments to conversation (${mode})`, { error: linkErr.message });
+          }
+        }
+
+        logger.info(`Resolved fileId attachments (${mode})`, { count: resolved.length });
+      } catch (resolveErr: any) {
+        logger.warn(`Failed to resolve fileId attachments (${mode})`, { error: resolveErr.message });
+      }
+    }
+
+    // Extract text from base64 document attachments
+    if (withBase64.length > 0) {
+      const { extracted, statuses } = await AttachmentExtractorService.extractAllWithStatus(withBase64);
+      if (extracted.length > 0) {
+        const ctx = AttachmentExtractorService.formatAsContext(extracted, request.question);
+        attachmentContext = attachmentContext ? attachmentContext + '\n\n' + ctx : ctx;
+      }
+      extractionStatuses.push(...statuses);
+
+      // Metadata entries for base64 docs (no fileId)
+      for (const doc of extracted) {
+        resolvedDocs.push({
+          name: doc.name,
+          mimeType: doc.mimeType,
+          extractedText: doc.text.length > 12000
+            ? AttachmentExtractorService.smartTruncate(doc.text, request.question, 12000)
+            : doc.text,
+          extractionStatus: 'success',
+        });
+      }
+    }
+
+    // Collect image attachments
+    if (images.length > 0) {
+      imageAttachments = images.map((img) => ({
+        name: img.name,
+        mimeType: img.mimeType,
+        data: img.data,
+      }));
+    }
+
+    logger.info(`Processed inline attachments (${mode})`, {
+      totalAttachments: request.attachments.length,
+      fileIdDocs: withFileId.length,
+      base64Docs: withBase64.length,
+      images: images.length,
+    });
+  }
+
+  return { attachmentContext, imageAttachments, extractionStatuses, resolvedDocs };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // AIAnswerPipelineService
 // ═══════════════════════════════════════════════════════════════════════
 
-// ═══════════════════════════════════════════════════════════════════════
-// Complexity-Based Model Selection — Thresholds & Types
-//
-// Strategy: deterministic, three-tier complexity scoring.
-//   LOW       → gpt-3.5-turbo          (fast, cheap — simple Q&A)
-//   MEDIUM    → gpt-4o-mini             (balanced — multi-part or moderate-context queries)
-//   HIGH      → gpt-4o-mini             (same model, higher token budget — synthesis / long sessions)
-//
-// Scoring signals (each contributes points; thresholds below):
-//   • Regex pattern indicators (comparison, analysis, multi-step, math/logic)
-//   • Question word count (multi-part heuristic)
-//   • Question character length
-//   • RAG context length (dense info requiring synthesis)
-//   • Conversation history length (session coherence)
-//
-// The exact thresholds are defined as named constants so they can be
-// tuned in one place without touching scoring or selection logic.
-// ═══════════════════════════════════════════════════════════════════════
-
-/** Complexity tier returned by `assessComplexity()`. */
-export type ComplexityTier = 'low' | 'medium' | 'high';
-
-export interface ComplexityAssessment {
-  tier: ComplexityTier;
-  score: number;
-  signals: string[];  // human-readable list of signals that fired
-}
-
-// ── Scoring weights ────────────────────────────────────────────────────
-
-/** Points awarded when ≥ 1 regex complexity-indicator matches the question. */
-const COMPLEXITY_WEIGHT_PATTERN_MATCH = 2;
-
-/** Points awarded when the question contains math / formal-logic language. */
-const COMPLEXITY_WEIGHT_MATH_LOGIC = 2;
-
-/** Points awarded when question word count exceeds QUESTION_WORD_COUNT_THRESHOLD. */
-const COMPLEXITY_WEIGHT_LONG_QUESTION_WORDS = 1;
-
-/** Points awarded when question character length exceeds QUESTION_CHAR_LENGTH_THRESHOLD. */
-const COMPLEXITY_WEIGHT_LONG_QUESTION_CHARS = 1;
-
-/** Points awarded when RAG context length exceeds RAG_CONTEXT_LENGTH_THRESHOLD. */
-const COMPLEXITY_WEIGHT_DENSE_CONTEXT = 1;
-
-/** Points awarded when conversation history length exceeds HISTORY_LENGTH_THRESHOLD. */
-const COMPLEXITY_WEIGHT_LONG_HISTORY = 1;
-
-/** Points awarded when the question contains comparison / conditional language. */
-const COMPLEXITY_WEIGHT_COMPARISON = 1;
-
-// ── Signal thresholds ──────────────────────────────────────────────────
-
-/** Word count above which a question is considered "multi-part". */
-const QUESTION_WORD_COUNT_THRESHOLD = 30;
-
-/** Character length above which a question earns the "long question" signal. */
-const QUESTION_CHAR_LENGTH_THRESHOLD = 200;
-
-/** RAG context character length above which the query is "dense context". */
-const RAG_CONTEXT_LENGTH_THRESHOLD = 4000;
-
-/** Conversation-history turn count above which the session is "long". */
-const HISTORY_LENGTH_THRESHOLD = 10;
-
-// ── Tier boundaries (inclusive lower bound) ────────────────────────────
-
-/** Minimum score for MEDIUM complexity (below → LOW). */
-const MEDIUM_COMPLEXITY_THRESHOLD = 2;
-
-/** Minimum score for HIGH complexity (below → MEDIUM). */
-const HIGH_COMPLEXITY_THRESHOLD = 5;
-
 export class AIAnswerPipelineService {
   // Model configuration
-  private static readonly DEFAULT_MODEL = 'gpt-3.5-turbo';
   private static readonly DEFAULT_TEMPERATURE = 0.7;
   private static readonly DEFAULT_MAX_TOKENS = 1800;
-  /** Best-quality model for complex / medium queries (pro tier). */
-  private static readonly GPT4_MODEL = 'gpt-4o-mini';
-  /** Default cost-effective model. */
-  private static readonly GPT35_MODEL = 'gpt-3.5-turbo';
 
   // ═════════════════════════════════════════════════════════════════════
   // LLM Cache Stats
@@ -383,113 +477,6 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       logger.warn('Off-topic pre-check failed, proceeding with full flow', { error: err?.message });
       return true;
     }
-  }
-
-  /**
-   * Assess query complexity and return a deterministic tier.
-   *
-   * Scoring signals (cumulative):
-   *   +2  regex pattern indicators (analysis, comparison, multi-step, etc.)
-   *   +2  math / formal-logic language
-   *   +1  question word count > QUESTION_WORD_COUNT_THRESHOLD (30)
-   *   +1  question char length > QUESTION_CHAR_LENGTH_THRESHOLD (200)
-   *   +1  RAG context length > RAG_CONTEXT_LENGTH_THRESHOLD (4 000 chars)
-   *   +1  conversation history > HISTORY_LENGTH_THRESHOLD (10 turns)
-   *   +1  comparison / conditional language
-   *
-   * Tier boundaries:
-   *   score < MEDIUM_COMPLEXITY_THRESHOLD (2) → LOW
-   *   score < HIGH_COMPLEXITY_THRESHOLD   (5) → MEDIUM
-   *   score ≥ HIGH_COMPLEXITY_THRESHOLD   (5) → HIGH
-   */
-  static assessComplexity(
-    question: string,
-    ragContext?: string,
-    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
-  ): ComplexityAssessment {
-    let score = 0;
-    const signals: string[] = [];
-
-    // ── 1. Regex complexity-indicator patterns ─────────────────────────
-    const complexIndicators = [
-      /\?.*\?/,
-      /(?:and|or|also|additionally|furthermore|moreover).*\?/i,
-      /(?:analyze|analysis|evaluate|examine|assess|critique)/i,
-      /(?:pros?|cons?|advantages?|disadvantages?|benefits?|drawbacks?)/i,
-      /(?:algorithm|implementation|architecture|design|methodology|framework)/i,
-      /(?:optimize|optimization|performance|efficiency|scalability)/i,
-      /(?:debug|troubleshoot|diagnose|fix|resolve|error|issue|problem)/i,
-      /(?:step|steps|process|procedure|workflow|pipeline)/i,
-      /(?:how to|how do|how does|how can|how would|how should)/i,
-      /(?:explain.*step|walk.*through|guide|tutorial)/i,
-      /(?:summarize|summary|overview|review|synthesis|synthesize)/i,
-      /(?:all|every|entire|complete|full|comprehensive)/i,
-    ];
-    if (complexIndicators.some(p => p.test(question))) {
-      score += COMPLEXITY_WEIGHT_PATTERN_MATCH;
-      signals.push('pattern-match');
-    }
-
-    // ── 2. Math / formal-logic language ────────────────────────────────
-    if (/(?:calculate|solve|equation|formula|theorem|proof|logic|reasoning)/i.test(question)) {
-      score += COMPLEXITY_WEIGHT_MATH_LOGIC;
-      signals.push('math-logic');
-    }
-
-    // ── 3. Comparison / conditional language ───────────────────────────
-    if (/(?:compare|contrast|difference|similarity|versus|vs\.?|if.*then|when.*would|relationship|correlation|impact|effect)/i.test(question)) {
-      score += COMPLEXITY_WEIGHT_COMPARISON;
-      signals.push('comparison-conditional');
-    }
-
-    // ── 4. Question word count > 30 (likely multi-part) ────────────────
-    const wordCount = question.trim().split(/\s+/).length;
-    if (wordCount > QUESTION_WORD_COUNT_THRESHOLD) {
-      score += COMPLEXITY_WEIGHT_LONG_QUESTION_WORDS;
-      signals.push(`word-count(${wordCount})`);
-    }
-
-    // ── 5. Question character length > 200 ─────────────────────────────
-    if (question.length > QUESTION_CHAR_LENGTH_THRESHOLD) {
-      score += COMPLEXITY_WEIGHT_LONG_QUESTION_CHARS;
-      signals.push(`char-length(${question.length})`);
-    }
-
-    // ── 6. RAG context > 4 000 chars (dense information) ───────────────
-    if (ragContext && ragContext.length > RAG_CONTEXT_LENGTH_THRESHOLD) {
-      score += COMPLEXITY_WEIGHT_DENSE_CONTEXT;
-      signals.push(`dense-context(${ragContext.length})`);
-    }
-
-    // ── 7. Conversation history > 10 turns ─────────────────────────────
-    if (conversationHistory && conversationHistory.length > HISTORY_LENGTH_THRESHOLD) {
-      score += COMPLEXITY_WEIGHT_LONG_HISTORY;
-      signals.push(`long-history(${conversationHistory.length})`);
-    }
-
-    // ── Determine tier ─────────────────────────────────────────────────
-    let tier: ComplexityTier;
-    if (score >= HIGH_COMPLEXITY_THRESHOLD) {
-      tier = 'high';
-    } else if (score >= MEDIUM_COMPLEXITY_THRESHOLD) {
-      tier = 'medium';
-    } else {
-      tier = 'low';
-    }
-
-    return { tier, score, signals };
-  }
-
-  /**
-   * Legacy convenience wrapper — returns true when complexity is HIGH.
-   * Kept for backward-compat with callers that only need a boolean.
-   */
-  static isComplexQuery(
-    question: string,
-    ragContext?: string,
-    conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
-  ): boolean {
-    return this.assessComplexity(question, ragContext, conversationHistory).tier === 'high';
   }
 
   static async selectModel(
@@ -645,231 +632,23 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         conversationStateText = undefined;
       }
 
-      // ── Inline attachment processing ──────────────────────────────────
-      let attachmentContext = '';
-      let imageAttachments: Array<{ name: string; mimeType: string; data: string }> | undefined;
-      // Tracks resolved entries from the attachmentIds path so they are included
-      // in the combined allDocsToSave written by the request.attachments block,
-      // preventing the second metadata save from overwriting the first.
-      let resolvedFromAttachmentIds: Array<{ name: string; mimeType: string; extractedText: string; extractionStatus: string; fileId: string }> = [];
+      // ── Attachment processing ────────────────────────────────────────
+      const attachmentResult = await processAttachments(request, userId, 'chat');
+      let attachmentContext = attachmentResult.attachmentContext;
+      const imageAttachments = attachmentResult.imageAttachments;
 
-      // ── Resolve pre-uploaded attachment IDs (follow-up messages) ────────
-      // When the frontend sends attachmentIds, load extracted text from the
-      // chat_attachments table — no base64 re-sent, no re-extraction.
-      if ((request as any).attachmentIds && (request as any).attachmentIds.length > 0 && userId) {
-        try {
-          const { ChatAttachmentService } = await import('./chat-attachment.service');
-          const resolved = await ChatAttachmentService.resolveByIds((request as any).attachmentIds, userId);
-          if (resolved.length > 0) {
-            const { AttachmentExtractorService } = await import('./attachment-extractor.service');
-            const docsWithText = resolved
-              .filter((r) => r.extractedText)
-              .map((r) => ({ name: r.fileName, text: r.extractedText!, mimeType: r.mimeType }));
-            if (docsWithText.length > 0) {
-              attachmentContext = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
-            }
-
-            // Emit extraction statuses so frontend can show badges on message bubbles
-            const resolvedStatuses = resolved.map((r) => ({
-              name: r.fileName,
-              status: r.extractedText ? 'success' as const : 'failed' as const,
-              chars: r.extractedText?.length ?? 0,
-            }));
-            if (resolvedStatuses.length > 0) {
-              (request as any)._extractionStatuses = [
-                ...((request as any)._extractionStatuses || []),
-                ...resolvedStatuses,
-              ];
-            }
-
-            // Build the metadata entries for these attachments.
-            // Store them in the outer scope so the combined allDocsToSave in the
-            // request.attachments block can include them, avoiding an overwrite.
-            resolvedFromAttachmentIds = resolved.map((r) => ({
-              name: r.fileName,
-              mimeType: r.mimeType,
-              extractedText: r.extractedText
-                ? r.extractedText.length > 12000
-                  ? (AttachmentExtractorService as any).smartTruncate(r.extractedText, request.question, 12000)
-                  : r.extractedText
-                : '',
-              extractionStatus: r.extractedText ? 'success' : 'failed',
-              fileId: r.id,
-            }));
-
-            // Persist fileId doc references into conversation metadata so
-            // attachments survive cross-session reloads.
-            if (request.conversationId) {
-              // Link attachments to this conversation (they were uploaded with
-              // conversation_id=NULL since the conversation may not have existed yet)
-              try {
-                await ChatAttachmentService.linkToConversation(
-                  (request as any).attachmentIds,
-                  request.conversationId,
-                  userId,
-                );
-              } catch (linkErr: any) {
-                logger.warn('Failed to link attachmentIds to conversation', { error: linkErr.message });
-              }
-
-              // Save to metadata now only when there are NO request.attachments;
-              // if request.attachments is also present, the combined save below handles it.
-              if (!request.attachments || request.attachments.length === 0) {
-                try {
-                  const { ConversationService } = await import('./conversation.service');
-                  await ConversationService.updateConversation(
-                    request.conversationId,
-                    userId,
-                    { metadata: { savedAttachments: resolvedFromAttachmentIds } },
-                  );
-                } catch (saveErr: any) {
-                  logger.warn('Failed to persist attachmentIds to metadata', { error: saveErr.message });
-                }
-              }
-            }
-
-            logger.info('Resolved attachmentIds for follow-up', {
-              ids: (request as any).attachmentIds,
-              resolved: resolved.length,
-              withText: docsWithText.length,
-            });
-          }
-        } catch (resolveErr: any) {
-          logger.warn('Failed to resolve attachmentIds', { error: resolveErr.message });
-        }
-      }
-
-      if (request.attachments && request.attachments.length > 0) {
-        const { AttachmentExtractorService } = await import('./attachment-extractor.service');
-
-        // Separate attachments: those with fileId (pre-uploaded) vs legacy base64
-        const withFileId = request.attachments.filter((a: any) => a.fileId);
-        const withBase64 = request.attachments.filter((a: any) => !a.fileId && a.type === 'document');
-        const images = request.attachments.filter((a) => a.type === 'image');
-
-        // ── Resolve fileId attachments from chat_attachments table ─────
-        let fileIdResolvedDocs: Array<{ name: string; text: string; mimeType: string; fileId: string; extractionStatus: string }> = [];
-        if (withFileId.length > 0 && userId) {
-          try {
-            const { ChatAttachmentService } = await import('./chat-attachment.service');
-            const fileIds = withFileId.map((a: any) => a.fileId);
-            const resolved = await ChatAttachmentService.resolveByIds(fileIds, userId);
-            const docsWithText = resolved
-              .filter((r) => r.extractedText)
-              .map((r) => ({ name: r.fileName, text: r.extractedText!, mimeType: r.mimeType }));
-            if (docsWithText.length > 0) {
-              attachmentContext = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
-            }
-            // Collect for metadata persistence
-            fileIdResolvedDocs = resolved.map((r) => ({
-              name: r.fileName,
-              text: r.extractedText || '',
-              mimeType: r.mimeType,
-              fileId: r.id,
-              extractionStatus: r.extractedText ? 'success' : 'failed',
-            }));
-            // Build extraction statuses from resolved data
-            const resolvedStatuses = resolved.map((r) => ({
-              name: r.fileName,
-              status: r.extractedText ? 'success' as const : 'failed' as const,
-              chars: r.extractedText?.length ?? 0,
-            }));
-            if (resolvedStatuses.length > 0) {
-              (request as any)._extractionStatuses = [
-                ...((request as any)._extractionStatuses || []),
-                ...resolvedStatuses,
-              ];
-            }
-            logger.info('Resolved fileId attachments', { count: resolved.length });
-
-            // Link these fileId attachments to the conversation
-            if (request.conversationId) {
-              try {
-                await ChatAttachmentService.linkToConversation(
-                  fileIds,
-                  request.conversationId,
-                  userId,
-                );
-              } catch (linkErr: any) {
-                logger.warn('Failed to link fileId attachments to conversation', { error: linkErr.message });
-              }
-            }
-          } catch (resolveErr: any) {
-            logger.warn('Failed to resolve fileId attachments', { error: resolveErr.message });
-          }
-        }
-
-        // ── Extract text from legacy base64 document attachments ─────
-        let base64ExtractedDocs: Array<{ name: string; text: string; mimeType: string }> = [];
-        if (withBase64.length > 0) {
-          const { extracted, statuses: extractionStatuses } = await AttachmentExtractorService.extractAllWithStatus(withBase64);
-          base64ExtractedDocs = extracted;
-          if (extracted.length > 0) {
-            const base64Context = AttachmentExtractorService.formatAsContext(extracted, request.question);
-            attachmentContext = attachmentContext
-              ? attachmentContext + '\n\n' + base64Context
-              : base64Context;
-          }
-          if (extractionStatuses.length > 0) {
-            (request as any)._extractionStatuses = [
-              ...((request as any)._extractionStatuses || []),
-              ...extractionStatuses,
-            ];
-          }
-        }
-
-        // Collect image attachments for multi-part vision message
-        if (images.length > 0) {
-          imageAttachments = images.map((img) => ({
-            name: img.name,
-            mimeType: img.mimeType,
-            data: img.data,
-          }));
-        }
-        logger.info('Processed inline attachments for chat mode', {
-          totalAttachments: request.attachments.length,
-          fileIdDocs: withFileId.length,
-          base64Docs: withBase64.length,
-          images: images.length,
-        });
-
-        // ── Persist extracted document text to conversation metadata ─────
-        // Save all file references so deleteByConversation can find and clean
-        // them up when the conversation is deleted.  Includes:
-        //   - resolvedFromAttachmentIds: files sent via the attachmentIds field
-        //   - fileIdResolvedDocs: inline attachments that had a fileId
-        //   - base64ExtractedDocs: inline base64 attachments (no fileId / storage)
-        // Dedup by fileId to avoid duplicates when the same file appears in both paths.
+      // Persist resolved docs to conversation metadata (chat-mode only)
+      // so attachments survive cross-session reloads and cleanup on delete.
+      if (attachmentResult.resolvedDocs.length > 0 && request.conversationId && userId) {
+        // Dedup by fileId
         const seenFileIds = new Set<string>();
-        const allDocsToSave = [
-          ...resolvedFromAttachmentIds.filter((doc) => {
-            if (seenFileIds.has(doc.fileId)) return false;
-            seenFileIds.add(doc.fileId);
-            return true;
-          }),
-          ...fileIdResolvedDocs.map((doc) => ({
-            name: doc.name,
-            mimeType: doc.mimeType,
-            extractedText: doc.text.length > 12000
-              ? AttachmentExtractorService.smartTruncate(doc.text, request.question, 12000)
-              : doc.text,
-            extractionStatus: doc.extractionStatus,
-            fileId: doc.fileId,
-          })).filter((doc) => {
-            if (seenFileIds.has(doc.fileId)) return false;
-            seenFileIds.add(doc.fileId);
-            return true;
-          }),
-          ...base64ExtractedDocs.map((doc) => ({
-            name: doc.name,
-            mimeType: doc.mimeType,
-            extractedText: doc.text.length > 12000
-              ? AttachmentExtractorService.smartTruncate(doc.text, request.question, 12000)
-              : doc.text,
-            extractionStatus: 'success',
-          })),
-        ];
-        if (allDocsToSave.length > 0 && request.conversationId && userId) {
+        const allDocsToSave = attachmentResult.resolvedDocs.filter((doc) => {
+          if (!doc.fileId) return true; // base64 docs have no fileId
+          if (seenFileIds.has(doc.fileId)) return false;
+          seenFileIds.add(doc.fileId);
+          return true;
+        });
+        if (allDocsToSave.length > 0) {
           try {
             const { ConversationService } = await import('./conversation.service');
             await ConversationService.updateConversation(
@@ -880,15 +659,13 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             logger.info('Saved attachment context to conversation metadata', {
               conversationId: request.conversationId,
               documentCount: allDocsToSave.length,
-              fileIdDocs: fileIdResolvedDocs.length,
-              base64Docs: base64ExtractedDocs.length,
             });
           } catch (saveErr: any) {
             logger.warn('Failed to save attachment context to conversation', { error: saveErr.message });
           }
         }
       } else if (!attachmentContext && request.conversationId && userId) {
-        // ── No new attachments and no attachmentIds — check conversation for saved context ─
+        // No new attachments — check conversation for previously saved context
         try {
           const { ConversationService } = await import('./conversation.service');
           const conversation = await ConversationService.getConversation(request.conversationId, userId);
@@ -936,7 +713,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         contextDegradationLevel: undefined,
         contextDegradationMessage: undefined,
         contextPartial: false,
-        extractionStatuses: (request as any)._extractionStatuses,
+        extractionStatuses: attachmentResult.extractionStatuses.length > 0
+          ? attachmentResult.extractionStatuses
+          : undefined,
         attachmentDocumentContext: attachmentContext || undefined,
       };
     }
@@ -1332,124 +1111,13 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       }
     }
 
-    // ── Build messages ─────────────────────────────────────────────────
-    // Process inline attachments for research mode (same as chat mode)
-    let researchAttachmentContext = '';
-    let researchImageAttachments: Array<{ name: string; mimeType: string; data: string }> | undefined;
-
-    // ── Resolve pre-uploaded attachment IDs (conversation-level attachments) ──
-    if ((request as any).attachmentIds && (request as any).attachmentIds.length > 0 && userId) {
-      try {
-        const { ChatAttachmentService } = await import('./chat-attachment.service');
-        const { AttachmentExtractorService } = await import('./attachment-extractor.service');
-        const resolved = await ChatAttachmentService.resolveByIds((request as any).attachmentIds, userId);
-        if (resolved.length > 0) {
-          const docsWithText = resolved
-            .filter((r) => r.extractedText)
-            .map((r) => ({ name: r.fileName, text: r.extractedText!, mimeType: r.mimeType }));
-          if (docsWithText.length > 0) {
-            researchAttachmentContext = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
-          }
-          const resolvedStatuses = resolved.map((r) => ({
-            name: r.fileName,
-            status: r.extractedText ? 'success' as const : 'failed' as const,
-            chars: r.extractedText?.length ?? 0,
-          }));
-          if (resolvedStatuses.length > 0) {
-            (request as any)._extractionStatuses = [
-              ...((request as any)._extractionStatuses || []),
-              ...resolvedStatuses,
-            ];
-          }
-
-          // Link to conversation if applicable
-          if (request.conversationId) {
-            try {
-              await ChatAttachmentService.linkToConversation(
-                (request as any).attachmentIds,
-                request.conversationId,
-                userId,
-              );
-            } catch (linkErr: any) {
-              logger.warn('Failed to link attachmentIds to conversation (research)', { error: linkErr.message });
-            }
-          }
-
-          logger.info('Resolved attachmentIds for research mode', {
-            ids: (request as any).attachmentIds,
-            resolved: resolved.length,
-            withText: docsWithText.length,
-          });
-        }
-      } catch (resolveErr: any) {
-        logger.warn('Failed to resolve attachmentIds in research mode', { error: resolveErr.message });
-      }
-    }
-
-    if (request.attachments && request.attachments.length > 0) {
-      const { AttachmentExtractorService } = await import('./attachment-extractor.service');
-
-      // Separate: fileId-only (pre-uploaded) vs base64 documents vs images
-      const withFileId = request.attachments.filter((a: any) => a.fileId && !a.data);
-      const withBase64 = request.attachments.filter((a: any) => !a.fileId || a.data).filter((a) => a.type === 'document');
-      const images = request.attachments.filter((a) => a.type === 'image');
-
-      // Resolve fileId attachments from DB
-      if (withFileId.length > 0 && userId) {
-        try {
-          const { ChatAttachmentService } = await import('./chat-attachment.service');
-          const fileIds = withFileId.map((a: any) => a.fileId);
-          const resolved = await ChatAttachmentService.resolveByIds(fileIds, userId);
-          const docsWithText = resolved
-            .filter((r) => r.extractedText)
-            .map((r) => ({ name: r.fileName, text: r.extractedText!, mimeType: r.mimeType }));
-          if (docsWithText.length > 0) {
-            const ctx = AttachmentExtractorService.formatAsContext(docsWithText, request.question);
-            researchAttachmentContext = researchAttachmentContext ? researchAttachmentContext + '\n\n' + ctx : ctx;
-          }
-          const resolvedStatuses = resolved.map((r) => ({
-            name: r.fileName,
-            status: r.extractedText ? 'success' as const : 'failed' as const,
-            chars: r.extractedText?.length ?? 0,
-          }));
-          if (resolvedStatuses.length > 0) {
-            (request as any)._extractionStatuses = [
-              ...((request as any)._extractionStatuses || []),
-              ...resolvedStatuses,
-            ];
-          }
-        } catch (resolveErr: any) {
-          logger.warn('Failed to resolve fileId attachments in research mode', { error: resolveErr.message });
-        }
-      }
-
-      // Extract text from base64 document attachments
-      if (withBase64.length > 0) {
-        const { extracted, statuses: researchExtractionStatuses } = await AttachmentExtractorService.extractAllWithStatus(withBase64);
-        if (extracted.length > 0) {
-          const ctx = AttachmentExtractorService.formatAsContext(extracted, request.question);
-          researchAttachmentContext = researchAttachmentContext ? researchAttachmentContext + '\n\n' + ctx : ctx;
-        }
-        if (researchExtractionStatuses.length > 0) {
-          (request as any)._extractionStatuses = [
-            ...((request as any)._extractionStatuses || []),
-            ...researchExtractionStatuses,
-          ];
-        }
-      }
-
-      if (images.length > 0) {
-        researchImageAttachments = images.map((img) => ({
-          name: img.name,
-          mimeType: img.mimeType,
-          data: img.data,
-        }));
-      }
-    }
+    // ── Attachment processing (shared helper) ─────────────────────────
+    const researchAttachmentResult = await processAttachments(request, userId, 'research');
+    const researchAttachmentContext = researchAttachmentResult.attachmentContext;
+    const researchImageAttachments = researchAttachmentResult.imageAttachments;
 
     // Pass document attachment context separately so the prompt builder
     // can position it ABOVE web results with primary-source hierarchy.
-    // Only plain `additionalContext` (non-attachment) goes into enrichedContext.
     const enrichedContext = request.context || undefined;
 
     const messages = this.buildMessages(
@@ -1488,7 +1156,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       contextDegradationMessage,
       contextPartial,
       attachmentDocumentContext: researchAttachmentContext || undefined,
-      extractionStatuses: (request as any)._extractionStatuses,
+      extractionStatuses: researchAttachmentResult.extractionStatuses.length > 0
+        ? researchAttachmentResult.extractionStatuses
+        : undefined,
     };
   }
 
@@ -2169,177 +1839,6 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       logger.error('Unexpected error in AI service:', error);
       throw new AppError('Failed to generate AI response', 500, 'AI_SERVICE_ERROR');
     }
-  }
-
-  // ═════════════════════════════════════════════════════════════════════
-  // Post-stream processing (follow-ups, quality, save, usage logging)
-  // ═════════════════════════════════════════════════════════════════════
-
-  /**
-   * Centralised post-stream business logic.
-   *
-   * Called by the streaming route handler after all chunks have been
-   * collected.  Handles:
-   *   1. Follow-up question extraction (structured or LLM-based)
-   *   2. Answer quality scoring
-   *   3. Conversation creation / message persistence
-   *   4. Usage logging for analytics
-   *
-   * Returns data the route needs to write back over SSE (follow-ups,
-   * quality score, conversationId).
-   */
-  static async postProcessStream(
-    params: PostProcessStreamParams
-  ): Promise<PostProcessStreamResult> {
-    const {
-      fullAnswer,
-      question,
-      userId,
-      sources,
-      topicName,
-      topicId,
-      conversationId,
-      model,
-      isResend,
-      structuredFollowUps,
-      structuredCitedSources,
-      ragSettings,
-    } = params;
-
-    let cleanedAnswer = fullAnswer;
-    let followUpQuestions: string[] | undefined;
-    let qualityScore: number | undefined;
-    let finalConversationId: string | undefined = conversationId;
-
-    // ── 1. Follow-up questions ──────────────────────────────────────
-    if (structuredFollowUps && structuredFollowUps.length > 0) {
-      followUpQuestions = structuredFollowUps;
-    } else {
-      try {
-        const followUpResult = await ResponseProcessorService.processFollowUpQuestions(
-          fullAnswer,
-          question,
-          topicName,
-        );
-        followUpQuestions = followUpResult.questions.length > 0 ? followUpResult.questions : undefined;
-        cleanedAnswer = followUpResult.answer;
-      } catch (err: any) {
-        logger.warn('Follow-up questions processing failed in streaming', { error: err?.message });
-      }
-    }
-
-    // ── 2. Quality score ────────────────────────────────────────────
-    try {
-      qualityScore = ResponseProcessorService.calculateAnswerQualityScore(
-        cleanedAnswer,
-        sources || [],
-        followUpQuestions || [],
-      );
-    } catch (err: any) {
-      logger.warn('Quality score calculation failed', { error: err?.message });
-    }
-
-    // ── 2b. LLM-as-judge evaluation (sampled, fire-and-forget) ────
-    if (userId) {
-      import('../services/answer-evaluator.service').then(({ AnswerEvaluatorService }) => {
-        AnswerEvaluatorService.maybeEvaluate({
-          question,
-          answer: cleanedAnswer,
-          sources: sources ?? undefined,
-          userId,
-          conversationId,
-          topicId,
-        });
-      }).catch((err: any) => {
-        logger.warn('Failed to load answer evaluator (streaming)', { error: err.message });
-      });
-    }
-
-    // ── 3. Persist to conversation ──────────────────────────────────
-    if (conversationId && userId && cleanedAnswer) {
-      try {
-        const { ConversationService } = await import('../services/conversation.service');
-        const { MessageService } = await import('../services/message.service');
-
-        let conversation = await ConversationService.getConversation(conversationId, userId);
-
-        if (!conversation) {
-          const title = ConversationService.generateTitleFromMessage(question);
-          conversation = await ConversationService.createConversation({
-            userId,
-            title,
-            topicId,
-          });
-          finalConversationId = conversation.id;
-          logger.info('Created new conversation for streaming message', {
-            conversationId: finalConversationId,
-            userId,
-          });
-        }
-
-        const metadata: Record<string, any> = {
-          model: model || 'gpt-4o-mini',
-          streaming: true,
-          ...(followUpQuestions && followUpQuestions.length > 0 && { followUpQuestions }),
-          ...(qualityScore !== undefined && { qualityScore }),
-          ...(structuredCitedSources && structuredCitedSources.length > 0 && { citedSources: structuredCitedSources }),
-          ...(ragSettings && Object.keys(ragSettings).length > 0 && { ragSettings }),
-        };
-
-        if (isResend) {
-          await MessageService.saveMessage({
-            conversationId: finalConversationId!,
-            role: 'assistant',
-            content: cleanedAnswer,
-            sources: sources ?? undefined,
-            metadata,
-          });
-        } else {
-          await MessageService.saveMessagePair(
-            finalConversationId!,
-            question,
-            cleanedAnswer,
-            sources,
-            metadata,
-          );
-        }
-
-        logger.info('Messages saved to conversation (streaming)', {
-          conversationId: finalConversationId,
-          userId,
-          isResend,
-        });
-      } catch (saveError: any) {
-        logger.warn('Failed to save messages to conversation (streaming)', {
-          error: saveError.message,
-          conversationId,
-          userId,
-        });
-      }
-    }
-
-    // ── 4. Log usage for analytics ──────────────────────────────────
-    if (userId && cleanedAnswer) {
-      try {
-        const { DatabaseService } = await import('../services/database.service');
-        await DatabaseService.logUsage(userId, 'query', {
-          question: question.substring(0, 200),
-          topicId,
-          model: model || 'gpt-3.5-turbo',
-          hasSources: sources && sources.length > 0,
-          streaming: true,
-        });
-      } catch (usageError: any) {
-        logger.warn('Failed to log query usage (streaming)', { error: usageError?.message });
-      }
-    }
-
-    return {
-      followUpQuestions,
-      qualityScore,
-      cleanedAnswer,
-      conversationId: finalConversationId,
-    };
   }
 
   // ═════════════════════════════════════════════════════════════════════

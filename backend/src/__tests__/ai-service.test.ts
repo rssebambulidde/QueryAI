@@ -424,10 +424,8 @@ describe('AIService', () => {
     });
   });
 
-  describe('PostProcessStreamParams ragSettings', () => {
-    it('should accept ragSettings in PostProcessStreamParams interface', async () => {
-      // Verify the type accepts ragSettings without type errors
-      const { PostProcessStreamParams } = await import('../services/ai-answer-pipeline.service') as any;
+  describe('ragSettings metadata', () => {
+    it('should accept ragSettings in streaming metadata', () => {
       const params = {
         fullAnswer: 'Test answer',
         question: mockQuestion,
