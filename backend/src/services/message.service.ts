@@ -653,20 +653,31 @@ export class MessageService {
       // The root is either the original itself (if it has no parent) or its parent
       const rootId: string = original.parent_message_id ?? original.id;
 
-      // Find the current max version among siblings + root
+      // Find the current max version among siblings + root.
+      // Query root + all children, compute max version in code for reliability.
       const { data: siblings, error: sibErr } = await supabaseAdmin
         .from('messages')
         .select('version')
-        .or(`id.eq.${rootId},parent_message_id.eq.${rootId}`)
-        .order('version', { ascending: false })
-        .limit(1);
+        .or(`id.eq.${rootId},parent_message_id.eq.${rootId}`);
 
       if (sibErr) {
         throw new AppError(`Failed to query versions: ${sibErr.message}`, 500, 'VERSION_QUERY_ERROR');
       }
 
-      const maxVersion = siblings?.[0]?.version ?? 1;
+      const maxVersion = (siblings ?? []).reduce(
+        (max, s) => Math.max(max, s.version ?? 1),
+        1,
+      );
       const newVersion = maxVersion + 1;
+
+      logger.debug('Creating message version', {
+        rootId,
+        originalMessageId,
+        siblingCount: siblings?.length ?? 0,
+        existingVersions: siblings?.map(s => s.version),
+        maxVersion,
+        newVersion,
+      });
 
       const { data: newMsg, error: insertErr } = await supabaseAdmin
         .from('messages')

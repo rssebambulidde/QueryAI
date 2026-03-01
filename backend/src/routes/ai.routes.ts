@@ -1245,7 +1245,9 @@ router.post(
 
     // Get all messages to find the user question preceding the target assistant message
     const allMessages = await MessageService.getAllMessages(conversationId, userId, { unlimited: true });
-    const targetIdx = allMessages.findIndex((m) => m.id === messageId || m.parent_message_id === messageId);
+    // getAllMessages returns root-only messages (parent_message_id IS NULL),
+    // so we match directly by ID.
+    const targetIdx = allMessages.findIndex((m) => m.id === messageId);
     if (targetIdx < 0) {
       throw new ValidationError('Message not found in conversation');
     }
