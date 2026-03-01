@@ -54,7 +54,7 @@ apiClient.interceptors.response.use(
       const originalRequest = error.config;
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname;
-        const isAuthPage = ['/login', '/signup', '/forgot-password', '/accept-invite'].includes(currentPath);
+        const isAuthPage = ['/login', '/signup', '/forgot-password'].includes(currentPath);
         const isRefreshRequest = originalRequest?.url?.includes('/api/auth/refresh');
         if (isAuthPage || isRefreshRequest) {
           localStorage.removeItem('accessToken');

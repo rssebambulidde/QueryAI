@@ -589,37 +589,46 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       // ── Phase 1: Fire all independent operations in parallel ────────
       const chatModelTask = this.selectModel(userId, request.question, undefined, undefined, request.model, 'chat');
 
-      const chatHistoryTask = (async (): Promise<Array<{ role: 'user' | 'assistant'; content: string }> | undefined> => {
-        let history = request.conversationHistory;
-        if (request.conversationId && userId && (!history || history.length === 0)) {
-          try {
+      const chatHistoryTask = LatencyTrackerService.trackOperation(
+        OperationType.HISTORY_LOADING,
+        async () => {
+          let history = request.conversationHistory;
+          if (request.conversationId && userId && (!history || history.length === 0)) {
             const { MessageService } = await import('./message.service');
             history = await MessageService.getSlidingWindowHistory(
               request.conversationId,
               userId,
               { model: request.model || 'gpt-3.5-turbo', windowSize: 10 }
             );
-          } catch (historyError: any) {
-            logger.warn('Failed to load conversation history for chat mode', { error: historyError.message });
+          } else if (history && history.length > 10) {
+            history = history.slice(-10);
           }
-        } else if (history && history.length > 10) {
-          history = history.slice(-10);
-        }
-        return history;
-      })();
+          return history;
+        },
+        { userId }
+      ).catch((err: any) => {
+        logger.warn('Failed to load conversation history for chat mode', { error: err.message });
+        return request.conversationHistory;
+      });
 
-      const chatStateTask = (async (): Promise<string | undefined> => {
-        if (request.enableStateTracking !== false && request.conversationId && userId) {
-          try {
+      const chatStateTask = LatencyTrackerService.trackOperation(
+        OperationType.CONVERSATION_STATE,
+        async () => {
+          if (request.enableStateTracking !== false && request.conversationId && userId) {
             const { ConversationStateService } = await import('./conversation-state.service');
             const state = await ConversationStateService.getState(request.conversationId, userId);
             if (state) return ConversationStateService.formatStateForContextCompact(state);
-          } catch { /* ignore */ }
-        }
-        return undefined;
-      })();
+          }
+          return undefined;
+        },
+        { userId }
+      ).catch(() => undefined);
 
-      const chatAttachmentTask = processAttachments(request, userId, 'chat');
+      const chatAttachmentTask = LatencyTrackerService.trackOperation(
+        OperationType.ATTACHMENT_PROCESSING,
+        () => processAttachments(request, userId, 'chat'),
+        { userId }
+      );
 
       const [modelSelection, conversationHistory, rawStateText, attachmentResult] =
         await Promise.all([chatModelTask, chatHistoryTask, chatStateTask, chatAttachmentTask]);
@@ -944,11 +953,12 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     })();
 
     // Helper: Conversation history loading + sliding window
-    const historyTask = (async (): Promise<Array<{ role: 'user' | 'assistant'; content: string }> | undefined> => {
-      let history = request.conversationHistory;
+    const historyTask = LatencyTrackerService.trackOperation(
+      OperationType.HISTORY_LOADING,
+      async () => {
+        let history = request.conversationHistory;
 
-      if (request.conversationId && userId && (!history || history.length === 0)) {
-        try {
+        if (request.conversationId && userId && (!history || history.length === 0)) {
           const { MessageService } = await import('./message.service');
           history = await MessageService.getSlidingWindowHistory(
             request.conversationId,
@@ -962,14 +972,7 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             conversationId: request.conversationId,
             historyLength: history.length,
           });
-        } catch (error: any) {
-          logger.warn('Failed to fetch conversation history, continuing without history', {
-            error: error.message,
-            conversationId: request.conversationId,
-          });
-        }
-      } else if (history && history.length > 0) {
-        try {
+        } else if (history && history.length > 0) {
           const { MessageService } = await import('./message.service');
           history = await MessageService.applyHistoryStrategy(
             history,
@@ -981,20 +984,24 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           logger.info('Client-provided history windowed (unified strategy)', {
             historyLength: history.length,
           });
-        } catch (error: any) {
-          logger.warn('Failed to apply history strategy to client-provided history, using as-is', {
-            error: error.message,
-          });
         }
-      }
 
-      return history;
-    })();
+        return history;
+      },
+      { userId }
+    ).catch((error: any) => {
+      logger.warn('Failed to load conversation history, continuing without history', {
+        error: error.message,
+        conversationId: request.conversationId,
+      });
+      return request.conversationHistory;
+    });
 
     // Helper: Conversation state (entity/topic tracking)
-    const stateTask = (async (): Promise<string> => {
-      if (request.conversationId && userId && request.enableStateTracking !== false) {
-        try {
+    const stateTask = LatencyTrackerService.trackOperation(
+      OperationType.CONVERSATION_STATE,
+      async () => {
+        if (request.conversationId && userId && request.enableStateTracking !== false) {
           const { ConversationStateService } = await import('./conversation-state.service');
           const state = await ConversationStateService.getState(request.conversationId, userId);
 
@@ -1008,15 +1015,17 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             });
             return text;
           }
-        } catch (stateErr: any) {
-          logger.warn('Failed to retrieve conversation state, continuing without it', {
-            error: stateErr.message,
-            conversationId: request.conversationId,
-          });
         }
-      }
+        return '';
+      },
+      { userId }
+    ).catch((stateErr: any) => {
+      logger.warn('Failed to retrieve conversation state, continuing without it', {
+        error: stateErr.message,
+        conversationId: request.conversationId,
+      });
       return '';
-    })();
+    });
 
     // Helper: Model selection (pure registry lookup — no dependency on RAG or history)
     const modelTask = this.selectModel(
@@ -1029,7 +1038,11 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     );
 
     // Helper: Attachment processing
-    const attachmentTask = processAttachments(request, userId, 'research');
+    const attachmentTask = LatencyTrackerService.trackOperation(
+      OperationType.ATTACHMENT_PROCESSING,
+      () => processAttachments(request, userId, 'research'),
+      { userId }
+    );
 
     // Await all 5 independent operations in parallel
     const [ragResult, loadedHistory, conversationStateText, modelSelection, researchAttachmentResult] =

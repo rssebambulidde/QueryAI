@@ -209,9 +209,6 @@ app.get('/', (_req: Request, res: Response) => {
         logout: 'POST /api/auth/logout',
         refresh: 'POST /api/auth/refresh',
         forgotPassword: 'POST /api/auth/forgot-password',
-        magicLink: 'POST /api/auth/magic-link',
-        invite: 'POST /api/auth/invite',
-        inviteGuest: 'POST /api/auth/invite-guest',
         resetPassword: 'POST /api/auth/reset-password',
         me: 'GET /api/auth/me',
       },
@@ -225,7 +222,7 @@ app.get('/', (_req: Request, res: Response) => {
 // Health check endpoint
 app.get('/health', async (_req: Request, res: Response) => {
   const dbHealth = await checkDatabaseHealth();
-  
+
   res.status(dbHealth.connected ? 200 : 503).json({
     success: dbHealth.connected,
     message: 'Server health check',
@@ -264,9 +261,6 @@ app.get('/api', (_req: Request, res: Response) => {
         logout: 'POST /api/auth/logout',
         refresh: 'POST /api/auth/refresh',
         forgotPassword: 'POST /api/auth/forgot-password',
-        magicLink: 'POST /api/auth/magic-link',
-        invite: 'POST /api/auth/invite',
-        inviteGuest: 'POST /api/auth/invite-guest',
         resetPassword: 'POST /api/auth/reset-password',
         me: 'GET /api/auth/me',
       },
@@ -308,10 +302,10 @@ async function initializeQueue() {
 
     const { RequestQueueService } = await import('./services/request-queue.service');
     const { RAGWorker } = await import('./workers/rag-worker');
-    
+
     await RequestQueueService.initialize();
     await RAGWorker.initialize();
-    
+
     logger.info('Request queue and worker initialized');
   } catch (error: any) {
     logger.warn('Failed to initialize request queue (continuing without queue)', {

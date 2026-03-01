@@ -156,12 +156,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {/* Redirect OAuth callback from root to /auth/callback before React hydrates */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){var p=window.location.pathname,h=window.location.hash;if(p==='/'&&h&&h.indexOf('access_token')!==-1){window.location.replace('/auth/callback'+h);}})();`,
-          }}
-        />
+
         {/* Structured Data (JSON-LD) for SEO - Scripts are automatically placed in head */}
         <Script
           id="organization-schema"

@@ -3,7 +3,7 @@ import multer from 'multer';
 import { AuthService, SignupData, LoginData } from '../services/auth.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
-import { authLimiter, inviteGuestLimiter } from '../middleware/rateLimiter';
+import { authLimiter } from '../middleware/rateLimiter';
 import { ValidationError } from '../types/error';
 import { StorageService } from '../services/storage.service';
 import { DatabaseService } from '../services/database.service';
@@ -11,25 +11,7 @@ import config from '../config/env';
 
 const router = Router();
 
-/**
- * GET /api/auth/email-config
- * Debug: check if redirect base URL is set (for magic link / invite emails).
- * Returns only whether it's configured; does not expose the URL.
- */
-router.get(
-  '/email-config',
-  (req: Request, res: Response) => {
-    const frontendUrl = config.CORS_ORIGIN || config.API_BASE_URL;
-    const configured = !!frontendUrl && !String(frontendUrl).includes('undefined');
-    res.status(200).json({
-      success: true,
-      redirectBaseUrlConfigured: configured,
-      hint: configured
-        ? 'Backend has a frontend URL. If emails still fail, check Supabase Auth Logs and Redirect URLs.'
-        : 'Set CORS_ORIGIN or API_BASE_URL in Railway to your frontend URL (e.g. https://your-app.vercel.app).',
-    });
-  }
-);
+
 
 /**
  * POST /api/auth/signup
@@ -41,7 +23,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const logger = (await import('../config/logger')).default;
     logger.info('Signup request received', { email: req.body.email });
-    
+
     const { email, password, fullName } = req.body;
 
     if (!email || !password) {
@@ -74,7 +56,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const logger = (await import('../config/logger')).default;
     logger.info('Login request received', { email: req.body.email });
-    
+
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -169,90 +151,7 @@ router.post(
   })
 );
 
-/**
- * POST /api/auth/magic-link
- * Request magic link for passwordless sign-in
- */
-router.post(
-  '/magic-link',
-  authLimiter,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { email } = req.body;
 
-    if (!email) {
-      throw new ValidationError('Email is required');
-    }
-
-    await AuthService.requestMagicLink(email.trim().toLowerCase());
-
-    // Always return success to prevent email enumeration
-    res.status(200).json({
-      success: true,
-      message: 'If an account exists with this email, a login link has been sent. Check your inbox.',
-    });
-  })
-);
-
-/**
- * POST /api/auth/invite
- * Invite a user by email (sends Supabase "Invite user" email). Requires authentication.
- */
-router.post(
-  '/invite',
-  authenticate,
-  authLimiter,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { email } = req.body;
-
-    if (!email) {
-      throw new ValidationError('Email is required');
-    }
-
-    const result = await AuthService.inviteUserByEmail(email.trim().toLowerCase());
-
-    if (!result.invited && result.error) {
-      return res.status(400).json({
-        success: false,
-        message: result.error,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Invitation sent. They will receive an email to set up their account.',
-    });
-  })
-);
-
-/**
- * POST /api/auth/invite-guest
- * Invite a friend by email from the signup page (no auth required). Rate-limited by IP.
- */
-router.post(
-  '/invite-guest',
-  inviteGuestLimiter,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { email } = req.body;
-
-    if (!email) {
-      throw new ValidationError('Email is required');
-    }
-
-    const result = await AuthService.inviteUserByEmail(email.trim().toLowerCase());
-
-    if (!result.invited && result.error) {
-      return res.status(400).json({
-        success: false,
-        message: result.error,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: 'Invitation sent. Your friend will receive an email to set up their account.',
-    });
-  })
-);
 
 /**
  * POST /api/auth/reset-password
@@ -377,11 +276,11 @@ router.put(
     const { full_name, avatar_url } = req.body;
 
     const updates: Partial<import('../types/database').Database.UserProfile> = {};
-    
+
     if (full_name !== undefined) {
       updates.full_name = full_name?.trim() || null;
     }
-    
+
     if (avatar_url !== undefined) {
       updates.avatar_url = avatar_url?.trim() || null;
     }

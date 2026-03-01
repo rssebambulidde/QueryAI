@@ -95,67 +95,73 @@ export class RetrievalOrchestratorService {
       return { cached: null };
     }
 
-    let queryEmbedding: number[] | undefined;
+    return LatencyTrackerService.trackOperation(
+      OperationType.CACHE_LOOKUP,
+      async () => {
+        let queryEmbedding: number[] | undefined;
 
-    try {
-      const cacheKey = this.generateRAGCacheKey(query, options);
-
-      // Exact match
-      const cached = await RedisCacheService.get<RAGContext>(cacheKey, {
-        prefix: this.RAG_CACHE_PREFIX,
-        ttl: this.calculateRAGCacheTTL(options),
-      });
-
-      if (cached) {
-        RedisCacheService.recordRAGHit();
-        logger.info('RAG context retrieved from cache (exact match)', {
-          userId: options.userId,
-          query: query.substring(0, 100),
-          webResults: cached.webSearchResults.length,
-        });
-        return { cached };
-      }
-
-      // Similarity-based lookup — preserve embedding for reuse in storeCache
-      if (enableSimilarityLookup) {
         try {
-          queryEmbedding = await EmbeddingService.generateEmbedding(query);
-          const similarEntries = await RedisCacheService.findSimilarEntries<RAGContext>(
-            queryEmbedding,
-            {
-              prefix: this.RAG_CACHE_PREFIX,
-              similarityThreshold,
-              maxResults: 1,
-            }
-          );
+          const cacheKey = this.generateRAGCacheKey(query, options);
 
-          if (similarEntries.length > 0 && similarEntries[0].similarity >= similarityThreshold) {
-            const similarContext = similarEntries[0].value;
-            RedisCacheService.recordRAGSimilarityHit();
-            logger.info('RAG context retrieved from cache (similarity match)', {
+          // Exact match
+          const cached = await RedisCacheService.get<RAGContext>(cacheKey, {
+            prefix: this.RAG_CACHE_PREFIX,
+            ttl: this.calculateRAGCacheTTL(options),
+          });
+
+          if (cached) {
+            RedisCacheService.recordRAGHit();
+            logger.info('RAG context retrieved from cache (exact match)', {
               userId: options.userId,
               query: query.substring(0, 100),
-              similarity: similarEntries[0].similarity,
-              webResults: similarContext.webSearchResults.length,
+              webResults: cached.webSearchResults.length,
             });
-            return { cached: similarContext, queryEmbedding };
+            return { cached };
           }
-        } catch (similarityError: any) {
-          logger.warn('Similarity-based cache lookup failed, continuing with retrieval', {
-            error: similarityError.message,
+
+          // Similarity-based lookup — preserve embedding for reuse in storeCache
+          if (enableSimilarityLookup) {
+            try {
+              queryEmbedding = await EmbeddingService.generateEmbedding(query);
+              const similarEntries = await RedisCacheService.findSimilarEntries<RAGContext>(
+                queryEmbedding,
+                {
+                  prefix: this.RAG_CACHE_PREFIX,
+                  similarityThreshold,
+                  maxResults: 1,
+                }
+              );
+
+              if (similarEntries.length > 0 && similarEntries[0].similarity >= similarityThreshold) {
+                const similarContext = similarEntries[0].value;
+                RedisCacheService.recordRAGSimilarityHit();
+                logger.info('RAG context retrieved from cache (similarity match)', {
+                  userId: options.userId,
+                  query: query.substring(0, 100),
+                  similarity: similarEntries[0].similarity,
+                  webResults: similarContext.webSearchResults.length,
+                });
+                return { cached: similarContext, queryEmbedding };
+              }
+            } catch (similarityError: any) {
+              logger.warn('Similarity-based cache lookup failed, continuing with retrieval', {
+                error: similarityError.message,
+              });
+            }
+          }
+
+          RedisCacheService.recordRAGMiss();
+        } catch (cacheError: any) {
+          logger.warn('RAG context cache check failed, continuing with retrieval', {
+            error: cacheError.message,
           });
+          RedisCacheService.recordRAGError();
         }
-      }
 
-      RedisCacheService.recordRAGMiss();
-    } catch (cacheError: any) {
-      logger.warn('RAG context cache check failed, continuing with retrieval', {
-        error: cacheError.message,
-      });
-      RedisCacheService.recordRAGError();
-    }
-
-    return { cached: null, queryEmbedding };
+        return { cached: null, queryEmbedding };
+      },
+      { userId: options.userId }
+    );
   }
 
   /**
@@ -171,30 +177,36 @@ export class RetrievalOrchestratorService {
     const enableContextCache = options.enableContextCache ?? true;
     if (!enableContextCache) return;
 
-    try {
-      const cacheKey = this.generateRAGCacheKey(query, options);
-      const cacheTTL = this.calculateRAGCacheTTL(options);
-      const queryEmbedding = precomputedEmbedding ?? await EmbeddingService.generateEmbedding(query);
+    await LatencyTrackerService.trackOperation(
+      OperationType.CACHE_STORE,
+      async () => {
+        try {
+          const cacheKey = this.generateRAGCacheKey(query, options);
+          const cacheTTL = this.calculateRAGCacheTTL(options);
+          const queryEmbedding = precomputedEmbedding ?? await EmbeddingService.generateEmbedding(query);
 
-      await RedisCacheService.setWithEmbedding(cacheKey, ragContext, queryEmbedding, {
-        prefix: this.RAG_CACHE_PREFIX,
-        ttl: cacheTTL,
-      });
+          await RedisCacheService.setWithEmbedding(cacheKey, ragContext, queryEmbedding, {
+            prefix: this.RAG_CACHE_PREFIX,
+            ttl: cacheTTL,
+          });
 
-      RedisCacheService.recordRAGSet();
-      logger.debug('RAG context cached', {
-        userId: options.userId,
-        query: query.substring(0, 100),
-        ttl: cacheTTL,
-        webResults: ragContext.webSearchResults.length,
-      });
-    } catch (cacheError: any) {
-      RedisCacheService.recordRAGError();
-      logger.warn('Failed to cache RAG context', {
-        error: cacheError.message,
-        userId: options.userId,
-      });
-    }
+          RedisCacheService.recordRAGSet();
+          logger.debug('RAG context cached', {
+            userId: options.userId,
+            query: query.substring(0, 100),
+            ttl: cacheTTL,
+            webResults: ragContext.webSearchResults.length,
+          });
+        } catch (cacheError: any) {
+          RedisCacheService.recordRAGError();
+          logger.warn('Failed to cache RAG context', {
+            error: cacheError.message,
+            userId: options.userId,
+          });
+        }
+      },
+      { userId: options.userId }
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════

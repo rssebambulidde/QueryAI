@@ -68,19 +68,19 @@ export class AuthService {
 
       if (authError) {
         logger.error('Signup error:', authError);
-        
+
         // Handle specific Supabase errors
         // Check both error code and message for better reliability
-        if (authError.status === 422 || 
-            authError.message?.toLowerCase().includes('already registered') ||
-            authError.message?.toLowerCase().includes('user already registered')) {
+        if (authError.status === 422 ||
+          authError.message?.toLowerCase().includes('already registered') ||
+          authError.message?.toLowerCase().includes('user already registered')) {
           throw new ConflictError('User with this email already exists');
         }
-        
+
         // Handle email sending errors - provide helpful message
         if (authError.message?.toLowerCase().includes('error sending confirmation email') ||
-            authError.message?.toLowerCase().includes('sending email') ||
-            authError.code === 'unexpected_failure') {
+          authError.message?.toLowerCase().includes('sending email') ||
+          authError.code === 'unexpected_failure') {
           logger.warn('Email sending failed. This usually means email confirmations are enabled but SMTP is not configured.');
           throw new AuthenticationError(
             'Signup failed: Email confirmation could not be sent. ' +
@@ -88,7 +88,7 @@ export class AuthService {
             'or configure SMTP email provider.'
           );
         }
-        
+
         throw new AuthenticationError(`Signup failed: ${authError.message || 'Unknown error'}`);
       }
 
@@ -124,7 +124,7 @@ export class AuthService {
         // Email confirmation might be required
         // Check if it's an email sending error or actual confirmation requirement
         logger.warn(`User created but no session. Email confirmation might be required.`);
-        
+
         // Return user info but no session
         return {
           user: {
@@ -183,14 +183,14 @@ export class AuthService {
 
       if (authError) {
         logger.warn(`Login failed for email: ${data.email}`, authError);
-        
+
         // Check error status code for invalid credentials (400 is common for invalid credentials)
-        if (authError.status === 400 || 
-            authError.message?.toLowerCase().includes('invalid login credentials') ||
-            authError.message?.toLowerCase().includes('invalid password')) {
+        if (authError.status === 400 ||
+          authError.message?.toLowerCase().includes('invalid login credentials') ||
+          authError.message?.toLowerCase().includes('invalid password')) {
           throw new AuthenticationError('Invalid email or password');
         }
-        
+
         throw new AuthenticationError(`Login failed: ${authError.message || 'Unknown error'}`);
       }
 
@@ -262,7 +262,7 @@ export class AuthService {
         redirectUrl,
         apiBaseUrl: config.API_BASE_URL,
       });
-      
+
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: redirectUrl,
       });
@@ -289,110 +289,7 @@ export class AuthService {
     }
   }
 
-  /**
-   * Request magic link for passwordless sign-in
-   * Sends an email with a link that signs the user in when clicked
-   */
-  static async requestMagicLink(email: string): Promise<void> {
-    try {
-      if (!email || typeof email !== 'string') {
-        throw new ValidationError('Email is required');
-      }
 
-      const trimmed = email.trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(trimmed)) {
-        throw new ValidationError('Invalid email format');
-      }
-
-      const frontendUrl = config.CORS_ORIGIN || config.API_BASE_URL;
-      if (!frontendUrl || frontendUrl.includes('undefined')) {
-        logger.error('Magic link: CORS_ORIGIN and API_BASE_URL are not set. Set one in Railway/env so the email link points to your app.');
-      }
-      const redirectUrl = `${frontendUrl}/auth/callback`;
-
-      logger.info(`Requesting magic link for: ${trimmed}`, { redirectUrl });
-
-      const { error } = await supabase.auth.signInWithOtp({
-        email: trimmed,
-        options: {
-          emailRedirectTo: redirectUrl,
-        },
-      });
-
-      if (error) {
-        logger.error('Magic link request error (check Supabase Auth Logs and Redirect URLs):', {
-          error: error.message,
-          code: error.code,
-          status: error.status,
-          redirectUrl,
-        });
-        // Don't reveal if email exists; return without throwing for security
-        return;
-      }
-
-      logger.info(`Magic link email sent successfully for: ${trimmed}. If not received, check spam and Supabase Auth Logs.`);
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        throw error;
-      }
-      logger.error('Magic link request error:', error);
-      // Don't reveal errors to prevent email enumeration
-    }
-  }
-
-  /**
-   * Invite a user by email (Supabase Auth admin invite).
-   * Sends the "Invite user" email; invitee clicks link and sets password on accept-invite page.
-   */
-  static async inviteUserByEmail(email: string): Promise<{ invited: boolean; error?: string }> {
-    try {
-      if (!email || typeof email !== 'string') {
-        throw new ValidationError('Email is required');
-      }
-
-      const trimmed = email.trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(trimmed)) {
-        throw new ValidationError('Invalid email format');
-      }
-
-      const frontendUrl = config.CORS_ORIGIN || config.API_BASE_URL;
-      if (!frontendUrl || frontendUrl.includes('undefined')) {
-        logger.error('Invite: CORS_ORIGIN and API_BASE_URL are not set. Set one in Railway/env so the invite link points to your app.');
-      }
-      const redirectTo = `${frontendUrl}/accept-invite`;
-
-      logger.info(`Inviting user by email: ${trimmed}`, { redirectTo });
-
-      const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(trimmed, {
-        redirectTo,
-      });
-
-      if (error) {
-        logger.error('Invite user error (check Supabase Auth Logs and Redirect URLs):', {
-          error: error.message,
-          code: error.code,
-          redirectTo,
-        });
-        // Don't reveal if user already exists
-        if (error.message?.toLowerCase().includes('already been invited') ||
-            error.message?.toLowerCase().includes('already registered')) {
-          return { invited: true };
-        }
-        return { invited: false, error: error.message };
-      }
-
-      logger.info(`Invite email sent successfully for: ${trimmed}`, { userId: data?.user?.id });
-      return { invited: true };
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        throw error;
-      }
-      logger.error('Invite user error:', error);
-      return { invited: false, error: error instanceof Error ? error.message : 'Failed to send invite' };
-    }
-  }
 
   /**
    * Verify JWT token and get user
@@ -499,13 +396,13 @@ export class AuthService {
     try {
       // Verify token first to get user
       const userData = await AuthService.verifyToken(token);
-      
+
       if (userData) {
         // Log the logout action
         // Note: Supabase handles session management client-side
         // The client should clear tokens from storage after calling this endpoint
         logger.info(`User logged out: ${userData.email} (${userData.userId})`);
-        
+
         // Optionally log usage
         await DatabaseService.logUsage(userData.userId, 'query', {
           action: 'logout',

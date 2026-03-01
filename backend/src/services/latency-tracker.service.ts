@@ -27,6 +27,12 @@ export enum OperationType {
   DEDUPLICATION = 'deduplication',
   DIVERSITY_FILTERING = 'diversity_filtering',
   
+  // Pipeline Operations
+  HISTORY_LOADING = 'history_loading',
+  CONVERSATION_STATE = 'conversation_state',
+  ATTACHMENT_PROCESSING = 'attachment_processing',
+  QUERY_EXPANSION = 'query_expansion',
+
   // Other Operations
   CACHE_LOOKUP = 'cache_lookup',
   CACHE_STORE = 'cache_store',
@@ -98,6 +104,10 @@ export class LatencyTrackerService {
     [OperationType.RERANKING]: { warning: 1000, critical: 3000 },
     [OperationType.DEDUPLICATION]: { warning: 500, critical: 1500 },
     [OperationType.DIVERSITY_FILTERING]: { warning: 500, critical: 1500 },
+    [OperationType.HISTORY_LOADING]: { warning: 500, critical: 2000 },
+    [OperationType.CONVERSATION_STATE]: { warning: 300, critical: 1000 },
+    [OperationType.ATTACHMENT_PROCESSING]: { warning: 2000, critical: 8000 },
+    [OperationType.QUERY_EXPANSION]: { warning: 1000, critical: 3000 },
     [OperationType.CACHE_LOOKUP]: { warning: 100, critical: 500 },
     [OperationType.CACHE_STORE]: { warning: 200, critical: 1000 },
     [OperationType.DATABASE_QUERY]: { warning: 500, critical: 2000 },

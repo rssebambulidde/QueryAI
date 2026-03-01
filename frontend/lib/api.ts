@@ -47,7 +47,7 @@ apiClient.interceptors.response.use(
     if (!error.response) {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
-      
+
       // Provide helpful error message for network errors
       const displayUrl = apiUrl.replace(/\/$/, '');
       if (isLocalhost && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
@@ -59,7 +59,7 @@ apiClient.interceptors.response.use(
       }
       return Promise.reject(error);
     }
-    
+
     // Handle rate limit errors (429) - don't retry, just show error
     if (error.response?.status === 429) {
       // Rate limit exceeded - return error immediately without retry
@@ -74,13 +74,13 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       // Token expired or invalid - try to refresh
       const originalRequest = error.config;
-      
+
       // Don't retry if this is already a refresh request or if we're on an auth page
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname;
-        const isAuthPage = currentPath === '/login' || currentPath === '/signup' || currentPath === '/forgot-password' || currentPath === '/accept-invite';
+        const isAuthPage = currentPath === '/login' || currentPath === '/signup' || currentPath === '/forgot-password';
         const isRefreshRequest = originalRequest?.url?.includes('/api/auth/refresh');
-        
+
         if (isAuthPage || isRefreshRequest) {
           // Clear tokens and dispatch unauthorized event
           localStorage.removeItem('accessToken');
@@ -89,18 +89,18 @@ apiClient.interceptors.response.use(
           return Promise.reject(error);
         }
       }
-      
+
       // Try to refresh the token
       const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null;
-      
+
       if (refreshToken && originalRequest && !originalRequest._retry) {
         originalRequest._retry = true;
-        
+
         try {
           // Import authApi here to avoid circular dependency
           const { authApi } = await import('./api');
           const refreshResponse = await authApi.refreshToken(refreshToken);
-          
+
           if (refreshResponse.success && refreshResponse.data) {
             // Update tokens
             const { accessToken, refreshToken: newRefreshToken } = refreshResponse.data;
@@ -108,10 +108,10 @@ apiClient.interceptors.response.use(
               localStorage.setItem('accessToken', accessToken);
               localStorage.setItem('refreshToken', newRefreshToken);
             }
-            
+
             // Update the original request with new token
             originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-            
+
             // Retry the original request
             return apiClient(originalRequest);
           } else {
@@ -379,21 +379,7 @@ export const authApi = {
     return response.data;
   },
 
-  requestMagicLink: async (email: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.post('/api/auth/magic-link', { email });
-    return response.data;
-  },
 
-  inviteUser: async (email: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.post('/api/auth/invite', { email });
-    return response.data;
-  },
-
-  /** Invite a friend from the signup page (no auth required). Rate-limited by IP. */
-  inviteFriend: async (email: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.post('/api/auth/invite-guest', { email });
-    return response.data;
-  },
 
   resetPassword: async (data: { password: string; accessToken: string; refreshToken: string }): Promise<ApiResponse<void>> => {
     const response = await apiClient.post(

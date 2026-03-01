@@ -22,18 +22,7 @@ export const authApi = {
     const response = await apiClient.post('/api/auth/forgot-password', { email });
     return response.data;
   },
-  requestMagicLink: async (email: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.post('/api/auth/magic-link', { email });
-    return response.data;
-  },
-  inviteUser: async (email: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.post('/api/auth/invite', { email });
-    return response.data;
-  },
-  inviteFriend: async (email: string): Promise<ApiResponse<void>> => {
-    const response = await apiClient.post('/api/auth/invite-guest', { email });
-    return response.data;
-  },
+
   resetPassword: async (data: { password: string; accessToken: string; refreshToken: string }): Promise<ApiResponse<void>> => {
     const response = await apiClient.post(
       '/api/auth/reset-password',
