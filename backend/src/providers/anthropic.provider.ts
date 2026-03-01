@@ -138,10 +138,14 @@ export class AnthropicProvider implements LLMProvider {
     const { model, messages: rawMessages, temperature, maxTokens, responseFormat, signal } = params;
     const { system, messages } = splitSystemMessages(rawMessages);
 
-    // Anthropic has no native response_format — inject a JSON instruction
+    // Anthropic has no native response_format — inject a strong JSON instruction
+    // wrapped in XML tags which Anthropic models respect more reliably.
     const effectiveSystem =
       responseFormat === 'json'
-        ? [system, 'You MUST respond with valid JSON only. No markdown fences, no explanation.']
+        ? [
+            system,
+            '<output_format>\nYou MUST respond with a single valid JSON object. No markdown fences, no preamble, no trailing text.\nStart your response with { and end with }. Output NOTHING else.\n</output_format>',
+          ]
             .filter(Boolean)
             .join('\n\n')
         : system;
@@ -181,7 +185,10 @@ export class AnthropicProvider implements LLMProvider {
 
     const effectiveSystem =
       responseFormat === 'json'
-        ? [system, 'You MUST respond with valid JSON only. No markdown fences, no explanation.']
+        ? [
+            system,
+            '<output_format>\nYou MUST respond with a single valid JSON object. No markdown fences, no preamble, no trailing text.\nStart your response with { and end with }. Output NOTHING else.\n</output_format>',
+          ]
             .filter(Boolean)
             .join('\n\n')
         : system;

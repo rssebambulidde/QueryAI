@@ -531,10 +531,13 @@ export const aiApi = {
       onError?: (error: Error) => void;
       maxRetries?: number;
       retryDelay?: number;
+      /** Max ms to wait for the next chunk before treating the stream as stalled (default 90s). */
+      inactivityTimeout?: number;
     }
-  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[] }, void, unknown> {
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; searchBudgetWarning?: string; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[] }, void, unknown> {
     const maxRetries = options?.maxRetries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000;
+    const inactivityTimeout = options?.inactivityTimeout ?? 90_000; // 90s default
     let retryCount = 0;
 
     while (retryCount <= maxRetries) {
@@ -599,7 +602,14 @@ export const aiApi = {
               return;
             }
 
-            const { done, value } = await reader.read();
+            // Race reader against inactivity timeout to detect stalled streams
+            const readResult = await Promise.race([
+              reader.read(),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('Stream inactivity timeout — no data received for ' + Math.round(inactivityTimeout / 1000) + 's')), inactivityTimeout)
+              ),
+            ]);
+            const { done, value } = readResult;
             if (done) break;
 
             buffer += decoder.decode(value, { stream: true });
@@ -668,6 +678,7 @@ export const aiApi = {
                       if (data.chunk) { yield data.chunk; }
                       if (data.followUpQuestions) { yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal }; }
                       if (data.qualityScore !== undefined) { yield { qualityScore: data.qualityScore }; }
+                      if (data.searchBudgetWarning) { yield { searchBudgetWarning: data.searchBudgetWarning }; }
                       if (data.done) { return; }
                       if (data.error) { throw new Error(data.error.message || 'Stream error'); }
                     } catch { /* skip */ }

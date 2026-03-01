@@ -209,6 +209,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                   onCompareVersions={onCompareVersions}
                   conversationId={conversationId}
                   mode={mode}
+                  isFirstAssistantMessage={message.role === 'assistant' && messages.findIndex(m => m.role === 'assistant') === virtualItem.index}
                 />
 
                 {/* Advanced features after the last assistant message */}

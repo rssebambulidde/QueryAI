@@ -559,8 +559,22 @@ router.post(
         }
       }
 
-      // Send completion message
-      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      // Check search budget and include warning if running low
+      let searchBudgetWarning: string | undefined;
+      if (!isChatMode && userId) {
+        try {
+          const { SearchBudgetService } = await import('../services/search-budget.service');
+          const budget = SearchBudgetService.canSearch(userId);
+          if (!budget.allowed) {
+            searchBudgetWarning = 'Daily search limit reached. Further queries will skip web search until tomorrow.';
+          } else if (budget.remaining <= 5) {
+            searchBudgetWarning = `${budget.remaining} web search${budget.remaining !== 1 ? 'es' : ''} remaining today.`;
+          }
+        } catch { /* non-critical */ }
+      }
+
+      // Send completion message (with optional budget warning)
+      res.write(`data: ${JSON.stringify({ done: true, ...(searchBudgetWarning && { searchBudgetWarning }) })}\n\n`);
       res.end();
     } catch (error: any) {
       logger.error('Error in streaming endpoint:', error);

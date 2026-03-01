@@ -20,6 +20,7 @@ import {
 import logger from '../config/logger';
 import { CacheTtlConfig, SearchConfig, RetrievalConfig, CircuitBreakerDefaults, RetryDefaults } from '../config/thresholds.config';
 import { AppError, ValidationError } from '../types/error';
+import { SearchBudgetService } from './search-budget.service';
 
 export type TimeRange = 'day' | 'week' | 'month' | 'year' | 'd' | 'w' | 'm' | 'y';
 
@@ -195,6 +196,8 @@ export interface SearchResponse {
   timeRange?: TimeRange;
   country?: string;
   cached?: boolean;
+  /** True when the user's daily search budget was exhausted (results will be empty). */
+  budgetExhausted?: boolean;
 }
 
 // Cache configuration for Tavily searches
@@ -279,6 +282,24 @@ export class SearchService {
         topic: request.topic,
         cacheKey: cacheKey.substring(0, 100),
       });
+
+      // Check per-user search budget (skip for cached results which don't count)
+      if (request.userId) {
+        const budget = SearchBudgetService.canSearch(request.userId);
+        if (!budget.allowed) {
+          logger.warn('Search budget exhausted, skipping web search', {
+            userId: request.userId,
+            remaining: budget.remaining,
+          });
+          return {
+            query: request.query,
+            results: [],
+            topic: request.topic,
+            cached: false,
+            budgetExhausted: true,
+          } as SearchResponse;
+        }
+      }
 
       // Check if Tavily is configured
       const client = tavilyClient;
@@ -1071,6 +1092,11 @@ export class SearchService {
           query: request.query,
           topic: request.topic,
         });
+      }
+
+      // Record search budget usage (count query variations as individual searches)
+      if (request.userId && finalResults.length > 0) {
+        SearchBudgetService.recordSearches(request.userId, 'free', queryVariations.length);
       }
 
       logger.info('Search completed', {

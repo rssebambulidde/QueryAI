@@ -97,9 +97,11 @@ interface ChatMessageProps {
   onFlagCitation?: (messageId: string, sourceUrl: string, sourceTitle: string) => void;
   /** Conversation mode — chat mode hides citations, sources, regenerate. */
   mode?: ConversationMode;
+  /** True when this is the first assistant message in the conversation (auto-expand follow-ups). */
+  isFirstAssistantMessage?: boolean;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onOpenSources, isStreaming = false, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, onFlagCitation, mode }) => {
+export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousResponseTime, onEdit, onFollowUpClick, userQuestion, onOpenSources, isStreaming = false, onExitResearchMode, onDelete, onRegenerate, onVersionSelect, onCompareVersions, conversationId, onFlagCitation, mode, isFirstAssistantMessage }) => {
   const { isMobile } = useMobile();
   const isUser = message.role === 'user';
   const isChatMode = mode !== 'research';
@@ -278,6 +280,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               )}
             >
               {isUser ? 'You' : 'Query Assistant'}
+              {!isUser && !isChatMode && (
+                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200 leading-none align-middle">
+                  Deep Search
+                </span>
+              )}
             </div>
           )}
 
@@ -739,6 +746,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
             questions={message.followUpQuestions}
             onQuestionClick={onFollowUpClick}
             className="mt-3"
+            initialExpanded={!!isFirstAssistantMessage}
           />
         )}
 

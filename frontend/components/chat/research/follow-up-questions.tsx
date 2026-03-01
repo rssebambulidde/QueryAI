@@ -8,14 +8,17 @@ interface FollowUpQuestionsProps {
   questions: string[];
   onQuestionClick: (question: string) => void;
   className?: string;
+  /** Start expanded (e.g. for the first research-mode answer). */
+  initialExpanded?: boolean;
 }
 
 export const FollowUpQuestions: React.FC<FollowUpQuestionsProps> = ({
   questions,
   onQuestionClick,
   className,
+  initialExpanded = false,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(initialExpanded);
 
   if (!questions || questions.length === 0) return null;
 
