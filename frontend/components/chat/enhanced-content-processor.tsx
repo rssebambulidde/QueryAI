@@ -3,7 +3,9 @@
 import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeKatex from 'rehype-katex';
 import { Source } from '@/lib/api';
 import { InlineCitation, CitationMatch } from './inline-citation';
 import { parseCitations, getCitationNumbers } from '@/lib/citation-parser';
@@ -170,8 +172,8 @@ export const EnhancedContentProcessor: React.FC<EnhancedContentProcessorProps> =
   return (
     <div className={wrapperClass}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeHighlight, rehypeKatex]}
         components={markdownComponents}
       >
         {processedContent}

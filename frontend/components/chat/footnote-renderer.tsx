@@ -3,7 +3,9 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import rehypeHighlight from 'rehype-highlight';
+import rehypeKatex from 'rehype-katex';
 import { Source } from '@/lib/api';
 import { CitationMatch } from './inline-citation';
 import { CitationRenderer } from '@/lib/citation-renderer';
@@ -64,8 +66,8 @@ export const FootnoteRenderer: React.FC<FootnoteRendererProps> = ({
       <div className="mt-6 pt-4 border-t border-gray-200">
         <h4 className="text-sm font-semibold text-gray-700 mb-3">Footnotes</h4>
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeHighlight]}
+          remarkPlugins={[remarkGfm, remarkMath]}
+          rehypePlugins={[rehypeHighlight, rehypeKatex]}
           components={getMarkdownComponents(isUser)}
         >
           {CitationRenderer.renderFootnotes(citations, sources, citationNumbers, format)}

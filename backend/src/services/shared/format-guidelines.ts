@@ -30,6 +30,11 @@ Conciseness:
 Code formatting:
 ${SHARED_CODE_ONLY_GUIDELINES}
 
+Math formatting:
+- For mathematical expressions, use LaTeX syntax with dollar signs: $inline$ for inline math, $$block$$ for display math
+- NEVER put formulas or equations inside code blocks (e.g. \`\`\`python) — always use LaTeX math notation
+- Examples: $x = \\frac{a}{b}$, $$\\text{Debt-to-Equity Ratio} = \\frac{\\text{Total Liabilities}}{\\text{Shareholders' Equity}}$$
+
 Markdown rules:
 - Use **bold** for key terms, important warnings, or first-mention of a concept
 - Use ### for section headings in longer answers (avoid # or ## — too large for chat)

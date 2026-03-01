@@ -3,6 +3,8 @@
 import React, { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { cn } from '@/lib/utils';
 import { getMarkdownComponents } from '@/lib/utils/markdown-components';
 import { X, ChevronLeft, ChevronRight, Globe, FileText, Eye, GitCompare } from 'lucide-react';
@@ -500,7 +502,7 @@ function FormattedPane({
         </div>
       </div>
       <div className="flex-1 overflow-y-auto p-4 text-sm leading-relaxed text-gray-800 prose prose-sm max-w-none">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
           {resolvedContent}
         </ReactMarkdown>
       </div>
