@@ -32,11 +32,22 @@ export default function HomePage() {
   // Store messages per conversation so we can switch between them
   const messageStoreRef = useRef<Record<string, Message[]>>({});
 
-  // Restore cached messages from sessionStorage on mount
+  // Restore cached messages from sessionStorage on mount.
+  // JSON.parse turns Date fields into strings, so rehydrate `timestamp` back to Date.
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem('queryai_anon_messages');
-      if (raw) messageStoreRef.current = JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, Message[]>;
+        for (const msgs of Object.values(parsed)) {
+          for (const msg of msgs) {
+            if (msg.timestamp && !(msg.timestamp instanceof Date)) {
+              msg.timestamp = new Date(msg.timestamp as unknown as string);
+            }
+          }
+        }
+        messageStoreRef.current = parsed;
+      }
     } catch { /* ignore */ }
   }, []);
 
