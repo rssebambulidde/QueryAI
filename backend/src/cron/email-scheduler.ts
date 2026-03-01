@@ -12,6 +12,7 @@ import { runSubscriptionLifecycleScheduler } from '../services/subscription-life
 import { runUsageAlertProcessor } from '../services/usage-alerts.service';
 import { processEmailQueue } from '../services/email-queue.service';
 import { SubscriptionService } from '../services/subscription.service';
+import { MetricsCleanupService } from '../services/metrics-cleanup.service';
 
 export async function runEmailScheduler(): Promise<void> {
   logger.info('Email scheduler: starting');
@@ -28,6 +29,11 @@ export async function runEmailScheduler(): Promise<void> {
 
     const q = await processEmailQueue(100);
     logger.info('Email scheduler: queue processed', { processed: q.processed, sent: q.sent, failed: q.failed });
+
+    // Daily metrics table retention cleanup
+    const cleanupStats = await MetricsCleanupService.cleanup();
+    logger.info('Email scheduler: metrics cleanup done', cleanupStats);
+
     logger.info('Email scheduler: done');
   } catch (error) {
     logger.error('Email scheduler failed', { error });

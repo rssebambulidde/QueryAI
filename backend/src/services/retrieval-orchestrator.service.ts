@@ -19,6 +19,7 @@ import { RedisCacheService } from './redis-cache.service';
 import { DegradationService, ServiceType, DegradationLevel } from './degradation.service';
 import { ErrorRecoveryService, RecoveryConfig } from './error-recovery.service';
 import { LatencyTrackerService, OperationType } from './latency-tracker.service';
+import { ErrorTrackerService, ServiceType as ErrorServiceType } from './error-tracker.service';
 import logger from '../config/logger';
 import { RetrievalConfig, CacheTtlConfig } from '../config/thresholds.config';
 
@@ -156,6 +157,9 @@ export class RetrievalOrchestratorService {
             error: cacheError.message,
           });
           RedisCacheService.recordRAGError();
+          ErrorTrackerService.trackError(ErrorServiceType.CACHE, cacheError, {
+            userId: options.userId, metadata: { operation: 'cacheCheck' },
+          }).catch(() => {});
         }
 
         return { cached: null, queryEmbedding };
@@ -203,6 +207,9 @@ export class RetrievalOrchestratorService {
             error: cacheError.message,
             userId: options.userId,
           });
+          ErrorTrackerService.trackError(ErrorServiceType.CACHE, cacheError, {
+            userId: options.userId, metadata: { operation: 'cacheStore' },
+          }).catch(() => {});
         }
       },
       { userId: options.userId }
@@ -377,6 +384,9 @@ export class RetrievalOrchestratorService {
       return results;
     } catch (error: any) {
       logger.warn('Web search failed, continuing without web results', { error: error.message });
+      ErrorTrackerService.trackError(ErrorServiceType.SEARCH, error, {
+        metadata: { operation: 'webSearch' },
+      }).catch(() => {});
       return [];
     }
   }
@@ -504,6 +514,10 @@ export class RetrievalOrchestratorService {
         error: webSearchResult.reason?.message,
         userId: options.userId,
       });
+      ErrorTrackerService.trackError(ErrorServiceType.SEARCH, webSearchResult.reason, {
+        userId: options.userId,
+        metadata: { operation: 'webSearchOrchestration' },
+      }).catch(() => {});
     }
 
     // v2: No document results

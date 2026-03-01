@@ -608,6 +608,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         { userId }
       ).catch((err: any) => {
         logger.warn('Failed to load conversation history for chat mode', { error: err.message });
+        ErrorTrackerService.trackError(ErrorServiceType.DATABASE, err, {
+          userId, metadata: { operation: 'historyLoading', mode: 'chat' },
+        }).catch(() => {});
         return request.conversationHistory;
       });
 
@@ -622,7 +625,12 @@ Is this question clearly within the topic? Answer only YES or NO.`;
           return undefined;
         },
         { userId }
-      ).catch(() => undefined);
+      ).catch((err: any) => {
+        ErrorTrackerService.trackError(ErrorServiceType.DATABASE, err, {
+          userId, metadata: { operation: 'conversationState', mode: 'chat' },
+        }).catch(() => {});
+        return undefined;
+      });
 
       const chatAttachmentTask = LatencyTrackerService.trackOperation(
         OperationType.ATTACHMENT_PROCESSING,
@@ -869,6 +877,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
             question: request.question,
             userId,
           });
+          ErrorTrackerService.trackError(ErrorServiceType.RAG, ragError, {
+            userId, metadata: { operation: 'ragRetrieval', question: request.question.substring(0, 100) },
+          }).catch(() => {});
           return { contextDegraded: false, contextPartial: false };
         }
       } else {
@@ -994,6 +1005,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         error: error.message,
         conversationId: request.conversationId,
       });
+      ErrorTrackerService.trackError(ErrorServiceType.DATABASE, error, {
+        userId, metadata: { operation: 'historyLoading', conversationId: request.conversationId },
+      }).catch(() => {});
       return request.conversationHistory;
     });
 
@@ -1024,6 +1038,9 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         error: stateErr.message,
         conversationId: request.conversationId,
       });
+      ErrorTrackerService.trackError(ErrorServiceType.DATABASE, stateErr, {
+        userId, metadata: { operation: 'conversationState', conversationId: request.conversationId },
+      }).catch(() => {});
       return '';
     });
 

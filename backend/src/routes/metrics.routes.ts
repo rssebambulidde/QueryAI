@@ -14,6 +14,7 @@ import { QualityMetricsService, QualityQuery, QualityMetricType } from '../servi
 import { SearchService } from '../services/search.service';
 import { AIService } from '../services/ai.service';
 import { RedisCacheService } from '../services/redis-cache.service';
+import { MetricsCleanupService } from '../services/metrics-cleanup.service';
 import { apiLimiter } from '../middleware/rateLimiter';
 import logger from '../config/logger';
 
@@ -512,6 +513,20 @@ router.get(
         },
       },
     });
+  })
+);
+
+/**
+ * POST /api/metrics/cleanup
+ * Run retention-based cleanup on all metrics tables (super-admin only)
+ */
+router.post(
+  '/cleanup',
+  authenticate,
+  requireSuperAdmin,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const results = await MetricsCleanupService.cleanup();
+    res.json({ success: true, deleted: results });
   })
 );
 
