@@ -21,7 +21,7 @@ import { ConfidenceBadge } from './research/confidence-badge';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { formatRelativeTime } from '@/lib/utils/relative-time';
 import type { ConversationMode } from '@/lib/chat/mode-config';
-import 'highlight.js/styles/github-dark.css';
+import 'highlight.js/styles/github.css';
 
 export interface SearchResult {
   id: string;

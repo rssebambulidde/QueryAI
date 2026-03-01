@@ -20,6 +20,10 @@ function extractText(node: React.ReactNode): string {
   return '';
 }
 
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function MarkdownCodeBlock({
   className,
   children,
@@ -35,7 +39,9 @@ function MarkdownCodeBlock({
     () => extractText(children).replace(/\n$/, ''),
     [children],
   );
-  const language = (className || '').split(/\s+/).find(c => c.startsWith('language-'))?.replace('language-', '') || 'code';
+  const language = (className || '').split(/\s+/).find(c => c.startsWith('language-'))?.replace('language-', '') || '';
+  const hasLanguage = language !== '';
+  const displayLanguage = hasLanguage ? capitalize(language) : '';
   const lines = codeText.split('\n');
   const lineCount = lines.length;
   const showLineNumbers = lineCount > LINE_NUMBER_THRESHOLD;
@@ -65,45 +71,62 @@ function MarkdownCodeBlock({
   };
 
   return (
-    <div className="my-3 rounded-lg overflow-hidden bg-[#0d1117]">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700/40">
-        <span className="text-xs font-mono text-gray-400 select-none">{language}</span>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="px-2 py-0.5 text-[11px] font-medium rounded text-gray-400 hover:text-gray-200 transition-colors"
-          aria-label={`Copy ${language} code`}
-          title={copied ? 'Copied' : `Copy ${language} code`}
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
+    <div className={`my-3 rounded-xl overflow-hidden bg-gray-50 ${hasLanguage ? 'border border-gray-200' : ''}`}>
+      {/* Header bar — only shown for recognized languages */}
+      {hasLanguage && (
+        <div className="flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-200">
+          <div className="flex items-center gap-1.5 select-none">
+            <svg className="w-3.5 h-3.5 text-gray-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="5 12 1 8 5 4" />
+              <polyline points="11 4 15 8 11 12" />
+            </svg>
+            <span className="text-xs font-semibold text-gray-700">{displayLanguage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="p-1 rounded text-gray-400 hover:text-gray-600 transition-colors"
+            aria-label={`Copy ${language} code`}
+            title={copied ? 'Copied' : `Copy ${language} code`}
+          >
+            {copied ? (
+              <svg className="w-4 h-4 text-green-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="5" y="5" width="9" height="9" rx="1.5" />
+                <path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" />
+              </svg>
+            )}
+          </button>
+        </div>
+      )}
       {/* Code area */}
       <div className={`relative ${isCollapsed ? 'max-h-[360px] overflow-hidden' : ''}`}>
         <div className="overflow-x-auto">
           <pre className="max-w-full m-0">
-            <code className={`block text-sm font-mono !bg-[#0d1117] text-gray-100 whitespace-pre ${showLineNumbers ? 'pl-0' : 'px-4 py-3'} ${className || ''}`} {...codeProps}>
+            <code className={`block text-sm font-mono !bg-gray-50 text-gray-800 whitespace-pre ${showLineNumbers ? 'pl-0 py-3' : 'p-4'} ${className || ''}`} {...codeProps}>
               {showLineNumbers ? (
                 <table className="border-collapse w-full">
                   <tbody>
                     {lines.map((line, i) => (
                       <tr key={i} className="leading-relaxed">
-                        <td className="select-none text-right pr-4 pl-3 py-0 text-gray-500 text-xs font-mono align-top w-[1%] whitespace-nowrap">{i + 1}</td>
-                        <td className="pl-4 pr-4 py-0 whitespace-pre">{line || '\n'}</td>
+                        <td className="select-none text-right pr-3 pl-4 py-0 text-gray-400 text-xs font-mono align-top w-[1%] whitespace-nowrap">{i + 1}</td>
+                        <td className="pl-3 pr-4 py-0 whitespace-pre">{line || '\n'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <span className="block px-4 py-3">{children}</span>
+                <span className="block px-4">{children}</span>
               )}
             </code>
           </pre>
         </div>
         {/* Collapse gradient overlay */}
         {isCollapsed && (
-          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#0d1117] to-transparent pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none" />
         )}
       </div>
       {/* Collapse/expand toggle */}
@@ -111,7 +134,7 @@ function MarkdownCodeBlock({
         <button
           type="button"
           onClick={() => setCollapsed(!collapsed)}
-          className="w-full px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-gray-200 border-t border-gray-700/40 transition-colors text-center"
+          className={`w-full px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors text-center ${hasLanguage ? 'border-t border-gray-200' : ''}`}
         >
           {collapsed ? `Show ${lineCount - COLLAPSE_VISIBLE_LINES} more lines` : 'Collapse'}
         </button>
