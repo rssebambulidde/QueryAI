@@ -48,7 +48,7 @@ interface HourlyBucket {
 function getHourlyBucket(): HourlyBucket {
   if (typeof window === 'undefined') return { hour: 0, count: 0 };
   try {
-    const raw = sessionStorage.getItem(ANON_RATE_KEY);
+    const raw = localStorage.getItem(ANON_RATE_KEY);
     if (raw) {
       const bucket: HourlyBucket = JSON.parse(raw);
       const currentHour = Math.floor(Date.now() / 3_600_000);
@@ -61,7 +61,7 @@ function getHourlyBucket(): HourlyBucket {
 function incrementHourlyBucket(): HourlyBucket {
   const bucket = getHourlyBucket();
   bucket.count += 1;
-  sessionStorage.setItem(ANON_RATE_KEY, JSON.stringify(bucket));
+  localStorage.setItem(ANON_RATE_KEY, JSON.stringify(bucket));
   return bucket;
 }
 

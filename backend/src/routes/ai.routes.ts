@@ -3,7 +3,7 @@ import { AIService, QuestionRequest } from '../services/ai.service';
 import { RequestQueueService, QueuePriority } from '../services/request-queue.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
-import { apiLimiter } from '../middleware/rateLimiter';
+import { apiLimiter, anonymousAiLimiter } from '../middleware/rateLimiter';
 import { enforceQueryLimit } from '../middleware/subscription.middleware';
 import { logQueryUsage } from '../middleware/usageCounter.middleware';
 import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
@@ -584,6 +584,7 @@ router.post(
 router.post(
   '/ask/anonymous',
   optionalAuthenticate,
+  anonymousAiLimiter,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const {
@@ -618,6 +619,8 @@ router.post(
       enableWebSearch,
     });
 
+    // Anonymous endpoint is always chat mode with no web search.
+    // Ignore client-supplied mode/search flags to prevent abuse.
     const request: QuestionRequest = {
       question: question.trim(),
       context: context?.trim(),
@@ -625,16 +628,16 @@ router.post(
       model,
       temperature,
       maxTokens,
-      enableSearch: normalizedMode.enableSearch,
+      enableSearch: false,
       topic: topic?.trim(),
       maxSearchResults: maxSearchResults ?? 5,
       timeRange,
       startDate,
       endDate,
       country,
-      enableDocumentSearch: enableDocumentSearch !== false,
-      enableWebSearch: normalizedMode.enableWebSearch,
-      mode: normalizedMode.mode,
+      enableDocumentSearch: false,
+      enableWebSearch: false,
+      mode: 'chat',
       attachments,
       attachmentIds,
       // Anonymous endpoint never persists to conversations.
@@ -666,6 +669,7 @@ router.post(
       const isChatMode = request.mode === 'chat';
       let fullAnswer = '';
       let sources: any[] | undefined;
+      let sourcesSent = false;
       let followUpQuestions: string[] | undefined;
       let qualityScore: number | undefined;
 
@@ -687,6 +691,7 @@ router.post(
               sources = parsed.sources;
               if (sources && sources.length > 0) {
                 res.write(`data: ${JSON.stringify({ sources })}\n\n`);
+                sourcesSent = true;
               }
               continue;
             }

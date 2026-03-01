@@ -16,11 +16,29 @@ export default function HomePage() {
   const { isMobile } = useMobile();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0);
-  const [conversations, setConversations] = useState<AnonymousConversation[]>([]);
+  const [conversations, setConversations] = useState<AnonymousConversation[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = sessionStorage.getItem('queryai_anon_conversations');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return parsed.map((c: any) => ({ ...c, createdAt: new Date(c.createdAt) }));
+      }
+    } catch { /* ignore */ }
+    return [];
+  });
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
 
   // Store messages per conversation so we can switch between them
   const messageStoreRef = useRef<Record<string, Message[]>>({});
+
+  // Restore cached messages from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('queryai_anon_messages');
+      if (raw) messageStoreRef.current = JSON.parse(raw);
+    } catch { /* ignore */ }
+  }, []);
 
   // If Supabase OAuth redirected to site root with tokens in hash, send to callback to complete sign-in
   useEffect(() => {
@@ -49,6 +67,19 @@ export default function HomePage() {
     setIsMobileSidebarOpen(false);
   };
 
+  // Persist conversations to sessionStorage whenever they change
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('queryai_anon_conversations', JSON.stringify(conversations));
+    } catch { /* ignore quota errors */ }
+  }, [conversations]);
+
+  const persistMessages = useCallback(() => {
+    try {
+      sessionStorage.setItem('queryai_anon_messages', JSON.stringify(messageStoreRef.current));
+    } catch { /* ignore quota errors */ }
+  }, []);
+
   const handleConversationCreated = useCallback((conv: AnonymousConversation) => {
     setConversations((prev) => [conv, ...prev]);
     setActiveConversationId(conv.id);
@@ -57,7 +88,8 @@ export default function HomePage() {
   /** Called by the container whenever its messages change so we can cache them */
   const handleMessagesChange = useCallback((convId: string, msgs: Message[]) => {
     messageStoreRef.current[convId] = msgs;
-  }, []);
+    persistMessages();
+  }, [persistMessages]);
 
   const handleSelectConversation = useCallback((id: string) => {
     setActiveConversationId(id);
@@ -72,11 +104,12 @@ export default function HomePage() {
   const handleDeleteConversation = useCallback((id: string) => {
     setConversations((prev) => prev.filter((c) => c.id !== id));
     delete messageStoreRef.current[id];
+    persistMessages();
     if (activeConversationId === id) {
       setChatKey((k) => k + 1);
       setActiveConversationId(null);
     }
-  }, [activeConversationId]);
+  }, [activeConversationId, persistMessages]);
 
   // Resolve initial messages for the active conversation (if switching back)
   const initialMessages = activeConversationId ? (messageStoreRef.current[activeConversationId] || []) : [];

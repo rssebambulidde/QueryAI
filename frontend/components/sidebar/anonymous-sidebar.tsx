@@ -121,7 +121,7 @@ export const AnonymousSidebar: React.FC<AnonymousSidebarProps> = ({
       {!isCollapsed && conversations.length > 0 && (
         <div className="flex-1 overflow-y-auto px-2">
           <div className="px-2 pb-1 pt-1 text-xs uppercase tracking-wider text-gray-400 font-medium">
-            Recent (not saved)
+            Recent (this session)
           </div>
           {conversations.map((conv) => (
             <div key={conv.id} className="relative group">
