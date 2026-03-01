@@ -282,7 +282,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               {isUser ? 'You' : 'Query Assistant'}
               {!isUser && !isChatMode && (
                 <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200 leading-none align-middle">
-                  Deep Search
+                  Deep Research
                 </span>
               )}
             </div>

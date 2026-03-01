@@ -1208,4 +1208,225 @@ router.get(
   })
 );
 
+/**
+ * POST /api/ai/regenerate
+ * Regenerate an assistant message with optional overrides.
+ * Saves the new answer as a version of the original message and streams
+ * the result using the same SSE protocol as /ask/stream (named events).
+ */
+router.post(
+  '/regenerate',
+  authenticate,
+  tierRateLimiter,
+  enforceQueryLimit,
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { messageId, conversationId, options } = req.body;
+
+    if (!messageId || !conversationId) {
+      throw new ValidationError('messageId and conversationId are required');
+    }
+    assertUUID(messageId, 'messageId');
+    assertUUID(conversationId, 'conversationId');
+
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new ValidationError('User not authenticated');
+    }
+
+    // Fetch the conversation to get its mode and topic
+    const { ConversationService } = await import('../services/conversation.service');
+    const { MessageService } = await import('../services/message.service');
+
+    const conversation = await ConversationService.getConversation(conversationId, userId);
+    if (!conversation) {
+      throw new ValidationError('Conversation not found');
+    }
+
+    // Get all messages to find the user question preceding the target assistant message
+    const allMessages = await MessageService.getAllMessages(conversationId, userId, { unlimited: true });
+    const targetIdx = allMessages.findIndex((m) => m.id === messageId || m.parent_message_id === messageId);
+    if (targetIdx < 0) {
+      throw new ValidationError('Message not found in conversation');
+    }
+
+    // Walk backwards to find the user question
+    let userQuestion = '';
+    for (let i = targetIdx - 1; i >= 0; i--) {
+      if (allMessages[i].role === 'user') {
+        userQuestion = allMessages[i].content;
+        break;
+      }
+    }
+    if (!userQuestion) {
+      throw new ValidationError('Could not find the user question for this message');
+    }
+
+    // Build conversation history (everything before the target message)
+    const conversationHistory = allMessages
+      .slice(0, targetIdx)
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+    const conversationMode = (conversation as any).mode || 'research';
+    const isChatMode = conversationMode === 'chat';
+
+    const modeFlags = normalizeModeAndSearchFlags({
+      mode: conversationMode,
+      enableSearch: undefined,
+      enableWebSearch: undefined,
+    });
+
+    const request: QuestionRequest = {
+      question: userQuestion,
+      conversationHistory,
+      conversationId,
+      mode: modeFlags.mode,
+      enableSearch: modeFlags.enableSearch,
+      enableWebSearch: modeFlags.enableWebSearch,
+      topicId: (conversation as any).topic_id ?? undefined,
+      maxSearchResults: options?.maxSearchResults ?? 5,
+      maxDocumentChunks: options?.maxDocumentChunks ?? 5,
+      enableDocumentSearch: options?.enableDocumentSearch !== false,
+      temperature: options?.temperature,
+      maxTokens: options?.maxTokens,
+      model: options?.model,
+    };
+
+    // SSE headers (named events for the regenerate protocol)
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.flushHeaders();
+
+    req.on('close', () => {
+      logger.info('Client disconnected from regenerate endpoint', { userId });
+      res.end();
+    });
+
+    try {
+      const stream = AIService.answerQuestionStream(request, userId);
+      let fullAnswer = '';
+      let sources: any[] | undefined;
+      let structuredFollowUps: string[] | undefined;
+      let structuredCitedSources: any[] | undefined;
+
+      for await (const chunk of stream) {
+        // Sentinel detection (same as /ask/stream)
+        if (chunk.length > 0 && chunk.charCodeAt(0) === 123) {
+          let parsed: any;
+          try { parsed = JSON.parse(chunk); } catch { /* not JSON */ }
+          if (parsed) {
+            if (parsed.__extractionStatus) {
+              res.write(`event: extractionStatus\ndata: ${JSON.stringify(parsed.statuses)}\n\n`);
+              continue;
+            }
+            if ('__extracting' in parsed) {
+              res.write(`event: extracting\ndata: ${JSON.stringify({ extracting: !!parsed.__extracting, files: parsed.extractingFiles ?? parsed.files })}\n\n`);
+              continue;
+            }
+            if (parsed.__sources) {
+              sources = parsed.sources;
+              if (sources && sources.length > 0) {
+                res.write(`event: sources\ndata: ${JSON.stringify(sources)}\n\n`);
+              }
+              continue;
+            }
+            if (parsed.__structured) {
+              structuredFollowUps = parsed.followUpQuestions;
+              structuredCitedSources = parsed.citedSources;
+              continue;
+            }
+          }
+        }
+        fullAnswer += chunk;
+        res.write(`event: chunk\ndata: ${JSON.stringify(chunk)}\n\n`);
+      }
+
+      // Follow-up questions
+      let followUpQuestions: string[] | undefined = structuredFollowUps;
+      if (!isChatMode && !followUpQuestions) {
+        try {
+          const { ResponseProcessorService } = await import('../services/response-processor.service');
+          const followUpResult = await ResponseProcessorService.processFollowUpQuestions(
+            fullAnswer, userQuestion, (conversation as any).title
+          );
+          followUpQuestions = followUpResult.questions.length > 0 ? followUpResult.questions : undefined;
+          fullAnswer = followUpResult.answer;
+        } catch { /* non-critical */ }
+      }
+
+      // Quality score
+      let qualityScore: number | undefined;
+      if (!isChatMode) {
+        try {
+          const { ResponseProcessorService } = await import('../services/response-processor.service');
+          qualityScore = ResponseProcessorService.calculateAnswerQualityScore(
+            fullAnswer, sources || [], followUpQuestions || []
+          );
+        } catch { /* non-critical */ }
+      }
+
+      if (followUpQuestions && followUpQuestions.length > 0) {
+        res.write(`event: followUpQuestions\ndata: ${JSON.stringify({ questions: followUpQuestions })}\n\n`);
+      }
+      if (qualityScore !== undefined) {
+        res.write(`event: qualityScore\ndata: ${JSON.stringify({ score: qualityScore })}\n\n`);
+      }
+
+      // Save as a new message version
+      const msgMetadata: Record<string, any> = {
+        model: request.model || 'gpt-4o-mini',
+        streaming: true,
+        regenerated: true,
+        ...(!isChatMode && followUpQuestions && { followUpQuestions }),
+        ...(!isChatMode && qualityScore !== undefined && { qualityScore }),
+        ...(structuredCitedSources && structuredCitedSources.length > 0 && { citedSources: structuredCitedSources }),
+        ...(options && { regenerateOptions: options }),
+      };
+
+      const newVersion = await MessageService.createMessageVersion(messageId, {
+        content: fullAnswer,
+        sources: sources ?? undefined,
+        metadata: msgMetadata,
+      });
+
+      // Fetch all versions to send back to frontend
+      const allVersions = await MessageService.getMessageVersions(messageId, userId);
+
+      res.write(`event: version\ndata: ${JSON.stringify({
+        version: newVersion.version,
+        messageId: newVersion.id,
+        versions: allVersions.map((v: any) => ({
+          id: v.id,
+          version: v.version ?? 1,
+          content: v.content,
+          sources: v.sources,
+          metadata: v.metadata,
+          created_at: v.created_at,
+        })),
+      })}\n\n`);
+
+      res.write(`event: done\ndata: {}\n\n`);
+      res.end();
+
+      logger.info('Message regenerated', {
+        messageId,
+        newVersionId: newVersion.id,
+        version: newVersion.version,
+        conversationId,
+        userId,
+      });
+    } catch (error: any) {
+      logger.error('Error in regenerate endpoint:', error);
+      res.write(`event: error\ndata: ${JSON.stringify({
+        message: error.message || 'Failed to regenerate response',
+      })}\n\n`);
+      res.end();
+    }
+  })
+);
+
 export default router;
