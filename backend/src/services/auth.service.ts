@@ -56,6 +56,8 @@ export class AuthService {
       }
 
       // Sign up user with Supabase Auth (use regular client for user operations)
+      // Use frontend URL so Supabase confirmation email redirects to /auth/confirm
+      const frontendUrl = config.CORS_ORIGIN || config.FRONTEND_URL || config.API_BASE_URL;
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
@@ -63,6 +65,7 @@ export class AuthService {
           data: {
             full_name: data.fullName || '',
           },
+          emailRedirectTo: `${frontendUrl}/auth/confirm`,
         },
       });
 
@@ -290,6 +293,28 @@ export class AuthService {
   }
 
 
+
+  /**
+   * Resend confirmation email for an unverified user.
+   */
+  static async resendConfirmationEmail(email: string): Promise<void> {
+    const frontendUrl = config.CORS_ORIGIN || config.FRONTEND_URL || config.API_BASE_URL;
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: `${frontendUrl}/auth/confirm`,
+      },
+    });
+
+    if (error) {
+      logger.warn('Resend confirmation email failed', { email, error: error.message });
+      // Don't reveal if user exists — always return silently
+    } else {
+      logger.info('Resend confirmation email sent', { email });
+    }
+  }
 
   /**
    * Verify JWT token and get user

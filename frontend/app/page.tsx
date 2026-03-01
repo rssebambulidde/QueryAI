@@ -53,6 +53,16 @@ export default function HomePage() {
 
 
 
+  // If Supabase redirected here with auth hash params (e.g. confirmation or error),
+  // forward to /auth/confirm which handles them properly.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && (hash.includes('access_token=') || hash.includes('error='))) {
+      router.replace(`/auth/confirm${hash}`);
+      return;
+    }
+  }, [router]);
+
   useEffect(() => {
     checkAuth().catch(() => { });
   }, [checkAuth]);

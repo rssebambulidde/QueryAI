@@ -108,7 +108,7 @@ export default function SignupPage() {
                 href="/verify-email"
                 className="font-medium text-orange-600 hover:text-orange-500 underline"
               >
-                Or verify your email directly
+                Need help verifying your email?
               </Link>
             </div>
           </Alert>

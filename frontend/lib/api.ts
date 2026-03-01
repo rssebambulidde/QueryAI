@@ -394,8 +394,8 @@ export const authApi = {
     return response.data;
   },
 
-  verifyEmail: async (data: { token: string; email?: string }): Promise<ApiResponse<void>> => {
-    const response = await apiClient.post('/api/auth/verify-email', data);
+  resendConfirmation: async (email: string): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/resend-confirmation', { email });
     return response.data;
   },
 

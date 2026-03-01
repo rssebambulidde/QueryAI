@@ -154,6 +154,30 @@ router.post(
 
 
 /**
+ * POST /api/auth/resend-confirmation
+ * Resend signup confirmation email
+ */
+router.post(
+  '/resend-confirmation',
+  authLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { email } = req.body;
+
+    if (!email) {
+      throw new ValidationError('Email is required');
+    }
+
+    await AuthService.resendConfirmationEmail(email.trim().toLowerCase());
+
+    // Always return success to prevent email enumeration
+    res.status(200).json({
+      success: true,
+      message: 'If an unverified account exists with this email, a new confirmation link has been sent',
+    });
+  })
+);
+
+/**
  * POST /api/auth/reset-password
  * Reset password using token from reset email (requires authentication)
  */
