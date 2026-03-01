@@ -586,54 +586,54 @@ Is this question clearly within the topic? Answer only YES or NO.`;
 
     // ── Chat mode: skip RAG, use simple conversational prompt ───────
     if (request.mode === 'chat') {
-      // Model selection still applies
-      const modelSelection = await this.selectModel(userId, request.question, undefined, request.conversationHistory, request.model, 'chat');
+      // ── Phase 1: Fire all independent operations in parallel ────────
+      const chatModelTask = this.selectModel(userId, request.question, undefined, undefined, request.model, 'chat');
+
+      const chatHistoryTask = (async (): Promise<Array<{ role: 'user' | 'assistant'; content: string }> | undefined> => {
+        let history = request.conversationHistory;
+        if (request.conversationId && userId && (!history || history.length === 0)) {
+          try {
+            const { MessageService } = await import('./message.service');
+            history = await MessageService.getSlidingWindowHistory(
+              request.conversationId,
+              userId,
+              { model: request.model || 'gpt-3.5-turbo', windowSize: 10 }
+            );
+          } catch (historyError: any) {
+            logger.warn('Failed to load conversation history for chat mode', { error: historyError.message });
+          }
+        } else if (history && history.length > 10) {
+          history = history.slice(-10);
+        }
+        return history;
+      })();
+
+      const chatStateTask = (async (): Promise<string | undefined> => {
+        if (request.enableStateTracking !== false && request.conversationId && userId) {
+          try {
+            const { ConversationStateService } = await import('./conversation-state.service');
+            const state = await ConversationStateService.getState(request.conversationId, userId);
+            if (state) return ConversationStateService.formatStateForContextCompact(state);
+          } catch { /* ignore */ }
+        }
+        return undefined;
+      })();
+
+      const chatAttachmentTask = processAttachments(request, userId, 'chat');
+
+      const [modelSelection, conversationHistory, rawStateText, attachmentResult] =
+        await Promise.all([chatModelTask, chatHistoryTask, chatStateTask, chatAttachmentTask]);
+
       const selectedModel = modelSelection.model;
       const selectedProvider = modelSelection.provider;
       const modelSelectionReason = modelSelection.reason;
 
-      // Load conversation history
-      let conversationHistory = request.conversationHistory;
-      if (request.conversationId && userId && (!conversationHistory || conversationHistory.length === 0)) {
-        try {
-          const { MessageService } = await import('./message.service');
-          const dbMessages = await MessageService.getAllMessages(request.conversationId, userId, { unlimited: true });
-          if (dbMessages.length > 0) {
-            conversationHistory = dbMessages.map((m) => ({
-              role: m.role as 'user' | 'assistant',
-              content: m.content,
-            }));
-          }
-        } catch (historyError: any) {
-          logger.warn('Failed to load conversation history for chat mode', { error: historyError.message });
-        }
-      }
-      // Apply sliding window (keep last 10)
-      if (conversationHistory && conversationHistory.length > 10) {
-        conversationHistory = conversationHistory.slice(-10);
-      }
-
-      // Conversation state tracking
-      let conversationStateText: string | undefined;
-      if (request.enableStateTracking !== false && request.conversationId && userId) {
-        try {
-          const { ConversationStateService } = await import('./conversation-state.service');
-          const state = await ConversationStateService.getState(request.conversationId, userId);
-          if (state) conversationStateText = ConversationStateService.formatStateForContextCompact(state);
-        } catch { /* ignore */ }
-      }
-
-      // When the user sends attachments, the conversation state may contain
-      // topics/entities from a DIFFERENT (now-removed) document. Clear it so
-      // stale topics don't bias the LLM toward the old document.
+      // Clear stale conversation state when new attachments are present
       const hasNewAttachments = !!((request as any).attachmentIds?.length)
         || !!(request.attachments?.length);
-      if (hasNewAttachments && conversationStateText) {
-        conversationStateText = undefined;
-      }
+      const conversationStateText = (hasNewAttachments ? undefined : rawStateText);
 
-      // ── Attachment processing ────────────────────────────────────────
-      const attachmentResult = await processAttachments(request, userId, 'chat');
+      // ── Phase 2: Attachment context (depends on attachmentResult) ───
       let attachmentContext = attachmentResult.attachmentContext;
       const imageAttachments = attachmentResult.imageAttachments;
 
