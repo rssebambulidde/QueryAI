@@ -42,7 +42,6 @@ router.post(
       endDate,
       country,
       // RAG options
-      enableDocumentSearch,
       enableWebSearch,
       topicId,
       documentIds,
@@ -94,7 +93,7 @@ router.post(
       endDate,
       country,
       // RAG options
-      enableDocumentSearch: enableDocumentSearch !== false, // Default to true
+      enableDocumentSearch: false, // v2: document search retired
       enableWebSearch: normalizedMode.enableWebSearch,
       topicId: topicId,
       documentIds: documentIds,
@@ -113,7 +112,6 @@ router.post(
       userId,
       questionLength: request.question.length,
       hasContext: !!request.context,
-      enableDocumentSearch: request.enableDocumentSearch,
       enableWebSearch: request.enableWebSearch,
       topicId: request.topicId,
       useQueue: !!useQueue,
@@ -214,7 +212,6 @@ router.post(
       endDate,
       country,
       // RAG options
-      enableDocumentSearch,
       enableWebSearch,
       topicId,
       documentIds,
@@ -264,7 +261,7 @@ router.post(
       endDate,
       country,
       // RAG options
-      enableDocumentSearch: enableDocumentSearch !== false, // Default to true
+      enableDocumentSearch: false, // v2: document search retired
       enableWebSearch: normalizedMode.enableWebSearch,
       topicId: topicId,
       documentIds: documentIds,
@@ -283,7 +280,6 @@ router.post(
       userId,
       questionLength: request.question.length,
       hasContext: !!request.context,
-      enableDocumentSearch: request.enableDocumentSearch,
       enableWebSearch: request.enableWebSearch,
       topicId: request.topicId,
     });
@@ -615,7 +611,6 @@ router.post(
       startDate,
       endDate,
       country,
-      enableDocumentSearch,
       enableWebSearch,
       mode,
       attachments,
@@ -627,7 +622,7 @@ router.post(
     }
 
     const userId = req.user?.id;
-    const normalizedMode = normalizeModeAndSearchFlags({
+    const _normalizedMode = normalizeModeAndSearchFlags({
       mode,
       enableSearch,
       enableWebSearch,
@@ -927,7 +922,6 @@ router.post(
       endDate,
       country,
       // RAG options
-      enableDocumentSearch,
       enableWebSearch,
       topicId,
       documentIds,
@@ -976,7 +970,7 @@ router.post(
       startDate,
       endDate,
       country,
-      enableDocumentSearch: enableDocumentSearch !== false,
+      enableDocumentSearch: false, // v2: document search retired
       enableWebSearch: normalizedMode.enableWebSearch,
       topicId: topicId,
       documentIds: documentIds,
@@ -1288,7 +1282,7 @@ router.post(
       topicId: (conversation as any).topic_id ?? undefined,
       maxSearchResults: options?.maxSearchResults ?? 5,
       maxDocumentChunks: options?.maxDocumentChunks ?? 5,
-      enableDocumentSearch: options?.enableDocumentSearch !== false,
+      enableDocumentSearch: false, // v2: document search retired
       temperature: options?.temperature,
       maxTokens: options?.maxTokens,
       model: options?.model,

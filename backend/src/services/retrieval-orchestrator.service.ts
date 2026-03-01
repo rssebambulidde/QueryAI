@@ -2,35 +2,25 @@
  * Retrieval Orchestrator Service
  *
  * Handles the retrieval layer of the RAG pipeline:
- * - Parallel retrieval (semantic, keyword, web search)
- * - Hybrid result merging
+ * - Web search retrieval (Tavily)
  * - Query expansion
- * - Adaptive threshold calculation
  * - Dynamic limits and adaptive context selection
  * - Cache check / store logic
  *
- * Extracted from rag.service.ts for better separation of concerns.
+ * v2: Document search (Pinecone) and keyword search retired — web-only retrieval.
  */
 
 import { EmbeddingService } from './embedding.service';
-import { PineconeService } from './pinecone.service';
 import { SearchService, SearchRequest } from './search.service';
-import { DocumentService } from './document.service';
-import { HybridSearchService } from './hybrid-search.service';
-import { KeywordSearchService, KeywordSearchResult } from './keyword-search.service';
-import { QueryExpansionService } from './query-expansion.service';
-import { ThresholdOptimizerService } from './threshold-optimizer.service';
-import { ContextSelectorService, ContextSelectionOptions } from './context-selector.service';
+// ContextSelectorService removed — v2: no document chunk selection needed
 import { AdaptiveContextService, AdaptiveContextOptions } from './adaptive-context.service';
 import { RAGConfig, DynamicLimitOptions } from '../config/rag.config';
 import { RedisCacheService } from './redis-cache.service';
 import { DegradationService, ServiceType, DegradationLevel } from './degradation.service';
 import { ErrorRecoveryService, RecoveryConfig } from './error-recovery.service';
-import { MetricsService } from './metrics.service';
 import { LatencyTrackerService, OperationType } from './latency-tracker.service';
 import logger from '../config/logger';
 import { RetrievalConfig, CacheTtlConfig } from '../config/thresholds.config';
-import { QueryDecomposerService, DecompositionResult } from './query-decomposer.service';
 
 import type { DocumentContext, RAGContext, RAGOptions } from './rag.service';
 
@@ -46,17 +36,6 @@ export interface RetrievalResult {
   affectedServices?: ServiceType[];
   degradationMessage?: string;
   partial?: boolean;
-  /** Multi-hop metadata — present when query was decomposed. */
-  multiHop?: {
-    decomposed: true;
-    subQuestions: string[];
-    /** Number of unique document chunks retrieved per sub-question. */
-    retrievalCountsPerHop: number[];
-    /** Total chunks before deduplication. */
-    totalBeforeDedup: number;
-    /** Total chunks after deduplication. */
-    totalAfterDedup: number;
-  };
 }
 
 export class RetrievalOrchestratorService {
@@ -80,7 +59,7 @@ export class RetrievalOrchestratorService {
       '', // v2: documentIds removed
       '0', // v2: document search disabled
       options.enableWebSearch ? '1' : '0',
-      options.enableKeywordSearch ? '1' : '0',
+      '0', // v2: keyword search disabled
       options.maxDocumentChunks || RetrievalConfig.defaults.maxDocumentChunks,
       options.maxWebResults || RetrievalConfig.defaults.maxWebResults,
       options.minScore || RetrievalConfig.minSimilarityScore,
@@ -94,8 +73,7 @@ export class RetrievalOrchestratorService {
    */
   static calculateRAGCacheTTL(options: RAGOptions): number {
     if (options.contextCacheTTL) return options.contextCacheTTL;
-    if (options.enableWebSearch && !options.enableDocumentSearch) return CacheTtlConfig.ragWebOnly;
-    if (options.enableDocumentSearch && !options.enableWebSearch) return CacheTtlConfig.ragDocOnly;
+    if (options.enableWebSearch) return CacheTtlConfig.ragWebOnly;
     return this.DEFAULT_RAG_CACHE_TTL;
   }
 
@@ -130,7 +108,6 @@ export class RetrievalOrchestratorService {
         logger.info('RAG context retrieved from cache (exact match)', {
           userId: options.userId,
           query: query.substring(0, 100),
-          documentChunks: cached.documentContexts.length,
           webResults: cached.webSearchResults.length,
         });
         return cached;
@@ -156,7 +133,6 @@ export class RetrievalOrchestratorService {
               userId: options.userId,
               query: query.substring(0, 100),
               similarity: similarEntries[0].similarity,
-              documentChunks: similarContext.documentContexts.length,
               webResults: similarContext.webSearchResults.length,
             });
             return similarContext;
@@ -205,7 +181,6 @@ export class RetrievalOrchestratorService {
         userId: options.userId,
         query: query.substring(0, 100),
         ttl: cacheTTL,
-        documentChunks: ragContext.documentContexts.length,
         webResults: ragContext.webSearchResults.length,
       });
     } catch (cacheError: any) {
@@ -228,6 +203,7 @@ export class RetrievalOrchestratorService {
     if (!options.enableQueryExpansion) return query;
 
     try {
+      const { QueryExpansionService } = await import('./query-expansion.service');
       const expansion = await QueryExpansionService.expandQuery(query, {
         strategy: options.expansionStrategy || 'hybrid',
         maxExpansions: options.maxExpansions ?? 5,
@@ -253,455 +229,8 @@ export class RetrievalOrchestratorService {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // Individual retrieval methods
+  // Web search retrieval
   // ═══════════════════════════════════════════════════════════════════
-
-  /**
-   * Retrieve relevant document chunks using keyword search (BM25).
-   */
-  static async retrieveDocumentContextKeyword(
-    query: string,
-    options: RAGOptions
-  ): Promise<KeywordSearchResult[]> {
-    if (!options.enableKeywordSearch) return [];
-
-    return await LatencyTrackerService.trackOperation(
-      OperationType.KEYWORD_SEARCH,
-      async () => this.retrieveDocumentContextKeywordInternal(query, options),
-      { userId: options.userId, metadata: { topicId: options.topicId } }
-    );
-  }
-
-  private static async retrieveDocumentContextKeywordInternal(
-    query: string,
-    options: RAGOptions
-  ): Promise<KeywordSearchResult[]> {
-    try {
-      const expandedQuery = await this.expandQueryIfEnabled(query, options);
-
-      logger.info('Performing keyword search', {
-        userId: options.userId,
-        originalQuery: query.substring(0, 100),
-        expandedQuery: expandedQuery.substring(0, 150),
-        expansionEnabled: options.enableQueryExpansion,
-      });
-
-      const keywordResults = await KeywordSearchService.search(expandedQuery, {
-        userId: options.userId,
-        topicId: options.topicId,
-        ancestorTopicIds: options.ancestorTopicIds,
-        documentIds: options.documentIds,
-        topK: options.maxDocumentChunks || RetrievalConfig.defaults.topK,
-        minScore: (options.minScore || RetrievalConfig.keywordBaseMinScore) * RetrievalConfig.keywordMinScoreMultiplier,
-      });
-
-      logger.info('Keyword search completed', {
-        userId: options.userId,
-        resultsCount: keywordResults.length,
-      });
-
-      return keywordResults;
-    } catch (error: any) {
-      logger.warn('Keyword search failed, continuing without keyword results', {
-        error: error.message,
-      });
-      return [];
-    }
-  }
-
-  /**
-   * Retrieve relevant document chunks from Pinecone (semantic search).
-   */
-  static async retrieveDocumentContext(
-    query: string,
-    options: RAGOptions
-  ): Promise<DocumentContext[]> {
-    if (!options.enableDocumentSearch) return [];
-
-    return await LatencyTrackerService.trackOperation(
-      OperationType.DOCUMENT_SEARCH,
-      async () => this.retrieveDocumentContextInternal(query, options),
-      {
-        userId: options.userId,
-        metadata: { enableKeywordSearch: options.enableKeywordSearch, topicId: options.topicId },
-      }
-    );
-  }
-
-  private static async retrieveDocumentContextInternal(
-    query: string,
-    options: RAGOptions
-  ): Promise<DocumentContext[]> {
-    try {
-      const expandedQuery = await this.expandQueryIfEnabled(query, options);
-
-      logger.info('Generating query embedding for document retrieval', {
-        userId: options.userId,
-        queryLength: query.length,
-        expandedQueryLength: expandedQuery.length,
-        expansionEnabled: options.enableQueryExpansion,
-      });
-
-      let queryEmbedding: number[];
-      try {
-        queryEmbedding = await LatencyTrackerService.trackOperation(
-          OperationType.EMBEDDING_GENERATION,
-          async () => EmbeddingService.generateEmbedding(expandedQuery),
-          { userId: options.userId, metadata: { queryLength: expandedQuery.length } }
-        );
-      } catch (embeddingError: any) {
-        const recoveryConfig: RecoveryConfig = {
-          maxAttempts: RetrievalConfig.retry.maxAttempts,
-          retryDelay: RetrievalConfig.retry.retryDelayMs,
-          enableFallback: options.enableKeywordSearch,
-          enableDegradation: true,
-        };
-
-        const fallbackFn = options.enableKeywordSearch
-          ? async () => {
-              logger.info('Using keyword search as fallback for embedding failure', { userId: options.userId });
-              return [] as number[];
-            }
-          : undefined;
-
-        const recoveryResult = await ErrorRecoveryService.attemptRecovery(
-          ServiceType.EMBEDDING,
-          embeddingError,
-          async () => EmbeddingService.generateEmbedding(expandedQuery),
-          fallbackFn,
-          recoveryConfig
-        );
-
-        if (recoveryResult.recovered && recoveryResult.result !== null) {
-          queryEmbedding = recoveryResult.result;
-          logger.info('Embedding generation recovered', {
-            userId: options.userId,
-            strategy: recoveryResult.strategy,
-            attempts: recoveryResult.attempts,
-          });
-        } else if (recoveryResult.recovered && recoveryResult.result === null && options.enableKeywordSearch) {
-          logger.warn('Embedding generation failed, falling back to keyword search', {
-            error: embeddingError.message,
-            userId: options.userId,
-            recoveryStrategy: recoveryResult.strategy,
-          });
-          return [];
-        } else {
-          logger.error('Embedding generation failed and recovery unsuccessful', {
-            error: embeddingError.message,
-            userId: options.userId,
-            recoveryStrategy: recoveryResult.strategy,
-            recoveryError: recoveryResult.error?.message,
-          });
-          throw embeddingError;
-        }
-      }
-
-      const embeddingDimensions = EmbeddingService.getCurrentDimensions();
-      const embeddingModel = EmbeddingService.getCurrentModel();
-
-      const { isPineconeConfigured } = await import('../config/pinecone');
-      if (!isPineconeConfigured()) {
-        logger.warn('Pinecone is not configured - document search unavailable', {
-          userId: options.userId,
-          message: 'PINECONE_API_KEY environment variable is not set. Document search requires Pinecone to be configured.',
-        });
-        return [];
-      }
-
-      // Calculate adaptive threshold if enabled
-      const useAdaptiveThreshold = options.useAdaptiveThreshold ?? true;
-      let minScore = options.minScore;
-
-      if (useAdaptiveThreshold && minScore === undefined) {
-        const broadSearchResults = await PineconeService.search(
-          queryEmbedding,
-          {
-            userId: options.userId,
-            topK: Math.min(50, (options.maxDocumentChunks || RetrievalConfig.defaults.topK) * 3),
-            topicId: options.topicId,
-            ancestorTopicIds: options.ancestorTopicIds,
-            documentIds: options.documentIds,
-            minScore: RetrievalConfig.broadAnalysisMinScore,
-            // NOTE: Do NOT filter by embeddingModel — vectors stored before this
-            // field was added to metadata would be incorrectly excluded.
-          },
-          embeddingDimensions
-        ).catch(() => []);
-
-        const thresholdResult = ThresholdOptimizerService.calculateThreshold(
-          query,
-          broadSearchResults,
-          {
-            minResults: options.minResults || RetrievalConfig.defaults.minResults,
-            maxResults: options.maxResults || options.maxDocumentChunks || RetrievalConfig.defaults.maxResults,
-          }
-        );
-
-        minScore = thresholdResult.threshold;
-
-        logger.info('Adaptive threshold calculated', {
-          userId: options.userId,
-          query: query.substring(0, 100),
-          threshold: minScore,
-          strategy: thresholdResult.strategy,
-          queryType: thresholdResult.queryType,
-          reasoning: thresholdResult.reasoning,
-          initialResultsCount: broadSearchResults.length,
-        });
-      } else {
-        minScore = minScore || RetrievalConfig.minSimilarityScore;
-      }
-
-      logger.info('Searching Pinecone for document chunks', {
-        userId: options.userId,
-        query: query.substring(0, 100),
-        topK: options.maxDocumentChunks || RetrievalConfig.defaults.maxDocumentChunks,
-        minScore,
-        topicId: options.topicId,
-        documentIds: options.documentIds,
-        embeddingModel,
-        embeddingDimensions,
-        adaptiveThreshold: useAdaptiveThreshold,
-      });
-
-      let searchResults: any[] = [];
-      try {
-        searchResults = await LatencyTrackerService.trackOperation(
-          OperationType.PINECONE_QUERY,
-          async () => PineconeService.search(
-            queryEmbedding,
-            {
-              userId: options.userId,
-              topK: options.maxDocumentChunks || RetrievalConfig.defaults.topK,
-              topicId: options.topicId,
-              ancestorTopicIds: options.ancestorTopicIds,
-              documentIds: options.documentIds,
-              minScore,
-              // NOTE: Do NOT filter by embeddingModel — vectors stored before this
-              // field was added to metadata would be incorrectly excluded.
-            },
-            embeddingDimensions
-          ),
-          { userId: options.userId, metadata: { topK: options.maxDocumentChunks || RetrievalConfig.defaults.topK, minScore } }
-        );
-      } catch (searchError: any) {
-        if (searchError.code === 'PINECONE_NOT_CONFIGURED') {
-          logger.warn('Pinecone not configured, skipping document search', { userId: options.userId });
-          return [];
-        }
-
-        const recoveryConfig: RecoveryConfig = {
-          maxAttempts: RetrievalConfig.retry.maxAttempts,
-          retryDelay: RetrievalConfig.retry.retryDelayMs,
-          enableFallback: options.enableKeywordSearch,
-          enableDegradation: true,
-        };
-
-        const fallbackFn = options.enableKeywordSearch
-          ? async () => {
-              logger.info('Using keyword search as fallback for Pinecone failure', { userId: options.userId });
-              return [] as any[];
-            }
-          : undefined;
-
-        const recoveryResult = await ErrorRecoveryService.attemptRecovery(
-          ServiceType.EMBEDDING,
-          searchError,
-          async () => PineconeService.search(
-            queryEmbedding,
-            {
-              userId: options.userId,
-              topK: options.maxDocumentChunks || RetrievalConfig.defaults.topK,
-              topicId: options.topicId,
-              ancestorTopicIds: options.ancestorTopicIds,
-              documentIds: options.documentIds,
-              minScore,
-              // NOTE: Do NOT filter by embeddingModel
-            },
-            embeddingDimensions
-          ),
-          fallbackFn,
-          recoveryConfig
-        );
-
-        if (recoveryResult.recovered && recoveryResult.result !== null && Array.isArray(recoveryResult.result)) {
-          searchResults = recoveryResult.result;
-          logger.info('Pinecone search recovered', {
-            userId: options.userId,
-            strategy: recoveryResult.strategy,
-            attempts: recoveryResult.attempts,
-            resultsCount: searchResults.length,
-          });
-        } else if (recoveryResult.recovered && recoveryResult.result === null && options.enableKeywordSearch) {
-          logger.warn('Pinecone search failed, falling back to keyword search', {
-            error: searchError.message,
-            userId: options.userId,
-            recoveryStrategy: recoveryResult.strategy,
-          });
-          return [];
-        } else {
-          logger.error('Pinecone search failed and recovery unsuccessful', {
-            error: searchError.message,
-            userId: options.userId,
-            recoveryStrategy: recoveryResult.strategy,
-            recoveryError: recoveryResult.error?.message,
-          });
-
-          if (options.enableKeywordSearch) return [];
-          throw searchError;
-        }
-      }
-
-      // Adaptive fallback for low result count
-      if (useAdaptiveThreshold && searchResults.length < (options.minResults || RetrievalConfig.defaults.minResults)) {
-        const config = ThresholdOptimizerService.getConfig();
-        if (config.fallbackEnabled && minScore > config.minThreshold) {
-          const fallbackThreshold = Math.max(
-            config.minThreshold,
-            minScore - RetrievalConfig.adaptiveFallbackReduction
-          );
-
-          logger.info('Applying fallback threshold for low results', {
-            userId: options.userId,
-            originalThreshold: minScore,
-            fallbackThreshold,
-            originalResultsCount: searchResults.length,
-          });
-
-          const fallbackResults = await PineconeService.search(
-            queryEmbedding,
-            {
-              userId: options.userId,
-              topK: options.maxDocumentChunks || RetrievalConfig.defaults.topK,
-              topicId: options.topicId,
-              ancestorTopicIds: options.ancestorTopicIds,
-              documentIds: options.documentIds,
-              minScore: fallbackThreshold,
-              embeddingModel,
-            },
-            embeddingDimensions
-          ).catch(() => []);
-
-          if (fallbackResults.length > searchResults.length) {
-            searchResults = fallbackResults;
-            minScore = fallbackThreshold;
-          }
-        }
-      }
-
-      // Hard-minimum score filter
-      const config = ThresholdOptimizerService.getConfig();
-      const hardMinimum = config.minThreshold;
-      searchResults = searchResults.filter((result: any) => {
-        const score = result.score || result.metadata?.score || 0;
-        return score >= hardMinimum;
-      });
-
-      if (searchResults.length === 0) {
-        logger.info('No relevant document chunks found', {
-          userId: options.userId,
-          query: query.substring(0, 100),
-        });
-        return [];
-      }
-
-      // Batch-fetch document metadata
-      const uniqueDocumentIds = Array.from(new Set(searchResults.map((r: any) => r.documentId)));
-      const documentsMap = await DocumentService.getDocumentsBatch(uniqueDocumentIds, options.userId);
-
-      const documentContexts: DocumentContext[] = [];
-
-      for (const result of searchResults) {
-        try {
-          const document = documentsMap.get(result.documentId);
-
-          if (!document) {
-            logger.warn('Document not found for chunk', {
-              documentId: result.documentId,
-              chunkId: result.chunkId,
-            });
-            documentContexts.push({
-              documentId: result.documentId,
-              documentName: 'Unknown Document',
-              chunkIndex: result.chunkIndex,
-              content: result.content,
-              score: result.score,
-            });
-            continue;
-          }
-
-          const author = document.metadata?.author || document.metadata?.Author || undefined;
-          const authors = document.metadata?.authors || (author ? [author] : undefined);
-          const documentType = document.file_type || undefined;
-          const fileSize = document.file_size || undefined;
-
-          let fileSizeFormatted: string | undefined;
-          if (fileSize) {
-            if (fileSize < 1024) {
-              fileSizeFormatted = `${fileSize} B`;
-            } else if (fileSize < 1024 * 1024) {
-              fileSizeFormatted = `${(fileSize / 1024).toFixed(2)} KB`;
-            } else {
-              fileSizeFormatted = `${(fileSize / (1024 * 1024)).toFixed(2)} MB`;
-            }
-          }
-
-          const publishedDate = document.metadata?.publishedDate ||
-            document.metadata?.published_date ||
-            document.metadata?.publicationDate ||
-            document.metadata?.publication_date ||
-            undefined;
-
-          documentContexts.push({
-            documentId: result.documentId,
-            documentName: document.filename,
-            chunkIndex: result.chunkIndex,
-            content: result.content,
-            score: result.score,
-            timestamp: document.updated_at || document.created_at,
-            author,
-            documentType,
-            createdAt: document.created_at,
-            updatedAt: document.updated_at,
-            fileSize,
-            fileSizeFormatted,
-            publishedDate,
-            authors,
-            // Provenance from Pinecone metadata
-            pageNumber: (result.metadata as any)?.page_number ?? undefined,
-            sectionTitle: (result.metadata as any)?.section_title ?? undefined,
-            sectionLevel: (result.metadata as any)?.section_level ?? undefined,
-          });
-        } catch (error: any) {
-          logger.warn('Failed to process document metadata', {
-            documentId: result.documentId,
-            error: error.message,
-          });
-          documentContexts.push({
-            documentId: result.documentId,
-            documentName: 'Unknown Document',
-            chunkIndex: result.chunkIndex,
-            content: result.content,
-            score: result.score,
-          });
-        }
-      }
-
-      logger.info('Document context retrieved', {
-        userId: options.userId,
-        chunkCount: documentContexts.length,
-      });
-
-      return documentContexts;
-    } catch (error: any) {
-      logger.error('Failed to retrieve document context', {
-        userId: options.userId,
-        error: error.message,
-      });
-      return [];
-    }
-  }
 
   /**
    * Retrieve web search results from Tavily.
@@ -836,84 +365,30 @@ export class RetrievalOrchestratorService {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // Hybrid merge
-  // ═══════════════════════════════════════════════════════════════════
-
-  /**
-   * Combine semantic and keyword search results using hybrid search service.
-   */
-  static async combineSearchResults(
-    semanticResults: DocumentContext[],
-    keywordResults: KeywordSearchResult[],
-    options: RAGOptions
-  ): Promise<DocumentContext[]> {
-    const weights = options.semanticSearchWeight !== undefined || options.keywordSearchWeight !== undefined
-      ? {
-          semantic: options.semanticSearchWeight ?? RetrievalConfig.weights.semantic,
-          keyword: options.keywordSearchWeight ?? RetrievalConfig.weights.keyword,
-        }
-      : undefined;
-
-    const hybridResults = await HybridSearchService.performHybridSearch(
-      semanticResults,
-      keywordResults,
-      {
-        userId: options.userId,
-        topicId: options.topicId,
-        documentIds: options.documentIds,
-        maxResults: options.maxDocumentChunks || RetrievalConfig.defaults.topK,
-        minScore: options.minScore,
-        weights,
-        useABTesting: options.useABTesting,
-        enableDeduplication: options.enableDeduplication,
-      }
-    );
-
-    return hybridResults.map(result => ({
-      documentId: result.documentId,
-      documentName: result.documentName,
-      chunkIndex: result.chunkIndex,
-      content: result.content,
-      score: result.combinedScore,
-      timestamp: result.timestamp,
-      author: result.author,
-      authors: result.authors,
-      documentType: result.documentType,
-      fileSize: result.fileSize,
-      fileSizeFormatted: result.fileSizeFormatted,
-      publishedDate: result.publishedDate,
-      createdAt: result.createdAt,
-      updatedAt: result.updatedAt,
-    }));
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
   // Dynamic limits & adaptive selection
   // ═══════════════════════════════════════════════════════════════════
 
   /**
-   * Calculate maxDocumentChunks & maxWebResults using dynamic limits
-   * and adaptive context selection.
+   * Calculate maxWebResults using dynamic limits and adaptive context selection.
    */
   static calculateLimits(
     query: string,
     options: RAGOptions
   ): { maxDocumentChunks: number; maxWebResults: number } {
     const enableDynamicLimits = options.enableDynamicLimits ?? true;
-    const useAdaptiveContextSelection = options.useAdaptiveContextSelection ?? true;
     const enableAdaptiveContextSelection = options.enableAdaptiveContextSelection ?? true;
-    let maxDocumentChunks = options.maxDocumentChunks;
+    let maxDocumentChunks = options.maxDocumentChunks ?? 0; // v2: always 0 (no document search)
     let maxWebResults = options.maxWebResults;
 
     // Step 1: Dynamic limits
-    if (enableDynamicLimits && (maxDocumentChunks === undefined || maxWebResults === undefined)) {
+    if (enableDynamicLimits && maxWebResults === undefined) {
       try {
         const dynamicLimitOptions: DynamicLimitOptions = {
           query,
           model: options.tokenBudgetOptions?.model,
           tokenBudgetOptions: options.tokenBudgetOptions,
-          minDocumentChunks: options.minChunks,
-          maxDocumentChunks: options.maxChunks || maxDocumentChunks,
+          minDocumentChunks: 0,
+          maxDocumentChunks: 0,
           minWebResults: RetrievalConfig.defaults.minWebResults,
           maxWebResults: options.maxWebResults || RetrievalConfig.defaults.maxWebResultsCeiling,
           ...options.dynamicLimitOptions,
@@ -921,13 +396,11 @@ export class RetrievalOrchestratorService {
 
         const dynamicLimits = RAGConfig.calculateDynamicLimits(dynamicLimitOptions);
 
-        if (maxDocumentChunks === undefined) maxDocumentChunks = dynamicLimits.documentChunks;
         if (maxWebResults === undefined) maxWebResults = dynamicLimits.webResults;
 
         logger.info('Dynamic limits calculated', {
           userId: options.userId,
           query: query.substring(0, 100),
-          documentChunks: maxDocumentChunks,
           webResults: maxWebResults,
           tokenBudget: dynamicLimits.factors.tokenBudget,
           complexity: dynamicLimits.factors.complexity,
@@ -935,73 +408,45 @@ export class RetrievalOrchestratorService {
         });
       } catch (error: any) {
         logger.warn('Dynamic limit calculation failed, using defaults', { error: error.message });
-        if (maxDocumentChunks === undefined) maxDocumentChunks = RetrievalConfig.defaults.maxDocumentChunks;
         if (maxWebResults === undefined) maxWebResults = RetrievalConfig.defaults.maxWebResults;
       }
     }
 
     // Step 2: Adaptive context selection
-    if (enableAdaptiveContextSelection && (maxDocumentChunks === undefined || maxWebResults === undefined || options.adaptiveContextOptions)) {
+    if (enableAdaptiveContextSelection && maxWebResults === undefined) {
       const adaptiveOptions: AdaptiveContextOptions = {
         query,
         model: options.tokenBudgetOptions?.model,
         tokenBudgetOptions: options.tokenBudgetOptions,
-        minDocumentChunks: options.minChunks || maxDocumentChunks || RetrievalConfig.defaults.minResults,
-        maxDocumentChunks: options.maxChunks || maxDocumentChunks || RetrievalConfig.defaults.maxDocumentChunksCeiling,
+        minDocumentChunks: 0,
+        maxDocumentChunks: 0,
         minWebResults: RetrievalConfig.defaults.minWebResults,
         maxWebResults: options.maxWebResults || maxWebResults || RetrievalConfig.defaults.maxWebResultsCeiling,
-        preferDocuments: options.adaptiveContextOptions?.preferDocuments,
-        preferWeb: options.adaptiveContextOptions?.preferWeb,
-        balanceRatio: options.adaptiveContextOptions?.balanceRatio,
+        preferWeb: true,
         enableComplexityAnalysis: options.adaptiveContextOptions?.enableComplexityAnalysis ?? true,
         enableTokenAwareSelection: options.adaptiveContextOptions?.enableTokenAwareSelection ?? true,
         ...options.adaptiveContextOptions,
       };
 
       const adaptiveSelection = AdaptiveContextService.selectAdaptiveContext(adaptiveOptions);
+      maxWebResults = adaptiveSelection.webResults;
 
-      if (maxDocumentChunks === undefined || maxWebResults === undefined ||
-          (options.adaptiveContextOptions && (adaptiveSelection.documentChunks !== maxDocumentChunks || adaptiveSelection.webResults !== maxWebResults))) {
-        maxDocumentChunks = adaptiveSelection.documentChunks;
-        maxWebResults = adaptiveSelection.webResults;
-
-        logger.info('Adaptive context selection applied', {
-          userId: options.userId,
-          query: query.substring(0, 100),
-          documentChunks: maxDocumentChunks,
-          webResults: maxWebResults,
-          complexity: adaptiveSelection.complexity.intentComplexity,
-          queryType: adaptiveSelection.complexity.queryType,
-          tokenBudget: adaptiveSelection.tokenBudget?.remaining.total,
-          reasoning: adaptiveSelection.reasoning,
-          adjustments: adaptiveSelection.adjustments,
-        });
-      }
-    } else if (useAdaptiveContextSelection && maxDocumentChunks === undefined) {
-      const contextSelectionOptions: ContextSelectionOptions = {
-        minChunks: options.minChunks,
-        maxChunks: options.maxChunks,
-        defaultChunks: RetrievalConfig.defaults.defaultChunks,
-      };
-
-      const contextSelection = ContextSelectorService.selectContextSize(query, contextSelectionOptions);
-      maxDocumentChunks = contextSelection.chunkCount;
-
-      logger.info('Adaptive context selection applied (legacy)', {
+      logger.info('Adaptive context selection applied', {
         userId: options.userId,
         query: query.substring(0, 100),
-        chunkCount: maxDocumentChunks,
-        complexity: contextSelection.complexity.intentComplexity,
-        queryType: contextSelection.complexity.queryType,
-        reasoning: contextSelection.reasoning,
+        webResults: maxWebResults,
+        complexity: adaptiveSelection.complexity.intentComplexity,
+        queryType: adaptiveSelection.complexity.queryType,
+        tokenBudget: adaptiveSelection.tokenBudget?.remaining.total,
+        reasoning: adaptiveSelection.reasoning,
+        adjustments: adaptiveSelection.adjustments,
       });
-    } else {
-      maxDocumentChunks = maxDocumentChunks || RetrievalConfig.defaults.maxDocumentChunks;
-      maxWebResults = maxWebResults || RetrievalConfig.defaults.maxWebResults;
     }
 
+    maxWebResults = maxWebResults || RetrievalConfig.defaults.maxWebResults;
+
     return {
-      maxDocumentChunks: maxDocumentChunks as number,
+      maxDocumentChunks,
       maxWebResults: maxWebResults as number,
     };
   }
@@ -1011,9 +456,8 @@ export class RetrievalOrchestratorService {
   // ═══════════════════════════════════════════════════════════════════
 
   /**
-   * Execute parallel retrieval (semantic + keyword + web) and merge results.
-   * Automatically detects complex multi-part questions and performs
-   * multi-hop retrieval when beneficial.
+   * Execute web search retrieval.
+   * v2: Document search and multi-hop retrieval retired — web-only.
    *
    * Returns raw RetrievalResult before pipeline processing.
    */
@@ -1021,224 +465,17 @@ export class RetrievalOrchestratorService {
     query: string,
     options: RAGOptions
   ): Promise<RetrievalResult> {
-    // ── Multi-hop gate ─────────────────────────────────────────────
-    // Only attempt decomposition when document search is enabled
-    // (multi-hop is about retrieving diverse document context).
-    const enableMultiHop = options.enableDocumentSearch !== false;
-
-    if (enableMultiHop && QueryDecomposerService.shouldDecompose(query)) {
-      try {
-        const decomposition = await QueryDecomposerService.decompose(query);
-        if (decomposition.decomposed) {
-          return this.orchestrateMultiHopRetrieval(query, decomposition, options);
-        }
-        logger.debug('Decomposition gate passed but LLM declined', {
-          reason: decomposition.reason,
-          query: query.substring(0, 100),
-        });
-      } catch (error: any) {
-        logger.warn('Multi-hop decomposition failed, falling back to single-hop', {
-          error: error.message,
-          userId: options.userId,
-        });
-      }
-    }
-
-    // ── Single-hop (default) ───────────────────────────────────────
-    return this.orchestrateSingleHopRetrieval(query, options);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Multi-hop retrieval
-  // ═══════════════════════════════════════════════════════════════════
-
-  /**
-   * Retrieve context for each sub-question independently, then merge,
-   * deduplicate, and re-rank the unified set.
-   *
-   * Web search is run once with the original query (not per sub-question)
-   * to avoid excessive API calls.
-   */
-  private static async orchestrateMultiHopRetrieval(
-    originalQuery: string,
-    decomposition: DecompositionResult,
-    options: RAGOptions
-  ): Promise<RetrievalResult> {
-    const { subQuestions } = decomposition;
-
-    // Calculate limits based on original query (for global budget)
-    const { maxDocumentChunks, maxWebResults } = this.calculateLimits(originalQuery, options);
-
-    // Per-sub-question chunk budget: divide equally with a small boost
-    const perHopChunks = Math.max(3, Math.ceil(maxDocumentChunks / subQuestions.length * 1.25));
-
-    logger.info('Starting multi-hop retrieval', {
-      userId: options.userId,
-      originalQuery: originalQuery.substring(0, 100),
-      subQuestionCount: subQuestions.length,
-      subQuestions: subQuestions.map(q => q.substring(0, 80)),
-      perHopChunks,
-      maxDocumentChunks,
-    });
-
-    const hopOptions: RAGOptions = {
-      ...options,
-      maxDocumentChunks: perHopChunks,
-      maxWebResults,
-      // Disable dynamic limits recalculation per hop — we already computed them
-      enableDynamicLimits: false,
-    };
-
-    // ── Parallel per-hop retrieval ──────────────────────────────────
-    // Each sub-question gets independent semantic + keyword search.
-    // Web search runs once with the original query.
-    const hopPromises = subQuestions.map(async (subQ) => {
-      const [semanticResult, keywordResult] = await Promise.allSettled([
-        options.enableDocumentSearch !== false
-          ? this.retrieveDocumentContext(subQ, hopOptions)
-          : Promise.resolve([] as DocumentContext[]),
-        options.enableKeywordSearch
-          ? this.retrieveDocumentContextKeyword(subQ, hopOptions)
-          : Promise.resolve([] as KeywordSearchResult[]),
-      ]);
-
-      const semantic = semanticResult.status === 'fulfilled' ? semanticResult.value : [];
-      const keyword = keywordResult.status === 'fulfilled' ? keywordResult.value : [];
-
-      // Merge hybrid per hop
-      let merged: DocumentContext[];
-      if (options.enableDocumentSearch !== false && options.enableKeywordSearch && semantic.length > 0 && keyword.length > 0) {
-        merged = await this.combineSearchResults(semantic, keyword, hopOptions);
-      } else if (semantic.length > 0) {
-        merged = semantic;
-      } else {
-        merged = keyword.map(r => ({
-          documentId: r.documentId,
-          documentName: r.documentName || 'Unknown Document',
-          chunkIndex: r.chunkIndex,
-          content: r.content,
-          score: r.score,
-        }));
-      }
-
-      return merged;
-    });
-
-    // Web search (once, with original query)
-    const webPromise = this.retrieveWebSearch(originalQuery, { ...options, maxWebResults });
-
-    const [hopResults, webSearchResult] = await Promise.all([
-      Promise.all(hopPromises),
-      webPromise.catch(() => [] as RAGContext['webSearchResults']),
-    ]);
-
-    const retrievalCountsPerHop = hopResults.map(r => r.length);
-    const allChunks = hopResults.flat();
-    const totalBeforeDedup = allChunks.length;
-
-    // ── Deduplication ───────────────────────────────────────────────
-    // Remove duplicate chunks (same documentId + chunkIndex), keeping
-    // the copy with the highest score.
-    const chunkMap = new Map<string, DocumentContext>();
-    for (const chunk of allChunks) {
-      const key = `${chunk.documentId}::${chunk.chunkIndex}`;
-      const existing = chunkMap.get(key);
-      if (!existing || chunk.score > existing.score) {
-        chunkMap.set(key, chunk);
-      }
-    }
-
-    // Re-rank by score descending, enforce global budget
-    let documentContexts = Array.from(chunkMap.values())
-      .sort((a, b) => b.score - a.score)
-      .slice(0, maxDocumentChunks);
-
-    const totalAfterDedup = documentContexts.length;
-
-    // ── Fallback: if multi-hop produced nothing useful, try single-hop
-    if (documentContexts.length === 0 && options.enableDocumentSearch !== false) {
-      logger.warn('Multi-hop retrieval produced no results, falling back to single-hop', {
-        userId: options.userId,
-        subQuestionCount: subQuestions.length,
-      });
-      return this.orchestrateSingleHopRetrieval(originalQuery, options);
-    }
-
-    logger.info('Multi-hop retrieval complete', {
-      userId: options.userId,
-      subQuestionCount: subQuestions.length,
-      retrievalCountsPerHop,
-      totalBeforeDedup,
-      totalAfterDedup,
-      webResults: webSearchResult.length,
-    });
-
-    // Degradation status
-    const degradationStatus = DegradationService.getOverallStatus();
-    const isDegraded = degradationStatus.level !== DegradationLevel.NONE;
-
-    // Collect metrics (async, non-blocking)
-    if (options.userId && documentContexts.length > 0) {
-      MetricsService.collectMetrics(
-        originalQuery,
-        options.userId,
-        documentContexts,
-        undefined,
-        {
-          searchTypes: {
-            web: options.enableWebSearch,
-          },
-          webResultsCount: webSearchResult.length,
-        }
-      ).catch((err: any) => {
-        logger.warn('Failed to collect multi-hop retrieval metrics', { error: err.message });
-      });
-    }
-
-    return {
-      documentContexts,
-      webSearchResults: webSearchResult,
-      degraded: isDegraded,
-      degradationLevel: degradationStatus.level,
-      affectedServices: degradationStatus.affectedServices,
-      degradationMessage: isDegraded ? degradationStatus.message : undefined,
-      multiHop: {
-        decomposed: true,
-        subQuestions,
-        retrievalCountsPerHop,
-        totalBeforeDedup,
-        totalAfterDedup,
-      },
-    };
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Single-hop retrieval (original logic)
-  // ═══════════════════════════════════════════════════════════════════
-
-  /**
-   * Standard single-hop retrieval: parallel semantic + keyword + web
-   * search for a single query, then merge.
-   */
-  private static async orchestrateSingleHopRetrieval(
-    query: string,
-    options: RAGOptions
-  ): Promise<RetrievalResult> {
     // Calculate limits
-    const { maxDocumentChunks, maxWebResults } = this.calculateLimits(query, options);
+    const { maxWebResults } = this.calculateLimits(query, options);
 
-    logger.info('Retrieving RAG context', {
+    logger.info('Retrieving RAG context (web-only)', {
       userId: options.userId,
       query: query.substring(0, 100),
       enableWebSearch: options.enableWebSearch,
-      // v2: document search disabled
     });
 
-    const updatedOptions: RAGOptions = { ...options, maxDocumentChunks, maxWebResults };
-
-    // v2: Skip document retrieval entirely — web-only
     const [webSearchResult] = await Promise.allSettled([
-      this.retrieveWebSearch(query, options),
+      this.retrieveWebSearch(query, { ...options, maxWebResults }),
     ]);
 
     // Extract results
@@ -1246,7 +483,7 @@ export class RetrievalOrchestratorService {
 
     // Log failures
     if (webSearchResult.status === 'rejected') {
-      logger.warn('Web search failed during parallel retrieval', {
+      logger.warn('Web search failed during retrieval', {
         error: webSearchResult.reason?.message,
         userId: options.userId,
       });
@@ -1261,27 +498,6 @@ export class RetrievalOrchestratorService {
     const isPartial = isDegraded && (
       (options.enableWebSearch && webSearchResults.length === 0 && webSearchResult.status === 'rejected')
     );
-
-    // v2: Metrics collection simplified (no document search)
-    if (options.userId && documentContexts.length > 0) {
-      MetricsService.collectMetrics(
-        query,
-        options.userId,
-        documentContexts,
-        undefined,
-        {
-          searchTypes: {
-            web: options.enableWebSearch,
-          },
-          webResultsCount: webSearchResults.length,
-        }
-      ).catch((error: any) => {
-        logger.warn('Failed to collect retrieval metrics', {
-          error: error.message,
-          userId: options.userId,
-        });
-      });
-    }
 
     return {
       documentContexts,

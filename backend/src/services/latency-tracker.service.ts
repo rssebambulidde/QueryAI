@@ -9,14 +9,8 @@ import { supabaseAdmin } from '../config/database';
 export enum OperationType {
   // RAG Operations
   RAG_CONTEXT_RETRIEVAL = 'rag_context_retrieval',
-  DOCUMENT_SEARCH = 'document_search',
-  SEMANTIC_SEARCH = 'semantic_search',
-  KEYWORD_SEARCH = 'keyword_search',
   WEB_SEARCH = 'web_search',
   EMBEDDING_GENERATION = 'embedding_generation',
-  PINECONE_QUERY = 'pinecone_query',
-  PINECONE_UPSERT = 'pinecone_upsert',
-  PINECONE_DELETE = 'pinecone_delete',
   
   // AI Operations
   AI_QUESTION_ANSWERING = 'ai_question_answering',
@@ -91,14 +85,8 @@ export interface LatencyAlert {
 export class LatencyTrackerService {
   private static readonly ALERT_THRESHOLDS: Record<OperationType, { warning: number; critical: number }> = {
     [OperationType.RAG_CONTEXT_RETRIEVAL]: { warning: 2000, critical: 5000 },
-    [OperationType.DOCUMENT_SEARCH]: { warning: 1500, critical: 3000 },
-    [OperationType.SEMANTIC_SEARCH]: { warning: 1000, critical: 2500 },
-    [OperationType.KEYWORD_SEARCH]: { warning: 500, critical: 1500 },
     [OperationType.WEB_SEARCH]: { warning: 3000, critical: 8000 },
     [OperationType.EMBEDDING_GENERATION]: { warning: 2000, critical: 5000 },
-    [OperationType.PINECONE_QUERY]: { warning: 1000, critical: 3000 },
-    [OperationType.PINECONE_UPSERT]: { warning: 2000, critical: 5000 },
-    [OperationType.PINECONE_DELETE]: { warning: 1000, critical: 3000 },
     [OperationType.AI_QUESTION_ANSWERING]: { warning: 5000, critical: 15000 },
     [OperationType.AI_STREAMING]: { warning: 1000, critical: 3000 },
     [OperationType.AI_OFF_TOPIC_CHECK]: { warning: 1000, critical: 3000 },

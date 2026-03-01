@@ -9,12 +9,8 @@ import { AIService } from '../services/ai.service';
 
 // Mock all external dependencies
 jest.mock('../services/embedding.service');
-jest.mock('../services/pinecone.service');
 jest.mock('../services/search.service');
-jest.mock('../services/document.service');
-jest.mock('../services/chunk.service');
 jest.mock('../config/openai');
-jest.mock('../config/pinecone');
 jest.mock('../config/redis.config');
 jest.mock('../config/database');
 

@@ -16,7 +16,7 @@ import { ContextPipelineService, FormatOptions } from './context-pipeline.servic
 import { RedisCacheService } from './redis-cache.service';
 import { LatencyTrackerService, OperationType } from './latency-tracker.service';
 import logger from '../config/logger';
-import { RetrievalConfig } from '../config/thresholds.config';
+// RetrievalConfig removed — v2: no document search thresholds needed
 
 import type { ExpansionStrategy } from './query-expansion.service';
 import type { RerankingStrategy } from '../config/reranking.config';
@@ -45,7 +45,7 @@ export interface DocumentContext {
   publishedDate?: string;
   createdAt?: string;
   updatedAt?: string;
-  // Provenance metadata from chunk/Pinecone
+  // v2: document provenance fields retained for type compatibility
   pageNumber?: number;
   sectionTitle?: string;
   sectionLevel?: number;
@@ -66,14 +66,6 @@ export interface RAGContext {
   affectedServices?: import('./degradation.service').ServiceType[];
   degradationMessage?: string;
   partial?: boolean;
-  // Multi-hop retrieval metadata (set when complex query was decomposed)
-  multiHop?: {
-    decomposed: true;
-    subQuestions: string[];
-    retrievalCountsPerHop: number[];
-    totalBeforeDedup: number;
-    totalAfterDedup: number;
-  };
   // Added by summarization / compression pipelines
   summarizationStats?: any;
   compressionStats?: any;
@@ -238,11 +230,6 @@ export class RAGService {
       degraded: retrieval.degraded,
       degradationLevel: retrieval.degradationLevel,
       partial: retrieval.partial,
-      multiHop: retrieval.multiHop ? {
-        subQuestions: retrieval.multiHop.subQuestions.length,
-        totalBeforeDedup: retrieval.multiHop.totalBeforeDedup,
-        totalAfterDedup: retrieval.multiHop.totalAfterDedup,
-      } : undefined,
     });
 
     const ragContext: RAGContext = {
@@ -253,7 +240,6 @@ export class RAGService {
       affectedServices: retrieval.affectedServices,
       degradationMessage: retrieval.degradationMessage,
       partial: retrieval.partial,
-      multiHop: retrieval.multiHop,
     };
 
     // ── 4. Cache store ──────────────────────────────────────────
@@ -270,25 +256,7 @@ export class RAGService {
     context: RAGContext,
     options: FormatOptions = {}
   ): Promise<string> {
-    const formatted = await ContextPipelineService.formatContextForPrompt(context, options);
-
-    // When multi-hop retrieval was used, prepend an instruction so the LLM
-    // knows the context was gathered from multiple angles of the question.
-    if (context.multiHop) {
-      const subQList = context.multiHop.subQuestions
-        .map((q, i) => `  ${i + 1}. ${q}`)
-        .join('\n');
-      const multiHopHeader = [
-        'MULTI-PART QUESTION CONTEXT: The user\'s question was decomposed into these sub-questions for deeper retrieval:',
-        subQList,
-        'The context below includes relevant excerpts for each sub-question, merged and deduplicated.',
-        'Address ALL parts of the original question comprehensively. Structure your answer so each aspect is covered clearly.',
-        '',
-      ].join('\n');
-      return multiHopHeader + formatted;
-    }
-
-    return formatted;
+    return await ContextPipelineService.formatContextForPrompt(context, options);
   }
 
   // ═══════════════════════════════════════════════════════════════════

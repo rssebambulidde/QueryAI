@@ -17,7 +17,6 @@
     "test:unit": "jest --testPathPatterns=__tests__",
     "test:integration": "jest --testPathPatterns=integration",
     "test:performance": "jest --testPathPatterns=performance",
-    "migrate-embeddings": "tsx src/scripts/migrate-embeddings.ts",
     "identify-pesapal-users": "tsx src/scripts/identify-pesapal-users.ts",
     "migrate-pesapal-to-paypal": "tsx src/scripts/migrate-pesapal-to-paypal.ts",
     "send-migration-emails": "tsx src/scripts/send-migration-emails.ts"
@@ -39,7 +38,6 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/generative-ai": "^0.24.1",
     "@paypal/paypal-server-sdk": "^2.2.0",
-    "@pinecone-database/pinecone": "^6.1.3",
     "@supabase/supabase-js": "^2.90.1",
     "@tavily/core": "^0.6.4",
     "@types/pdfkit": "^0.17.4",

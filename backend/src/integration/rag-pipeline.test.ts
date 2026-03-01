@@ -5,22 +5,15 @@
 
 import { RAGService, RAGOptions, RAGContext } from '../services/rag.service';
 import { AIService, QuestionRequest, QuestionResponse } from '../services/ai.service';
-import { DocumentService } from '../services/document.service';
 import { EmbeddingService } from '../services/embedding.service';
-import { PineconeService } from '../services/pinecone.service';
 import { SearchService } from '../services/search.service';
-import { ChunkService } from '../services/chunk.service';
 import { DegradationService, ServiceType } from '../services/degradation.service';
 import { ErrorRecoveryService } from '../services/error-recovery.service';
 
 // Mock all external dependencies
 jest.mock('../services/embedding.service');
-jest.mock('../services/pinecone.service');
 jest.mock('../services/search.service');
-jest.mock('../services/document.service');
-jest.mock('../services/chunk.service');
 jest.mock('../config/openai');
-jest.mock('../config/pinecone');
 jest.mock('../config/redis.config');
 jest.mock('../config/database');
 

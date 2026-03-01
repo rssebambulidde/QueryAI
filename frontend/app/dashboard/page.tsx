@@ -37,10 +37,7 @@ function DashboardContent() {
       }
     }
     return {
-      enableDocumentSearch: true,
       enableWebSearch: true,
-      maxDocumentChunks: 5,
-      minScore: 0.5,
       maxWebResults: 5,
     };
   });

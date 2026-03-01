@@ -5,7 +5,6 @@
  */
 
 import { DocumentContext } from './rag.service';
-import { HybridSearchResult } from './hybrid-search.service';
 import {
   RerankingConfig,
   RerankingStrategy,

@@ -9,6 +9,7 @@ import {
   CreditCard,
   Users,
   ShieldCheck,
+  Sparkles,
   Menu,
   ChevronLeft,
 } from 'lucide-react';
@@ -33,6 +34,7 @@ const settingsNav: SettingsNavItem[] = [
   { href: '/dashboard/settings/profile', label: 'Profile', icon: User, group: 'account' },
   { href: '/dashboard/settings/subscription', label: 'Subscription', icon: CreditCard, group: 'account' },
   { href: '/dashboard/settings/citations', label: 'Citations', icon: FileText, group: 'research' },
+  { href: '/dashboard/settings/research-features', label: 'Research Features', icon: Sparkles, group: 'research' },
   { href: '/dashboard/settings/team', label: 'Team', icon: Users, group: 'admin', requiresEnterprise: true },
   { href: '/dashboard/settings/super-admin', label: 'Super Admin', icon: ShieldCheck, group: 'admin', requiresSuperAdmin: true },
 ];

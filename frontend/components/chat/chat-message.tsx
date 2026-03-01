@@ -69,10 +69,8 @@ export type Message = ChatMessageType;
 
 export interface RegenerateOptions {
   model?: string;
-  maxDocumentChunks?: number;
   maxSearchResults?: number;
   enableWebSearch?: boolean;
-  enableDocumentSearch?: boolean;
   temperature?: number;
   maxTokens?: number;
 }
@@ -560,7 +558,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                         Regenerate
                       </button>
                       <button
-                        onClick={() => { setShowRegenerateMenu(false); handleRegenerate({ maxDocumentChunks: 15, maxSearchResults: 12, enableWebSearch: true, enableDocumentSearch: true, temperature: 0.7 }); }}
+                        onClick={() => { setShowRegenerateMenu(false); handleRegenerate({ maxSearchResults: 12, enableWebSearch: true, temperature: 0.7 }); }}
                         className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                       >
                         <BookOpen className="w-3.5 h-3.5" />

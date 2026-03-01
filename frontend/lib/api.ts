@@ -901,10 +901,8 @@ export const aiApi = {
     conversationId: string,
     options?: {
       model?: string;
-      maxDocumentChunks?: number;
       maxSearchResults?: number;
       enableWebSearch?: boolean;
-      enableDocumentSearch?: boolean;
       temperature?: number;
       maxTokens?: number;
     }
@@ -935,10 +933,8 @@ export const aiApi = {
     conversationId: string,
     options?: {
       model?: string;
-      maxDocumentChunks?: number;
       maxSearchResults?: number;
       enableWebSearch?: boolean;
-      enableDocumentSearch?: boolean;
       temperature?: number;
       maxTokens?: number;
     },

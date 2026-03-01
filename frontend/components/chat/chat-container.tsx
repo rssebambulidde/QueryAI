@@ -27,6 +27,7 @@ import { ChatErrorBoundary } from './chat-error-boundary';
 import { ConversationExportDialog } from './conversation-export-dialog';
 // Chat shortcut UI removed from this component
 import { useChatSend } from '@/lib/hooks/useChatSend';
+import { useResearchFeaturesStore } from '@/lib/store/research-features-store';
 import {
   DEFAULT_CONVERSATION_MODE,
   getModeSearchFlags,
@@ -101,15 +102,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Advanced features
-  const [queryExpansionEnabled, setQueryExpansionEnabled] = useState(false);
+  // Advanced features — driven by research features store
+  const { features: researchFeatures, setFeature: setResearchFeature } = useResearchFeaturesStore();
+  const queryExpansionEnabled = researchFeatures.masterEnabled && researchFeatures.queryRewriting;
   const [queryExpansionSettings, setQueryExpansionSettings] = useState<QueryExpansionSettings>({
     enableExpansion: false,
     expansionMethod: 'hybrid',
     maxExpansions: 5,
     confidenceThreshold: 0.7,
   });
-  const [rerankingEnabled, setRerankingEnabled] = useState(false);
+  const rerankingEnabled = researchFeatures.masterEnabled && researchFeatures.reranking;
   const [rerankingSettings, setRerankingSettings] = useState<RerankingSettings>({
     enableReranking: false,
     rerankingMethod: 'cross-encoder',
@@ -136,16 +138,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
   } = useConversationStore();
   const { unifiedFilters, setUnifiedFilters } = useFilterStore();
 
-  // RAG settings — document search always disabled (Phase 2)
+  // RAG settings — web-only retrieval
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
-    if (propRagSettings) return { ...propRagSettings, enableDocumentSearch: false };
+    if (propRagSettings) return propRagSettings;
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ragSettings');
       if (saved) {
-        try { return { ...JSON.parse(saved), enableDocumentSearch: false }; } catch { /* use defaults */ }
+        try { return JSON.parse(saved); } catch { /* use defaults */ }
       }
     }
-    return { enableDocumentSearch: false, enableWebSearch: true, maxDocumentChunks: 5, minScore: 0.5, maxWebResults: 5 };
+    return { enableWebSearch: true, maxWebResults: 5 };
   });
 
   // const [showResearchSummaryModal, setShowResearchSummaryModal] = useState(false);
@@ -748,11 +750,11 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
                 conversationId={currentConversationId ?? undefined}
                 lastResponseData={lastResponseData}
                 queryExpansionEnabled={queryExpansionEnabled}
-                onQueryExpansionEnabledChange={setQueryExpansionEnabled}
+                onQueryExpansionEnabledChange={(v: boolean) => setResearchFeature('queryRewriting', v)}
                 queryExpansionSettings={queryExpansionSettings}
                 onQueryExpansionSettingsChange={setQueryExpansionSettings}
                 rerankingEnabled={rerankingEnabled}
-                onRerankingEnabledChange={setRerankingEnabled}
+                onRerankingEnabledChange={(v: boolean) => setResearchFeature('reranking', v)}
                 rerankingSettings={rerankingSettings}
                 onRerankingSettingsChange={setRerankingSettings}
                 previousTokenUsage={previousTokenUsage}

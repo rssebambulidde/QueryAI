@@ -525,7 +525,7 @@ function SourceComparison({ left, right }: { left: MessageVersionSummary; right:
 
   const getOptionLabel = (opts: any): string | null => {
     if (!opts) return null;
-    if (opts.maxDocumentChunks > 5 || opts.maxSearchResults > 5) return 'More sources';
+    if (opts.maxSearchResults > 5) return 'More sources';
     if (opts.temperature <= 0.3 && opts.maxTokens <= 600) return 'Shorter & precise';
     if (opts.temperature >= 0.9 && opts.maxTokens >= 4096) return 'Longer & creative';
     return null;

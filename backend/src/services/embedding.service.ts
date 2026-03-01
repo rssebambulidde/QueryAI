@@ -2,8 +2,8 @@ import OpenAI from 'openai';
 import config from '../config/env';
 import logger from '../config/logger';
 import { AppError } from '../types/error';
-import { ChunkingService, ChunkingOptions, TextChunk } from './chunking.service';
-import { PineconeService } from './pinecone.service';
+// ChunkingService removed — v2: document processing retired
+// PineconeService removed — v2: document search retired
 import { RedisCacheService } from './redis-cache.service';
 import { RetryService } from './retry.service';
 import { CircuitBreakerService } from './circuit-breaker.service';
@@ -945,116 +945,5 @@ export class EmbeddingService {
     }
   }
 
-  /**
-   * Process document: chunk, generate embeddings, and store in Pinecone
-   */
-  static async processDocument(
-    documentId: string,
-    userId: string,
-    text: string,
-    chunkingOptions?: ChunkingOptions,
-    topicId?: string
-  ): Promise<{
-    chunks: TextChunk[];
-    embeddings: number[][];
-    metadata: {
-      totalChunks: number;
-      totalTokens: number;
-    };
-  }> {
-    try {
-      // Chunk the text (handle both sync and async chunking)
-      // If semantic chunking is requested, use async method; otherwise use sync
-      let chunks: TextChunk[];
-      const useSemantic = 
-        chunkingOptions?.strategy === 'semantic' || 
-        chunkingOptions?.strategy === 'hybrid' || 
-        chunkingOptions?.enableSemanticChunking === true;
-      
-      if (useSemantic) {
-        chunks = await ChunkingService.chunkTextAsync(text, chunkingOptions || {});
-      } else {
-        // Use sentence-based (synchronous) - ensure strategy is not semantic
-        const sentenceOptions = chunkingOptions ? { ...chunkingOptions, strategy: 'sentence' as const } : undefined;
-        chunks = ChunkingService.chunkText(text, sentenceOptions);
-      }
-
-      logger.info('Document chunked', {
-        documentId,
-        chunkCount: chunks.length,
-        strategy: chunkingOptions?.strategy || chunkingOptions?.enableSemanticChunking ? 'semantic' : 'sentence',
-      });
-
-      // Generate embeddings for all chunks (use optimized batch for efficiency)
-      const chunkTexts = chunks.map(chunk => chunk.content);
-      // Use optimized batch processing (not queue) for document processing
-      const embeddings = await this.generateEmbeddingsBatch(chunkTexts, undefined, undefined, false);
-
-      logger.info('Embeddings generated', {
-        documentId,
-        embeddingCount: embeddings.length,
-      });
-
-      // Store embeddings in Pinecone
-      // Generate chunk IDs for Pinecone
-      const chunksWithIds = chunks.map((chunk, index) => ({
-        id: `${documentId}_chunk_${index}`,
-        chunkIndex: chunk.chunkIndex,
-        content: chunk.content,
-        // Provenance metadata for citations
-        pageNumber: chunk.pageNumber,
-        sectionTitle: chunk.section?.title,
-        sectionLevel: chunk.section?.level,
-      }));
-
-      // Get current model dimensions for Pinecone
-      const embeddingDimensions = this.getCurrentDimensions();
-
-      await PineconeService.upsertVectors(
-        documentId,
-        chunksWithIds,
-        embeddings,
-        userId,
-        topicId,
-        embeddingDimensions,
-        this.getCurrentModel()
-      );
-
-      logger.info('Vectors stored in Pinecone', {
-        documentId,
-        vectorCount: embeddings.length,
-      });
-
-      // Index document for keyword search
-      try {
-        const { KeywordSearchService } = await import('./keyword-search.service');
-        await KeywordSearchService.indexDocument(documentId, userId, topicId);
-        logger.info('Document indexed for keyword search', { documentId });
-      } catch (keywordError: any) {
-        // Don't fail document processing if keyword indexing fails
-        logger.warn('Failed to index document for keyword search', {
-          documentId,
-          error: keywordError.message,
-        });
-      }
-
-      return {
-        chunks: chunks, // chunks is already TextChunk[]
-        embeddings,
-        metadata: {
-          totalChunks: chunks.length,
-          totalTokens: chunks.reduce((sum, chunk) => sum + chunk.tokenCount, 0),
-        },
-      };
-    } catch (error: any) {
-      logger.error('Error processing document:', {
-        documentId,
-        error: error.message,
-      });
-      if (error instanceof AppError) {
-        throw error;
-      }
-      throw new AppError('Failed to process document', 500, 'DOCUMENT_PROCESSING_ERROR');
-    }
-  }
+  // v2: processDocument() removed — Pinecone document search retired.
 }
