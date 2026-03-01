@@ -6,6 +6,7 @@ import { ConversationService } from './conversation.service';
 import { ConversationSummarizerService, ConversationSummarizationOptions } from './conversation-summarizer.service';
 import { SlidingWindowService, SlidingWindowOptions } from './sliding-window.service';
 import { CitedSourceService } from './cited-source.service';
+import { RedisCacheService } from './redis-cache.service';
 
 export interface CreateMessageInput {
   conversationId: string;
@@ -32,6 +33,9 @@ export interface MessagePair {
  * Handles message CRUD operations
  */
 export class MessageService {
+  private static readonly HISTORY_CACHE_PREFIX = 'conv-history';
+  private static readonly HISTORY_CACHE_TTL = 30; // seconds
+
   /**
    * Save a single message to a conversation
    */
@@ -74,6 +78,9 @@ export class MessageService {
 
       // Update conversation timestamp
       await ConversationService.updateConversationTimestamp(input.conversationId);
+
+      // Invalidate history cache so next request gets fresh data
+      this.invalidateHistoryCache(input.conversationId).catch(() => {});
 
       logger.info('Message saved', {
         messageId: data.id,
@@ -172,6 +179,9 @@ export class MessageService {
       // The RPC returns a JSONB object with userMessage / assistantMessage
       const userMessage: Database.Message = data.userMessage;
       const assistantMessage: Database.Message = data.assistantMessage;
+
+      // Invalidate history cache so next request gets fresh data
+      this.invalidateHistoryCache(conversationId).catch(() => {});
 
       logger.info('Message pair saved atomically', {
         conversationId,
@@ -425,6 +435,20 @@ export class MessageService {
     options: SlidingWindowOptions = {}
   ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
     try {
+      // Check Redis cache first (short-lived, 30s TTL)
+      const cacheKey = `${conversationId}:${userId}`;
+      try {
+        const cached = await RedisCacheService.get<Array<{ role: 'user' | 'assistant'; content: string }>>(
+          cacheKey,
+          { prefix: this.HISTORY_CACHE_PREFIX }
+        );
+        if (cached) {
+          return this.applyHistoryStrategy(cached, options);
+        }
+      } catch {
+        // Redis unavailable — fall through to DB
+      }
+
       // Get recent messages (default-limited to avoid loading huge histories)
       const messages = await this.getAllMessages(conversationId, userId);
 
@@ -434,6 +458,12 @@ export class MessageService {
         content: msg.content || '',
       }));
 
+      // Cache raw history (before strategy applied) for reuse
+      RedisCacheService.set(cacheKey, history, {
+        prefix: this.HISTORY_CACHE_PREFIX,
+        ttl: this.HISTORY_CACHE_TTL,
+      }).catch(() => {});
+
       return this.applyHistoryStrategy(history, options);
     } catch (error) {
       if (error instanceof AppError) {
@@ -441,6 +471,19 @@ export class MessageService {
       }
       logger.error('Unexpected error getting sliding window history:', error);
       throw new AppError('Failed to get sliding window history', 500, 'HISTORY_SLIDING_WINDOW_ERROR');
+    }
+  }
+
+  /**
+   * Invalidate the conversation history cache after a message is saved.
+   */
+  private static async invalidateHistoryCache(conversationId: string): Promise<void> {
+    try {
+      await RedisCacheService.deletePattern(`${conversationId}:*`, {
+        prefix: this.HISTORY_CACHE_PREFIX,
+      });
+    } catch {
+      // Non-critical — cache will expire via TTL
     }
   }
 

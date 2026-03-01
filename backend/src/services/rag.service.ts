@@ -180,7 +180,7 @@ export class RAGService {
     options: RAGOptions
   ): Promise<RAGContext> {
     // ── 1. Cache check ──────────────────────────────────────────
-    const cached = await RetrievalOrchestratorService.checkCache(query, options);
+    const { cached, queryEmbedding } = await RetrievalOrchestratorService.checkCache(query, options);
     if (cached) return cached;
 
     // ── 2. Retrieval orchestration ──────────────────────────────
@@ -242,8 +242,11 @@ export class RAGService {
       partial: retrieval.partial,
     };
 
-    // ── 4. Cache store ──────────────────────────────────────────
-    await RetrievalOrchestratorService.storeCache(query, options, ragContext);
+    // ── 4. Cache store (fire-and-forget — non-critical) ─────────
+    // Reuse the queryEmbedding from checkCache to avoid a duplicate embedding API call.
+    RetrievalOrchestratorService.storeCache(query, options, ragContext, queryEmbedding).catch((err: any) => {
+      logger.warn('Background cache store failed', { error: err.message, userId: options.userId });
+    });
 
     return ragContext;
   }

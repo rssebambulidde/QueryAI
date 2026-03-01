@@ -79,20 +79,23 @@ export class RetrievalOrchestratorService {
 
   /**
    * Attempt to retrieve RAG context from cache (exact + similarity).
-   * Returns null on miss or cache error.
+   * Returns the cached context (or null on miss) plus any query embedding
+   * generated during similarity lookup — so callers can reuse it for storeCache.
    */
   static async checkCache(
     query: string,
     options: RAGOptions
-  ): Promise<RAGContext | null> {
+  ): Promise<{ cached: RAGContext | null; queryEmbedding?: number[] }> {
     const enableContextCache = options.enableContextCache ?? true;
     const enableSimilarityLookup = options.enableSimilarityLookup ?? true;
     const similarityThreshold = options.contextCacheSimilarityThreshold ?? this.DEFAULT_SIMILARITY_THRESHOLD;
 
     if (!enableContextCache) {
       RedisCacheService.recordRAGMiss();
-      return null;
+      return { cached: null };
     }
+
+    let queryEmbedding: number[] | undefined;
 
     try {
       const cacheKey = this.generateRAGCacheKey(query, options);
@@ -110,13 +113,13 @@ export class RetrievalOrchestratorService {
           query: query.substring(0, 100),
           webResults: cached.webSearchResults.length,
         });
-        return cached;
+        return { cached };
       }
 
-      // Similarity-based lookup
+      // Similarity-based lookup — preserve embedding for reuse in storeCache
       if (enableSimilarityLookup) {
         try {
-          const queryEmbedding = await EmbeddingService.generateEmbedding(query);
+          queryEmbedding = await EmbeddingService.generateEmbedding(query);
           const similarEntries = await RedisCacheService.findSimilarEntries<RAGContext>(
             queryEmbedding,
             {
@@ -135,7 +138,7 @@ export class RetrievalOrchestratorService {
               similarity: similarEntries[0].similarity,
               webResults: similarContext.webSearchResults.length,
             });
-            return similarContext;
+            return { cached: similarContext, queryEmbedding };
           }
         } catch (similarityError: any) {
           logger.warn('Similarity-based cache lookup failed, continuing with retrieval', {
@@ -152,16 +155,18 @@ export class RetrievalOrchestratorService {
       RedisCacheService.recordRAGError();
     }
 
-    return null;
+    return { cached: null, queryEmbedding };
   }
 
   /**
    * Store RAG context in cache with embedding for similarity lookup.
+   * Accepts an optional pre-computed queryEmbedding to avoid redundant API calls.
    */
   static async storeCache(
     query: string,
     options: RAGOptions,
-    ragContext: RAGContext
+    ragContext: RAGContext,
+    precomputedEmbedding?: number[]
   ): Promise<void> {
     const enableContextCache = options.enableContextCache ?? true;
     if (!enableContextCache) return;
@@ -169,7 +174,7 @@ export class RetrievalOrchestratorService {
     try {
       const cacheKey = this.generateRAGCacheKey(query, options);
       const cacheTTL = this.calculateRAGCacheTTL(options);
-      const queryEmbedding = await EmbeddingService.generateEmbedding(query);
+      const queryEmbedding = precomputedEmbedding ?? await EmbeddingService.generateEmbedding(query);
 
       await RedisCacheService.setWithEmbedding(cacheKey, ragContext, queryEmbedding, {
         prefix: this.RAG_CACHE_PREFIX,

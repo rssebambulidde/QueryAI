@@ -725,197 +725,6 @@ Is this question clearly within the topic? Answer only YES or NO.`;
     const topicDescription = undefined;
     const topicScopeConfig = undefined;
 
-    // ── RAG retrieval ──────────────────────────────────────────────────
-    let ragContext: string | undefined;
-    let sources: Source[] | undefined;
-    let contextDegraded = false;
-    let contextDegradationLevel: DegradationLevel | undefined;
-    let contextDegradationMessage: string | undefined;
-    let contextPartial = false;
-
-    if (userId) {
-      try {
-        const ragOptions: RAGOptions = {
-          userId,
-          // v2: Topics & document search retired
-          enableDocumentSearch: false,
-          enableWebSearch: request.enableWebSearch !== false,
-          maxDocumentChunks: request.maxDocumentChunks ?? 5,
-          maxWebResults: request.maxSearchResults ?? 5,
-          minScore: request.minScore,
-          topic: request.topic,
-          timeRange: request.timeRange,
-          startDate: request.startDate,
-          endDate: request.endDate,
-          country: request.country,
-          topicQueryOptions: undefined,
-          enableQueryExpansion: request.enableQueryExpansion ?? false,
-          expansionStrategy: request.expansionStrategy,
-          maxExpansions: request.maxExpansions,
-          enableQueryRewriting: request.enableQueryRewriting ?? false,
-          queryRewritingOptions: request.queryRewritingOptions,
-          enableWebResultReranking: request.enableWebResultReranking ?? false,
-          webResultRerankingConfig: request.webResultRerankingConfig,
-          enableQualityScoring: request.enableQualityScoring ?? false,
-          qualityScoringConfig: request.qualityScoringConfig,
-          minQualityScore: request.minQualityScore,
-          filterByQuality: request.filterByQuality ?? false,
-          enableReranking: request.enableReranking ?? false,
-          rerankingStrategy: request.rerankingStrategy,
-          rerankingTopK: request.rerankingTopK,
-          rerankingMaxResults: request.rerankingMaxResults,
-          useAdaptiveThreshold: request.useAdaptiveThreshold ?? true,
-          minResults: request.minResults,
-          maxResults: request.maxResults,
-          enableDiversityFilter: request.enableDiversityFilter ?? false,
-          diversityLambda: request.diversityLambda,
-          diversityMaxResults: request.diversityMaxResults,
-          diversitySimilarityThreshold: undefined,
-          enableResultDeduplication: request.enableResultDeduplication ?? false,
-          deduplicationThreshold: request.deduplicationThreshold,
-          deduplicationNearDuplicateThreshold: request.deduplicationNearDuplicateThreshold,
-          useAdaptiveContextSelection: request.useAdaptiveContextSelection ?? true,
-          enableAdaptiveContextSelection: request.enableAdaptiveContextSelection ?? true,
-          adaptiveContextOptions: request.adaptiveContextOptions,
-          minChunks: request.minChunks,
-          maxChunks: request.maxChunks,
-          enableDynamicLimits: request.enableDynamicLimits ?? true,
-          dynamicLimitOptions: request.dynamicLimitOptions,
-          enableRelevanceOrdering: request.enableRelevanceOrdering ?? true,
-          orderingOptions: request.orderingOptions,
-          contextReductionStrategy: request.contextReductionStrategy ?? 'summarize',
-          maxContextTokens: request.maxContextTokens,
-          summarizationOptions: request.summarizationOptions,
-          enableSourcePrioritization: request.enableSourcePrioritization ?? true,
-          prioritizationOptions: request.prioritizationOptions,
-          enableTokenBudgeting: request.enableTokenBudgeting ?? true,
-          tokenBudgetOptions: request.tokenBudgetOptions ? {
-            ...request.tokenBudgetOptions,
-            model: request.tokenBudgetOptions.model ?? request.model ?? 'gpt-3.5-turbo',
-          } : undefined,
-        };
-
-        if (request.enableSearch === false) {
-          ragOptions.enableWebSearch = false;
-        }
-
-        const context = await RAGService.retrieveContext(request.question, ragOptions);
-
-        const [formattedContext, extractedSources] = await Promise.all([
-          RAGService.formatContextForPrompt(context, {
-            enableRelevanceOrdering: ragOptions.enableRelevanceOrdering ?? true,
-            orderingOptions: ragOptions.orderingOptions,
-            contextReductionStrategy: ragOptions.contextReductionStrategy ?? 'summarize',
-            summarizationOptions: ragOptions.summarizationOptions,
-            enableSourcePrioritization: ragOptions.enableSourcePrioritization ?? true,
-            prioritizationOptions: ragOptions.prioritizationOptions,
-            enableTokenBudgeting: ragOptions.enableTokenBudgeting ?? true,
-            tokenBudgetOptions: {
-              ...ragOptions.tokenBudgetOptions,
-              model: request.model || 'gpt-3.5-turbo',
-            },
-            query: request.question,
-            model: request.model || 'gpt-3.5-turbo',
-            userId: userId,
-          }),
-          Promise.resolve(RAGService.extractSources(context)),
-        ]);
-
-        ragContext = formattedContext;
-        sources = extractedSources;
-        contextDegraded = context.degraded || false;
-        contextDegradationLevel = context.degradationLevel;
-        contextDegradationMessage = context.degradationMessage;
-        contextPartial = context.partial || false;
-
-        logger.info('RAG context retrieved', {
-          userId,
-          documentChunks: context.documentContexts.length,
-          webResults: context.webSearchResults.length,
-          totalSources: sources.length,
-          degraded: contextDegraded,
-          degradationLevel: contextDegradationLevel,
-          partial: contextPartial,
-        });
-      } catch (ragError: any) {
-        logger.warn('RAG retrieval failed, continuing without RAG context', {
-          error: ragError.message,
-          question: request.question,
-          userId,
-        });
-      }
-    } else {
-      // Fallback web search when no userId
-      if (request.enableSearch !== false) {
-        try {
-          const searchRequest: SearchRequest = {
-            query: request.question,
-            topic: request.topic,
-            maxResults: request.maxSearchResults ?? 5,
-            timeRange: request.timeRange,
-            startDate: request.startDate,
-            endDate: request.endDate,
-            country: request.country,
-          };
-
-          const searchResponse = await SearchService.search(searchRequest);
-
-          if (searchResponse.results && searchResponse.results.length > 0) {
-            const webResults = searchResponse.results.map(r => ({
-              title: r.title,
-              url: r.url,
-              content: r.content,
-            }));
-
-            ragContext = await RAGService.formatContextForPrompt({
-              documentContexts: [],
-              webSearchResults: webResults,
-            }, {
-              enableRelevanceOrdering: true,
-              contextReductionStrategy: request.contextReductionStrategy ?? 'summarize',
-              summarizationOptions: request.summarizationOptions,
-              enableSourcePrioritization: request.enableSourcePrioritization ?? true,
-              prioritizationOptions: request.prioritizationOptions,
-              enableTokenBudgeting: request.enableTokenBudgeting ?? true,
-              tokenBudgetOptions: {
-                ...request.tokenBudgetOptions,
-                model: request.model || 'gpt-3.5-turbo',
-              },
-              query: request.question,
-              model: request.model || 'gpt-3.5-turbo',
-              userId: userId,
-            });
-
-            const accessDate = new Date().toISOString();
-
-            sources = searchResponse.results.map((r) => ({
-              type: 'web' as const,
-              title: r.title,
-              url: r.url,
-              snippet: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
-              metadata: {
-                publishedDate: r.publishedDate,
-                publicationDate: r.publishedDate,
-                accessDate,
-                author: r.author,
-                url: r.url,
-              },
-            }));
-
-            logger.info('Search results retrieved (fallback)', {
-              query: request.question,
-              resultsCount: webResults.length,
-            });
-          }
-        } catch (searchError: any) {
-          logger.warn('Search failed, continuing without search results', {
-            error: searchError.message,
-            question: request.question,
-          });
-        }
-      }
-    }
-
     // ── Time filter ────────────────────────────────────────────────────
     const timeFilter = request.timeRange || request.startDate || request.endDate || request.topic || request.country
       ? {
@@ -927,77 +736,337 @@ Is this question clearly within the topic? Answer only YES or NO.`;
         }
       : undefined;
 
-    // ── Conversation history (unified: sliding window + summarization) ─
-    //
-    // Strategy decision (Item 21):
-    //   **Sliding window with summarization fallback.**
-    //
-    //   • Deterministic: the most recent N messages (default 10) are kept
-    //     verbatim — same window for /ask and /ask/stream.
-    //   • When older messages exist, they are summarized into ≤ 1 000 tokens
-    //     to stay within the 2 000-token total history budget.
-    //   • After windowing, optional relevance filtering (below) may further
-    //     prune low-relevance turns.
-    //
-    //   Configuration (see SlidingWindowConfig in thresholds.config.ts):
-    //     - Max messages in window:  10   (windowSize)
-    //     - Token budget (win+sum):  2 000 (maxTotalTokens)
-    //     - Summary token cap:       1 000 (maxSummaryTokens)
-    //     - Summarization trigger:   messages.length > windowSize
-    //
-    //   Both pipelines call prepareRequestContext() so the LLM always
-    //   receives identical conversation context regardless of endpoint.
-    // ──────────────────────────────────────────────────────────────────
-    let conversationHistory = request.conversationHistory;
+    // ══════════════════════════════════════════════════════════════════
+    // Phase 1: Fire all independent operations in parallel
+    // ══════════════════════════════════════════════════════════════════
 
-    // Load from DB when no client-provided history (or empty array)
-    if (request.conversationId && userId && (!conversationHistory || conversationHistory.length === 0)) {
-      try {
-        const { MessageService } = await import('./message.service');
+    // Helper: RAG retrieval + format + source extraction
+    const ragTask = (async (): Promise<{
+      ragContext?: string;
+      sources?: Source[];
+      contextDegraded: boolean;
+      contextDegradationLevel?: DegradationLevel;
+      contextDegradationMessage?: string;
+      contextPartial: boolean;
+    }> => {
+      if (userId) {
+        try {
+          const ragOptions: RAGOptions = {
+            userId,
+            enableDocumentSearch: false,
+            enableWebSearch: request.enableWebSearch !== false,
+            maxDocumentChunks: request.maxDocumentChunks ?? 5,
+            maxWebResults: request.maxSearchResults ?? 5,
+            minScore: request.minScore,
+            topic: request.topic,
+            timeRange: request.timeRange,
+            startDate: request.startDate,
+            endDate: request.endDate,
+            country: request.country,
+            topicQueryOptions: undefined,
+            enableQueryExpansion: request.enableQueryExpansion ?? false,
+            expansionStrategy: request.expansionStrategy,
+            maxExpansions: request.maxExpansions,
+            enableQueryRewriting: request.enableQueryRewriting ?? false,
+            queryRewritingOptions: request.queryRewritingOptions,
+            enableWebResultReranking: request.enableWebResultReranking ?? false,
+            webResultRerankingConfig: request.webResultRerankingConfig,
+            enableQualityScoring: request.enableQualityScoring ?? false,
+            qualityScoringConfig: request.qualityScoringConfig,
+            minQualityScore: request.minQualityScore,
+            filterByQuality: request.filterByQuality ?? false,
+            enableReranking: request.enableReranking ?? false,
+            rerankingStrategy: request.rerankingStrategy,
+            rerankingTopK: request.rerankingTopK,
+            rerankingMaxResults: request.rerankingMaxResults,
+            useAdaptiveThreshold: request.useAdaptiveThreshold ?? true,
+            minResults: request.minResults,
+            maxResults: request.maxResults,
+            enableDiversityFilter: request.enableDiversityFilter ?? false,
+            diversityLambda: request.diversityLambda,
+            diversityMaxResults: request.diversityMaxResults,
+            diversitySimilarityThreshold: undefined,
+            enableResultDeduplication: request.enableResultDeduplication ?? false,
+            deduplicationThreshold: request.deduplicationThreshold,
+            deduplicationNearDuplicateThreshold: request.deduplicationNearDuplicateThreshold,
+            useAdaptiveContextSelection: request.useAdaptiveContextSelection ?? true,
+            enableAdaptiveContextSelection: request.enableAdaptiveContextSelection ?? true,
+            adaptiveContextOptions: request.adaptiveContextOptions,
+            minChunks: request.minChunks,
+            maxChunks: request.maxChunks,
+            enableDynamicLimits: request.enableDynamicLimits ?? true,
+            dynamicLimitOptions: request.dynamicLimitOptions,
+            enableRelevanceOrdering: request.enableRelevanceOrdering ?? true,
+            orderingOptions: request.orderingOptions,
+            contextReductionStrategy: request.contextReductionStrategy ?? 'summarize',
+            maxContextTokens: request.maxContextTokens,
+            summarizationOptions: request.summarizationOptions,
+            enableSourcePrioritization: request.enableSourcePrioritization ?? true,
+            prioritizationOptions: request.prioritizationOptions,
+            enableTokenBudgeting: request.enableTokenBudgeting ?? true,
+            tokenBudgetOptions: request.tokenBudgetOptions ? {
+              ...request.tokenBudgetOptions,
+              model: request.tokenBudgetOptions.model ?? request.model ?? 'gpt-3.5-turbo',
+            } : undefined,
+          };
 
-        conversationHistory = await MessageService.getSlidingWindowHistory(
-          request.conversationId,
+          if (request.enableSearch === false) {
+            ragOptions.enableWebSearch = false;
+          }
+
+          const context = await RAGService.retrieveContext(request.question, ragOptions);
+
+          const [formattedContext, extractedSources] = await Promise.all([
+            RAGService.formatContextForPrompt(context, {
+              enableRelevanceOrdering: ragOptions.enableRelevanceOrdering ?? true,
+              orderingOptions: ragOptions.orderingOptions,
+              contextReductionStrategy: ragOptions.contextReductionStrategy ?? 'summarize',
+              summarizationOptions: ragOptions.summarizationOptions,
+              enableSourcePrioritization: ragOptions.enableSourcePrioritization ?? true,
+              prioritizationOptions: ragOptions.prioritizationOptions,
+              enableTokenBudgeting: ragOptions.enableTokenBudgeting ?? true,
+              tokenBudgetOptions: {
+                ...ragOptions.tokenBudgetOptions,
+                model: request.model || 'gpt-3.5-turbo',
+              },
+              query: request.question,
+              model: request.model || 'gpt-3.5-turbo',
+              userId: userId,
+            }),
+            Promise.resolve(RAGService.extractSources(context)),
+          ]);
+
+          logger.info('RAG context retrieved', {
+            userId,
+            documentChunks: context.documentContexts.length,
+            webResults: context.webSearchResults.length,
+            totalSources: extractedSources.length,
+            degraded: context.degraded || false,
+            degradationLevel: context.degradationLevel,
+            partial: context.partial || false,
+          });
+
+          return {
+            ragContext: formattedContext,
+            sources: extractedSources,
+            contextDegraded: context.degraded || false,
+            contextDegradationLevel: context.degradationLevel,
+            contextDegradationMessage: context.degradationMessage,
+            contextPartial: context.partial || false,
+          };
+        } catch (ragError: any) {
+          logger.warn('RAG retrieval failed, continuing without RAG context', {
+            error: ragError.message,
+            question: request.question,
+            userId,
+          });
+          return { contextDegraded: false, contextPartial: false };
+        }
+      } else {
+        // Fallback web search when no userId
+        if (request.enableSearch !== false) {
+          try {
+            const searchRequest: SearchRequest = {
+              query: request.question,
+              topic: request.topic,
+              maxResults: request.maxSearchResults ?? 5,
+              timeRange: request.timeRange,
+              startDate: request.startDate,
+              endDate: request.endDate,
+              country: request.country,
+            };
+
+            const searchResponse = await SearchService.search(searchRequest);
+
+            if (searchResponse.results && searchResponse.results.length > 0) {
+              const webResults = searchResponse.results.map(r => ({
+                title: r.title,
+                url: r.url,
+                content: r.content,
+              }));
+
+              const formattedContext = await RAGService.formatContextForPrompt({
+                documentContexts: [],
+                webSearchResults: webResults,
+              }, {
+                enableRelevanceOrdering: true,
+                contextReductionStrategy: request.contextReductionStrategy ?? 'summarize',
+                summarizationOptions: request.summarizationOptions,
+                enableSourcePrioritization: request.enableSourcePrioritization ?? true,
+                prioritizationOptions: request.prioritizationOptions,
+                enableTokenBudgeting: request.enableTokenBudgeting ?? true,
+                tokenBudgetOptions: {
+                  ...request.tokenBudgetOptions,
+                  model: request.model || 'gpt-3.5-turbo',
+                },
+                query: request.question,
+                model: request.model || 'gpt-3.5-turbo',
+                userId: userId,
+              });
+
+              const accessDate = new Date().toISOString();
+
+              const fallbackSources: Source[] = searchResponse.results.map((r) => ({
+                type: 'web' as const,
+                title: r.title,
+                url: r.url,
+                snippet: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
+                metadata: {
+                  publishedDate: r.publishedDate,
+                  publicationDate: r.publishedDate,
+                  accessDate,
+                  author: r.author,
+                  url: r.url,
+                },
+              }));
+
+              logger.info('Search results retrieved (fallback)', {
+                query: request.question,
+                resultsCount: webResults.length,
+              });
+
+              return {
+                ragContext: formattedContext,
+                sources: fallbackSources,
+                contextDegraded: false,
+                contextPartial: false,
+              };
+            }
+          } catch (searchError: any) {
+            logger.warn('Search failed, continuing without search results', {
+              error: searchError.message,
+              question: request.question,
+            });
+          }
+        }
+        return { contextDegraded: false, contextPartial: false };
+      }
+    })();
+
+    // Helper: Conversation history loading + sliding window
+    const historyTask = (async (): Promise<Array<{ role: 'user' | 'assistant'; content: string }> | undefined> => {
+      let history = request.conversationHistory;
+
+      if (request.conversationId && userId && (!history || history.length === 0)) {
+        try {
+          const { MessageService } = await import('./message.service');
+          history = await MessageService.getSlidingWindowHistory(
+            request.conversationId,
+            userId,
+            {
+              model: request.model || 'gpt-3.5-turbo',
+              ...request.slidingWindowOptions,
+            }
+          );
+          logger.info('Conversation history loaded (unified sliding-window strategy)', {
+            conversationId: request.conversationId,
+            historyLength: history.length,
+          });
+        } catch (error: any) {
+          logger.warn('Failed to fetch conversation history, continuing without history', {
+            error: error.message,
+            conversationId: request.conversationId,
+          });
+        }
+      } else if (history && history.length > 0) {
+        try {
+          const { MessageService } = await import('./message.service');
+          history = await MessageService.applyHistoryStrategy(
+            history,
+            {
+              model: request.model || 'gpt-3.5-turbo',
+              ...request.slidingWindowOptions,
+            }
+          );
+          logger.info('Client-provided history windowed (unified strategy)', {
+            historyLength: history.length,
+          });
+        } catch (error: any) {
+          logger.warn('Failed to apply history strategy to client-provided history, using as-is', {
+            error: error.message,
+          });
+        }
+      }
+
+      return history;
+    })();
+
+    // Helper: Conversation state (entity/topic tracking)
+    const stateTask = (async (): Promise<string> => {
+      if (request.conversationId && userId && request.enableStateTracking !== false) {
+        try {
+          const { ConversationStateService } = await import('./conversation-state.service');
+          const state = await ConversationStateService.getState(request.conversationId, userId);
+
+          if (state && (state.topics.length > 0 || state.entities.length > 0 || state.keyConcepts.length > 0)) {
+            const text = ConversationStateService.formatStateForContextCompact(state);
+            logger.info('Conversation state injected into prompt', {
+              conversationId: request.conversationId,
+              topics: state.topics.length,
+              entities: state.entities.length,
+              concepts: state.keyConcepts.length,
+            });
+            return text;
+          }
+        } catch (stateErr: any) {
+          logger.warn('Failed to retrieve conversation state, continuing without it', {
+            error: stateErr.message,
+            conversationId: request.conversationId,
+          });
+        }
+      }
+      return '';
+    })();
+
+    // Helper: Model selection (pure registry lookup — no dependency on RAG or history)
+    const modelTask = this.selectModel(
+      userId,
+      request.question,
+      undefined,  // ragContext not needed — selectModel never uses it
+      undefined,  // conversationHistory not needed
+      request.model,
+      'research'
+    );
+
+    // Helper: Attachment processing
+    const attachmentTask = processAttachments(request, userId, 'research');
+
+    // Await all 5 independent operations in parallel
+    const [ragResult, loadedHistory, conversationStateText, modelSelection, researchAttachmentResult] =
+      await Promise.all([ragTask, historyTask, stateTask, modelTask, attachmentTask]);
+
+    // Unpack RAG results
+    const ragContext = ragResult.ragContext;
+    const sources = ragResult.sources;
+    const contextDegraded = ragResult.contextDegraded;
+    const contextDegradationLevel = ragResult.contextDegradationLevel;
+    const contextDegradationMessage = ragResult.contextDegradationMessage;
+    const contextPartial = ragResult.contextPartial;
+
+    // Unpack model selection
+    const selectedModel = modelSelection.model;
+    const selectedProvider = modelSelection.provider;
+    const modelSelectionReason = modelSelection.reason;
+
+    // Fire-and-forget: subscription lookup is only for logging, don't block
+    if (userId) {
+      SubscriptionService.getUserSubscriptionWithLimits(userId).then(subscriptionData => {
+        logger.info('Model selected based on tier', {
           userId,
-          {
-            model: request.model || 'gpt-3.5-turbo',
-            ...request.slidingWindowOptions,
-          }
-        );
-
-        logger.info('Conversation history loaded (unified sliding-window strategy)', {
-          conversationId: request.conversationId,
-          historyLength: conversationHistory.length,
+          tier: subscriptionData?.subscription.tier || 'unknown',
+          selectedModel,
+          reason: modelSelectionReason,
+          question: request.question.substring(0, 100),
         });
-      } catch (error: any) {
-        logger.warn('Failed to fetch conversation history, continuing without history', {
-          error: error.message,
-          conversationId: request.conversationId,
-        });
-      }
-    } else if (conversationHistory && conversationHistory.length > 0) {
-      // Client-provided history — still apply sliding window for consistency
-      try {
-        const { MessageService } = await import('./message.service');
-
-        conversationHistory = await MessageService.applyHistoryStrategy(
-          conversationHistory,
-          {
-            model: request.model || 'gpt-3.5-turbo',
-            ...request.slidingWindowOptions,
-          }
-        );
-
-        logger.info('Client-provided history windowed (unified strategy)', {
-          historyLength: conversationHistory.length,
-        });
-      } catch (error: any) {
-        logger.warn('Failed to apply history strategy to client-provided history, using as-is', {
-          error: error.message,
-        });
-      }
+      }).catch(() => {});
     }
 
-    // ── History relevance filtering ────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════
+    // Phase 2: Sequential steps that depend on Phase 1 results
+    // ══════════════════════════════════════════════════════════════════
+
+    // History relevance filtering (depends on loaded history)
+    let conversationHistory = loadedHistory;
     if (conversationHistory && conversationHistory.length > 0 && request.enableHistoryFiltering !== false) {
       try {
         const { HistoryFilterService } = await import('./history-filter.service');
@@ -1024,66 +1093,8 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       }
     }
 
-    // ── Model selection ────────────────────────────────────────────────
-    let selectedModel: string;
-    let selectedProvider: LLMProvider;
-    let modelSelectionReason: string;
-
-    const modelSelection = await this.selectModel(
-      userId,
-      request.question,
-      ragContext,
-      conversationHistory,
-      request.model,
-      'research'
-    );
-    selectedModel = modelSelection.model;
-    selectedProvider = modelSelection.provider;
-    modelSelectionReason = modelSelection.reason;
-
-    if (userId) {
-      try {
-        const subscriptionData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
-        logger.info('Model selected based on tier', {
-          userId,
-          tier: subscriptionData?.subscription.tier || 'unknown',
-          selectedModel,
-          reason: modelSelectionReason,
-          question: request.question.substring(0, 100),
-        });
-      } catch (error) {
-        // Ignore errors in logging
-      }
-    }
-
-    // ── Conversation state (entity / topic tracking) ───────────────────
-    let conversationStateText = '';
-
-    if (request.conversationId && userId && request.enableStateTracking !== false) {
-      try {
-        const { ConversationStateService } = await import('./conversation-state.service');
-        const state = await ConversationStateService.getState(request.conversationId, userId);
-
-        if (state && (state.topics.length > 0 || state.entities.length > 0 || state.keyConcepts.length > 0)) {
-          conversationStateText = ConversationStateService.formatStateForContextCompact(state);
-          logger.info('Conversation state injected into prompt', {
-            conversationId: request.conversationId,
-            topics: state.topics.length,
-            entities: state.entities.length,
-            concepts: state.keyConcepts.length,
-          });
-        }
-      } catch (stateErr: any) {
-        logger.warn('Failed to retrieve conversation state, continuing without it', {
-          error: stateErr.message,
-          conversationId: request.conversationId,
-        });
-      }
-    }
-
-    // ── Few-shot examples ──────────────────────────────────────────────
+    // Few-shot examples (depends on ragContext for hasWebResults check)
     let fewShotExamplesText = '';
-
     if (request.enableFewShotExamples !== false) {
       try {
         const hasDocuments = ragContext?.includes('Relevant Document Excerpts:') || false;
@@ -1111,13 +1122,12 @@ Is this question clearly within the topic? Answer only YES or NO.`;
       }
     }
 
-    // ── Attachment processing (shared helper) ─────────────────────────
-    const researchAttachmentResult = await processAttachments(request, userId, 'research');
+    // ══════════════════════════════════════════════════════════════════
+    // Phase 3: Build final messages (depends on ALL above)
+    // ══════════════════════════════════════════════════════════════════
+
     const researchAttachmentContext = researchAttachmentResult.attachmentContext;
     const researchImageAttachments = researchAttachmentResult.imageAttachments;
-
-    // Pass document attachment context separately so the prompt builder
-    // can position it ABOVE web results with primary-source hierarchy.
     const enrichedContext = request.context || undefined;
 
     const messages = this.buildMessages(
