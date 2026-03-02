@@ -107,7 +107,10 @@ export const ChatInputArea: React.FC<
 
   // ── Conversation-mode variant (bottom bar) ───────────────────────────────
   return (
-    <div className="bg-white border-t border-gray-200 shadow-lg relative flex justify-center">
+    <div
+      className="bg-white border-t border-gray-200 shadow-lg relative flex justify-center"
+      style={{ paddingBottom: 'max(0px, env(safe-area-inset-bottom))' }}
+    >
       <div className="w-full max-w-4xl mx-auto px-4 pb-4">
         <ChatInput
           onSend={onSend}
