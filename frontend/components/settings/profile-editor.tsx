@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Mail, Lock, Save, Upload, X, Camera } from 'lucide-react';
+import { User, Mail, Lock, Save, Upload, X, Camera, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/lib/hooks/use-toast';
@@ -9,6 +9,10 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { authApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
+import { PasswordStrengthMeter } from '@/components/ui/password-strength-meter';
+import { validatePasswordStrength } from '@/lib/utils/password-validation';
+import { LoginActivity } from '@/components/settings/login-activity';
+import { useRouter } from 'next/navigation';
 
 interface ProfileEditorProps {
   className?: string;
@@ -17,7 +21,8 @@ interface ProfileEditorProps {
 export const ProfileEditor: React.FC<ProfileEditorProps> = ({
   className,
 }) => {
-  const { user, setUser } = useAuthStore();
+  const { user, setUser, deleteAccount } = useAuthStore();
+  const router = useRouter();
   const { isMobile } = useMobile();
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [email, setEmail] = useState(user?.email || '');
@@ -30,6 +35,9 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isChangingEmail, setIsChangingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -132,6 +140,23 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (!deletePassword) {
+      toast.error('Please enter your password to confirm');
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await deleteAccount(deletePassword);
+      toast.success('Account deleted successfully');
+      router.push('/');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete account');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword) {
       toast.error('Please fill in all password fields');
@@ -143,8 +168,9 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
       return;
     }
 
-    if (newPassword.length < 8) {
-      toast.error('Password must be at least 8 characters long');
+    const strength = validatePasswordStrength(newPassword);
+    if (!strength.isValid) {
+      toast.error(`Password too weak: ${strength.errors.join(', ')}`);
       return;
     }
 
@@ -374,9 +400,10 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password (min 8 characters)"
+                placeholder="Enter new password"
                 className="w-full"
               />
+              <PasswordStrengthMeter password={newPassword} className="mt-2" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -398,6 +425,63 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
               <Lock className="w-4 h-4 mr-2" />
               Update Password
             </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Login Activity */}
+      <LoginActivity />
+
+      {/* Danger Zone */}
+      <div className="bg-white border border-red-200 rounded-lg p-6">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle className="w-5 h-5 text-red-500" />
+          <h3 className="text-lg font-semibold text-red-600">Danger Zone</h3>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">
+          Permanently delete your account and all associated data. This action cannot be undone.
+        </p>
+
+        {!showDeleteConfirm ? (
+          <Button
+            variant="outline"
+            onClick={() => setShowDeleteConfirm(true)}
+            className="border-red-300 text-red-600 hover:bg-red-50 touch-manipulation min-h-[44px]"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Delete Account
+          </Button>
+        ) : (
+          <div className="space-y-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm font-medium text-red-700">
+              Are you sure? Enter your password to confirm permanent deletion.
+            </p>
+            <Input
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              placeholder="Enter your password"
+              className="w-full"
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={handleDeleteAccount}
+                disabled={isDeleting || !deletePassword}
+                className="bg-red-600 hover:bg-red-700 text-white touch-manipulation min-h-[44px]"
+              >
+                {isDeleting ? 'Deleting...' : 'Permanently Delete'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeletePassword('');
+                }}
+                className="touch-manipulation min-h-[44px]"
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
         )}
       </div>

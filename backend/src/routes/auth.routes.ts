@@ -3,7 +3,7 @@ import multer from 'multer';
 import { AuthService, SignupData, LoginData } from '../services/auth.service';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth.middleware';
-import { authLimiter } from '../middleware/rateLimiter';
+import { authLimiter, buildProgressiveKey, checkProgressiveLimit, recordLoginFailure, resetLoginFailures } from '../middleware/rateLimiter';
 import { ValidationError } from '../types/error';
 import { StorageService } from '../services/storage.service';
 import { DatabaseService } from '../services/database.service';
@@ -63,18 +63,43 @@ router.post(
       throw new ValidationError('Email and password are required');
     }
 
+    // Progressive rate limiting check
+    const progressiveKey = buildProgressiveKey(req, email);
+    const { blocked, retryAfter } = await checkProgressiveLimit(progressiveKey);
+    if (blocked) {
+      logger.warn('Progressive rate limit hit', { email, retryAfter });
+      res.status(429).json({
+        success: false,
+        error: {
+          message: `Too many failed login attempts. Please try again in ${retryAfter} seconds.`,
+          code: 'PROGRESSIVE_RATE_LIMIT',
+          retryAfter,
+        },
+      });
+      return;
+    }
+
     const loginData: LoginData = {
       email: email.trim().toLowerCase(),
       password,
     };
 
-    const result = await AuthService.login(loginData);
+    try {
+      const result = await AuthService.login(loginData);
 
-    res.status(200).json({
-      success: true,
-      message: 'Login successful',
-      data: result,
-    });
+      // Reset failures on successful login
+      await resetLoginFailures(progressiveKey);
+
+      res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        data: result,
+      });
+    } catch (error: any) {
+      // Record failure for progressive limiting
+      await recordLoginFailure(progressiveKey);
+      throw error;
+    }
   })
 );
 
@@ -209,6 +234,86 @@ router.post(
 );
 
 /**
+ * POST /api/auth/change-email
+ * Request email change (Supabase sends confirmation to new address)
+ */
+router.post(
+  '/change-email',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { newEmail } = req.body;
+    if (!newEmail) throw new ValidationError('New email is required');
+
+    await AuthService.changeEmail(req.user!.id, newEmail.trim().toLowerCase());
+
+    res.status(200).json({
+      success: true,
+      message: 'If the email is valid, a confirmation link has been sent to the new address.',
+    });
+  })
+);
+
+/**
+ * POST /api/auth/change-password
+ * Change password (requires current password verification)
+ */
+router.post(
+  '/change-password',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      throw new ValidationError('Current and new passwords are required');
+    }
+
+    await AuthService.changePassword(req.user!.id, currentPassword, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully',
+    });
+  })
+);
+
+/**
+ * POST /api/auth/delete-account
+ * Permanently delete account and all user data
+ */
+router.post(
+  '/delete-account',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { password } = req.body;
+    if (!password) throw new ValidationError('Password is required for account deletion');
+
+    await AuthService.deleteAccount(req.user!.id, password);
+
+    res.status(200).json({
+      success: true,
+      message: 'Account deleted successfully',
+    });
+  })
+);
+
+/**
+ * GET /api/auth/login-activity
+ * Get recent login activity for the current user
+ */
+router.get(
+  '/login-activity',
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const activity = await AuthService.getLoginActivity(req.user!.id, limit);
+
+    res.status(200).json({
+      success: true,
+      data: { activity },
+    });
+  })
+);
+
+/**
  * GET /api/auth/me
  * Get current user (requires authentication)
  */
@@ -228,6 +333,12 @@ router.get(
         DatabaseService.getUserProfile(req.user!.id),
         DatabaseService.getUserSubscription(req.user!.id),
       ]);
+    }
+
+    // Sync email if Supabase auth email differs from profile (e.g. after email change confirmation)
+    if (profile && req.user!.email && profile.email !== req.user!.email) {
+      await DatabaseService.updateUserProfile(req.user!.id, { email: req.user!.email });
+      profile = { ...profile, email: req.user!.email };
     }
 
     res.status(200).json({

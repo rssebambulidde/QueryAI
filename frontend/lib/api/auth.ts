@@ -65,4 +65,12 @@ export const authApi = {
     const response = await apiClient.post('/api/auth/change-password', data);
     return response.data;
   },
+  deleteAccount: async (data: { password: string }): Promise<ApiResponse<void>> => {
+    const response = await apiClient.post('/api/auth/delete-account', data);
+    return response.data;
+  },
+  getLoginActivity: async (limit?: number): Promise<ApiResponse<{ activity: Array<{ id: string; action: string; timestamp: string; ipAddress: string }> }>> => {
+    const response = await apiClient.get('/api/auth/login-activity', { params: { limit } });
+    return response.data;
+  },
 };

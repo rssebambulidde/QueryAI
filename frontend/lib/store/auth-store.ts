@@ -22,6 +22,7 @@ interface AuthState {
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   refreshAuthToken: () => Promise<boolean>;
+  deleteAccount: (password: string) => Promise<void>;
   clearError: () => void;
   syncFromStorage: () => void; // Sync auth state from storage events
 }
@@ -148,8 +149,14 @@ export const useAuthStore = create<AuthState>()(
           const isRateLimit = error.response?.status === 429 || 
                              error.response?.data?.error?.message?.toLowerCase().includes('too many');
           
+          // Extract retryAfter for progressive rate limiting
+          const retryAfter = error.response?.data?.error?.retryAfter;
+          const rateLimitMsg = retryAfter
+            ? `Too many failed attempts. Please try again in ${retryAfter} seconds.`
+            : (error.response?.data?.error?.message || 'Too many requests. Please wait before trying again.');
+
           const errorMessage = isRateLimit
-            ? (error.response?.data?.error?.message || 'Too many requests. Please wait 15 minutes before trying again.')
+            ? rateLimitMsg
             : (error.response?.data?.error?.message ||
                error.message ||
                'Login failed');
@@ -382,6 +389,33 @@ export const useAuthStore = create<AuthState>()(
             setTimeout(() => window.localStorage.removeItem('auth:logout'), 100);
           }
           return false;
+        }
+      },
+
+      deleteAccount: async (password: string) => {
+        try {
+          const response = await authApi.deleteAccount({ password });
+          if (response.success) {
+            // Clear all auth state
+            set({
+              user: null,
+              accessToken: null,
+              refreshToken: null,
+              isAuthenticated: false,
+              tokenExpiryTime: null,
+            });
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('refreshToken');
+              localStorage.removeItem('tokenExpiryTime');
+              localStorage.removeItem('conversation-storage');
+            }
+          } else {
+            throw new Error('Failed to delete account');
+          }
+        } catch (error: any) {
+          const msg = error.response?.data?.error?.message || error.message || 'Failed to delete account';
+          throw new Error(msg);
         }
       },
 

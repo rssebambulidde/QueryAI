@@ -3,6 +3,7 @@ import { DatabaseService } from './database.service';
 import logger from '../config/logger';
 import config from '../config/env';
 import { AuthenticationError, ValidationError, ConflictError } from '../types/error';
+import { validatePasswordStrength } from '../utils/password-validation';
 
 export interface SignupData {
   email: string;
@@ -45,8 +46,9 @@ export class AuthService {
         throw new ValidationError('Email and password are required');
       }
 
-      if (data.password.length < 8) {
-        throw new ValidationError('Password must be at least 8 characters long');
+      const pwStrength = validatePasswordStrength(data.password);
+      if (!pwStrength.isValid) {
+        throw new ValidationError(`Password too weak: ${pwStrength.errors.join(', ')}`);
       }
 
       // Validate email format
@@ -317,6 +319,155 @@ export class AuthService {
   }
 
   /**
+   * Change email — Supabase sends confirmation to the new address.
+   */
+  static async changeEmail(userId: string, newEmail: string): Promise<void> {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail)) {
+      throw new ValidationError('Invalid email format');
+    }
+
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      email: newEmail,
+    });
+
+    if (error) {
+      logger.error('Email change error:', { userId, error: error.message });
+      // Silent — don't reveal if email is already taken
+    }
+
+    logger.info(`Email change requested for user: ${userId}`);
+  }
+
+  /**
+   * Change password — verifies current password first.
+   */
+  static async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const profile = await DatabaseService.getUserProfile(userId);
+    if (!profile) throw new AuthenticationError('User not found');
+
+    // Verify current password
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: profile.email,
+      password: currentPassword,
+    });
+    if (signInError) throw new AuthenticationError('Current password is incorrect');
+
+    // Validate new password strength
+    const pwStrength = validatePasswordStrength(newPassword);
+    if (!pwStrength.isValid) {
+      throw new ValidationError(`Password too weak: ${pwStrength.errors.join(', ')}`);
+    }
+
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      password: newPassword,
+    });
+    if (error) throw new AuthenticationError('Failed to change password');
+
+    logger.info(`Password changed for user: ${userId}`);
+  }
+
+  /**
+   * Delete account — full cascade cleanup of all user data.
+   */
+  static async deleteAccount(userId: string, password: string): Promise<void> {
+    const profile = await DatabaseService.getUserProfile(userId);
+    if (!profile) throw new AuthenticationError('User not found');
+
+    // Verify password
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: profile.email,
+      password,
+    });
+    if (signInError) throw new AuthenticationError('Invalid password');
+
+    // 1. Delete all conversations + attachments
+    const { data: conversations } = await supabaseAdmin
+      .from('conversations' as any)
+      .select('id, metadata')
+      .eq('user_id', userId);
+
+    if (conversations?.length) {
+      try {
+        const { ChatAttachmentService } = await import('./chat-attachment.service');
+        for (const conv of conversations) {
+          const savedAttachments = (conv as any).metadata?.savedAttachments || [];
+          const metadataFileIds = savedAttachments.map((a: any) => a.fileId).filter(Boolean);
+          try {
+            await ChatAttachmentService.deleteByConversation(conv.id, userId, metadataFileIds);
+          } catch (e: any) {
+            logger.warn('Failed to cleanup conversation attachments', { convId: conv.id, error: e.message });
+          }
+        }
+      } catch (e: any) {
+        logger.warn('Failed to import ChatAttachmentService', { error: e.message });
+      }
+      await supabaseAdmin.from('conversations' as any).delete().eq('user_id', userId);
+    }
+
+    // 2. Delete orphaned chat_attachments + storage files
+    const { data: orphanedAttachments } = await supabaseAdmin
+      .from('chat_attachments' as any)
+      .select('id, storage_path')
+      .eq('user_id', userId);
+    if (orphanedAttachments?.length) {
+      const paths = orphanedAttachments.map((a: any) => a.storage_path).filter(Boolean);
+      if (paths.length) {
+        await supabaseAdmin.storage.from('chat-attachments').remove(paths);
+      }
+      await supabaseAdmin.from('chat_attachments' as any).delete().eq('user_id', userId);
+    }
+
+    // 3. Delete avatar files
+    try {
+      const bucket = config.SUPABASE_STORAGE_BUCKET || 'avatars';
+      const { data: avatarFiles } = await supabaseAdmin.storage.from(bucket).list(`avatars/${userId}`);
+      if (avatarFiles?.length) {
+        const avatarPaths = avatarFiles.map((f) => `avatars/${userId}/${f.name}`);
+        await supabaseAdmin.storage.from(bucket).remove(avatarPaths);
+      }
+    } catch (e: any) {
+      logger.warn('Failed to cleanup avatars', { userId, error: e.message });
+    }
+
+    // 4. Delete usage_logs, subscriptions, user_profiles (keep payments for audit)
+    await supabaseAdmin.from('usage_logs' as any).delete().eq('user_id', userId);
+    await supabaseAdmin.from('subscriptions' as any).delete().eq('user_id', userId);
+    await supabaseAdmin.from('user_profiles' as any).delete().eq('id', userId);
+
+    // 5. Delete from Supabase Auth (last step)
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    if (deleteError) {
+      logger.error('Failed to delete auth user:', { userId, error: deleteError.message });
+      throw new AuthenticationError('Failed to delete account');
+    }
+
+    logger.info(`Account deleted: ${userId} (${profile.email})`);
+  }
+
+  /**
+   * Get login activity from Supabase audit log.
+   */
+  static async getLoginActivity(userId: string, limit: number = 20): Promise<any[]> {
+    const { data, error } = await supabaseAdmin.rpc('get_user_audit_logs' as any, {
+      target_user_id: userId,
+      limit_count: limit,
+    });
+
+    if (error) {
+      logger.error('Failed to fetch login activity:', { userId, error: error.message });
+      return [];
+    }
+
+    return (data || []).map((entry: any) => ({
+      id: entry.id,
+      action: entry.action,
+      timestamp: entry.created_at,
+      ipAddress: entry.ip_address || 'Unknown',
+    }));
+  }
+
+  /**
    * Verify JWT token and get user
    */
   static async verifyToken(token: string): Promise<{ userId: string; email: string } | null> {
@@ -380,8 +531,9 @@ export class AuthService {
         throw new ValidationError('New password is required');
       }
 
-      if (newPassword.length < 8) {
-        throw new ValidationError('Password must be at least 8 characters long');
+      const pwStrength = validatePasswordStrength(newPassword);
+      if (!pwStrength.isValid) {
+        throw new ValidationError(`Password too weak: ${pwStrength.errors.join(', ')}`);
       }
 
       // Verify token and get user

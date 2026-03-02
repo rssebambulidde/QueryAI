@@ -2,6 +2,7 @@ import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 import { RateLimitError } from '../types/error';
 import logger from '../config/logger';
+import { isRedisConfigured, getRedisClient } from '../config/redis.config';
 
 // General API rate limiter
 export const apiLimiter = rateLimit({
@@ -122,6 +123,127 @@ export const webhookLimiter = rateLimit({
     });
   },
 });
+
+// --- Progressive login rate limiting ---
+
+interface FailureRecord {
+  count: number;
+  lastFailure: number;
+}
+
+const FAILURE_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+const failureMap = new Map<string, FailureRecord>();
+
+// Cleanup stale entries every 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of failureMap) {
+    if (now - record.lastFailure > FAILURE_WINDOW_MS) {
+      failureMap.delete(key);
+    }
+  }
+}, FAILURE_WINDOW_MS);
+
+const PROGRESSIVE_TIERS = [
+  { threshold: 5, cooldownSeconds: 60 },      // 5 failures → 1 min
+  { threshold: 10, cooldownSeconds: 300 },     // 10 failures → 5 min
+  { threshold: 20, cooldownSeconds: 1800 },    // 20 failures → 30 min
+];
+
+function getApplicableTier(count: number): { cooldownSeconds: number } | null {
+  for (let i = PROGRESSIVE_TIERS.length - 1; i >= 0; i--) {
+    if (count >= PROGRESSIVE_TIERS[i].threshold) {
+      return PROGRESSIVE_TIERS[i];
+    }
+  }
+  return null;
+}
+
+async function getFailureCount(key: string): Promise<number> {
+  // Try Redis first
+  if (isRedisConfigured()) {
+    try {
+      const client = await getRedisClient();
+      const val = await client.get(`login_failures:${key}`);
+      if (val !== null) return parseInt(val, 10);
+    } catch {
+      // Fall through to in-memory
+    }
+  }
+  const record = failureMap.get(key);
+  if (!record) return 0;
+  if (Date.now() - record.lastFailure > FAILURE_WINDOW_MS) {
+    failureMap.delete(key);
+    return 0;
+  }
+  return record.count;
+}
+
+async function incrementFailure(key: string): Promise<number> {
+  const now = Date.now();
+
+  // In-memory
+  const existing = failureMap.get(key);
+  const newCount = (existing && now - existing.lastFailure < FAILURE_WINDOW_MS)
+    ? existing.count + 1
+    : 1;
+  failureMap.set(key, { count: newCount, lastFailure: now });
+
+  // Redis overlay
+  if (isRedisConfigured()) {
+    try {
+      const client = await getRedisClient();
+      const redisKey = `login_failures:${key}`;
+      const newVal = await client.incr(redisKey);
+      if (newVal === 1) {
+        await client.expire(redisKey, Math.ceil(FAILURE_WINDOW_MS / 1000));
+      }
+      return newVal;
+    } catch {
+      // Fall through to in-memory count
+    }
+  }
+  return newCount;
+}
+
+async function resetFailures(key: string): Promise<void> {
+  failureMap.delete(key);
+  if (isRedisConfigured()) {
+    try {
+      const client = await getRedisClient();
+      await client.del(`login_failures:${key}`);
+    } catch {
+      // Ignore
+    }
+  }
+}
+
+export function buildProgressiveKey(req: Request, email?: string): string {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  return email ? `${ip}:${email.toLowerCase()}` : ip;
+}
+
+export async function checkProgressiveLimit(key: string): Promise<{ blocked: boolean; retryAfter?: number }> {
+  const count = await getFailureCount(key);
+  const tier = getApplicableTier(count);
+  if (!tier) return { blocked: false };
+
+  // Check if cooldown has elapsed since last failure
+  let lastFailureTime: number | null = null;
+  const record = failureMap.get(key);
+  if (record) lastFailureTime = record.lastFailure;
+
+  if (lastFailureTime) {
+    const elapsed = (Date.now() - lastFailureTime) / 1000;
+    if (elapsed < tier.cooldownSeconds) {
+      const retryAfter = Math.ceil(tier.cooldownSeconds - elapsed);
+      return { blocked: true, retryAfter };
+    }
+  }
+  return { blocked: false };
+}
+
+export { incrementFailure as recordLoginFailure, resetFailures as resetLoginFailures };
 
 // Rate limiter for anonymous (unauthenticated) AI query endpoint
 // Stricter IP-based limits to prevent abuse while allowing product trial

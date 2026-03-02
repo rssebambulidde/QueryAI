@@ -10,6 +10,7 @@ import { authApi } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Alert } from '@/components/ui/alert';
+import { PasswordStrengthMeter } from '@/components/ui/password-strength-meter';
 
 const resetPasswordSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -30,6 +31,7 @@ export default function ResetPasswordPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<ResetPasswordFormData>({
     resolver: zodResolver(resetPasswordSchema),
@@ -155,6 +157,7 @@ export default function ResetPasswordPage() {
               error={errors.password?.message}
               {...register('password')}
             />
+            <PasswordStrengthMeter password={watch('password') || ''} className="mt-1" />
 
             <PasswordInput
               label="Confirm Password"

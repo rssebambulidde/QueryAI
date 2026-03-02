@@ -13,6 +13,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { Alert } from '@/components/ui/alert';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { PasswordStrengthMeter } from '@/components/ui/password-strength-meter';
 
 const signupSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -32,6 +33,7 @@ export default function SignupPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
@@ -144,9 +146,7 @@ export default function SignupPage() {
               error={errors.password?.message}
               {...register('password')}
             />
-            <p className="text-xs text-gray-500">
-              Password must be at least 8 characters long
-            </p>
+            <PasswordStrengthMeter password={watch('password') || ''} className="mt-1" />
           </div>
 
           <div>
