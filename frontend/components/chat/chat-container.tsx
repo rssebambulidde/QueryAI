@@ -726,17 +726,19 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ ragSettings: propR
       {/* Conversation mode */}
       {!isEmpty && (
         <>
-          {/* Chat toolbar */}
-          <div className="flex items-center justify-end gap-1 px-4 py-1.5 border-b border-gray-100 bg-gray-50/50">
-            <button
-              onClick={() => setIsExportOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-              title="Export conversation"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export</span>
-            </button>
-          </div>
+          {/* Chat toolbar — hidden on mobile (export is in the mobile conversation header) */}
+          {!isMobile && (
+            <div className="flex items-center justify-end gap-1 px-4 py-1.5 border-b border-gray-100 bg-gray-50/50">
+              <button
+                onClick={() => setIsExportOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                title="Export conversation"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export</span>
+              </button>
+            </div>
+          )}
 
           <div className="flex flex-1 min-h-0">
             <ChatErrorBoundary scope="chat">

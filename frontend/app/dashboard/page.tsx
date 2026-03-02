@@ -11,9 +11,11 @@ import { RAGSettings } from '@/components/chat/rag-source-selector';
 import { useConversationStore } from '@/lib/store/conversation-store';
 import { BottomNavigation } from '@/components/mobile/bottom-navigation';
 import { MobileSidebar, HamburgerMenu } from '@/components/mobile/mobile-sidebar';
+import { MobileConversationHeader } from '@/components/mobile/mobile-conversation-header';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { useToast } from '@/lib/hooks/use-toast';
 import { UsageWarningBanner } from '@/components/notifications/usage-warning-banner';
+import { ConversationExportDialog } from '@/components/chat/conversation-export-dialog';
 // import { RoleDebug } from '@/components/debug/role-debug'; // Uncomment to debug role issues
 
 type TabType = 'chat' | 'collections';
@@ -41,7 +43,14 @@ function DashboardContent() {
       maxWebResults: 5,
     };
   });
-  const { selectConversation } = useConversationStore();
+  const { selectConversation, currentConversationId, conversations, deleteConversation } = useConversationStore();
+  const [isExportOpen, setIsExportOpen] = useState(false);
+
+  // On mobile, when a conversation is selected and we're on the chat tab, hide bottom nav + hamburger
+  const isInConversation = isMobile && activeTab === 'chat' && !!currentConversationId;
+  const currentConversation = isInConversation
+    ? conversations.find((c) => c.id === currentConversationId)
+    : null;
 
   // Read tab from URL query parameter on mount and when it changes
   useEffect(() => {
@@ -176,24 +185,31 @@ function DashboardContent() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      {/* Fixed Hamburger Menu for Mobile - Always Visible */}
-      {isMobile && (
-        <HamburgerMenu 
-          onClick={() => setIsMobileSidebarOpen(true)}
-          className="fixed top-4 left-4 z-50 bg-white shadow-lg rounded-lg p-2 border border-gray-200"
+      {/* Mobile: Conversation header OR hamburger + top nav */}
+      {isMobile && isInConversation ? (
+        <MobileConversationHeader
+          title={currentConversation?.title || 'Conversation'}
+          onBack={() => selectConversation(null)}
+          onExport={() => setIsExportOpen(true)}
+          onDelete={currentConversationId ? () => {
+            deleteConversation(currentConversationId);
+          } : undefined}
         />
-      )}
-      
-      {/* Top nav — only visible on mobile where sidebar is hidden */}
-      {isMobile && (
-        <nav className="bg-white flex-shrink-0 border-b border-gray-100">
-          <div className="px-4">
-            <div className="flex items-center h-12">
-              <h1 className="text-base font-semibold text-gray-900">QueryAI</h1>
+      ) : isMobile ? (
+        <>
+          <HamburgerMenu
+            onClick={() => setIsMobileSidebarOpen(true)}
+            className="fixed top-4 left-4 z-50 bg-white shadow-lg rounded-lg p-2 border border-gray-200"
+          />
+          <nav className="bg-white flex-shrink-0 border-b border-gray-100">
+            <div className="px-4">
+              <div className="flex items-center h-12">
+                <h1 className="text-base font-semibold text-gray-900">QueryAI</h1>
+              </div>
             </div>
-          </div>
-        </nav>
-      )}
+          </nav>
+        </>
+      ) : null}
 
       <main className="flex-1 flex overflow-hidden relative">
         {/* Mobile Sidebar */}
@@ -223,7 +239,7 @@ function DashboardContent() {
         )}
 
         {/* Main Content Area — chat tab always shows conversation thread (messages + input), not sources */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={isMobile ? { paddingBottom: '64px' } : undefined}>
+        <div className="flex-1 flex flex-col overflow-hidden" style={isMobile && !isInConversation ? { paddingBottom: '64px' } : undefined}>
           {/* Usage warning banner */}
           <UsageWarningBanner />
 
@@ -245,15 +261,27 @@ function DashboardContent() {
         </div>
       </main>
 
-      {/* Bottom Navigation (Mobile Only) — account + tier + sign out in bottom right when signed in */}
-      <BottomNavigation
-        user={user}
-        subscriptionTier={user?.subscriptionTier || 'free'}
-        onSignOut={async () => {
-          await logout();
-          router.push('/');
-        }}
-      />
+      {/* Bottom Navigation (Mobile Only) — hidden when inside a conversation */}
+      {!isInConversation && (
+        <BottomNavigation
+          user={user}
+          subscriptionTier={user?.subscriptionTier || 'free'}
+          onSignOut={async () => {
+            await logout();
+            router.push('/');
+          }}
+        />
+      )}
+
+      {/* Export dialog triggered from mobile conversation header */}
+      {isExportOpen && currentConversationId && currentConversation && (
+        <ConversationExportDialog
+          conversation={currentConversation}
+          messageCount={0}
+          isOpen={isExportOpen}
+          onClose={() => setIsExportOpen(false)}
+        />
+      )}
     </div>
   );
 }
