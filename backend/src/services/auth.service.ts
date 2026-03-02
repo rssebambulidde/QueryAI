@@ -446,13 +446,33 @@ export class AuthService {
   }
 
   /**
-   * Get login activity from Supabase audit log.
+   * Log a login or signup event with the client's real IP address.
+   */
+  static async logLoginActivity(
+    userId: string,
+    action: 'login' | 'signup',
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<void> {
+    const { error } = await supabaseAdmin
+      .from('login_activity')
+      .insert({ user_id: userId, action, ip_address: ipAddress || null, user_agent: userAgent || null });
+
+    if (error) {
+      logger.error('Failed to log login activity:', { userId, action, error: error.message });
+    }
+  }
+
+  /**
+   * Get recent login activity for a user.
    */
   static async getLoginActivity(userId: string, limit: number = 20): Promise<any[]> {
-    const { data, error } = await supabaseAdmin.rpc('get_user_audit_logs' as any, {
-      target_user_id: userId,
-      limit_count: limit,
-    });
+    const { data, error } = await supabaseAdmin
+      .from('login_activity')
+      .select('id, action, ip_address, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
 
     if (error) {
       logger.error('Failed to fetch login activity:', { userId, error: error.message });

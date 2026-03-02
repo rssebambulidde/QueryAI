@@ -38,6 +38,11 @@ router.post(
 
     const result = await AuthService.signup(signupData);
 
+    // Log signup activity with client IP
+    if (result.user?.id) {
+      AuthService.logLoginActivity(result.user.id, 'signup', req.ip, req.get('user-agent'));
+    }
+
     res.status(201).json({
       success: true,
       message: 'User created successfully',
@@ -89,6 +94,11 @@ router.post(
 
       // Reset failures on successful login
       await resetLoginFailures(progressiveKey);
+
+      // Log login activity with client IP
+      if (result.user?.id) {
+        AuthService.logLoginActivity(result.user.id, 'login', req.ip, req.get('user-agent'));
+      }
 
       res.status(200).json({
         success: true,
