@@ -1,10 +1,10 @@
 'use client';
 
-import React from 'react';
 import { ChatInput } from './chat-input';
 import { Search, MessageCircle } from 'lucide-react';
 import type { ChatInputAreaProps } from './chat-types';
 import { cn } from '@/lib/utils';
+import { useMobileNavStore } from '@/lib/store/mobile-nav-store';
 
 /**
  * Chat input area — used in two layouts:
@@ -39,6 +39,7 @@ export const ChatInputArea: React.FC<
 }) => {
     const isChatMode = mode === 'chat';
     const webEnabled = ragSettings?.enableWebSearch !== false;
+    const isNavVisible = useMobileNavStore((state) => state.isNavVisible);
 
     const handleWebToggle = (enabled: boolean) => {
       if (onRagSettingsChange && ragSettings) {
@@ -108,7 +109,12 @@ export const ChatInputArea: React.FC<
 
     // ── Conversation-mode variant (bottom bar) ───────────────────────────────
     return (
-      <div className="bg-white border-t border-gray-200 shadow-lg relative flex justify-center flex-shrink-0">
+      <div
+        className={cn(
+          "bg-white border-t border-gray-200 shadow-lg relative flex justify-center flex-shrink-0 transition-transform duration-300",
+          !isNavVisible && "translate-y-14" // Translate down by the bottom nav's height (3.5rem/56px) so it touches the bottom of the screen
+        )}
+      >
         <div className="w-full max-w-4xl mx-auto px-2 sm:px-4 pb-2 sm:pb-4">
           <ChatInput
             onSend={onSend}

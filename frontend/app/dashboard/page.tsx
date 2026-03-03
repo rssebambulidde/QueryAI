@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ChatInterface } from '@/components/chat/chat-interface';
 import { CollectionManager } from '@/components/collections/collection-manager';
@@ -16,6 +17,7 @@ import { useToast } from '@/lib/hooks/use-toast';
 import { UsageWarningBanner } from '@/components/notifications/usage-warning-banner';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { SquarePen } from 'lucide-react';
+import { useMobileNavStore } from '@/lib/store/mobile-nav-store';
 // import { RoleDebug } from '@/components/debug/role-debug'; // Uncomment to debug role issues
 
 type TabType = 'chat' | 'collections';
@@ -29,6 +31,7 @@ function DashboardContent() {
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { isMobile } = useMobile();
+  const isNavVisible = useMobileNavStore((state) => state.isNavVisible);
   const [ragSettings, setRagSettings] = useState<RAGSettings>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ragSettings');
@@ -180,7 +183,12 @@ function DashboardContent() {
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Top nav — only visible on mobile where sidebar is hidden */}
       {isMobile && (
-        <nav className="bg-white flex-shrink-0 border-b border-gray-100 z-40 relative">
+        <nav
+          className={cn(
+            "bg-white flex-shrink-0 border-b border-gray-100 z-40 relative transition-transform duration-300",
+            !isNavVisible && "-translate-y-full absolute top-0 w-full"
+          )}
+        >
           <div className="px-2">
             <div className="flex items-center justify-between h-14">
               <div className="flex items-center gap-2">

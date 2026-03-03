@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
+import { useMobileNavStore } from '@/lib/store/mobile-nav-store';
 
 interface BottomNavItem {
   id: string;
@@ -79,6 +80,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   const pathname = usePathname();
   const { isMobile } = useMobile();
   const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const isNavVisible = useMobileNavStore((state) => state.isNavVisible);
 
   if (!isMobile) {
     return null;
@@ -127,7 +129,8 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
     <>
       <nav
         className={cn(
-          'fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200',
+          'fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 transition-transform duration-300',
+          !isNavVisible && 'translate-y-full',
           'safe-area-inset-bottom',
           className
         )}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collectionApi, Collection, CreateCollectionInput, conversationApi, Conversation } from '@/lib/api';
 import { useToast } from '@/lib/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, Edit2, Folder, Search, X, MessageSquare, FolderPlus } from 'lucide-react';
 import { AddConversationsToCollectionDialog } from './add-conversations-to-collection-dialog';
 import { cn } from '@/lib/utils';
+import { useDebounce } from '@/lib/hooks/use-debounce';
+import { useMobileNavStore } from '@/lib/store/mobile-nav-store';
 import { useMobile } from '@/lib/hooks/use-mobile';
 
 interface CollectionManagerProps {
@@ -23,11 +25,15 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
   const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
   const [collectionSearchResults, setCollectionSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showAddConversationsDialog, setShowAddConversationsDialog] = useState(false);
+
+  const setNavVisible = useMobileNavStore((state) => state.setNavVisible);
+  const lastScrollYRef = useRef(0);
 
   // Form state
   const [formData, setFormData] = useState<CreateCollectionInput>({
@@ -184,6 +190,27 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
     collection.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (!isMobile) return;
+
+    const currentScrollY = e.currentTarget.scrollTop;
+    const distanceFromBottom = e.currentTarget.scrollHeight - currentScrollY - e.currentTarget.clientHeight;
+    const diff = currentScrollY - lastScrollYRef.current;
+
+    if (diff > 5 && currentScrollY > 50) {
+      setNavVisible(false);
+    } else if (diff < -5) {
+      setNavVisible(true);
+    }
+
+    // Show nav if near extremes
+    if (distanceFromBottom < 20 || currentScrollY < 20) {
+      setNavVisible(true);
+    }
+
+    lastScrollYRef.current = currentScrollY;
+  };
+
   const predefinedColors = [
     '#f97316', // Orange
     '#3b82f6', // Blue
@@ -196,7 +223,7 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
   ];
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-4xl mx-auto h-full flex flex-col pt-4 overflow-y-auto" onScroll={handleScroll}>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Collections</h1>
         <p className="text-gray-600">Organize your conversations into collections for better management</p>

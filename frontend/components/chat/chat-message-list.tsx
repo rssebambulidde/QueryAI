@@ -12,6 +12,7 @@ import { CostEstimation } from '@/components/advanced/cost-estimation';
 import { ChevronUp, ChevronDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatMessageListProps } from './chat-types';
+import { useMobileNavStore } from '@/lib/store/mobile-nav-store';
 
 /**
  * Distance from the bottom (px) at which we still consider the user
@@ -72,6 +73,8 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   const parentRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const prevMessageCountRef = useRef(messages.length);
+  const lastScrollYRef = useRef(0);
+  const setNavVisible = useMobileNavStore((state) => state.setNavVisible);
 
   // ── Virtualizer (dynamic measurement) ───────────────────────────
   const virtualizer = useVirtualizer({
@@ -82,13 +85,36 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
     getItemKey: (index) => messages[index]?.id ?? index,
   });
 
-  // ── Track whether user is scrolled near bottom ──────────────────
+  // ── Track whether user is scrolled near bottom and update nav visibility ──
   const handleScroll = useCallback(() => {
     const el = parentRef.current;
     if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+
+    const currentScrollY = el.scrollTop;
+    const distanceFromBottom = el.scrollHeight - currentScrollY - el.clientHeight;
+
     isAtBottomRef.current = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD;
-  }, []);
+
+    if (isMobile) {
+      // Determine scroll direction
+      const diff = currentScrollY - lastScrollYRef.current;
+
+      if (diff > 5 && currentScrollY > 50) {
+        // Scrolling down (and past the top) -> hide nav
+        setNavVisible(false);
+      } else if (diff < -5) {
+        // Scrolling up -> show nav
+        setNavVisible(true);
+      }
+
+      // Always show navigation if we're near the bottom (so the user can easily type) or very top
+      if (distanceFromBottom < 20 || currentScrollY < 20) {
+        setNavVisible(true);
+      }
+
+      lastScrollYRef.current = currentScrollY;
+    }
+  }, [isMobile, setNavVisible]);
 
   // ── Auto-scroll to bottom ───────────────────────────────────────
   // Fires on every messages/isStreaming change (including each
