@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Conversation } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Trash2, Edit2, Check, X, Folder, MoreVertical, Pin, Search, MessageCircle } from 'lucide-react';
@@ -34,6 +35,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(conversation.title || '');
   const [showMenu, setShowMenu] = useState(false);
+  const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0 });
   const [isHovered, setIsHovered] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { updateConversation } = useConversationStore();
@@ -182,7 +184,18 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
           {/* Context menu trigger */}
           <div className="relative flex-shrink-0" ref={menuRef}>
             <button
-              onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!showMenu) {
+                  // Calculate coordinates before showing
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setMenuCoords({
+                    top: rect.bottom + window.scrollY,
+                    left: rect.right + window.scrollX,
+                  });
+                }
+                setShowMenu(!showMenu);
+              }}
               className={cn(
                 'p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-200/60 rounded transition-opacity',
                 isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
@@ -193,45 +206,62 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
               <MoreVertical className="w-3.5 h-3.5" />
             </button>
 
-            {showMenu && (
-              <div className={cn(
-                'absolute bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1',
-                'right-0 top-full mt-1 w-44'
-              )}>
-                {onPin && (
+            {showMenu && typeof document !== 'undefined' && createPortal(
+              <div
+                className="fixed inset-0 z-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(false);
+                }}
+              >
+                <div
+                  className={cn(
+                    'absolute bg-white border border-gray-200 rounded-lg shadow-lg py-1 w-44',
+                    'transition-opacity'
+                  )}
+                  style={{
+                    // Position relative to viewport, subtracting width and adding small margin
+                    top: `${menuCoords.top + 4}px`,
+                    left: `${menuCoords.left - 176}px`, // 176px is w-44
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {onPin && (
+                    <button
+                      onClick={handlePin}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
+                    >
+                      <Pin className={cn('w-3.5 h-3.5', isPinned && 'fill-current')} />
+                      {isPinned ? 'Unpin' : 'Pin'}
+                    </button>
+                  )}
+                  {onSaveToCollection && (
+                    <button
+                      onClick={handleAddToCollection}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
+                    >
+                      <Folder className="w-3.5 h-3.5" />
+                      Add to Collection
+                    </button>
+                  )}
                   <button
-                    onClick={handlePin}
+                    onClick={handleRename}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
                   >
-                    <Pin className={cn('w-3.5 h-3.5', isPinned && 'fill-current')} />
-                    {isPinned ? 'Unpin' : 'Pin'}
+                    <Edit2 className="w-3.5 h-3.5" />
+                    Rename
                   </button>
-                )}
-                {onSaveToCollection && (
+                  <div className="border-t border-gray-100 my-0.5" />
                   <button
-                    onClick={handleAddToCollection}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
+                    onClick={handleDelete}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left touch-manipulation min-h-[36px]"
                   >
-                    <Folder className="w-3.5 h-3.5" />
-                    Add to Collection
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
                   </button>
-                )}
-                <button
-                  onClick={handleRename}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                  Rename
-                </button>
-                <div className="border-t border-gray-100 my-0.5" />
-                <button
-                  onClick={handleDelete}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left touch-manipulation min-h-[36px]"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete
-                </button>
-              </div>
+                </div>
+              </div>,
+              document.body
             )}
           </div>
         </>
