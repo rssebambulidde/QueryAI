@@ -841,7 +841,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   ) : (
                     <Search className="w-3.5 h-3.5" />
                   )}
-                  <span>{isChatMode ? MODE_LABELS.chat : MODE_LABELS.research}</span>
+                  <span className="hidden sm:inline">{isChatMode ? MODE_LABELS.chat : MODE_LABELS.research}</span>
+                  <span className="sm:hidden">{isChatMode ? MODE_LABELS.chat : 'Research'}</span>
                   <ChevronUp className={cn('w-3 h-3 transition-transform', showModeMenu ? 'rotate-180' : '')} />
                 </button>
 
