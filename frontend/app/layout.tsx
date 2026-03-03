@@ -39,7 +39,7 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
   icons: {
     icon: '/icon.svg',
-    apple: '/apple-icon.svg',
+    apple: '/apple-touch-icon.png',
   },
   openGraph: {
     title: "QueryAI - Fact Research Assistant | SamaBrains",

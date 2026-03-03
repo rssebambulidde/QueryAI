@@ -251,26 +251,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const {
     isListening,
     transcript,
-    isSupported: isSpeechSupported,
     startListening,
     stopListening,
     resetTranscript,
   } = useSpeechRecognition();
 
-  // Handle Speech Transcript updates
-  const previousTranscriptRef = useRef('');
-  useEffect(() => {
-    if (transcript && transcript !== previousTranscriptRef.current) {
-      // Append the new part of the transcript
-      const newText = transcript.slice(previousTranscriptRef.current.length);
-      setMessage((prev) => prev + newText);
-      previousTranscriptRef.current = transcript;
-    }
-  }, [transcript]);
+  // Track the message text that was present before voice input started
+  const messageBeforeListeningRef = useRef('');
 
+  // When listening starts, capture the current message as the base
+  useEffect(() => {
+    if (isListening) {
+      messageBeforeListeningRef.current = message;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isListening]);
+
+  // Whenever transcript updates, rebuild message = base + transcript
+  useEffect(() => {
+    if (isListening && transcript) {
+      const base = messageBeforeListeningRef.current;
+      const separator = base && !base.endsWith(' ') ? ' ' : '';
+      setMessage(base + separator + transcript);
+    }
+  }, [transcript, isListening]);
+
+  // When listening stops, clean up transcript state
   useEffect(() => {
     if (!isListening) {
-      previousTranscriptRef.current = '';
       resetTranscript();
     }
   }, [isListening, resetTranscript]);
@@ -845,23 +853,41 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           'focus-within:ring-2 focus-within:ring-orange-400/60 focus-within:border-orange-200'
         )}
       >
-        <div className="flex items-end gap-2 sm:gap-3 px-3 sm:px-4 pt-3 pb-2">
-          <div className="flex items-center gap-2 pb-1.5 shrink-0">
-            {/* Paperclip - attach files/images for this message */}
+        {/* Row 1: Full-width textarea */}
+        <div className="px-4 pt-3">
+          <textarea
+            ref={textInputRef}
+            value={message}
+            onChange={(e) => { setMessage(e.target.value); autoResize(); }}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            rows={1}
+            className="w-full bg-transparent focus:outline-none disabled:cursor-not-allowed text-gray-900 placeholder-gray-400 resize-none text-base leading-6"
+            style={{ minHeight: `${minHeight}px`, maxHeight: '200px' }}
+            aria-label="Message input"
+          />
+        </div>
+
+        {/* Row 2: Action buttons */}
+        <div className="flex items-center justify-between px-3 pb-2 pt-1">
+          {/* Left: Attach + Mode */}
+          <div className="flex items-center gap-2">
+            {/* Paperclip */}
             <button
               type="button"
               onClick={() => inlineFileInputRef.current?.click()}
               disabled={disabled || inlineAttachments.length >= INLINE_MAX_COUNT}
               className={cn(
-                'flex items-center justify-center w-10 h-10 rounded-full border transition-all duration-200',
+                'flex items-center justify-center w-9 h-9 rounded-full border transition-all duration-200',
                 inlineAttachments.length >= INLINE_MAX_COUNT || disabled
                   ? 'border-white/20 bg-white/40 text-gray-300 cursor-not-allowed'
-                  : 'border-white/40 bg-white/60 text-gray-600 hover:bg-white hover:text-gray-800'
+                  : 'border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
               )}
               aria-label="Attach files or images"
               title={`Attach files or images (${inlineAttachments.length}/${INLINE_MAX_COUNT})`}
             >
-              <Paperclip className="w-5 h-5" />
+              <Paperclip className="w-4 h-4" />
             </button>
 
             {/* Mode selector dropup */}
@@ -871,18 +897,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   type="button"
                   onClick={() => setShowModeMenu((v) => !v)}
                   className={cn(
-                    'flex items-center justify-center gap-1 w-10 h-10 rounded-full border transition-all duration-200 bg-white/60',
+                    'flex items-center gap-1 px-2.5 h-9 rounded-full border text-xs font-medium transition-all duration-200',
                     isChatMode
-                      ? 'border-purple-200/80 text-purple-700 hover:bg-purple-50'
-                      : 'border-blue-200/80 text-blue-700 hover:bg-blue-50'
+                      ? 'border-purple-200/80 text-purple-700 bg-purple-50 hover:bg-purple-100'
+                      : 'border-blue-200/80 text-blue-700 bg-blue-50 hover:bg-blue-100'
                   )}
                   aria-label="Select mode"
                   aria-expanded={showModeMenu}
                   aria-haspopup="listbox"
                 >
-                  <span className="flex items-center justify-center w-4 h-4 text-gray-700">
-                    <Plus className="w-4 h-4" />
-                  </span>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isChatMode ? 'Express' : 'Research'}</span>
                   <ChevronUp className={cn('w-3 h-3 transition-transform', showModeMenu ? 'rotate-180' : '')} />
                 </button>
 
@@ -927,65 +952,52 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             )}
           </div>
 
-          {/* Text input */}
-          <textarea
-            ref={textInputRef}
-            value={message}
-            onChange={(e) => { setMessage(e.target.value); autoResize(); }}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={disabled}
-            rows={1}
-            className={cn(
-              'flex-1 min-w-0 py-2.5 sm:py-3 px-1.5 sm:px-2 bg-transparent focus:outline-none disabled:cursor-not-allowed text-gray-900 placeholder-gray-500 resize-none text-base leading-6'
-            )}
-            style={{ minHeight: `${minHeight}px`, maxHeight: '200px' }}
-            aria-label="Message input"
-          />
-
-          {/* Microphone button — always shown, falls back to MediaRecorder */}
-          <button
-            type="button"
-            onClick={toggleSpeechRecognition}
-            disabled={disabled}
-            className={cn(
-              'flex items-center justify-center w-10 h-10 rounded-full transition-all duration-200 shrink-0 mb-1.5 border',
-              isListening
-                ? 'bg-red-100 text-red-600 border-red-200 animate-pulse'
-                : 'bg-white/60 text-gray-400 hover:text-gray-600 border-transparent hover:bg-gray-100'
-            )}
-            aria-label={isListening ? 'Stop listening' : 'Start speaking'}
-            title={isListening ? 'Tap to stop' : 'Voice input'}
-          >
-            <Mic className="w-5 h-5" />
-          </button>
-
-          {/* Circular action button (send / cancel queue) */}
-          {activeQueueJobId ? (
+          {/* Right: Mic + Send */}
+          <div className="flex items-center gap-2">
+            {/* Microphone — always shown, falls back to MediaRecorder */}
             <button
               type="button"
-              onClick={onCancelQueueJob}
-              className="w-10 h-10 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all duration-200 flex items-center justify-center touch-manipulation shrink-0 mb-1.5 shadow-sm"
-              aria-label="Cancel queued request"
-            >
-              <Square className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!canSend}
+              onClick={toggleSpeechRecognition}
+              disabled={disabled}
               className={cn(
-                'w-10 h-10 rounded-full flex items-center justify-center touch-manipulation shrink-0 mb-1.5 transition-all duration-200',
-                canSend
-                  ? 'bg-orange-600 text-white shadow-md hover:bg-orange-700 hover:scale-105'
-                  : 'bg-gray-100 text-gray-500 border border-gray-300 cursor-not-allowed'
+                'flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 border',
+                isListening
+                  ? 'bg-red-100 text-red-600 border-red-200 animate-pulse'
+                  : 'border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-700'
               )}
-              aria-label="Send message"
+              aria-label={isListening ? 'Stop listening' : 'Start voice input'}
+              title={isListening ? 'Tap to stop' : 'Voice input'}
             >
-              <ArrowUp className="w-5 h-5" />
+              <Mic className="w-4 h-4" />
             </button>
-          )}
+
+            {/* Send / Cancel */}
+            {activeQueueJobId ? (
+              <button
+                type="button"
+                onClick={onCancelQueueJob}
+                className="w-9 h-9 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all duration-200 flex items-center justify-center touch-manipulation shadow-sm"
+                aria-label="Cancel queued request"
+              >
+                <Square className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!canSend}
+                className={cn(
+                  'w-9 h-9 rounded-full flex items-center justify-center touch-manipulation transition-all duration-200',
+                  canSend
+                    ? 'bg-orange-600 text-white shadow-md hover:bg-orange-700 hover:scale-105'
+                    : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                )}
+                aria-label="Send message"
+              >
+                <ArrowUp className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Inline attachments preview strip */}
