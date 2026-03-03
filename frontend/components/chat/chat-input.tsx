@@ -848,9 +848,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       <div
         ref={inputContainerRef}
         className={cn(
-          'w-full relative border rounded-3xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm transition-all shadow-[0_1px_3px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.8)] dark:shadow-none',
-          isDragging ? 'border-orange-400 ring-2 ring-orange-200 dark:ring-orange-900/50' : 'border-gray-300 dark:border-slate-700',
-          'focus-within:ring-2 focus-within:ring-orange-400/60 focus-within:border-orange-200 dark:focus-within:border-orange-500/50'
+          'w-full relative border rounded-3xl bg-white/95 /95 backdrop-blur-sm transition-all shadow-[0_1px_3px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.8)] ',
+          isDragging ? 'border-orange-400 ring-2 ring-orange-200 /50' : 'border-gray-300 ',
+          'focus-within:ring-2 focus-within:ring-orange-400/60 focus-within:border-orange-200 /50'
         )}
       >
         {/* Row 1: Full-width textarea */}
@@ -863,7 +863,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             placeholder={placeholder}
             disabled={disabled}
             rows={1}
-            className="w-full bg-transparent focus:outline-none disabled:cursor-not-allowed text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-none text-base leading-6"
+            className="w-full bg-transparent focus:outline-none disabled:cursor-not-allowed text-gray-900  placeholder-gray-400  resize-none text-base leading-6"
             style={{ minHeight: `${minHeight}px`, maxHeight: '200px' }}
             aria-label="Message input"
           />
@@ -881,8 +881,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               className={cn(
                 'flex items-center justify-center w-9 h-9 rounded-full border transition-all duration-200',
                 inlineAttachments.length >= INLINE_MAX_COUNT || disabled
-                  ? 'border-white/20 bg-white/40 dark:border-slate-700 dark:bg-slate-800 text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                  : 'border-gray-200 dark:border-slate-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-700 dark:hover:text-gray-300'
+                  ? 'border-white/20 bg-white/40   text-gray-300  cursor-not-allowed'
+                  : 'border-gray-200  text-gray-500  hover:bg-gray-100  hover:text-gray-700 '
               )}
               aria-label="Attach files or images"
               title={`Attach files or images (${inlineAttachments.length}/${INLINE_MAX_COUNT})`}
@@ -899,8 +899,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   className={cn(
                     'flex items-center gap-1 px-2.5 h-9 rounded-full border text-xs font-medium transition-all duration-200',
                     isChatMode
-                      ? 'border-purple-200/80 dark:border-purple-900/50 text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/40'
-                      : 'border-blue-200/80 dark:border-blue-900/50 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40'
+                      ? 'border-purple-200/80 /50 text-purple-700  bg-purple-50 /20 hover:bg-purple-100 /40'
+                      : 'border-blue-200/80 /50 text-blue-700  bg-blue-50 /20 hover:bg-blue-100 /40'
                   )}
                   aria-label="Select mode"
                   aria-expanded={showModeMenu}
@@ -913,7 +913,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
                 {/* Dropup menu */}
                 {showModeMenu && (
-                  <div className="absolute bottom-full left-0 mb-2 w-56 bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 shadow-lg py-1 z-50" role="listbox">
+                  <div className="absolute bottom-full left-0 mb-2 w-56 bg-white  rounded-xl border border-gray-200  shadow-lg py-1 z-50" role="listbox">
                     <button
                       type="button"
                       role="option"
@@ -926,8 +926,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     >
                       <MessageCircle className="w-4 h-4 mt-0.5 text-purple-500 shrink-0" />
                       <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{MODE_LABELS.chat}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{MODE_DESCRIPTIONS.chat}</div>
+                        <div className="text-sm font-medium text-gray-900 ">{MODE_LABELS.chat}</div>
+                        <div className="text-xs text-gray-500 ">{MODE_DESCRIPTIONS.chat}</div>
                       </div>
                     </button>
                     <button
@@ -942,8 +942,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     >
                       <Search className="w-4 h-4 mt-0.5 text-blue-500 shrink-0" />
                       <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{MODE_LABELS.research}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{MODE_DESCRIPTIONS.research}</div>
+                        <div className="text-sm font-medium text-gray-900 ">{MODE_LABELS.research}</div>
+                        <div className="text-xs text-gray-500 ">{MODE_DESCRIPTIONS.research}</div>
                       </div>
                     </button>
                   </div>
@@ -962,8 +962,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               className={cn(
                 'flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 border',
                 isListening
-                  ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50 animate-pulse'
-                  : 'border-gray-200 dark:border-slate-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-700 dark:hover:text-gray-300'
+                  ? 'bg-red-100 /30 text-red-600  border-red-200 /50 animate-pulse'
+                  : 'border-gray-200  text-gray-500  hover:bg-gray-100  hover:text-gray-700 '
               )}
               aria-label={isListening ? 'Stop listening' : 'Start voice input'}
               title={isListening ? 'Tap to stop' : 'Voice input'}
@@ -990,7 +990,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   'w-9 h-9 rounded-full flex items-center justify-center touch-manipulation transition-all duration-200',
                   canSend
                     ? 'bg-orange-600 text-white shadow-md hover:bg-orange-700 hover:scale-105'
-                    : 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-600 border border-gray-200 dark:border-slate-700 cursor-not-allowed'
+                    : 'bg-gray-100  text-gray-400  border border-gray-200  cursor-not-allowed'
                 )}
                 aria-label="Send message"
               >
@@ -1015,7 +1015,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             {activeConversationAttachments!.map((att) => (
               <span
                 key={att.id}
-                className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-xs rounded-full border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-600 dark:text-gray-300 max-w-[160px]"
+                className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-xs rounded-full border border-gray-200  bg-gray-50  text-gray-600  max-w-[160px]"
               >
                 <FileText className="w-3 h-3 text-gray-400 flex-shrink-0" />
                 <span className="truncate">{att.name}</span>
@@ -1023,7 +1023,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   <button
                     type="button"
                     onClick={() => onClearConversationAttachment(att.id)}
-                    className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                    className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200  text-gray-400 hover:text-red-500  transition-colors"
                     aria-label={`Detach ${att.name}`}
                   >
                     <X className="w-3 h-3" />

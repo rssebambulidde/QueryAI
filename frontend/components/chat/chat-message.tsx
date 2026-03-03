@@ -269,8 +269,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
             isUser
               ? 'px-4 py-3 bg-gradient-to-br from-orange-600 to-orange-700 text-white'
               : !isUser && message.isRefusal
-                ? 'px-4 py-3.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/50 text-amber-900 dark:text-amber-200 w-full'
-                : 'px-4 py-3.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-gray-900 dark:text-gray-100 w-full'
+                ? 'px-4 py-3.5 bg-amber-50 /20 border border-amber-200 /50 text-amber-900  w-full'
+                : 'px-4 py-3.5 bg-white  border border-gray-200  text-gray-900  w-full'
           )}
         >
           {/* Role Label - hide when assistant is streaming with empty content */}
@@ -278,12 +278,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
             <div
               className={cn(
                 'text-xs font-semibold mb-2 uppercase tracking-wide',
-                isUser ? 'text-orange-100' : 'text-gray-500 dark:text-gray-400'
+                isUser ? 'text-orange-100' : 'text-gray-500 '
               )}
             >
               {isUser ? 'You' : 'Query Assistant'}
               {!isUser && !isChatMode && (
-                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/50 leading-none align-middle">
+                <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 /30 text-orange-700  border border-orange-200 /50 leading-none align-middle">
                   Deep Research
                 </span>
               )}
@@ -293,7 +293,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
           {/* Content - full width for assistant so text is well aligned, no gap on right */}
           <div className={cn(
             'max-w-none break-words overflow-wrap-anywhere',
-            isUser ? 'prose prose-sm prose-invert max-w-none' : 'min-w-0 w-full text-left prose prose-sm prose-gray dark:prose-invert max-w-none'
+            isUser ? 'prose prose-sm prose-invert max-w-none' : 'min-w-0 w-full text-left prose prose-sm prose-gray  max-w-none'
           )}>
             {isUser && isEditing ? (
               <div className="space-y-2">
@@ -380,15 +380,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                         <span className={cn(
                           'flex-shrink-0 px-1.5 py-0.5 text-xs font-medium rounded',
                           result.score >= 0.8
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                            ? 'bg-green-100 /30 text-green-700 '
                             : result.score >= 0.6
-                              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
-                              : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300'
+                              ? 'bg-yellow-100 /30 text-yellow-700 '
+                              : 'bg-gray-100  text-gray-600 '
                         )}>
                           {(result.score * 100).toFixed(0)}%
                         </span>
                       </div>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-3">{result.content.slice(0, 300)}</p>
+                      <p className="text-xs text-gray-600  line-clamp-3">{result.content.slice(0, 300)}</p>
                     </div>
                   ))}
                 </div>
@@ -436,7 +436,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               <div
                 className={cn(
                   'text-xs opacity-70',
-                  isUser ? 'text-orange-100' : 'text-gray-500 dark:text-gray-400'
+                  isUser ? 'text-orange-100' : 'text-gray-500 '
                 )}
                 title={message.timestamp.toLocaleString()}
               >
@@ -456,7 +456,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               {!isUser && !isStreaming && !message.isStreaming && citationCount > 0 && !isChatMode && (
                 <button
                   onClick={() => onOpenSources?.(message.sources ?? [], '')}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs font-medium leading-tight hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-blue-200 /50 bg-blue-50 /20 text-blue-700  text-xs font-medium leading-tight hover:bg-blue-100 /40 transition-colors"
                   title="View cited sources"
                 >
                   <BookOpen className="w-3 h-3" />
@@ -477,7 +477,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   'min-w-[44px] min-h-[44px] flex items-center justify-center',
                   justCopied
                     ? 'text-green-500 p-1.5'
-                    : isUser ? 'text-orange-100 hover:bg-white p-1.5' : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700 p-1.5'
+                    : isUser ? 'text-orange-100 hover:bg-white p-1.5' : 'text-gray-400  hover:bg-gray-100  p-1.5'
                 )}
                 title={justCopied ? 'Copied!' : 'Copy message'}
                 aria-label="Copy message"
@@ -504,7 +504,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                   className={cn(
                     'rounded hover:bg-opacity-20 transition-colors touch-manipulation',
                     'min-w-[44px] min-h-[44px] flex items-center justify-center',
-                    isUser ? 'text-orange-100 hover:bg-white p-1.5' : 'text-gray-400 dark:text-gray-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 dark:hover:text-red-400 p-1.5'
+                    isUser ? 'text-orange-100 hover:bg-white p-1.5' : 'text-gray-400  hover:bg-red-50 /20 hover:text-red-500  p-1.5'
                   )}
                   title="Delete message"
                   aria-label="Delete message"
@@ -513,18 +513,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                 </button>
               )}
               {showDeleteConfirm && (
-                <div className="flex items-center gap-1 bg-red-50 dark:bg-red-900/20 rounded-lg px-2 py-1 border border-red-200 dark:border-red-900/50">
-                  <span className="text-xs text-red-600 dark:text-red-400 mr-1">Delete?</span>
+                <div className="flex items-center gap-1 bg-red-50 /20 rounded-lg px-2 py-1 border border-red-200 /50">
+                  <span className="text-xs text-red-600  mr-1">Delete?</span>
                   <button
                     onClick={() => { onDelete?.(message.id); setShowDeleteConfirm(false); }}
-                    className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 touch-manipulation min-w-[36px] min-h-[36px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center"
+                    className="p-1 rounded hover:bg-red-100 /40 text-red-600  touch-manipulation min-w-[36px] min-h-[36px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center"
                     title="Confirm delete"
                   >
                     <Check className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => setShowDeleteConfirm(false)}
-                    className="p-1 rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 touch-manipulation min-w-[36px] min-h-[36px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center"
+                    className="p-1 rounded hover:bg-gray-100 /10 text-gray-500  touch-manipulation min-w-[36px] min-h-[36px] sm:min-w-[28px] sm:min-h-[28px] flex items-center justify-center"
                     title="Cancel"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -541,7 +541,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                       className={cn(
                         'rounded-l hover:bg-opacity-20 transition-colors touch-manipulation',
                         'min-w-[36px] min-h-[44px] flex items-center justify-center',
-                        'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-600 dark:hover:text-gray-300 p-1.5',
+                        'text-gray-400  hover:bg-gray-100  hover:text-gray-600  p-1.5',
                         isRegenerating && 'animate-spin'
                       )}
                       title="Regenerate response"
@@ -554,7 +554,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                       className={cn(
                         'rounded-r hover:bg-opacity-20 transition-colors touch-manipulation',
                         'min-w-[20px] min-h-[44px] flex items-center justify-center',
-                        'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-600 dark:hover:text-gray-300 p-0.5'
+                        'text-gray-400  hover:bg-gray-100  hover:text-gray-600  p-0.5'
                       )}
                       title="Regenerate options"
                       aria-label="Regenerate options"
@@ -563,10 +563,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                     </button>
                   </div>
                   {showRegenerateMenu && (
-                    <div className="absolute bottom-full right-0 mb-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-lg py-1 z-50 min-w-[180px]">
+                    <div className="absolute bottom-full right-0 mb-1 bg-white  border border-gray-200  rounded-lg shadow-lg py-1 z-50 min-w-[180px]">
                       <button
                         onClick={() => { setShowRegenerateMenu(false); handleRegenerate({}); }}
-                        className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2"
+                        className="w-full px-3 py-2 text-left text-sm text-gray-700  hover:bg-gray-50  flex items-center gap-2"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
                         Regenerate
