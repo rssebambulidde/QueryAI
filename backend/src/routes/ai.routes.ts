@@ -427,7 +427,6 @@ router.post(
               used: limitCheck.used,
               limit: limitCheck.limit,
             });
-
             // Build tier-appropriate refusal message (mirroring frontend)
             const usageInfo = limitCheck.limit != null ? ` (${limitCheck.used ?? 0} of ${limitCheck.limit} used)` : '';
             let limitRefusalMsg: string;
@@ -496,6 +495,7 @@ router.post(
               logger.warn('Failed to cleanup stale limit refusals', { error: cleanupErr?.message });
             }
           }
+
         } catch (limitErr: any) {
           // Non-critical — fall through to normal pipeline on error
           logger.warn('Failed to check Tavily limit pre-stream', { error: limitErr?.message });
