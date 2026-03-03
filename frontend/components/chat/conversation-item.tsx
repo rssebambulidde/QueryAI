@@ -44,21 +44,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
   const conversationMode = normalizeConversationMode(conversation.mode);
   const isChatMode = conversationMode === 'chat';
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('touchstart', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-        document.removeEventListener('touchstart', handleClickOutside);
-      };
-    }
-  }, [showMenu]);
+
 
   const handleEdit = async () => {
     if (editTitle.trim() && editTitle !== conversation.title) {
