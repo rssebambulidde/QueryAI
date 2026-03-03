@@ -827,7 +827,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   type="button"
                   onClick={() => setShowModeMenu((v) => !v)}
                   className={cn(
-                    'flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 h-8 sm:h-9 text-[11px] sm:text-xs font-medium rounded-full border transition-all duration-200 bg-white/60',
+                    'flex items-center justify-center gap-1 w-8 sm:w-9 h-8 sm:h-9 rounded-full border transition-all duration-200 bg-white/60',
                     isChatMode
                       ? 'border-purple-200/80 text-purple-700 hover:bg-purple-50'
                       : 'border-blue-200/80 text-blue-700 hover:bg-blue-50'
@@ -836,11 +836,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   aria-expanded={showModeMenu}
                   aria-haspopup="listbox"
                 >
-                  <span className="hidden sm:inline">
-                    {isChatMode ? <MessageCircle className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
+                  <span className="flex items-center justify-center w-4 h-4 text-gray-700">
+                    <Plus className="w-4 h-4" />
                   </span>
-                  <span className="hidden sm:inline">{isChatMode ? MODE_LABELS.chat : MODE_LABELS.research}</span>
-                  <span className="sm:hidden flex items-center justify-center w-4 h-4"><Plus className="w-4 h-4" /></span>
                   <ChevronUp className={cn('w-3 h-3 transition-transform', showModeMenu ? 'rotate-180' : '')} />
                 </button>
 
