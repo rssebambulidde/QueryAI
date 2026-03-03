@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 export interface UseSpeechRecognitionResult {
     isListening: boolean;
     transcript: string;
-    /** Always true — mic button always shown */
     isSupported: boolean;
     startListening: () => void;
     stopListening: () => void;
@@ -18,8 +17,14 @@ export function useSpeechRecognition(): UseSpeechRecognitionResult {
     const recognitionRef = useRef<any>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
-    // Accumulate all FINAL results here so intermediate results don't duplicate
     const finalTranscriptRef = useRef('');
+    // Track whether we intentionally stopped (vs browser auto-stopping on silence)
+    const intentionalStopRef = useRef(false);
+    const isListeningRef = useRef(false);
+
+    useEffect(() => {
+        isListeningRef.current = isListening;
+    }, [isListening]);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -27,62 +32,83 @@ export function useSpeechRecognition(): UseSpeechRecognitionResult {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-        if (SpeechRecognition) {
-            setUsesNativeApi(true);
-            const recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = 'en-US';
+        if (!SpeechRecognition) return;
 
-            recognition.onresult = (event: any) => {
-                let interimTranscript = '';
-                // Build from resultIndex onwards
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    const result = event.results[i];
-                    if (result.isFinal) {
-                        // Append final result to the running total
-                        finalTranscriptRef.current += result[0].transcript + ' ';
-                    } else {
-                        // These are interim (live preview) — not yet final
-                        interimTranscript += result[0].transcript;
-                    }
+        setUsesNativeApi(true);
+
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true; // Keep listening continuously
+        recognition.interimResults = true;
+        recognition.lang = navigator.language || 'en-US'; // Respect device language
+
+        recognition.onresult = (event: any) => {
+            let interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                const result = event.results[i];
+                if (result.isFinal) {
+                    finalTranscriptRef.current += result[0].transcript + ' ';
+                } else {
+                    interimTranscript += result[0].transcript;
                 }
-                // Expose: final accumulated text + current interim preview
-                setTranscript(finalTranscriptRef.current + interimTranscript);
-            };
+            }
+            setTranscript(finalTranscriptRef.current + interimTranscript);
+        };
 
-            recognition.onerror = (event: any) => {
+        recognition.onerror = (event: any) => {
+            // 'no-speech' and 'network' are non-fatal — restart silently if still meant to be listening
+            if (
+                (event.error === 'no-speech' || event.error === 'network' || event.error === 'audio-capture') &&
+                isListeningRef.current &&
+                !intentionalStopRef.current
+            ) {
+                // Brief pause then restart
+                setTimeout(() => {
+                    if (isListeningRef.current && !intentionalStopRef.current) {
+                        try { recognition.start(); } catch { /* already started */ }
+                    }
+                }, 300);
+            } else {
                 console.warn('Speech recognition error:', event.error);
                 setIsListening(false);
-            };
+                isListeningRef.current = false;
+            }
+        };
 
-            recognition.onend = () => {
+        recognition.onend = () => {
+            // Browser stops recognition after a period of silence.
+            // Auto-restart unless the user intentionally stopped.
+            if (isListeningRef.current && !intentionalStopRef.current) {
+                try { recognition.start(); } catch { /* already started */ }
+            } else {
                 setIsListening(false);
-            };
+                isListeningRef.current = false;
+            }
+        };
 
-            recognitionRef.current = recognition;
-        }
+        recognitionRef.current = recognition;
     }, []);
 
     const startListening = useCallback(async () => {
-        if (isListening) return;
+        if (isListeningRef.current) return;
 
-        // Reset any previous accumulated transcript
+        // Reset
         finalTranscriptRef.current = '';
         setTranscript('');
+        intentionalStopRef.current = false;
 
-        // --- Native Web Speech API path ---
+        // --- Native Web Speech API ---
         if (recognitionRef.current) {
             try {
                 recognitionRef.current.start();
                 setIsListening(true);
+                isListeningRef.current = true;
             } catch (error) {
-                console.warn('Failed to start native speech recognition:', error);
+                console.warn('Failed to start speech recognition:', error);
             }
             return;
         }
 
-        // --- MediaRecorder fallback ---
+        // --- MediaRecorder fallback (Firefox / unsupported browsers) ---
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const mediaRecorder = new MediaRecorder(stream);
@@ -112,26 +138,29 @@ export function useSpeechRecognition(): UseSpeechRecognitionResult {
                     console.warn('Transcription upload failed:', err);
                 }
                 setIsListening(false);
+                isListeningRef.current = false;
             };
 
             mediaRecorderRef.current = mediaRecorder;
             mediaRecorder.start();
             setIsListening(true);
+            isListeningRef.current = true;
         } catch (err) {
             console.warn('Microphone access denied:', err);
-            setIsListening(false);
         }
-    }, [isListening]);
+    }, []);
 
     const stopListening = useCallback(() => {
-        if (!isListening) return;
+        intentionalStopRef.current = true;
+        isListeningRef.current = false;
+        setIsListening(false);
 
         if (recognitionRef.current && usesNativeApi) {
-            recognitionRef.current.stop();
+            try { recognitionRef.current.stop(); } catch { /* ignore */ }
         } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
             mediaRecorderRef.current.stop();
         }
-    }, [isListening, usesNativeApi]);
+    }, [usesNativeApi]);
 
     const resetTranscript = useCallback(() => {
         setTranscript('');
