@@ -228,7 +228,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                 >
                   {onPin && (
                     <button
-                      onClick={handlePin}
+                      onClick={(e) => { e.stopPropagation(); handlePin(); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
                     >
                       <Pin className={cn('w-3.5 h-3.5', isPinned && 'fill-current')} />
@@ -237,7 +237,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                   )}
                   {onSaveToCollection && (
                     <button
-                      onClick={handleAddToCollection}
+                      onClick={(e) => { e.stopPropagation(); handleAddToCollection(); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
                     >
                       <Folder className="w-3.5 h-3.5" />
@@ -245,7 +245,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                     </button>
                   )}
                   <button
-                    onClick={handleRename}
+                    onClick={(e) => { e.stopPropagation(); handleRename(); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation min-h-[36px]"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
@@ -253,7 +253,7 @@ export const ConversationItem: React.FC<ConversationItemProps> = ({
                   </button>
                   <div className="border-t border-gray-100 my-0.5" />
                   <button
-                    onClick={handleDelete}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(e); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 text-left touch-manipulation min-h-[36px]"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
