@@ -370,10 +370,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   // ─── Collapsed sidebar ────────────────────────────────────────────
   if (isCollapsed) {
     return (
-      <div className="flex flex-col h-full bg-white border-r border-gray-100 w-14 flex-shrink-0">
+      <div className="flex flex-col h-full bg-white dark:bg-slate-900 border-r border-gray-100 dark:border-slate-800 w-14 flex-shrink-0">
         {/* Collapsed Header */}
-        <div className="p-2 flex flex-col items-center gap-1 border-b border-gray-100">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-white text-xs font-bold">
+        <div className="p-2 flex flex-col items-center gap-1 border-b border-gray-100 dark:border-slate-800">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-white dark:text-gray-100 text-xs font-bold">
             Q
           </div>
           <button
@@ -451,27 +451,27 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   return (
     <div
       className={cn(
-        'flex flex-col bg-white border-r border-gray-100 flex-shrink-0 relative',
+        'flex flex-col bg-white dark:bg-slate-900 border-r border-gray-100 dark:border-slate-800 flex-shrink-0 relative',
         isMobile ? 'h-full min-h-0' : 'h-full'
       )}
       style={{ width: isMobile ? '100%' : `${sidebarWidth}px` }}
     >
       {/* ── Change 1: Branded header with action buttons ── */}
       {!isMobile && (
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-slate-800 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-white text-xs font-bold">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-white dark:text-gray-100 text-xs font-bold">
               Q
             </div>
-            <span className="text-base font-semibold text-gray-900 tracking-tight">QueryAI</span>
+            <span className="text-base font-semibold text-gray-900 dark:text-gray-50 tracking-tight">QueryAI</span>
           </div>
           <div className="flex items-center gap-0.5">
             <button
               onClick={handleNewConversation}
-              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
               title="New conversation (⌘N)"
             >
-              <SquarePen className="w-4 h-4 text-gray-500" />
+              <SquarePen className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             </button>
             <NotificationBell />
             <button
@@ -497,8 +497,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     className={cn(
                       'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px]',
                       activeTab === 'chat'
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-50'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-gray-50'
                     )}
                   >
                     <MessageSquare className="w-[18px] h-[18px]" />
@@ -509,8 +509,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                     className={cn(
                       'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px]',
                       activeTab === 'collections'
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-50'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-gray-50'
                     )}
                   >
                     <Folder className="w-[18px] h-[18px]" />
@@ -531,7 +531,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           </nav>
 
           {/* Divider */}
-          <div className="mx-4 border-t border-gray-100" />
+          <div className="mx-4 border-t border-gray-100 dark:border-slate-800" />
         </>
       )}
 
@@ -557,7 +557,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                 }}
                 className={cn(
                   'p-1 rounded-md transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center',
-                  isSearchOpen ? 'bg-gray-100 text-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                  isSearchOpen
+                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300'
+                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800'
                 )}
                 title="Search conversations (⌘K)"
               >
@@ -582,7 +584,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                         setIsSearchOpen(false);
                       }
                     }}
-                    className="pl-8 pr-8 h-8 text-xs bg-gray-50 border-gray-200 focus:bg-white"
+                    className="pl-8 pr-8 h-8 text-xs bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700 focus:bg-white dark:focus:bg-slate-900 text-gray-900 dark:text-gray-100"
                   />
                   {searchQuery && (
                     <button

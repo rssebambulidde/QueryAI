@@ -8,6 +8,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { PayPalProvider } from "@/components/payment/paypal-provider";
 import { TokenExpiryWarning } from "@/components/auth/token-expiry-warning";
 import { CookieConsentBanner } from "@/components/cookies/cookie-consent-banner";
+import { ThemeProvider } from "@/providers/theme-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -148,8 +149,24 @@ export default function RootLayout({
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Inline script to prevent FOUC for dark mode */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var t = localStorage.getItem('theme');
+                var m = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (t === 'dark' || (!t && m) || (t === 'system' && m)) {
+                  document.documentElement.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
         {/* Resource hints for API connection optimization */}
         {apiUrl && (
           <>
@@ -161,34 +178,36 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <ThemeProvider>
 
-        {/* Structured Data (JSON-LD) for SEO - Scripts are automatically placed in head */}
-        <Script
-          id="organization-schema"
-          type="application/ld+json"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
-        />
-        <Script
-          id="software-application-schema"
-          type="application/ld+json"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
-        />
-        <Script
-          id="website-schema"
-          type="application/ld+json"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
-        />
-        <ErrorBoundary>
-          <PayPalProvider>
-            {children}
-            <Toaster />
-            <TokenExpiryWarning />
-            <CookieConsentBanner />
-          </PayPalProvider>
-        </ErrorBoundary>
+          {/* Structured Data (JSON-LD) for SEO - Scripts are automatically placed in head */}
+          <Script
+            id="organization-schema"
+            type="application/ld+json"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+          />
+          <Script
+            id="software-application-schema"
+            type="application/ld+json"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }}
+          />
+          <Script
+            id="website-schema"
+            type="application/ld+json"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+          />
+          <ErrorBoundary>
+            <PayPalProvider>
+              {children}
+              <Toaster />
+              <TokenExpiryWarning />
+              <CookieConsentBanner />
+            </PayPalProvider>
+          </ErrorBoundary>
+        </ThemeProvider>
       </body>
     </html>
   );

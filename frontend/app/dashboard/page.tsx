@@ -179,10 +179,10 @@ function DashboardContent() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50 dark:bg-slate-900">
       {/* Top nav — only visible on mobile where sidebar is hidden */}
       {isMobile && (
-        <nav className="bg-white flex-shrink-0 border-b border-gray-100 z-40 relative">
+        <nav className="bg-white dark:bg-slate-900 flex-shrink-0 border-b border-gray-100 dark:border-slate-800 z-40 relative">
           <div className="px-2">
             <div className="flex items-center justify-between h-14">
               <div className="flex items-center gap-2">
@@ -199,7 +199,7 @@ function DashboardContent() {
                     selectConversation(null);
                     setActiveTab('chat');
                   }}
-                  className="w-10 h-10 p-0 rounded-full text-gray-500 hover:text-gray-900 bg-gray-50"
+                  className="w-10 h-10 p-0 rounded-full text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 bg-gray-50 dark:bg-slate-800"
                   aria-label="New conversation"
                 >
                   <SquarePen className="w-5 h-5" />
@@ -276,10 +276,10 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100">
         <div className="text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
         </div>
       </div>
     }>

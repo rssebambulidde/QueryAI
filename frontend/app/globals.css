@@ -18,9 +18,14 @@
   /* Neutral Colors */
   --gray-900: #0F172A;
   --gray-800: #1E293B;
+  --gray-700: #334155;
   --gray-600: #475569;
+  --gray-500: #64748b;
   --gray-400: #94A3B8;
+  --gray-300: #cbd5e1;
+  --gray-200: #e2e8f0;
   --gray-100: #F1F5F9;
+  --gray-50: #f8fafc;
 }
 
 @theme inline {
@@ -30,11 +35,26 @@
   --font-mono: var(--font-geist-mono);
 }
 
+.dark {
+  --background: #0f172a; /* Slate 900 */
+  --foreground: #f8fafc; /* Slate 50 */
+  color-scheme: dark;
+
+  /* Invert grays for dark mode */
+  --gray-900: #f8fafc; /* 50 */
+  --gray-800: #f1f5f9; /* 100 */
+  --gray-700: #e2e8f0; /* 200 */
+  --gray-600: #cbd5e1; /* 300 */
+  --gray-500: #94a3b8; /* 400 */
+  --gray-400: #64748b; /* 500 */
+  --gray-300: #475569; /* 600 */
+  --gray-200: #334155; /* 700 */
+  --gray-100: #1e293b; /* 800 */
+  --gray-50: #0f172a;  /* 900 */
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* We use the "class" strategy now, so the dark system theme is handled via the script adding the .dark class */
 }
 
 body {
@@ -53,12 +73,12 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #e5e7eb;
+  background: var(--gray-200);
   border-radius: 3px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #d1d5db;
+  background: var(--gray-300);
 }
 
 /* Smooth animations */
@@ -149,6 +169,7 @@ body {
   overflow-x: auto;
   padding: 1rem;
   border-radius: 0.5rem;
+  background-color: var(--gray-100);
 }
 
 .prose pre code {
@@ -165,13 +186,13 @@ body {
 
 .prose table th,
 .prose table td {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--gray-200);
   padding: 0.5rem;
   text-align: left;
 }
 
 .prose table th {
-  background-color: #f9fafb;
+  background-color: var(--gray-50);
   font-weight: 600;
 }
 
