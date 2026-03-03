@@ -4,7 +4,7 @@ import { RequestQueueService, QueuePriority } from '../services/request-queue.se
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
 import { apiLimiter, anonymousAiLimiter } from '../middleware/rateLimiter';
-import { enforceQueryLimit } from '../middleware/subscription.middleware';
+import { enforceQueryLimit, enforceResearchMode } from '../middleware/subscription.middleware';
 import { logQueryUsage } from '../middleware/usageCounter.middleware';
 import { tierRateLimiter } from '../middleware/tierRateLimiter.middleware';
 import { ValidationError } from '../types/error';
@@ -24,6 +24,7 @@ router.post(
   authenticate,
   tierRateLimiter,
   enforceQueryLimit,
+  enforceResearchMode,
   apiLimiter,
   logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
@@ -160,6 +161,27 @@ router.post(
       }
     }
 
+    // ── Early gate: block research mode when web search limit is exhausted ──
+    if (normalizedMode.mode === 'research' && userId) {
+      try {
+        const { SubscriptionService } = await import('../services/subscription.service');
+        const limitCheck = await SubscriptionService.checkTavilySearchLimit(userId);
+        if (!limitCheck.allowed) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              message: `You've reached your web search limit (${limitCheck.used} of ${limitCheck.limit} used). Deep Research requires web search. Upgrade your plan for more.`,
+              code: 'WEB_SEARCH_LIMIT_EXCEEDED',
+              used: limitCheck.used,
+              limit: limitCheck.limit,
+            },
+          });
+        }
+      } catch (limitErr: any) {
+        logger.warn('Failed to check Tavily limit (non-streaming)', { error: limitErr?.message });
+      }
+    }
+
     // Direct processing (default or fallback)
     const result = await AIService.answerQuestion(request, userId);
 
@@ -194,6 +216,7 @@ router.post(
   authenticate,
   tierRateLimiter,
   enforceQueryLimit,
+  enforceResearchMode,
   apiLimiter,
   logQueryUsage,
   asyncHandler(async (req: Request, res: Response) => {
@@ -382,9 +405,47 @@ router.post(
       }
 
       const isChatMode = request.mode === 'chat';
+
+      // ── Early gate: block research mode when web search limit is exhausted ──
+      // Instead of silently proceeding with no context (which produces a useless
+      // LLM response), notify the client immediately and end the stream.
+      if (!isChatMode && userId) {
+        try {
+          const { SubscriptionService } = await import('../services/subscription.service');
+          const limitCheck = await SubscriptionService.checkTavilySearchLimit(userId);
+          if (!limitCheck.allowed) {
+            // Fetch the user's tier so the frontend can show a tier-appropriate message
+            let tier: string = 'free';
+            try {
+              const subData = await SubscriptionService.getUserSubscriptionWithLimits(userId);
+              if (subData) tier = subData.subscription.tier;
+            } catch { /* fallback to 'free' */ }
+
+            logger.info('Web search limit exceeded, blocking research mode', {
+              userId,
+              tier,
+              used: limitCheck.used,
+              limit: limitCheck.limit,
+            });
+            res.write(`data: ${JSON.stringify({
+              webSearchLimitExceeded: true,
+              used: limitCheck.used,
+              limit: limitCheck.limit,
+              tier,
+            })}\n\n`);
+            res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+            res.end();
+            return;
+          }
+        } catch (limitErr: any) {
+          // Non-critical — fall through to normal pipeline on error
+          logger.warn('Failed to check Tavily limit pre-stream', { error: limitErr?.message });
+        }
+      }
+
       let sources: any[] | undefined = undefined;
       let sourcesSent = false;
-      
+
       // Stream the response and collect full answer.
       // The pipeline yields two kinds of chunks:
       //   1. Plain text chunks — actual LLM answer tokens
@@ -905,6 +966,7 @@ router.post(
   authenticate,
   tierRateLimiter,
   enforceQueryLimit,
+  enforceResearchMode,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const {
@@ -983,6 +1045,27 @@ router.post(
       attachments,
       attachmentIds,
     };
+
+    // ── Early gate: block research mode when web search limit is exhausted ──
+    if (normalizedMode.mode === 'research' && userId) {
+      try {
+        const { SubscriptionService } = await import('../services/subscription.service');
+        const limitCheck = await SubscriptionService.checkTavilySearchLimit(userId);
+        if (!limitCheck.allowed) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              message: `You've reached your web search limit (${limitCheck.used} of ${limitCheck.limit} used). Deep Research requires web search. Upgrade your plan for more.`,
+              code: 'WEB_SEARCH_LIMIT_EXCEEDED',
+              used: limitCheck.used,
+              limit: limitCheck.limit,
+            },
+          });
+        }
+      } catch (limitErr: any) {
+        logger.warn('Failed to check Tavily limit (queue)', { error: limitErr?.message });
+      }
+    }
 
     if (!RequestQueueService.isAvailable()) {
       return res.status(503).json({
@@ -1213,6 +1296,7 @@ router.post(
   authenticate,
   tierRateLimiter,
   enforceQueryLimit,
+  enforceResearchMode,
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { messageId, conversationId, options } = req.body;
@@ -1287,6 +1371,27 @@ router.post(
       maxTokens: options?.maxTokens,
       model: options?.model,
     };
+
+    // ── Early gate: block research mode when web search limit is exhausted ──
+    if (!isChatMode && userId) {
+      try {
+        const { SubscriptionService: SubSvc } = await import('../services/subscription.service');
+        const limitCheck = await SubSvc.checkTavilySearchLimit(userId);
+        if (!limitCheck.allowed) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              message: `You've reached your web search limit (${limitCheck.used} of ${limitCheck.limit} used). Deep Research requires web search. Upgrade your plan for more.`,
+              code: 'WEB_SEARCH_LIMIT_EXCEEDED',
+              used: limitCheck.used,
+              limit: limitCheck.limit,
+            },
+          });
+        }
+      } catch (limitErr: any) {
+        logger.warn('Failed to check Tavily limit (regenerate)', { error: limitErr?.message });
+      }
+    }
 
     // SSE headers (named events for the regenerate protocol)
     res.setHeader('Content-Type', 'text/event-stream');
@@ -1422,6 +1527,7 @@ router.post(
       })}\n\n`);
       res.end();
     }
+    return;
   })
 );
 

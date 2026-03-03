@@ -445,6 +445,29 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
               if (warning) toast.error(warning);
               continue;
             }
+            if (typeof chunk === 'object' && 'webSearchLimitExceeded' in chunk) {
+              // Research mode blocked — user has exhausted their web search quota.
+              // Show a tier-appropriate upgrade/wait message.
+              const { tier, webSearchUsed, webSearchLimit } = chunk as { tier?: string; webSearchUsed?: number; webSearchLimit?: number | null };
+              const usageInfo = webSearchLimit != null ? ` (${webSearchUsed ?? 0} of ${webSearchLimit} used)` : '';
+              let limitMsg: string;
+              if (tier === 'pro') {
+                limitMsg = `You've used all your web searches for this month${usageInfo}. Deep Research mode requires web search to find and cite sources.\n\nYour quota resets at the start of next month, or you can upgrade to Enterprise for unlimited searches.`;
+              } else {
+                limitMsg = `You've reached your web search limit${usageInfo}. Deep Research mode requires web search to find and cite sources.\n\nUpgrade your plan to get more web searches and continue using Deep Research.`;
+              }
+              isRefusal = true;
+              assistantMessage = {
+                ...assistantMessage,
+                content: limitMsg,
+                isStreaming: false,
+                isRefusal: true,
+              };
+              assistantMsgRef.current = assistantMessage;
+              setMessages((prev) => { const u = [...prev]; u[u.length - 1] = assistantMessage; return u; });
+              // Skip the rest of the stream (backend sends done right after)
+              continue;
+            }
 
             if (typeof chunk === 'string') {
               pendingChunksRef.current.push(chunk);
