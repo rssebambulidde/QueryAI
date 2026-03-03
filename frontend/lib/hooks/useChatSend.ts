@@ -356,6 +356,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           let isRefusal = false;
           let qualityScore: number | undefined;
           let streamSources: Source[] | undefined;
+          let webSearchLimitHit = false;
           let sourcesNeedRefresh = false;
 
           const handleStreamError = (streamErr: Error) => {
@@ -457,6 +458,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
                 limitMsg = `You've reached your web search limit${usageInfo}. Deep Research mode requires web search to find and cite sources.\n\nUpgrade your plan to get more web searches and continue using Deep Research.`;
               }
               isRefusal = true;
+              webSearchLimitHit = true;
               assistantMessage = {
                 ...assistantMessage,
                 content: limitMsg,
@@ -514,7 +516,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           });
           responseTimeStartRef.current = null;
 
-          if (conversationId) {
+          if (conversationId && !webSearchLimitHit) {
             await reloadPersistedMessages(conversationId);
             // Now safe to set the conversation as current (streaming is done, messages are persisted)
             if (conversationId !== currentConversationId) {
