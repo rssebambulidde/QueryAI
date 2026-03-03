@@ -232,7 +232,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [dismissedResearchHintMode, setDismissedResearchHintMode] = useState<ConversationMode | null>(null);
   const [inlineAttachments, setInlineAttachments] = useState<ChatAttachment[]>([]);
   const [dismissedSuggestionKey, setDismissedSuggestionKey] = useState('');
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
@@ -583,7 +583,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const canSend = !disabled && (hasMessage || inlineAttachments.length > 0 || hasConversationAttachments);
 
   return (
-    <div 
+    <div
       className="relative py-3 px-4"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
@@ -604,7 +604,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
       {/* Validation error banner */}
       {validationError && (
-        <div 
+        <div
           className="mb-2 flex items-center justify-between gap-2 px-3 py-2 bg-red-50 rounded-lg border border-red-200 text-xs"
           role="alert"
           aria-live="polite"
@@ -690,7 +690,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
       {/* Upload status banner */}
       {uploadStatus && (
-        <div 
+        <div
           className="mb-2 flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 text-xs"
           role="status"
           aria-live="polite"
@@ -801,15 +801,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           'focus-within:ring-2 focus-within:ring-orange-400/60 focus-within:border-orange-200'
         )}
       >
-        <div className="flex items-end gap-2 px-2 sm:px-3 pt-2">
-          <div className="flex items-center gap-1.5 pb-1 shrink-0">
+        <div className="flex items-end gap-1.5 sm:gap-2 px-2.5 sm:px-3 pt-2">
+          <div className="flex items-center gap-1 sm:gap-1.5 pb-1 shrink-0">
             {/* Paperclip - attach files/images for this message */}
             <button
               type="button"
               onClick={() => inlineFileInputRef.current?.click()}
               disabled={disabled || inlineAttachments.length >= INLINE_MAX_COUNT}
               className={cn(
-                'flex items-center justify-center w-9 h-9 rounded-full border transition-all duration-200',
+                'flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full border transition-all duration-200',
                 inlineAttachments.length >= INLINE_MAX_COUNT || disabled
                   ? 'border-white/20 bg-white/40 text-gray-300 cursor-not-allowed'
                   : 'border-white/40 bg-white/60 text-gray-600 hover:bg-white hover:text-gray-800'
@@ -827,7 +827,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   type="button"
                   onClick={() => setShowModeMenu((v) => !v)}
                   className={cn(
-                    'flex items-center gap-1.5 px-3 h-9 text-xs font-medium rounded-full border transition-all duration-200 bg-white/60',
+                    'flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 h-8 sm:h-9 text-[11px] sm:text-xs font-medium rounded-full border transition-all duration-200 bg-white/60',
                     isChatMode
                       ? 'border-purple-200/80 text-purple-700 hover:bg-purple-50'
                       : 'border-blue-200/80 text-blue-700 hover:bg-blue-50'
@@ -896,9 +896,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             disabled={disabled}
             rows={1}
             className={cn(
-              'flex-1 min-w-0 py-3 px-2 bg-transparent focus:outline-none disabled:cursor-not-allowed text-gray-900 placeholder-gray-500 resize-none text-base leading-6'
+              'flex-1 min-w-0 py-2.5 sm:py-3 px-1.5 sm:px-2 bg-transparent focus:outline-none disabled:cursor-not-allowed text-gray-900 placeholder-gray-500 resize-none text-base leading-6'
             )}
-            style={{ minHeight: '48px', maxHeight: '200px' }}
+            style={{ minHeight: '44px', maxHeight: '200px' }}
             aria-label="Message input"
           />
 
@@ -907,7 +907,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <button
               type="button"
               onClick={onCancelQueueJob}
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all duration-200 flex items-center justify-center touch-manipulation shrink-0 mb-1 shadow-sm"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all duration-200 flex items-center justify-center touch-manipulation shrink-0 mb-1 shadow-sm"
               aria-label="Cancel queued request"
             >
               <Square className="w-4 h-4" />
@@ -918,7 +918,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               onClick={handleSend}
               disabled={!canSend}
               className={cn(
-                'w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center touch-manipulation shrink-0 mb-1 transition-all duration-200',
+                'w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center touch-manipulation shrink-0 mb-1 transition-all duration-200',
                 canSend
                   ? 'bg-orange-600 text-white shadow-md hover:bg-orange-700 hover:scale-105'
                   : 'bg-gray-100 text-gray-500 border border-gray-300 cursor-not-allowed'
@@ -986,7 +986,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           aria-hidden="true"
         />
       </div>
-      
+
       {/* Screen reader announcements */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {isUploading && `Uploading ${uploadStatus?.fileName}, ${uploadStatus?.progress}% complete`}

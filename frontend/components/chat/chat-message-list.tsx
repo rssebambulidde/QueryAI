@@ -146,7 +146,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
       )}
 
       {/* Content wrapper (centring + padding — same layout as before) */}
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 w-full">
+      <div className="max-w-3xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-6 sm:py-8 pb-6 w-full">
 
         {/* Virtualised height container */}
         <div
@@ -303,13 +303,13 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                   error.includes('plan') ||
                   error.includes('subscription') ||
                   error.includes('tier')) && (
-                  <a
-                    href="/dashboard/settings/subscription"
-                    className="text-sm text-orange-600 hover:text-orange-800 underline font-medium self-start"
-                  >
-                    Upgrade your plan →
-                  </a>
-                )}
+                    <a
+                      href="/dashboard/settings/subscription"
+                      className="text-sm text-orange-600 hover:text-orange-800 underline font-medium self-start"
+                    >
+                      Upgrade your plan →
+                    </a>
+                  )}
               </div>
               {onDismissError && (
                 <button
