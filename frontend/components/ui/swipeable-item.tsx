@@ -63,7 +63,7 @@ export const SwipeableItem: React.FC<SwipeableItemProps> = ({
     return (
         <div
             ref={containerRef}
-            className={cn('relative overflow-hidden group', className)}
+            className={cn('relative group', className)}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
