@@ -73,14 +73,19 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
         toast.error(response.message || 'Failed to create collection. Please try again.');
       }
     } catch (error: any) {
+      const code = error.response?.data?.error?.code;
       let errorMessage = error.response?.data?.error?.message || error.message || 'Failed to create collection';
-      
+
       // Provide helpful message for migration errors
       if (errorMessage.includes('MIGRATION_REQUIRED') || errorMessage.includes('relation') || errorMessage.includes('does not exist')) {
         errorMessage = 'Collections feature requires database migration. Please contact support or check migration guide.';
       }
-      
-      toast.error(errorMessage);
+
+      if (code === 'COLLECTION_LIMIT_EXCEEDED') {
+        toast.warning(errorMessage);
+      } else {
+        toast.error(errorMessage);
+      }
       console.error('Collection creation error:', error);
     } finally {
       setIsCreating(false);
@@ -476,7 +481,7 @@ export const CollectionManager: React.FC<CollectionManagerProps> = ({ onConversa
                       Add Conversations
                     </Button>
                   </div>
-                  
+
                   {/* Search within collection */}
                   <div className="mb-3">
                     <div className="relative">

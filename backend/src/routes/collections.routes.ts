@@ -66,9 +66,16 @@ router.post(
     // Enforce collection limit for user's tier
     const limitCheck = await SubscriptionService.checkCollectionLimit(userId);
     if (!limitCheck.allowed) {
-      throw new ForbiddenError(
-        `Collection limit reached. You have ${limitCheck.used} of ${limitCheck.limit} collections. Upgrade for more.`
-      );
+      res.status(403).json({
+        success: false,
+        error: {
+          message: `Collection limit reached. You have ${limitCheck.used} of ${limitCheck.limit} collections. Upgrade your plan for more.`,
+          code: 'COLLECTION_LIMIT_EXCEEDED',
+          used: limitCheck.used,
+          limit: limitCheck.limit,
+        },
+      });
+      return;
     }
 
     const input: CreateCollectionInput = {

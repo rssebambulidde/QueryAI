@@ -280,7 +280,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         toast.error('Failed to create collection');
       }
     } catch (error: any) {
-      toast.error(error.message || 'Failed to create collection');
+      const code = error.response?.data?.error?.code;
+      const msg = error.response?.data?.error?.message || error.message || 'Failed to create collection';
+      if (code === 'COLLECTION_LIMIT_EXCEEDED') {
+        toast.warning(msg);
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsCreatingCollection(false);
     }
@@ -629,7 +635,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                             setShowSaveDialog(true);
                           }}
                           onPin={(conversationId) => {
-                            handleTogglePin(conversationId, { stopPropagation: () => {} } as React.MouseEvent);
+                            handleTogglePin(conversationId, { stopPropagation: () => { } } as React.MouseEvent);
                           }}
                           isPinned={true}
                           formatTime={formatTime}
@@ -658,7 +664,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                             setShowSaveDialog(true);
                           }}
                           onPin={(conversationId) => {
-                            handleTogglePin(conversationId, { stopPropagation: () => {} } as React.MouseEvent);
+                            handleTogglePin(conversationId, { stopPropagation: () => { } } as React.MouseEvent);
                           }}
                           isPinned={false}
                           formatTime={formatTime}
@@ -928,7 +934,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             setShowSaveDialog(false);
             setSelectedConversationForCollection(null);
           }}
-          onSaved={() => {}}
+          onSaved={() => { }}
         />
       )}
 
