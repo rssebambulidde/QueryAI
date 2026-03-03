@@ -120,26 +120,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
   const [flaggedCitations, setFlaggedCitations] = useState<FlaggedCitation[]>([]);
   const [showFlagMenu, setShowFlagMenu] = useState(false);
 
-  // Quick emoji reactions
-  const REACTIONS = ['👍', '✅', '🔁'] as const;
-  type ReactionEmoji = typeof REACTIONS[number];
-  const storageKey = `reaction_${message.id}`;
-  const [activeReaction, setActiveReaction] = useState<ReactionEmoji | null>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem(storageKey) as ReactionEmoji | null);
-    }
-    return null;
-  });
 
-  const handleReaction = (emoji: ReactionEmoji) => {
-    const next = activeReaction === emoji ? null : emoji;
-    setActiveReaction(next);
-    if (next) {
-      localStorage.setItem(storageKey, next);
-    } else {
-      localStorage.removeItem(storageKey);
-    }
-  };
   const { toast } = useToast();
 
   // Re-render every 60s to keep relative timestamps fresh
@@ -620,28 +601,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
           </div>
         </div>
 
-        {/* Quick Emoji Reactions — only for assistant messages */}
-        {!isUser && !isStreaming && !message.isStreaming && message.content.trim() && (
-          <div className="mt-1.5 flex items-center gap-1">
-            {REACTIONS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => handleReaction(emoji)}
-                className={cn(
-                  'text-base px-2 py-0.5 rounded-full border transition-all duration-150 select-none',
-                  activeReaction === emoji
-                    ? 'bg-orange-50 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700 scale-110 shadow-sm'
-                    : 'border-transparent hover:bg-gray-100 dark:hover:bg-slate-800 hover:border-gray-200 dark:hover:border-slate-700 opacity-60 hover:opacity-100'
-                )}
-                title={emoji === '👍' ? 'Helpful' : emoji === '✅' ? 'Accurate' : 'Regenerate'}
-                aria-label={emoji === '👍' ? 'Mark helpful' : emoji === '✅' ? 'Mark accurate' : 'Request different response'}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Version history indicator — only for assistant messages with 2+ versions */}
         {!isUser && message.versions && message.versions.length > 1 && !isStreaming && !message.isStreaming && (
