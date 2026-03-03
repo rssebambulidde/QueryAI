@@ -473,15 +473,17 @@ router.post(
             return;
           }
 
-          // ── Cleanup: remove stale web-search-limit refusals ──────────────
+          // ── Cleanup: remove stale limit refusals ──────────────────────
           // If the user now has capacity (upgraded or limit adjusted), delete
           // any old refusal messages so the alert disappears from the conversation.
+          const STALE_REFUSAL_TYPES = new Set(['web_search_limit', 'query_limit', 'research_mode_unavailable', 'tavily_search_limit']);
           if (request.conversationId && userId) {
             try {
               const { MessageService } = await import('../services/message.service');
               const allMsgs = await MessageService.getAllMessages(request.conversationId, userId);
               for (const msg of allMsgs) {
-                if (msg.role === 'assistant' && (msg.metadata as any)?.refusalType === 'web_search_limit') {
+                const refusalType = (msg.metadata as any)?.refusalType;
+                if (msg.role === 'assistant' && refusalType && STALE_REFUSAL_TYPES.has(refusalType)) {
                   await MessageService.deleteMessage(msg.id, userId);
                   // Also delete the paired user message that triggered the refusal
                   const idx = allMsgs.indexOf(msg);
@@ -491,7 +493,7 @@ router.post(
                 }
               }
             } catch (cleanupErr: any) {
-              logger.warn('Failed to cleanup stale web search limit refusals', { error: cleanupErr?.message });
+              logger.warn('Failed to cleanup stale limit refusals', { error: cleanupErr?.message });
             }
           }
         } catch (limitErr: any) {

@@ -588,6 +588,17 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
         abortControllerRef.current = null;
 
         let errorMessage = 'Failed to get AI response';
+        // Codes that should appear as inline alert messages, not toasts
+        const LIMIT_ALERT_CODES = new Set([
+          'QUERY_LIMIT_EXCEEDED',
+          'TAVILY_SEARCH_LIMIT_EXCEEDED',
+          'RESEARCH_MODE_NOT_AVAILABLE',
+          'DOCUMENT_UPLOAD_LIMIT_EXCEEDED',
+          'FEATURE_NOT_AVAILABLE',
+          'WEB_SEARCH_LIMIT_EXCEEDED',
+        ]);
+
+        let isLimitAlert = false;
 
         if (err.response?.status === 429) {
           const ed = err.response?.data?.error;
@@ -613,12 +624,27 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           } else {
             errorMessage = ed?.message || 'Access denied. This feature may require a higher plan.';
           }
+          isLimitAlert = LIMIT_ALERT_CODES.has(code);
         } else if (err.message) { errorMessage = err.message; }
         else if (err.response?.data?.error?.message) { errorMessage = err.response.data.error.message; }
 
         setError(errorMessage);
-        toast.error(errorMessage);
-        setMessages((prev) => prev.slice(0, -1));
+
+        if (isLimitAlert) {
+          // Show as an in-conversation alert instead of a toast
+          const refusalMessage: Message = {
+            id: `limit-refusal-${Date.now()}`,
+            role: 'assistant' as const,
+            content: errorMessage,
+            timestamp: new Date(),
+            isRefusal: true,
+            isStreaming: false,
+          };
+          setMessages((prev) => [...prev, refusalMessage]);
+        } else {
+          toast.error(errorMessage);
+          setMessages((prev) => prev.slice(0, -1));
+        }
       }
     },
     [
