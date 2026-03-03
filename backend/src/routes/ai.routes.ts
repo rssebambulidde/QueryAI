@@ -439,6 +439,7 @@ router.post(
 
             res.write(`data: ${JSON.stringify({
               webSearchLimitExceeded: true,
+              message: limitRefusalMsg,
               used: limitCheck.used,
               limit: limitCheck.limit,
               tier,

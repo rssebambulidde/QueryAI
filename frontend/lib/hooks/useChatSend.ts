@@ -356,7 +356,6 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           let isRefusal = false;
           let qualityScore: number | undefined;
           let streamSources: Source[] | undefined;
-          let webSearchLimitHit = false;
           let sourcesNeedRefresh = false;
 
           const handleStreamError = (streamErr: Error) => {
@@ -447,18 +446,10 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
               continue;
             }
             if (typeof chunk === 'object' && 'webSearchLimitExceeded' in chunk) {
-              // Research mode blocked — user has exhausted their web search quota.
-              // Show a tier-appropriate upgrade/wait message.
-              const { tier, webSearchUsed, webSearchLimit } = chunk as { tier?: string; webSearchUsed?: number; webSearchLimit?: number | null };
-              const usageInfo = webSearchLimit != null ? ` (${webSearchUsed ?? 0} of ${webSearchLimit} used)` : '';
-              let limitMsg: string;
-              if (tier === 'pro') {
-                limitMsg = `You've used all your web searches for this month${usageInfo}. Deep Research mode requires web search to find and cite sources.\n\nYour quota resets at the start of next month, or you can upgrade to Enterprise for unlimited searches.`;
-              } else {
-                limitMsg = `You've reached your web search limit${usageInfo}. Deep Research mode requires web search to find and cite sources.\n\nUpgrade your plan to get more web searches and continue using Deep Research.`;
-              }
+              // Research mode blocked — use the message from the backend (single source of truth)
+              const { webSearchLimitMessage } = chunk as { webSearchLimitMessage?: string };
+              const limitMsg = webSearchLimitMessage || 'You\'ve reached your web search limit. Deep Research mode requires web search to find and cite sources.';
               isRefusal = true;
-              webSearchLimitHit = true;
               assistantMessage = {
                 ...assistantMessage,
                 content: limitMsg,

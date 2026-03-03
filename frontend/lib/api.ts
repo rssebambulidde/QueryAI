@@ -528,7 +528,7 @@ export const aiApi = {
       /** Max ms to wait for the next chunk before treating the stream as stalled (default 90s). */
       inactivityTimeout?: number;
     }
-  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; searchBudgetWarning?: string; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[]; webSearchLimitExceeded?: boolean; webSearchUsed?: number; webSearchLimit?: number | null; tier?: string }, void, unknown> {
+  ): AsyncGenerator<string | { followUpQuestions?: string[]; refusal?: boolean; qualityScore?: number; searchBudgetWarning?: string; sources?: Source[]; extractionStatus?: Array<{ name: string; status: 'success' | 'truncated' | 'failed'; chars: number; reason?: string; ocrApplied?: boolean }>; extracting?: boolean; extractingFiles?: string[]; webSearchLimitExceeded?: boolean; webSearchLimitMessage?: string; webSearchUsed?: number; webSearchLimit?: number | null; tier?: string }, void, unknown> {
     const maxRetries = options?.maxRetries ?? 3;
     const retryDelay = options?.retryDelay ?? 1000;
     const inactivityTimeout = options?.inactivityTimeout ?? 90_000; // 90s default
@@ -668,7 +668,7 @@ export const aiApi = {
                     // Legacy fallback: unnamed data-only lines (backwards compat)
                     try {
                       const data = JSON.parse(payload);
-                      if (data.webSearchLimitExceeded) { yield { webSearchLimitExceeded: true, webSearchUsed: data.used, webSearchLimit: data.limit, tier: data.tier }; }
+                      if (data.webSearchLimitExceeded) { yield { webSearchLimitExceeded: true, webSearchLimitMessage: data.message, webSearchUsed: data.used, webSearchLimit: data.limit, tier: data.tier }; }
                       if (data.sources) { yield { sources: data.sources }; }
                       if (data.chunk) { yield data.chunk; }
                       if (data.followUpQuestions) { yield { followUpQuestions: data.followUpQuestions, refusal: data.refusal }; }

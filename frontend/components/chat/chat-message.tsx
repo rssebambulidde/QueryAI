@@ -266,7 +266,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
             'rounded-2xl shadow-sm',
             isUser
               ? 'px-4 py-3 bg-gradient-to-br from-orange-600 to-orange-700 text-white'
-              : 'px-4 py-3.5 bg-white border border-gray-200 text-gray-900 w-full'
+              : !isUser && message.isRefusal
+                ? 'px-4 py-3.5 bg-amber-50 border border-amber-200 text-amber-900 w-full'
+                : 'px-4 py-3.5 bg-white border border-gray-200 text-gray-900 w-full'
           )}
         >
           {/* Role Label - hide when assistant is streaming with empty content */}
@@ -387,9 +389,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
               </div>
             ) : !isUser && message.isRefusal ? (
               /* ── Refusal / limit alert ───────────────────────────── */
-              <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+              <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-amber-900 whitespace-pre-wrap">{message.content}</div>
+                <div className="text-sm whitespace-pre-wrap">{message.content}</div>
               </div>
             ) : (
               <ChatErrorBoundary
