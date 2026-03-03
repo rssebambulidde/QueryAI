@@ -14,6 +14,8 @@ import { MobileSidebar, HamburgerMenu } from '@/components/mobile/mobile-sidebar
 import { useMobile } from '@/lib/hooks/use-mobile';
 import { useToast } from '@/lib/hooks/use-toast';
 import { UsageWarningBanner } from '@/components/notifications/usage-warning-banner';
+import { NotificationBell } from '@/components/notifications/notification-bell';
+import { SquarePen } from 'lucide-react';
 // import { RoleDebug } from '@/components/debug/role-debug'; // Uncomment to debug role issues
 
 type TabType = 'chat' | 'collections';
@@ -33,7 +35,7 @@ function DashboardContent() {
       if (saved) {
         try {
           return JSON.parse(saved);
-        } catch (e) {}
+        } catch (e) { }
       }
     }
     return {
@@ -64,13 +66,13 @@ function DashboardContent() {
       import('@/lib/api').then(({ paymentApi }) => {
         paymentApi.syncSubscription().then((r) => {
           if (r.success && r.data?.synced) {
-            checkAuth().catch(() => {});
+            checkAuth().catch(() => { });
           }
-        }).catch(() => {});
+        }).catch(() => { });
       });
       toast.success('Payment completed. Your subscription has been updated.');
       router.replace('/dashboard/settings/subscription', { scroll: false });
-      checkAuth().catch(() => {});
+      checkAuth().catch(() => { });
     } else if (payment === 'cancelled') {
       toast.info('Payment was cancelled.');
       router.replace('/dashboard', { scroll: false });
@@ -94,9 +96,9 @@ function DashboardContent() {
         paymentApi.syncSubscription().then((r) => {
           if (r.success && r.data?.synced) {
             toast.success('Subscription synced. Your plan has been updated.');
-            checkAuth().catch(() => {});
+            checkAuth().catch(() => { });
           }
-        }).catch(() => {});
+        }).catch(() => { });
       });
       toast.info('Payment is pending. Syncing with PayPal...');
       router.replace('/dashboard/settings/subscription', { scroll: false });
@@ -109,7 +111,7 @@ function DashboardContent() {
       // Navigate to settings subscription page
       router.push('/dashboard/settings/subscription', { scroll: false });
     };
-    
+
     window.addEventListener('navigateToSubscription', handleNavigateToSubscription);
     return () => {
       window.removeEventListener('navigateToSubscription', handleNavigateToSubscription);
@@ -176,20 +178,31 @@ function DashboardContent() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      {/* Fixed Hamburger Menu for Mobile - Always Visible */}
-      {isMobile && (
-        <HamburgerMenu 
-          onClick={() => setIsMobileSidebarOpen(true)}
-          className="fixed top-4 left-4 z-50 bg-white shadow-lg rounded-lg p-2 border border-gray-200"
-        />
-      )}
-      
       {/* Top nav — only visible on mobile where sidebar is hidden */}
       {isMobile && (
-        <nav className="bg-white flex-shrink-0 border-b border-gray-100">
-          <div className="px-4">
-            <div className="flex items-center h-12">
-              <h1 className="text-base font-semibold text-gray-900">QueryAI</h1>
+        <nav className="bg-white flex-shrink-0 border-b border-gray-100 z-40 relative">
+          <div className="px-2">
+            <div className="flex items-center justify-between h-14">
+              <div className="flex items-center gap-2">
+                <HamburgerMenu
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                />
+                <h1 className="text-base font-semibold text-gray-900 tracking-tight">QueryAI</h1>
+              </div>
+              <div className="flex items-center gap-0.5">
+                <NotificationBell />
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    selectConversation(null);
+                    setActiveTab('chat');
+                  }}
+                  className="w-10 h-10 p-0 rounded-full text-gray-500 hover:text-gray-900 bg-gray-50"
+                  aria-label="New conversation"
+                >
+                  <SquarePen className="w-5 h-5" />
+                </Button>
+              </div>
             </div>
           </div>
         </nav>
@@ -232,15 +245,15 @@ function DashboardContent() {
               <ChatInterface ragSettings={ragSettings} />
             </div>
           ) : activeTab === 'collections' ? (
-             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-               <CollectionManager 
-                 onConversationSelect={(conversationId) => {
-                   // Switch to chat tab and select the conversation
-                   setActiveTab('chat');
-                   selectConversation(conversationId);
-                 }}
-               />
-             </div>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <CollectionManager
+                onConversationSelect={(conversationId) => {
+                  // Switch to chat tab and select the conversation
+                  setActiveTab('chat');
+                  selectConversation(conversationId);
+                }}
+              />
+            </div>
           ) : null}
         </div>
       </main>

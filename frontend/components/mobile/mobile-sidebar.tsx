@@ -144,9 +144,9 @@ export const MobileSidebar: React.FC<MobileSidebarProps> = ({
         </div>
 
         {/* Content — flex-1 min-h-0 so account section stays visible at bottom */}
-        <div 
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col" 
-          style={{ 
+        <div
+          className="flex-1 min-h-0 overflow-x-hidden flex flex-col"
+          style={{
             maxHeight: 'calc(85vh - 80px)',
             paddingBottom: 'max(8px, env(safe-area-inset-bottom))',
           }}

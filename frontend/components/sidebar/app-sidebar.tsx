@@ -454,23 +454,23 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       style={{ width: isMobile ? '100%' : `${sidebarWidth}px` }}
     >
       {/* ── Change 1: Branded header with action buttons ── */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-white text-xs font-bold">
-            Q
+      {!isMobile && (
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center text-white text-xs font-bold">
+              Q
+            </div>
+            <span className="text-base font-semibold text-gray-900 tracking-tight">QueryAI</span>
           </div>
-          <span className="text-base font-semibold text-gray-900 tracking-tight">QueryAI</span>
-        </div>
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={handleNewConversation}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-            title="New conversation (⌘N)"
-          >
-            <SquarePen className="w-4 h-4 text-gray-500" />
-          </button>
-          <NotificationBell />
-          {!isMobile && (
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={handleNewConversation}
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+              title="New conversation (⌘N)"
+            >
+              <SquarePen className="w-4 h-4 text-gray-500" />
+            </button>
+            <NotificationBell />
             <button
               onClick={() => setIsCollapsed(true)}
               className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -478,51 +478,59 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
             >
               <PanelLeftClose className="w-4 h-4 text-gray-500" />
             </button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Change 2: Flat vertical nav links ── */}
-      <nav className="px-3 pt-3 pb-1 flex-shrink-0">
-        <div className="space-y-0.5">
-          <button
-            onClick={() => onTabChange('chat')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px]',
-              activeTab === 'chat'
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            )}
-          >
-            <MessageSquare className="w-[18px] h-[18px]" />
-            Query Assistant
-          </button>
-          <button
-            onClick={() => onTabChange('collections')}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px]',
-              activeTab === 'collections'
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            )}
-          >
-            <Folder className="w-[18px] h-[18px]" />
-            Collections
-          </button>
-          {user?.role === 'super_admin' && (
-            <button
-              onClick={() => router.push('/dashboard/settings/super-admin')}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors min-h-[44px]"
-            >
-              <ShieldCheck className="w-[18px] h-[18px]" />
-              Super Admin
-            </button>
-          )}
-        </div>
-      </nav>
+      {(!isMobile || user?.role === 'super_admin') && (
+        <>
+          <nav className="px-3 pt-3 pb-1 flex-shrink-0">
+            <div className="space-y-0.5">
+              {!isMobile && (
+                <>
+                  <button
+                    onClick={() => onTabChange('chat')}
+                    className={cn(
+                      'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px]',
+                      activeTab === 'chat'
+                        ? 'bg-gray-100 text-gray-900'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    )}
+                  >
+                    <MessageSquare className="w-[18px] h-[18px]" />
+                    Query Assistant
+                  </button>
+                  <button
+                    onClick={() => onTabChange('collections')}
+                    className={cn(
+                      'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px]',
+                      activeTab === 'collections'
+                        ? 'bg-gray-100 text-gray-900'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    )}
+                  >
+                    <Folder className="w-[18px] h-[18px]" />
+                    Collections
+                  </button>
+                </>
+              )}
+              {user?.role === 'super_admin' && (
+                <button
+                  onClick={() => router.push('/dashboard/settings/super-admin')}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors min-h-[44px]"
+                >
+                  <ShieldCheck className="w-[18px] h-[18px]" />
+                  Super Admin
+                </button>
+              )}
+            </div>
+          </nav>
 
-      {/* Divider */}
-      <div className="mx-4 border-t border-gray-100" />
+          {/* Divider */}
+          <div className="mx-4 border-t border-gray-100" />
+        </>
+      )}
 
       {/* ── Change 3 & 7: Content area — no nested collapsibles, search as icon toggle ── */}
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
