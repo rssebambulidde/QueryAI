@@ -845,15 +845,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           'focus-within:ring-2 focus-within:ring-orange-400/60 focus-within:border-orange-200'
         )}
       >
-        <div className="flex items-end gap-1.5 sm:gap-2 px-2.5 sm:px-3 pt-2">
-          <div className="flex items-center gap-1 sm:gap-1.5 pb-1 shrink-0">
+        <div className="flex items-end gap-2 sm:gap-3 px-3 sm:px-4 pt-3 pb-2">
+          <div className="flex items-center gap-2 pb-1.5 shrink-0">
             {/* Paperclip - attach files/images for this message */}
             <button
               type="button"
               onClick={() => inlineFileInputRef.current?.click()}
               disabled={disabled || inlineAttachments.length >= INLINE_MAX_COUNT}
               className={cn(
-                'flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full border transition-all duration-200',
+                'flex items-center justify-center w-10 h-10 rounded-full border transition-all duration-200',
                 inlineAttachments.length >= INLINE_MAX_COUNT || disabled
                   ? 'border-white/20 bg-white/40 text-gray-300 cursor-not-allowed'
                   : 'border-white/40 bg-white/60 text-gray-600 hover:bg-white hover:text-gray-800'
@@ -861,7 +861,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               aria-label="Attach files or images"
               title={`Attach files or images (${inlineAttachments.length}/${INLINE_MAX_COUNT})`}
             >
-              <Paperclip className="w-4 h-4" />
+              <Paperclip className="w-5 h-5" />
             </button>
 
             {/* Mode selector dropup */}
@@ -871,7 +871,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   type="button"
                   onClick={() => setShowModeMenu((v) => !v)}
                   className={cn(
-                    'flex items-center justify-center gap-1 w-8 sm:w-9 h-8 sm:h-9 rounded-full border transition-all duration-200 bg-white/60',
+                    'flex items-center justify-center gap-1 w-10 h-10 rounded-full border transition-all duration-200 bg-white/60',
                     isChatMode
                       ? 'border-purple-200/80 text-purple-700 hover:bg-purple-50'
                       : 'border-blue-200/80 text-blue-700 hover:bg-blue-50'
@@ -943,31 +943,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             aria-label="Message input"
           />
 
-          {/* Microphone button */}
-          {isSpeechSupported && (
-            <button
-              type="button"
-              onClick={toggleSpeechRecognition}
-              disabled={disabled}
-              className={cn(
-                'flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full transition-all duration-200 shrink-0 mb-1 border',
-                isListening
-                  ? 'bg-red-100 text-red-600 border-red-200 animate-pulse'
-                  : 'bg-white/60 text-gray-400 hover:text-gray-600 border-transparent hover:bg-gray-100'
-              )}
-              aria-label={isListening ? "Stop listening" : "Start speaking"}
-              title="Voice Input"
-            >
-              <Mic className="w-4 h-4" />
-            </button>
-          )}
+          {/* Microphone button — always shown, falls back to MediaRecorder */}
+          <button
+            type="button"
+            onClick={toggleSpeechRecognition}
+            disabled={disabled}
+            className={cn(
+              'flex items-center justify-center w-10 h-10 rounded-full transition-all duration-200 shrink-0 mb-1.5 border',
+              isListening
+                ? 'bg-red-100 text-red-600 border-red-200 animate-pulse'
+                : 'bg-white/60 text-gray-400 hover:text-gray-600 border-transparent hover:bg-gray-100'
+            )}
+            aria-label={isListening ? 'Stop listening' : 'Start speaking'}
+            title={isListening ? 'Tap to stop' : 'Voice input'}
+          >
+            <Mic className="w-5 h-5" />
+          </button>
 
           {/* Circular action button (send / cancel queue) */}
           {activeQueueJobId ? (
             <button
               type="button"
               onClick={onCancelQueueJob}
-              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all duration-200 flex items-center justify-center touch-manipulation shrink-0 mb-1 shadow-sm"
+              className="w-10 h-10 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all duration-200 flex items-center justify-center touch-manipulation shrink-0 mb-1.5 shadow-sm"
               aria-label="Cancel queued request"
             >
               <Square className="w-4 h-4" />
@@ -978,14 +976,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               onClick={handleSend}
               disabled={!canSend}
               className={cn(
-                'w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center touch-manipulation shrink-0 mb-1 transition-all duration-200',
+                'w-10 h-10 rounded-full flex items-center justify-center touch-manipulation shrink-0 mb-1.5 transition-all duration-200',
                 canSend
                   ? 'bg-orange-600 text-white shadow-md hover:bg-orange-700 hover:scale-105'
                   : 'bg-gray-100 text-gray-500 border border-gray-300 cursor-not-allowed'
               )}
               aria-label="Send message"
             >
-              <ArrowUp className="w-4 h-4" />
+              <ArrowUp className="w-5 h-5" />
             </button>
           )}
         </div>
