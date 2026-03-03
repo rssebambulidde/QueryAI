@@ -516,7 +516,7 @@ export function useChatSend(deps: UseChatSendDeps): UseChatSendReturn {
           });
           responseTimeStartRef.current = null;
 
-          if (conversationId && !webSearchLimitHit) {
+          if (conversationId) {
             await reloadPersistedMessages(conversationId);
             // Now safe to set the conversation as current (streaming is done, messages are persisted)
             if (conversationId !== currentConversationId) {

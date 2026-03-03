@@ -315,7 +315,7 @@ router.post(
     res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering for nginx
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    
+
     // Flush headers immediately
     res.flushHeaders();
 
@@ -427,12 +427,46 @@ router.post(
               used: limitCheck.used,
               limit: limitCheck.limit,
             });
+
+            // Build tier-appropriate refusal message (mirroring frontend)
+            const usageInfo = limitCheck.limit != null ? ` (${limitCheck.used ?? 0} of ${limitCheck.limit} used)` : '';
+            let limitRefusalMsg: string;
+            if (tier === 'pro') {
+              limitRefusalMsg = `You've used all your web searches for this month${usageInfo}. Deep Research mode requires web search to find and cite sources.\n\nYour quota resets at the start of next month, or you can upgrade to Enterprise for unlimited searches.`;
+            } else {
+              limitRefusalMsg = `You've reached your web search limit${usageInfo}. Deep Research mode requires web search to find and cite sources.\n\nUpgrade your plan to get more web searches and continue using Deep Research.`;
+            }
+
             res.write(`data: ${JSON.stringify({
               webSearchLimitExceeded: true,
               used: limitCheck.used,
               limit: limitCheck.limit,
               tier,
             })}\n\n`);
+
+            // Persist the refusal to the conversation so it survives reload
+            if (request.conversationId && userId) {
+              try {
+                const { ConversationService } = await import('../services/conversation.service');
+                const { MessageService } = await import('../services/message.service');
+                let conv = await ConversationService.getConversation(request.conversationId, userId);
+                let cid = request.conversationId;
+                if (!conv) {
+                  conv = await ConversationService.createConversation({
+                    userId,
+                    title: ConversationService.generateTitleFromMessage(request.question),
+                  });
+                  cid = conv.id;
+                }
+                await MessageService.saveMessagePair(cid, request.question, limitRefusalMsg, [], {
+                  isRefusal: true,
+                  refusalType: 'web_search_limit',
+                });
+              } catch (e: any) {
+                logger.warn('Failed to save web search limit refusal to conversation', { error: e?.message });
+              }
+            }
+
             res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
             res.end();
             return;
@@ -509,7 +543,7 @@ router.post(
           logger.warn('Follow-up questions processing failed in streaming', { error: followUpErr?.message });
         }
       }
-      
+
       // Calculate answer quality score (Deep Research only)
       let qualityScore: number | undefined;
       if (!isChatMode) {
@@ -545,10 +579,10 @@ router.post(
         try {
           const { ConversationService } = await import('../services/conversation.service');
           const { MessageService } = await import('../services/message.service');
-          
+
           let conversationId = request.conversationId;
           let conversation = await ConversationService.getConversation(conversationId, userId);
-          
+
           if (!conversation) {
             const title = ConversationService.generateTitleFromMessage(request.question);
             conversation = await ConversationService.createConversation({
@@ -635,9 +669,9 @@ router.post(
       res.end();
     } catch (error: any) {
       logger.error('Error in streaming endpoint:', error);
-      
+
       // Send error as SSE
-      res.write(`data: ${JSON.stringify({ 
+      res.write(`data: ${JSON.stringify({
         error: {
           message: error.message || 'Failed to generate response',
           code: error.code || 'STREAM_ERROR',

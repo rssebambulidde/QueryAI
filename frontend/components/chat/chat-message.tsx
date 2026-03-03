@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
-import { Copy, Edit2, Check, X, Trash2, BookOpen, RefreshCw, ChevronDown, History, GitCompare, ThumbsUp, ThumbsDown, MessageSquare, Flag, FileText } from 'lucide-react';
+import { Copy, Edit2, Check, X, Trash2, BookOpen, RefreshCw, ChevronDown, History, GitCompare, ThumbsUp, ThumbsDown, MessageSquare, Flag, FileText, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/lib/hooks/use-toast';
 import { SourceCitation } from './source-citation';
 import { FollowUpQuestions } from './research/follow-up-questions';
@@ -384,6 +384,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, previousRespo
                     </div>
                   ))}
                 </div>
+              </div>
+            ) : !isUser && message.isRefusal ? (
+              /* ── Refusal / limit alert ───────────────────────────── */
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-amber-900 whitespace-pre-wrap">{message.content}</div>
               </div>
             ) : (
               <ChatErrorBoundary
