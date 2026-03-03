@@ -204,6 +204,8 @@ interface ChatInputProps {
   onClearConversationAttachment?: (id: string) => void;
   /** Clear all conversation-level attachments. */
   onClearAllConversationAttachments?: () => void;
+  /** Optional minimum height for the textarea */
+  minHeight?: number;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -222,6 +224,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onModeChange,
   activeConversationAttachments,
   onClearConversationAttachment,
+  minHeight = 44,
 }) => {
   const isChatMode = mode === 'chat';
   const [message, setMessage] = useState('');
@@ -895,7 +898,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             className={cn(
               'flex-1 min-w-0 py-2.5 sm:py-3 px-1.5 sm:px-2 bg-transparent focus:outline-none disabled:cursor-not-allowed text-gray-900 placeholder-gray-500 resize-none text-base leading-6'
             )}
-            style={{ minHeight: '44px', maxHeight: '200px' }}
+            style={{ minHeight: `${minHeight}px`, maxHeight: '200px' }}
             aria-label="Message input"
           />
 

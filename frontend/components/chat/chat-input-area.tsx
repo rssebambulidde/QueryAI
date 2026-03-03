@@ -53,7 +53,7 @@ export const ChatInputArea: React.FC<
     if (variant === 'empty') {
       return (
         <div className="flex flex-1 min-h-0 items-center justify-center">
-          <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             {/* Greeting */}
             <div className="text-center mb-8">
               <div className={cn(
@@ -99,6 +99,7 @@ export const ChatInputArea: React.FC<
               onModeChange={onModeChange}
               activeConversationAttachments={activeConversationAttachments}
               onClearConversationAttachment={onClearConversationAttachment}
+              minHeight={120}
             />
           </div>
         </div>
