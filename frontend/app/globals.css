@@ -3,18 +3,18 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  
+
   /* Brand Colors - Primary Blue */
   --primary-blue: #2563EB;
   --primary-blue-dark: #1E40AF;
   --primary-blue-light: #3B82F6;
-  
+
   /* Accent Colors */
   --accent-orange: #F97316;
   --accent-orange-light: #FB923C;
   --success-green: #10B981;
   --warning-amber: #F59E0B;
-  
+
   /* Neutral Colors */
   --gray-900: #0F172A;
   --gray-800: #1E293B;
@@ -35,27 +35,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-.dark {
-  --background: #0f172a; /* Slate 900 */
-  --foreground: #f8fafc; /* Slate 50 */
-  color-scheme: dark;
 
-  /* Invert grays for dark mode */
-  --gray-900: #f8fafc; /* 50 */
-  --gray-800: #f1f5f9; /* 100 */
-  --gray-700: #e2e8f0; /* 200 */
-  --gray-600: #cbd5e1; /* 300 */
-  --gray-500: #94a3b8; /* 400 */
-  --gray-400: #64748b; /* 500 */
-  --gray-300: #475569; /* 600 */
-  --gray-200: #334155; /* 700 */
-  --gray-100: #1e293b; /* 800 */
-  --gray-50: #0f172a;  /* 900 */
-}
-
-@media (prefers-color-scheme: dark) {
-  /* We use the "class" strategy now, so the dark system theme is handled via the script adding the .dark class */
-}
 
 body {
   background: var(--background);
@@ -86,6 +66,7 @@ body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -96,6 +77,7 @@ body {
     transform: translateY(10px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -141,13 +123,19 @@ body {
   margin-bottom: 0.5rem;
 }
 
-.prose ul, .prose ol {
+.prose ul,
+.prose ol {
   margin: 0.75rem 0;
   padding-left: 1.5rem;
 }
 
-.prose ul { list-style-type: disc; }
-.prose ol { list-style-type: decimal; }
+.prose ul {
+  list-style-type: disc;
+}
+
+.prose ol {
+  list-style-type: decimal;
+}
 
 .prose li {
   margin: 0.25rem 0;
@@ -198,15 +186,20 @@ body {
 
 /* Mobile Optimizations */
 @media (max-width: 768px) {
+
   /* Ensure touch targets are at least 44x44px */
-  button, a, input[type="button"], input[type="submit"] {
+  button,
+  a,
+  input[type="button"],
+  input[type="submit"] {
     min-height: 44px;
     min-width: 44px;
   }
 
   /* Optimize text for mobile readability */
   body {
-    font-size: 16px; /* Prevent zoom on iOS */
+    font-size: 16px;
+    /* Prevent zoom on iOS */
     -webkit-text-size-adjust: 100%;
   }
 
@@ -241,12 +234,15 @@ body {
 
 /* Hide scrollbar but keep functionality */
 .scrollbar-hide {
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
 }
 
 .scrollbar-hide::-webkit-scrollbar {
-  display: none;  /* Chrome, Safari, Opera */
+  display: none;
+  /* Chrome, Safari, Opera */
 }
 
 /* Overflow wrap utility for better text wrapping */
