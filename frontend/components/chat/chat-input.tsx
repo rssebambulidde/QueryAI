@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback, useMemo, DragEvent, ClipboardEvent } from 'react';
-import { ArrowUp, Square, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, ChevronUp, Search, MessageCircle, Paperclip, Sparkles, Plus } from 'lucide-react';
+import { ArrowUp, Square, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, ChevronUp, Search, MessageCircle, Paperclip, Sparkles, Plus, Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
+import { useHaptics } from '@/lib/hooks/use-haptics';
 import type { ChatAttachment } from './chat-types';
 import { AttachmentPreviewStrip } from './attachment-preview';
 import { attachmentApi } from '@/lib/api';
@@ -227,6 +229,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   minHeight = 44,
 }) => {
   const isChatMode = mode === 'chat';
+  const { vibrate } = useHaptics();
   const [message, setMessage] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -243,6 +246,43 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const dragCounterRef = useRef(0);
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const modeKey = mode ?? 'chat';
+
+  // Speech Recognition
+  const {
+    isListening,
+    transcript,
+    isSupported: isSpeechSupported,
+    startListening,
+    stopListening,
+    resetTranscript,
+  } = useSpeechRecognition();
+
+  // Handle Speech Transcript updates
+  const previousTranscriptRef = useRef('');
+  useEffect(() => {
+    if (transcript && transcript !== previousTranscriptRef.current) {
+      // Append the new part of the transcript
+      const newText = transcript.slice(previousTranscriptRef.current.length);
+      setMessage((prev) => prev + newText);
+      previousTranscriptRef.current = transcript;
+    }
+  }, [transcript]);
+
+  useEffect(() => {
+    if (!isListening) {
+      previousTranscriptRef.current = '';
+      resetTranscript();
+    }
+  }, [isListening, resetTranscript]);
+
+  const toggleSpeechRecognition = () => {
+    vibrate('medium');
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
 
   // Detect research-like keywords when user is in chat/Express mode
   const RESEARCH_KEYWORDS = /\b(latest|current news|recent|source|sources|evidence|study|studies|research|statistics|data|report|cite|citation|according to|fact.?check|202[4-9]|203\d)\b/i;
@@ -289,6 +329,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const hasInline = inlineAttachments.length > 0;
     const hasConversation = (activeConversationAttachments?.length ?? 0) > 0;
     if ((message.trim() || hasInline || hasConversation) && !disabled) {
+      vibrate('light');
       // Merge: new inline attachments + active conversation-level attachments (deduplicated)
       const inlineIds = new Set(inlineAttachments.map((a) => a.id));
       const merged = [
@@ -901,6 +942,25 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             style={{ minHeight: `${minHeight}px`, maxHeight: '200px' }}
             aria-label="Message input"
           />
+
+          {/* Microphone button */}
+          {isSpeechSupported && (
+            <button
+              type="button"
+              onClick={toggleSpeechRecognition}
+              disabled={disabled}
+              className={cn(
+                'flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full transition-all duration-200 shrink-0 mb-1 border',
+                isListening
+                  ? 'bg-red-100 text-red-600 border-red-200 animate-pulse'
+                  : 'bg-white/60 text-gray-400 hover:text-gray-600 border-transparent hover:bg-gray-100'
+              )}
+              aria-label={isListening ? "Stop listening" : "Start speaking"}
+              title="Voice Input"
+            >
+              <Mic className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Circular action button (send / cancel queue) */}
           {activeQueueJobId ? (

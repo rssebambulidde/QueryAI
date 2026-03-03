@@ -18,6 +18,8 @@ import { useMobile } from '@/lib/hooks/use-mobile';
 import { ConversationSkeleton, CollectionSkeleton } from './skeleton-loader';
 import { AccountDropdown } from './account-dropdown';
 import { NotificationBell } from '@/components/notifications/notification-bell';
+import { SwipeableItem } from '@/components/ui/swipeable-item';
+import { useHaptics } from '@/lib/hooks/use-haptics';
 // Topic filters retired in Phase 2 (v2 migration)
 // import { SidebarTopicFilters } from './sidebar-topic-filters';
 
@@ -50,6 +52,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   subscriptionTier = 'free',
 }) => {
   const { isMobile } = useMobile();
+  const { vibrate } = useHaptics();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -632,22 +635,27 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pinned</span>
                       </div>
                       {pinnedConvs.map((conversation) => (
-                        <ConversationItemComponent
+                        <SwipeableItem
                           key={conversation.id}
-                          conversation={conversation}
-                          isActive={conversation.id === currentConversationId}
-                          onSelect={() => selectConversation(conversation.id)}
-                          onDelete={(e) => handleDeleteConversation(conversation.id, e)}
-                          onSaveToCollection={(conversationId) => {
-                            setSelectedConversationForCollection(conversationId);
-                            setShowSaveDialog(true);
-                          }}
-                          onPin={(conversationId) => {
-                            handleTogglePin(conversationId, { stopPropagation: () => { } } as React.MouseEvent);
-                          }}
-                          isPinned={true}
-                          formatTime={formatTime}
-                        />
+                          onDelete={() => { vibrate('heavy'); handleDeleteConversation(conversation.id, { stopPropagation: () => { } } as React.MouseEvent); }}
+                          deleteLabel="Delete"
+                        >
+                          <ConversationItemComponent
+                            conversation={conversation}
+                            isActive={conversation.id === currentConversationId}
+                            onSelect={() => selectConversation(conversation.id)}
+                            onDelete={(e) => handleDeleteConversation(conversation.id, e)}
+                            onSaveToCollection={(conversationId) => {
+                              setSelectedConversationForCollection(conversationId);
+                              setShowSaveDialog(true);
+                            }}
+                            onPin={(conversationId) => {
+                              handleTogglePin(conversationId, { stopPropagation: () => { } } as React.MouseEvent);
+                            }}
+                            isPinned={true}
+                            formatTime={formatTime}
+                          />
+                        </SwipeableItem>
                       ))}
                       {dateGroups.length > 0 && (
                         <div className="mx-3 my-1.5 border-t border-gray-100" />
@@ -657,26 +665,31 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   {/* Date-grouped conversations */}
                   {dateGroups.map((group) => (
                     <React.Fragment key={group.label}>
-                      <div className="px-3 pt-2 pb-0.5">
+                      <div className="sticky top-0 bg-white z-10 px-3 pt-2 pb-0.5">
                         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{group.label}</span>
                       </div>
                       {group.conversations.map((conversation) => (
-                        <ConversationItemComponent
+                        <SwipeableItem
                           key={conversation.id}
-                          conversation={conversation}
-                          isActive={conversation.id === currentConversationId}
-                          onSelect={() => selectConversation(conversation.id)}
-                          onDelete={(e) => handleDeleteConversation(conversation.id, e)}
-                          onSaveToCollection={(conversationId) => {
-                            setSelectedConversationForCollection(conversationId);
-                            setShowSaveDialog(true);
-                          }}
-                          onPin={(conversationId) => {
-                            handleTogglePin(conversationId, { stopPropagation: () => { } } as React.MouseEvent);
-                          }}
-                          isPinned={false}
-                          formatTime={formatTime}
-                        />
+                          onDelete={() => { vibrate('heavy'); handleDeleteConversation(conversation.id, { stopPropagation: () => { } } as React.MouseEvent); }}
+                          deleteLabel="Delete"
+                        >
+                          <ConversationItemComponent
+                            conversation={conversation}
+                            isActive={conversation.id === currentConversationId}
+                            onSelect={() => selectConversation(conversation.id)}
+                            onDelete={(e) => handleDeleteConversation(conversation.id, e)}
+                            onSaveToCollection={(conversationId) => {
+                              setSelectedConversationForCollection(conversationId);
+                              setShowSaveDialog(true);
+                            }}
+                            onPin={(conversationId) => {
+                              handleTogglePin(conversationId, { stopPropagation: () => { } } as React.MouseEvent);
+                            }}
+                            isPinned={false}
+                            formatTime={formatTime}
+                          />
+                        </SwipeableItem>
                       ))}
                     </React.Fragment>
                   ))}

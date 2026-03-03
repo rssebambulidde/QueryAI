@@ -57,6 +57,11 @@ export const metadata: Metadata = {
       },
     ],
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'QueryAI',
+  },
   twitter: {
     card: "summary_large_image",
     title: "QueryAI - Fact Research Assistant | SamaBrains",
