@@ -472,6 +472,28 @@ router.post(
             res.end();
             return;
           }
+
+          // ── Cleanup: remove stale web-search-limit refusals ──────────────
+          // If the user now has capacity (upgraded or limit adjusted), delete
+          // any old refusal messages so the alert disappears from the conversation.
+          if (request.conversationId && userId) {
+            try {
+              const { MessageService } = await import('../services/message.service');
+              const allMsgs = await MessageService.getAllMessages(request.conversationId, userId);
+              for (const msg of allMsgs) {
+                if (msg.role === 'assistant' && (msg.metadata as any)?.refusalType === 'web_search_limit') {
+                  await MessageService.deleteMessage(msg.id, userId);
+                  // Also delete the paired user message that triggered the refusal
+                  const idx = allMsgs.indexOf(msg);
+                  if (idx > 0 && allMsgs[idx - 1].role === 'user') {
+                    await MessageService.deleteMessage(allMsgs[idx - 1].id, userId);
+                  }
+                }
+              }
+            } catch (cleanupErr: any) {
+              logger.warn('Failed to cleanup stale web search limit refusals', { error: cleanupErr?.message });
+            }
+          }
         } catch (limitErr: any) {
           // Non-critical — fall through to normal pipeline on error
           logger.warn('Failed to check Tavily limit pre-stream', { error: limitErr?.message });
