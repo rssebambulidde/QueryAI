@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback, useMemo, DragEvent, ClipboardEvent } from 'react';
-import { ArrowUp, Square, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, ChevronUp, Search, MessageCircle, Paperclip, Sparkles } from 'lucide-react';
+import { ArrowUp, Square, X, RefreshCw, FileText, FileSpreadsheet, File, Clock, Upload, ChevronUp, Search, MessageCircle, Paperclip, Sparkles, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ChatAttachment } from './chat-types';
 import { AttachmentPreviewStrip } from './attachment-preview';
@@ -827,7 +827,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   type="button"
                   onClick={() => setShowModeMenu((v) => !v)}
                   className={cn(
-                    'flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 h-8 sm:h-9 text-[11px] sm:text-xs font-medium rounded-full border transition-all duration-200 bg-white/60',
+                    'flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-3 h-8 sm:h-9 text-[11px] sm:text-xs font-medium rounded-full border transition-all duration-200 bg-white/60',
                     isChatMode
                       ? 'border-purple-200/80 text-purple-700 hover:bg-purple-50'
                       : 'border-blue-200/80 text-blue-700 hover:bg-blue-50'
@@ -836,13 +836,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   aria-expanded={showModeMenu}
                   aria-haspopup="listbox"
                 >
-                  {isChatMode ? (
-                    <MessageCircle className="w-3.5 h-3.5" />
-                  ) : (
-                    <Search className="w-3.5 h-3.5" />
-                  )}
+                  <span className="hidden sm:inline">
+                    {isChatMode ? <MessageCircle className="w-3.5 h-3.5" /> : <Search className="w-3.5 h-3.5" />}
+                  </span>
                   <span className="hidden sm:inline">{isChatMode ? MODE_LABELS.chat : MODE_LABELS.research}</span>
-                  <span className="sm:hidden">{isChatMode ? MODE_LABELS.chat : 'Research'}</span>
+                  <span className="sm:hidden flex items-center justify-center w-4 h-4"><Plus className="w-4 h-4" /></span>
                   <ChevronUp className={cn('w-3 h-3 transition-transform', showModeMenu ? 'rotate-180' : '')} />
                 </button>
 
