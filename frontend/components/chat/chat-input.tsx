@@ -40,66 +40,6 @@ const INLINE_MAX_SIZE = 50 * 1024 * 1024; // 50 MB — matches backend multer li
 /** Max number of inline attachments per message */
 const INLINE_MAX_COUNT = 5;
 
-// ── Attachment-based question suggestions ─────────────────────────────────────
-
-/** Generate contextual question suggestions based on attached file types & names. */
-function generateAttachmentSuggestions(attachments: ChatAttachment[]): string[] {
-  if (attachments.length === 0) return [];
-
-  const docs = attachments.filter((a) => a.type === 'document');
-  const images = attachments.filter((a) => a.type === 'image');
-
-  // If only images, image-specific suggestions
-  if (docs.length === 0 && images.length > 0) {
-    return [
-      'Describe what you see in this image',
-      'Extract all text from this image',
-      'What are the key details here?',
-    ];
-  }
-
-  // Detect file types among documents
-  const hasCSV = docs.some((d) => d.mimeType === 'text/csv' || d.name.toLowerCase().endsWith('.csv'));
-  const hasPDF = docs.some((d) => d.mimeType === 'application/pdf' || d.name.toLowerCase().endsWith('.pdf'));
-  const hasSpreadsheet = hasCSV;
-  const docName = docs.length === 1 ? docs[0].name : undefined;
-
-  // Domain-specific: CSV / spreadsheet data
-  if (hasSpreadsheet) {
-    const suggestions = [
-      'Summarize this data',
-      'What trends do you see in this data?',
-      'List the key statistics and totals',
-    ];
-    if (docs.length > 1) suggestions.push('Compare the data across these files');
-    return suggestions;
-  }
-
-  // General document suggestions
-  const suggestions: string[] = [];
-
-  if (docName) {
-    suggestions.push(`Summarize ${docName}`);
-  } else {
-    suggestions.push('Summarize this document');
-  }
-
-  suggestions.push('What are the key findings?');
-
-  if (hasPDF) {
-    suggestions.push('List all important dates and figures');
-  } else {
-    suggestions.push('What are the main points?');
-  }
-
-  if (docs.length > 1) {
-    suggestions.push('Compare these documents');
-  } else {
-    suggestions.push('What questions does this raise?');
-  }
-
-  return suggestions.slice(0, 4);
-}
 
 /** Check if a file is an accepted document type */
 function isAcceptedFile(file: File): boolean {
@@ -237,7 +177,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [dismissedResearchHintMode, setDismissedResearchHintMode] = useState<ConversationMode | null>(null);
   const [inlineAttachments, setInlineAttachments] = useState<ChatAttachment[]>([]);
-  const [dismissedSuggestionKey, setDismissedSuggestionKey] = useState('');
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
@@ -299,27 +239,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     && message.length >= 10
     && RESEARCH_KEYWORDS.test(message);
 
-  // Generate contextual suggestions when attachments are present
-  const allAttachments = useMemo(() => [
-    ...inlineAttachments,
-    ...(activeConversationAttachments ?? []),
-  ], [inlineAttachments, activeConversationAttachments]);
-
-  const attachmentSuggestions = useMemo(
-    () => generateAttachmentSuggestions(allAttachments),
-    [allAttachments],
-  );
-
-  const suggestionKey = useMemo(
-    () => allAttachments.map((a) => a.id).join('|'),
-    [allAttachments],
-  );
-
-  const showSuggestions = allAttachments.length > 0
-    && attachmentSuggestions.length > 0
-    && !message.trim()
-    && !disabled
-    && dismissedSuggestionKey !== suggestionKey;
 
   // Close mode menu on outside click
   useEffect(() => {
@@ -823,27 +742,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      {/* Attachment-based question suggestions */}
-      {showSuggestions && (
-        <div className="flex items-center gap-2 flex-wrap mb-2">
-          <Sparkles className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-          {attachmentSuggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              onClick={() => {
-                setMessage(suggestion);
-                setDismissedSuggestionKey(suggestionKey);
-                // Focus the text input so user can edit or just press Enter
-                textInputRef.current?.focus();
-              }}
-              className="px-3 py-1.5 text-xs font-medium text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-full transition-colors whitespace-nowrap"
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-      )}
 
       <div
         ref={inputContainerRef}
